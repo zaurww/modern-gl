@@ -603,6 +603,7 @@ class MainWindow(QMainWindow):
         page.saved.connect(lambda _id, p=page: self._document_saved(p))
         page.open_document.connect(self.open_document)
         page.copy_requested.connect(self.new_document)
+        page.new_requested.connect(lambda: self.new_document())
         page.template_saved.connect(self.open_template)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
         page.title_changed.connect(lambda p=page: self._retitle(p))

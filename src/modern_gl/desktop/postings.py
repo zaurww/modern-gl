@@ -12,10 +12,16 @@ Paste (Ctrl+V) takes lines copied from Excel, one posting per line. With a heade
 without one they go in the order of keyboard entry: Dt, its subconto, Kt, its subconto,
 (currency, amount in currency, rate,) amount, memo — an empty cell skips a field.
 Copy (Ctrl+C) gives the document in the header form, so it can go to Excel and back.
+
+Speed-ups: a subconto list starts with the elements recently used on that account; the
+memo cell offers the memo of the last posting with the same Dt/Kt pair (selected, so
+typing replaces it); "#" in the Dt cell picks an entry template; an amount may be typed
+as arithmetic (1180*18/118).
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
@@ -99,6 +105,19 @@ class UnknownValue(LookupError):
     def __init__(self, kind_id: int, text: str) -> None:
         super().__init__(text)
         self.kind_id, self.text = kind_id, text
+
+
+@dataclass
+class EntryHints:
+    """What the grid may suggest; the document page fills it from the company's history."""
+
+    recent: Callable[[int, int], list[int]] = lambda _account, _position: []
+    memo: Callable[[int, int], str] = lambda _debit, _credit: ""
+    templates: Callable[[], list[tuple[int, str]]] = lambda: []  # (id, name)
+
+
+TEMPLATE_MARK = "#"
+ARITHMETIC = re.compile(r"[-+*/()=]")
 
 
 @dataclass
@@ -444,7 +463,10 @@ class PostingsModel(QAbstractTableModel):
             formula.parse(text)  # check now, not when the template is saved
             return text
         if side in ("amount", "currency_amount"):
-            value = to_minor(plain_number(text))
+            if ARITHMETIC.search(text):  # a small calculator: 1180*18/118
+                value = formula.evaluate(text)
+            else:
+                value = to_minor(plain_number(text))
             if value <= 0:
                 raise ValueError(tr("сумма должна быть больше нуля"))
             return value
@@ -663,6 +685,8 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
         try:
             typed = bool(text.strip())
             matches = search(items, text) if (typed or show_all) else []
+            if not text.strip().startswith(TEMPLATE_MARK):  # templates only after "#"
+                matches = [m for m in matches if not m.startswith(TEMPLATE_MARK)]
             model.setStringList(matches)
             if not matches:
                 popup.hide()
@@ -691,21 +715,40 @@ class PostingsDelegate(QStyledItemDelegate):
 
     error = Signal(str)
     unknown_value = Signal(QPersistentModelIndex, int, str)  # index, kind_id, typed text
+    template_chosen = Signal(int, int)  # row, entry template id
 
-    def __init__(self, catalog: Catalog, parent=None) -> None:
+    def __init__(self, catalog: Catalog, parent=None, hints: EntryHints | None = None) -> None:
         super().__init__(parent)
         self.catalog = catalog
+        self.hints = hints or EntryHints()
+
+    def _template_items(self) -> list[str]:
+        return [f"{TEMPLATE_MARK}{name}" for _, name in self.hints.templates()]
+
+    def _subconto_items(self, model, row: int, col: int) -> list[str]:
+        """The directory with the elements recently used on this account first."""
+        kind = model.kind_at(row, col)
+        side, pos = column_role(col)
+        values = self.catalog.values(kind)
+        account = getattr(model.rows[row], side)
+        active = {v.id for v in values}
+        recent = [v for v in self.hints.recent(account, pos) if v in active] if account else []
+        rest = [v for v in values if v.id not in set(recent)]
+        return [self.catalog.value(v).label for v in recent] + [v.label for v in rest]
 
     def createEditor(self, parent, option, index):
         editor = QLineEdit(parent)
         editor.setFrame(False)
+        editor.setProperty("gl_row", index.row())
         side, pos = column_role(index.column())
+        model = index.model()
         if side in ("debit", "credit"):
             if pos is None:
                 items = [a.label for a in self.catalog.leaf_accounts]
+                if side == "debit" and not model.formulas:
+                    items += self._template_items()
             else:
-                kind = index.model().kind_at(index.row(), index.column())
-                items = [v.label for v in self.catalog.values(kind)]
+                items = self._subconto_items(model, index.row(), index.column())
             # A subconto cell opens with its whole list, like a 1C directory;
             # an account cell shows suggestions from the first typed character.
             attach_list(editor, items, pos is not None, self._chosen)
@@ -724,10 +767,47 @@ class PostingsDelegate(QStyledItemDelegate):
         self._commit_and_next(editor)
 
     def setEditorData(self, editor, index):
-        if not editor.text():  # keep the key that started editing
-            editor.setText(index.data(Qt.ItemDataRole.EditRole) or "")
+        if editor.text():  # keep the key that started editing
+            return
+        editor.setText(index.data(Qt.ItemDataRole.EditRole) or "")
+        model = index.model()
+        r = model.rows[index.row()]
+        if (
+            column_role(index.column())[0] == "memo"
+            and not r.memo
+            and r.debit is not None
+            and r.credit is not None
+            and not model.read_only
+        ):
+            hint = self.hints.memo(r.debit, r.credit)
+            if hint:  # offered selected: Enter takes it, typing replaces it
+                editor.setText(hint)
+                editor.selectAll()
+
+    def _template(self, text: str) -> int | None:
+        needle = fold(text.strip()[len(TEMPLATE_MARK) :])
+        templates = self.hints.templates()
+        found = [t for t in templates if fold(t[1]) == needle] or [
+            t for t in templates if fold(t[1]).startswith(needle)
+        ]
+        if len(found) != 1:
+            return None
+        return found[0][0]
 
     def setModelData(self, editor, model, index):
+        text = editor.text().strip()
+        if (
+            text.startswith(TEMPLATE_MARK)
+            and index.column() == DT
+            and not model.formulas
+            and self.hints.templates()
+        ):
+            template_id = self._template(text)
+            if template_id is None:
+                self.error.emit(tr("шаблон «{name}» не найден или не один", name=text[1:]))
+            else:
+                self.template_chosen.emit(index.row(), template_id)
+            return
         try:
             value = model.parse(index.row(), index.column(), editor.text())
         except UnknownValue as e:

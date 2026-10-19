@@ -173,3 +173,12 @@ def compute(formulas: Sequence[str], amount: int | None) -> list[int | None]:
         return done[n]
 
     return [line(i + 1, ()) if i + 1 in trees else None for i in range(len(formulas))]
+
+
+def evaluate(text: str) -> int:
+    """An amount typed as arithmetic ("1180*18/118", "=1000+180") -> kopecks, rounded
+    half away from zero. Only numbers and + - * / ( ) — no S or L here."""
+    tree = parse(text.strip().lstrip("=").replace(" ", "").replace("\u00a0", ""))
+    if variables(tree):
+        raise ValidationError(tr("в сумме можно только числа и + − * / ( )"))
+    return _round_minor(_evaluate(tree, {}))

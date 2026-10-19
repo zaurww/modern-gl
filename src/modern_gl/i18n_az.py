@@ -163,11 +163,11 @@ AZ: dict[str, str] = {
     "сумма должна быть больше нуля": "məbləğ sıfırdan böyük olmalıdır",
     # ---- document --------------------------------------------------------------------------
     "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
-    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
+    "Del — удалить строку   ·   # — шаблон   ·   Ctrl+V — вставить из Excel   ·   "
+    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести   ·   Ctrl+Shift+Enter — провести и новый": (
         "Enter — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
-        "Del — sətri sil   ·   Ctrl+V — Excel-dən yapışdır   ·   "
-        "Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
+        "Del — sətri sil   ·   # — şablon   ·   Ctrl+V — Excel-dən yapışdır   ·   "
+        "Ctrl+S — saxla   ·   Ctrl+Enter — keçir   ·   Ctrl+Shift+Enter — keçir və yenisi"
     ),
     "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
@@ -626,4 +626,8 @@ AZ: dict[str, str] = {
     "валюта указана, но счета без валютного учёта": "valyuta göstərilib, amma hesablarda valyuta uçotu yoxdur",
     "нет суммы": "məbləğ yoxdur",
     "«{text}» нет в справочнике «{kind}»": "«{text}» «{kind}» soraqçasında yoxdur",
+    # ---- faster entry form ----------------------------------------------------------------
+    "шаблон «{name}» не найден или не один": "«{name}» şablonu tapılmadı və ya bir deyil",
+    "Шаблон «{name}» вставлен": "«{name}» şablonu əlavə edildi",
+    "в сумме можно только числа и + − * / ( )": "məbləğdə yalnız rəqəmlər və + − * / ( ) ola bilər",
 }

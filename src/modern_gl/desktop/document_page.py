@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from fractions import Fraction
 
@@ -23,9 +24,18 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger import TemplateLine
-from modern_gl.application.queries import DocumentData, TemplateData, load_document
+from modern_gl.application.queries import (
+    DocumentData,
+    TemplateData,
+    last_memo,
+    list_templates,
+    load_document,
+    load_template,
+    recent_subconto,
+)
 from modern_gl.desktop.postings import (
     DT,
+    EntryHints,
     PostingRow,
     PostingsDelegate,
     PostingsModel,
@@ -51,8 +61,8 @@ from modern_gl.infrastructure.db import transaction
 
 HINT = (
     "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
-    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
+    "Del — удалить строку   ·   # — шаблон   ·   Ctrl+V — вставить из Excel   ·   "
+    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести   ·   Ctrl+Shift+Enter — провести и новый"
 )
 
 
@@ -63,6 +73,7 @@ class DocumentPage(QWidget):
     template_saved = Signal(int)  # entry template made from this document
     close_requested = Signal()
     title_changed = Signal()
+    new_requested = Signal()  # posted with Ctrl+Shift+Enter: the next document, please
 
     def __init__(
         self,
@@ -124,7 +135,16 @@ class DocumentPage(QWidget):
 
         self.model = PostingsModel(session.catalog)
         self.model.rate_for = self._rate_for
-        self.delegate = PostingsDelegate(session.catalog, self)
+        cid = session.company_id
+        self.delegate = PostingsDelegate(
+            session.catalog,
+            self,
+            EntryHints(
+                recent=lambda account, pos: recent_subconto(session.conn, cid, account, pos),
+                memo=lambda dt, ct: last_memo(session.conn, cid, dt, ct),
+                templates=lambda: [(t.id, t.name) for t in list_templates(session.conn, cid)],
+            ),
+        )
         self.table = PostingsTable(self.model, self.delegate)
         root.addWidget(self.table, 1)
 
@@ -138,6 +158,7 @@ class DocumentPage(QWidget):
         self.hint = QLabel(tr(HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
+        self.hint.setWordWrap(True)  # never widens the window
         bottom.addWidget(self.hint, 1)
         total_caption = QLabel(tr("Итого"))
         total_caption.setObjectName("secondary")
@@ -184,11 +205,17 @@ class DocumentPage(QWidget):
         self.amount.returnPressed.connect(self._focus_grid)
         self.delegate.error.connect(self.show_error)
         self.delegate.unknown_value.connect(self._offer_new_value)
+        # deferred: the cell editor that picked the template has to close first
+        self.delegate.template_chosen.connect(
+            lambda row, tid: QTimer.singleShot(0, lambda: self.insert_template(row, tid))
+        )
         self.memo.returnPressed.connect(self._focus_grid)
 
         self._shortcut("Ctrl+S", lambda: self.save(post=False))
         self._shortcut("Ctrl+Return", lambda: self.save(post=True))
         self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
+        self._shortcut("Ctrl+Shift+Return", self.post_and_new)
+        self._shortcut("Ctrl+Shift+Enter", self.post_and_new)
         # Ins and F9 also work while a cell is being edited (in 1C-style entry an editor
         # is almost always open); Del inside an editor deletes text, so it does not.
         self._grid_shortcut("Ins", self._insert_row, while_editing=True)
@@ -444,7 +471,9 @@ class DocumentPage(QWidget):
         self.table.setFocus()  # commits an open cell editor
         self.error.hide()
         doc_date = self.date.date().toPython()
-        memo = self.memo.text().strip()
+        memo = self.memo.text().strip() or next(  # no title: the first posting's memo
+            (r.memo.strip() for r in self.model.rows if r.memo.strip()), ""
+        )
         layer = self.layer.currentData()
         led, cid = self.s.ledger, self.s.company_id
         try:
@@ -470,6 +499,46 @@ class DocumentPage(QWidget):
         )
         self.saved.emit(doc_id)
         return True
+
+    def post_and_new(self) -> None:
+        if self.save(post=True):
+            self.new_requested.emit()
+
+    def insert_template(self, row: int, template_id: int) -> None:
+        """ "#template" typed in a Dt cell: the template's lines take that row's place.
+        A document that is otherwise empty becomes the template (with its memo)."""
+        template = load_template(self.s.conn, self.s.company_id, template_id)
+        others = [r for i, r in enumerate(self.model.rows) if i != row and not r.is_empty()]
+        if not others:
+            self._set_entry(template)
+            return
+        offset = row  # template formulas refer to their own lines: L1 -> L(row + 1)…
+
+        def shift(text: str) -> str:
+            return re.sub(r"[Ll](\d+)", lambda m: f"L{int(m[1]) + offset}", text)
+
+        if self.model.rows[row].is_empty():
+            self.model.remove_row(row)
+        for i, ln in enumerate(template.lines):
+            self.model.insert_row(
+                row + i,
+                PostingRow(
+                    ln.debit_account_id,
+                    list(ln.debit_subconto),
+                    ln.credit_account_id,
+                    list(ln.credit_subconto),
+                    None,
+                    ln.memo,
+                    shift(ln.formula),
+                ),
+            )
+        asks = formula.uses_amount([ln.formula for ln in template.lines])
+        self.amount_caption.setVisible(asks)
+        self.amount.setVisible(asks)
+        if asks:
+            self.amount.setFocus()
+            self._amount_edited(self.amount.text())
+        self.s.notify(tr("Шаблон «{name}» вставлен", name=template.name))
 
     def delete(self) -> None:
         if self.doc is None:

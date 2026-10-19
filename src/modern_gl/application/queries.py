@@ -172,3 +172,42 @@ def load_template(conn: sqlite3.Connection, company_id: int, template_id: int) -
     if found is None:
         raise NotFoundError(tr("шаблон не найден"))
     return found
+
+
+def recent_subconto(
+    conn: sqlite3.Connection, company_id: int, account_id: int, position: int, limit: int = 8
+) -> list[int]:
+    """Elements most recently used at a subconto position of an account, newest first."""
+    if position not in (1, 2, 3):
+        raise ValueError(position)
+    return [
+        r[0]
+        for r in conn.execute(
+            f"""
+            SELECT value FROM (
+                SELECT dt_sc{position} AS value, id FROM postings
+                WHERE company_id = :c AND debit_account_id = :a AND dt_sc{position} IS NOT NULL
+                UNION ALL
+                SELECT ct_sc{position}, id FROM postings
+                WHERE company_id = :c AND credit_account_id = :a AND ct_sc{position} IS NOT NULL
+            )
+            GROUP BY value ORDER BY MAX(id) DESC LIMIT :n
+            """,
+            {"c": company_id, "a": account_id, "n": limit},
+        )
+    ]
+
+
+def last_memo(conn: sqlite3.Connection, company_id: int, debit: int, credit: int) -> str:
+    """The memo of the latest posting with this Dt/Kt pair (or of its document)."""
+    row = conn.execute(
+        """
+        SELECT CASE WHEN p.memo <> '' THEN p.memo ELSE d.memo END
+        FROM postings p JOIN documents d ON d.id = p.document_id
+        WHERE p.company_id = ? AND p.debit_account_id = ? AND p.credit_account_id = ?
+          AND (p.memo <> '' OR d.memo <> '')
+        ORDER BY p.id DESC LIMIT 1
+        """,
+        (company_id, debit, credit),
+    ).fetchone()
+    return row[0] if row else ""
