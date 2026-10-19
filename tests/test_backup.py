@@ -140,3 +140,13 @@ def test_copy_of_open_database_is_consistent(tmp_path):
     assert sqlite3.connect(target).execute("SELECT name FROM companies").fetchone()[0] == "Live"
     conn.close()
     assert cid == 1
+
+
+def test_failed_copy_leaves_no_partial_file(tmp_path):
+    ws = Workspace(tmp_path / "data")
+    _, conn, *_ = company(ws)
+    target = tmp_path / "copy.gl"
+    conn.close()  # backing up a closed connection fails half-way
+    with pytest.raises(sqlite3.ProgrammingError):
+        backup.copy_to(conn, target)
+    assert list(tmp_path.glob("copy.gl*")) == []

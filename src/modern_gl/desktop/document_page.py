@@ -329,7 +329,7 @@ class DocumentPage(QWidget):
             self.model.rows = rows or [PostingRow()]
             self.model.endResetModel()
             self.dirty = True
-        self._apply_mode(read_only=False, status="new")
+        self._apply_mode(read_only=False)
         QTimer.singleShot(0, self.memo.setFocus)
 
     def _set_entry(self, entry: TemplateData) -> None:
@@ -427,7 +427,7 @@ class DocumentPage(QWidget):
             self.status.set(tr("Сторнирован"), "red")
         else:
             self.status.set(tr("Проведён"), "green")
-        self._apply_mode(read_only, d.status)
+        self._apply_mode(read_only)
         self.dirty = False
         self._update_total()
         self.title_changed.emit()
@@ -437,7 +437,7 @@ class DocumentPage(QWidget):
         if i >= 0:
             self.layer.setCurrentIndex(i)
 
-    def _apply_mode(self, read_only: bool, status: str) -> None:
+    def _apply_mode(self, read_only: bool) -> None:
         for w in (self.memo, self.date, self.layer):
             w.setEnabled(not read_only)
         self.memo.setReadOnly(read_only)

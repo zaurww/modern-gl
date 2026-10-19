@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import cast
+from typing import ClassVar, cast
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QIcon
@@ -71,7 +71,7 @@ def button(text: str, kind: str = "", tooltip: str = "") -> QPushButton:
 class Chip(QLabel):
     """Rounded status label: draft / posted / storno."""
 
-    TONES = {
+    TONES: ClassVar[dict[str, tuple[str, str]]] = {
         "neutral": (P.secondary, P.subtle),
         "green": (P.green, P.green_soft),
         "amber": (P.amber, P.amber_soft),

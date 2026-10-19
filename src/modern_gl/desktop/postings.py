@@ -273,7 +273,7 @@ class PostingsModel(QAbstractTableModel):
     def applies(self, row: int, col: int) -> bool:
         if col in CURRENCY_COLUMNS:
             return self.is_currency(row)
-        side, pos = column_role(col)
+        _, pos = column_role(col)
         return pos is None or self.kind_at(row, col) is not None
 
     def flags(self, index):

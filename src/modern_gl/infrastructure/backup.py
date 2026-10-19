@@ -76,15 +76,15 @@ def copy_to(conn: sqlite3.Connection, target: Path) -> Path:
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_name(target.name + ".part")
     partial.unlink(missing_ok=True)
-    dst = sqlite3.connect(partial)
     try:
-        conn.backup(dst)
-        dst.execute("PRAGMA journal_mode = DELETE")  # a single self-contained file
-    finally:
-        dst.close()
-    try:
+        dst = sqlite3.connect(partial)
+        try:
+            conn.backup(dst)
+            dst.execute("PRAGMA journal_mode = DELETE")  # a single self-contained file
+        finally:
+            dst.close()
         check(partial)
-    except BackupError:
+    except BaseException:  # a failed or damaged copy must not be left behind
         partial.unlink(missing_ok=True)
         raise
     partial.replace(target)
