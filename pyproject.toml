@@ -3,10 +3,16 @@ name = "modern-gl"
 version = "0.1.0"
 description = "Keyboard-first double-entry general ledger (1C 7.7 style postings, parallel books)"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pyside6>=6.8",
+]
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6"]
+dev = [
+    "pytest>=8",
+    "pytest-qt>=4.5.0",
+    "ruff>=0.6",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -25,3 +31,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[project.gui-scripts]
+modern-gl = "modern_gl.desktop.app:main"

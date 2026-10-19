@@ -7,7 +7,9 @@
 ## Команды
 - Тесты: `uv run pytest -q`
 - Линтер: `uv run ruff check . && uv run ruff format --check .`
-- Демо: `uv run python scripts/demo.py`
+- Программа: `uv run modern-gl` (база по умолчанию `~/ModernGL/ledger.db`); с демо-данными: `uv run modern-gl demo.db --demo`
+- Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка>` — после любых изменений UI смотреть их
+- Демо в консоли: `uv run python scripts/demo.py`
 
 ## Структура
 - `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt.
@@ -22,3 +24,6 @@
 - Схема меняется только новой миграцией; старые миграции не редактировать.
 - Любое изменение логики учёта — с тестом, в котором ожидаемые цифры посчитаны вручную.
 - Сообщения об ошибках для пользователя — по-русски.
+- **Дизайн — главный приоритет** (ориентир: Things от Cultured Code): светло, много воздуха, боковая панель вместо вкладок, крупные заголовки, один акцентный синий, без сеток «как в Excel». Цвета и шрифты — только через `desktop/theme.py`.
+- UI: `src/modern_gl/desktop` (PySide6). Никакого SQL в виджетах — только `application/queries.py`, `application/catalog.py`, `reporting`.
+- В тестах UI модальные диалоги подменяются (`no_modal_dialogs`), иначе тест зависнет.

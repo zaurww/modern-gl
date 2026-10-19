@@ -22,9 +22,16 @@ Expected ОСВ for February 2026 (hand-calculated):
 
 from __future__ import annotations
 
+import os
+import sys
 from dataclasses import dataclass
 
 import pytest
+
+# UI tests run without a screen; point Qt at the system fonts so text measures realistically.
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+if sys.platform == "win32":
+    os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["WINDIR"], "Fonts"))
 
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.infrastructure.db import connect
