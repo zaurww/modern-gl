@@ -1,6 +1,7 @@
 """Import a chart of accounts from CSV (Excel 'CSV UTF-8', ';'-separated).
 
 Columns: code;name;parent;group;subconto[;class;contra;two_sided]
+  code      - optional: an account without a code is known by its name
   parent    - parent account code, empty for top level (parents must come first)
   group     - 1 for a group (no postings allowed), empty or 0 otherwise
   subconto  - subconto kind codes for positions 1..3, comma-separated; must already exist
@@ -27,7 +28,8 @@ SUBCONTO_COLUMNS = ("code", "name")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 LEGACY_CLASS = {"A": "asset", "P": "liability"}
 # Each template exists per language: chart_<name>_<lang>.csv, chart_<name>_subconto_<lang>.csv
-TEMPLATES = ("1c77",)
+TEMPLATES = ("classic", "1c77")
+DEFAULT_TEMPLATE = "classic"
 
 
 def _read_rows(path: str | Path, columns: tuple[str, ...], delimiter: str) -> list[dict]:
@@ -42,11 +44,12 @@ def _read_rows(path: str | Path, columns: tuple[str, ...], delimiter: str) -> li
 
 
 def apply_chart_template(
-    ledger: Ledger, company_id: int, name: str = "1c77", lang: str | None = None
+    ledger: Ledger, company_id: int, name: str = DEFAULT_TEMPLATE, lang: str | None = None
 ) -> int:
     """Create a template's subconto kinds and accounts in one transaction.
 
-    "1c77" is the 1C 7.7 style chart (two-digit codes, subaccounts like 60.1).
+    "classic" is the short pre-2000 chart (46 sales, 80 profit and loss, ~37 accounts);
+    "1c77" is the full 1C 7.7 chart on the 2000 plan (90 sales, subaccounts like 60.1).
     Names come in the given language (default: the interface language).
     """
     if name not in TEMPLATES:
@@ -80,7 +83,7 @@ def import_chart_csv(
                     company_id,
                     row["code"].strip(),
                     row["name"].strip(),
-                    parent_code=(row["parent"] or "").strip() or None,
+                    parent=(row["parent"] or "").strip() or None,
                     is_group=(row["group"] or "").strip() == "1",
                     subconto=[ledger.subconto_kind_id(company_id, k) for k in kinds],
                     account_class=account_class,

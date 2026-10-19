@@ -270,4 +270,9 @@ AZ: dict[str, str] = {
     "Списание материалов": "Materialların silinməsi",
     "Корректировка оценки запасов": "Ehtiyatların qiymətləndirilməsinə düzəliş",
     "Аренда за март": "Mart ayı üzrə icarə",
+    "Реализация услуг": "Xidmətlərin satışı",
+    "Услуги оказаны": "Xidmətlər göstərilib",
+    "НДС 18%": "ƏDV 18%",
+    "Оплата от покупателя": "Alıcıdan ödəniş",
+    "необязательно": "məcburi deyil",
 }

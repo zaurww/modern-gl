@@ -64,7 +64,7 @@ def type_into_cell(qtbot, page: DocumentPage, row: int, col: int, text: str) -> 
 def test_opens_on_journal_with_demo_documents(window):
     page = current_page(window)
     assert page.title() == "Журнал"
-    assert page.model.rowCount() == 11
+    assert page.model.rowCount() == 13
     assert window.windowTitle().startswith("ДЕМО ООО")
 
 
@@ -104,19 +104,19 @@ def test_keyboard_entry_skips_subconto_cells_that_do_not_apply(window, qtbot):
 def test_group_account_is_refused_with_a_hint(window, qtbot):
     window.new_document()
     page = current_page(window)
-    type_into_cell(qtbot, page, 0, DT, "60")
+    type_into_cell(qtbot, page, 0, DT, "68")
     assert page.model.rows[0].debit is None
-    assert "60.1, 60.2" in page.error.text()
+    assert "68.1, 68.2" in page.error.text()
 
 
 def test_changing_account_clears_incompatible_subconto(window):
     window.new_document()
     page = current_page(window)
     m, cat = page.model, window.session.catalog
-    m.setData(m.index(0, CT), cat.by_code["60.1"].id)
-    alfa = next(v.id for v in cat.values(cat.by_code["60.1"].sc_kinds[0]) if "Альфа" in v.name)
+    m.setData(m.index(0, CT), cat.by_code["60"].id)
+    alfa = next(v.id for v in cat.values(cat.by_code["60"].sc_kinds[0]) if "Альфа" in v.name)
     m.setData(m.index(0, CT + 1), alfa)
-    m.setData(m.index(0, CT), cat.by_code["62.1"].id)  # same kind: counterparty stays
+    m.setData(m.index(0, CT), cat.by_code["62"].id)  # same kind: counterparty stays
     assert m.rows[0].credit_sc[0] == alfa
     m.setData(m.index(0, CT), cat.by_code["26"].id)  # cost item: cleared
     assert m.rows[0].credit_sc == [None, None, None]
@@ -139,7 +139,7 @@ def test_post_from_form_updates_journal_and_reports(window):
     assert page.save(post=True)
     assert page.status.text() == "Проведён"
     assert page.model.read_only
-    assert window.sidebar.find(("doc", page.doc_id)).text() == "Документ №12"
+    assert window.sidebar.find(("doc", page.doc_id)).text() == "Документ №14"
 
     journal = window.pages[("journal",)]
     assert journal.model.docs[-1].memo == "Пополнение кассы"
@@ -186,7 +186,7 @@ def test_osv_drill_down_to_card_and_document(window):
     osv.drill(row)
     card = current_page(window)
     assert card.title() == "Карточка счёта 51"
-    assert len(card.model.rows) == 2
+    assert len(card.model.rows) == 3
     card.drill(card.model.rows[0])
     assert isinstance(current_page(window), DocumentPage)
 
@@ -238,11 +238,11 @@ def test_subconto_list_opens_at_once_and_filters_from_first_letter(window, qtbot
     window.new_document()
     page = current_page(window)
     cat = window.session.catalog
-    page.model.setData(page.model.index(0, CT), cat.by_code["60.1"].id)
+    page.model.setData(page.model.index(0, CT), cat.by_code["60"].id)
 
     editor, completer = open_cell_editor(page, 0, CT + 1)
     popup = completer.popup()
-    all_counterparties = len(cat.values(cat.by_code["60.1"].sc_kinds[0]))
+    all_counterparties = len(cat.values(cat.by_code["60"].sc_kinds[0]))
     assert popup.isVisible()
     assert completer.model().rowCount() == all_counterparties  # whole directory, like 1C
 
@@ -260,10 +260,10 @@ def test_account_list_appears_while_typing(window, qtbot):
     page = current_page(window)
     editor, completer = open_cell_editor(page, 0, DT)
     assert not completer.popup().isVisible()  # empty account cell: no noise
-    qtbot.keyClicks(editor, "60")
+    qtbot.keyClicks(editor, "68")
     assert completer.model().stringList()[:2] == [
-        "60.1  Расчёты с поставщиками и подрядчиками",
-        "60.2  Авансы выданные",
+        "68.1  Подоходный налог",
+        "68.2  Налог на добавленную стоимость",
     ]
 
 
@@ -274,7 +274,7 @@ def test_osv_top_level_only(window):
     osv.date_to.setDate(date(2026, 2, 28))
     osv.top_only.setChecked(True)
     codes = [r.code for r in osv.model.rows]
-    assert "10" in codes and "10.1" not in codes and "60.1" not in codes
+    assert "68" in codes and "68.2" not in codes
     total = osv.model.rows[-1]
     assert osv.model.data(osv.model.index(len(osv.model.rows) - 1, 2)) == "0.00" or (
         total.opening_dt != 0
@@ -313,7 +313,7 @@ def test_osv_sections_by_class(window):
     osv.sections.setChecked(True)
     rows = osv.model.rows
     headers = [r for r in rows if id(r) in osv._section_rows]
-    assert [h.name for h in headers] == ["Активы", "Обязательства", "Капитал", "Расходы"]
+    assert [h.name for h in headers] == ["Активы", "Обязательства", "Капитал", "Доходы", "Расходы"]
     total = rows[-1]
     assert sum(h.closing_dt for h in headers) == total.closing_dt
     assert sum(h.closing_ct for h in headers) == total.closing_ct
@@ -323,12 +323,12 @@ def test_osv_sections_by_class(window):
 def test_change_class_from_chart_menu(window):
     window.show_place(("chart",))
     chart = current_page(window)
-    acc = window.session.catalog.by_code["76.5"]
+    acc = window.session.catalog.by_code["76"]
     menu = dict(e for e in chart.menu_actions(acc) if e is not None)
     submenu = dict(e for e in menu["Класс счёта"] if e is not None)
     submenu["     Активы"]()
-    assert window.session.catalog.by_code["76.5"].account_class == "asset"
-    row = next(a for a in chart.model.rows if a.code == "76.5")
+    assert window.session.catalog.by_code["76"].account_class == "asset"
+    row = next(a for a in chart.model.rows if a.code == "76")
     assert chart.model.data(chart.model.index(chart.model.rows.index(row), 3)) == "Активы"
 
 
@@ -336,8 +336,9 @@ def test_open_reports_are_translated_in_sidebar(window):
     window.set_ui_language("az")
     try:
         osv = window.pages.get(("osv",)) or (window.show_place(("osv",)) or current_page(window))
-        window.open_report("card", "51", osv.params)
-        assert window.sidebar.find(("card", "51")).text() == "Hesab kartı 51"
+        bank = window.session.catalog.by_code["51"].id
+        window.open_report("card", bank, osv.params)
+        assert window.sidebar.find(("card", bank)).text() == "Hesab kartı 51"
         assert current_page(window).header.title.text() == "Hesab kartı 51"
     finally:
         window.set_ui_language("ru")
@@ -350,7 +351,7 @@ def test_osv_expanded_by_subconto(window):
     osv.date_to.setDate(date(2026, 2, 28))
     osv.expand.setChecked(True)
     rows = osv.model.rows
-    i = next(i for i, r in enumerate(rows) if r.code == "60.1")
+    i = next(i for i, r in enumerate(rows) if r.code == "60")
     under = [r.name.strip() for r in rows[i + 1 : i + 3]]
     assert under == ["Альфа Трейд", "Бета Сервис"]
     assert sum(r.closing_ct for r in rows[i + 1 : i + 3]) == rows[i].closing_ct
@@ -378,7 +379,7 @@ def test_account_dialog_adds_subaccount_and_renames(window, monkeypatch):
         d.name.setText("Kapital Bank USD")
 
     run(add_bank)
-    chart.edit_account(None, "52")
+    chart.edit_account(None, cat.by_code["52"].id)
     assert cat.by_code["52"].is_group
     assert cat.by_code["52.1"].parent_id == cat.by_code["52"].id
     assert cat.by_code["52.1"].account_class == "asset"  # inherited
@@ -433,7 +434,7 @@ def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch)
     assert [c.name for c in workspace.companies()] == ["Yeni MMC", "ДЕМО ООО"]
     demo = next(c for c in workspace.companies() if c.name == "ДЕМО ООО")
     window.open_company(demo.path)
-    assert current_page(window).model.rowCount() == 11
+    assert current_page(window).model.rowCount() == 13
 
 
 def test_delete_company_needs_typed_name(window, workspace, monkeypatch):
@@ -568,7 +569,7 @@ def test_pick_from_open_list_with_arrows(window, qtbot, key):
     window.new_document()
     page = current_page(window)
     cat = window.session.catalog
-    page.model.setData(page.model.index(0, CT), cat.by_code["60.1"].id)
+    page.model.setData(page.model.index(0, CT), cat.by_code["60"].id)
     editor, completer = open_cell_editor(page, 0, CT + 1)
     popup = completer.popup()
     assert popup.isVisible() and editor.text() == ""

@@ -18,7 +18,7 @@ def classes(conn, cid):
 
 def test_template_classes(ledger, conn):
     cid = ledger.create_company("Классы")
-    apply_chart_template(ledger, cid)
+    apply_chart_template(ledger, cid, "1c77")
     c = classes(conn, cid)
     assert all(cls for cls, _ in c.values())  # every template account is classified
     assert c["01"] == ("asset", 0)
@@ -38,8 +38,8 @@ def test_new_account_inherits_class_and_two_sided(ledger, conn):
     ledger.add_account(
         cid, "60", "Поставщики", is_group=True, account_class="liability", two_sided=True
     )
-    ledger.add_account(cid, "60.9", "Прочие", parent_code="60")
-    ledger.add_account(cid, "60.8", "Особые", parent_code="60", two_sided=False)
+    ledger.add_account(cid, "60.9", "Прочие", parent="60")
+    ledger.add_account(cid, "60.8", "Особые", parent="60", two_sided=False)
     ledger.add_account(cid, "76", "Разные")
     c = classes(conn, cid)
     assert c["60.9"][0] == "liability"  # from the parent
@@ -72,7 +72,7 @@ def test_csv_understands_1c_kind_column(ledger, conn, tmp_path):
 
 def test_changing_group_class_moves_subaccounts_that_followed_it(ledger, conn):
     cid = ledger.create_company("Классы")
-    apply_chart_template(ledger, cid)
+    apply_chart_template(ledger, cid, "1c77")
     ledger.set_account_class(cid, "62.2", "equity")  # set differently on purpose
     ledger.set_account_class(cid, "62", "revenue")
     c = classes(conn, cid)
@@ -148,7 +148,7 @@ def test_update_account_protects_history(demo, conn):
     # no postings yet: free to reshape
     led.add_account(cid, "55", "Спецсчёт", account_class="asset")
     led.update_account(cid, "55", is_group=True)
-    led.add_account(cid, "55.1", "Аккредитив", parent_code="55")
+    led.add_account(cid, "55.1", "Аккредитив", parent="55")
 
 
 def test_hidden_account_keeps_history_but_takes_no_new_postings(demo, conn):

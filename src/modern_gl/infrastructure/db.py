@@ -42,15 +42,32 @@ def schema_version(conn: sqlite3.Connection) -> int:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
+    """Apply pending migrations. Foreign keys are off meanwhile, so a migration may
+    rebuild a referenced table (the SQLite way to change a column); dangling
+    references are checked before each migration commits."""
     current = schema_version(conn)
-    for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        version = int(path.name.split("_", 1)[0])
-        if version <= current:
-            continue
-        sql = path.read_text(encoding="utf-8")
-        try:
-            conn.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;")
-        except BaseException:
-            if conn.in_transaction:
-                conn.execute("ROLLBACK")
-            raise
+    pending = [
+        (version, path)
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql"))
+        if (version := int(path.name.split("_", 1)[0])) > current
+    ]
+    if not pending:
+        return
+    conn.execute("PRAGMA foreign_keys = OFF")  # no effect inside a transaction
+    try:
+        for version, path in pending:
+            sql = path.read_text(encoding="utf-8")
+            try:
+                conn.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};")
+                broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+                if broken:
+                    raise sqlite3.IntegrityError(
+                        f"{path.name}: broken references {[tuple(r) for r in broken]}"
+                    )
+                conn.execute("COMMIT")
+            except BaseException:
+                if conn.in_transaction:
+                    conn.execute("ROLLBACK")
+                raise
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")

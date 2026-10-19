@@ -15,7 +15,7 @@ from modern_gl.i18n import fold, sort_key, tr
 @dataclass(frozen=True)
 class AccountInfo:
     id: int
-    code: str
+    code: str  # "" when the account has no code (known by its name only)
     name: str
     is_group: bool
     parent_id: int | None
@@ -27,7 +27,12 @@ class AccountInfo:
 
     @property
     def label(self) -> str:
-        return f"{self.code}  {self.name}"
+        return f"{self.code}  {self.name}" if self.code else self.name
+
+    @property
+    def short(self) -> str:
+        """Code if there is one, else the name: for grid cells and messages."""
+        return self.code or self.name
 
 
 @dataclass(frozen=True)
@@ -53,7 +58,7 @@ class Catalog:
         self.accounts: dict[int, AccountInfo] = {
             r["id"]: AccountInfo(
                 r["id"],
-                r["code"],
+                r["code"] or "",
                 r["name"],
                 bool(r["is_group"]),
                 r["parent_id"],
@@ -64,11 +69,12 @@ class Catalog:
                 bool(r["two_sided"]),
             )
             for r in self.conn.execute(
-                "SELECT * FROM accounts WHERE company_id = ? ORDER BY code",
+                "SELECT * FROM accounts WHERE company_id = ? ORDER BY code IS NULL, code",
                 (self.company_id,),
             )
         }
-        self.by_code = {a.code: a for a in self.accounts.values()}
+        self._tree_order()
+        self.by_code = {a.code: a for a in self.accounts.values() if a.code}
         self.kinds: dict[int, str] = {
             r["id"]: r["name"]
             for r in self.conn.execute(
@@ -85,6 +91,22 @@ class Catalog:
             self._add(SubcontoInfo(r["id"], r["kind_id"], r["name"], r["code"], bool(r["active"])))
         for values in self._by_kind.values():
             values.sort(key=lambda v: sort_key(v.name))
+
+    def _tree_order(self) -> None:
+        """Tree order: each account followed by its subaccounts; among siblings coded
+        accounts come first (by code), then the ones without a code (alphabetically)."""
+        children: dict[int | None, list[AccountInfo]] = {}
+        for a in self.accounts.values():  # already ordered by code
+            children.setdefault(a.parent_id, []).append(a)
+        for siblings in children.values():
+            siblings.sort(key=lambda a: (not a.code, "" if a.code else sort_key(a.name)))
+        ordered: dict[int, AccountInfo] = {}
+        stack = list(reversed(children.get(None, [])))
+        while stack:
+            a = stack.pop()
+            ordered[a.id] = a
+            stack.extend(reversed(children.get(a.id, [])))
+        self.accounts = ordered
 
     def _add(self, value: SubcontoInfo) -> None:
         self._values[value.id] = value
@@ -126,24 +148,25 @@ class Catalog:
         found = self.by_code.get(text.split()[0])
         if found is None:
             needle = fold(text)
-            matches = [a for a in self.leaf_accounts if needle in fold(a.name)]
-            if len(matches) > 1:  # prefer names that start with what was typed
+            matches = [a for a in self.leaf_accounts if needle in fold(a.label)]
+            if len(matches) > 1:  # prefer the exact name, then names starting with the text
+                exact = [a for a in matches if fold(a.name) == needle or fold(a.label) == needle]
                 starts = [a for a in matches if fold(a.name).startswith(needle)]
-                matches = starts if len(starts) == 1 else matches
+                matches = exact or (starts if len(starts) == 1 else matches)
             if len(matches) != 1:
                 if not matches:
                     raise LookupError(tr("счёт «{text}» не найден", text=text))
-                codes = ", ".join(a.code for a in matches[:6])
+                codes = ", ".join(a.short for a in matches[:6])
                 raise LookupError(
                     tr("«{text}» подходит к нескольким счетам: {codes}", text=text, codes=codes)
                 )
             found = matches[0]
         if not found.active:
-            raise LookupError(tr("счёт {code} скрыт", code=found.code))
+            raise LookupError(tr("счёт {code} скрыт", code=found.short))
         if found.is_group:
-            subs = ", ".join(a.code for a in self.accounts.values() if a.parent_id == found.id)
+            subs = ", ".join(a.short for a in self.accounts.values() if a.parent_id == found.id)
             raise LookupError(
-                tr("счёт {code} — группа, выберите субсчёт: {subs}", code=found.code, subs=subs)
+                tr("счёт {code} — группа, выберите субсчёт: {subs}", code=found.short, subs=subs)
             )
         return found
 

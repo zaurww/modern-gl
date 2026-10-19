@@ -497,11 +497,11 @@ class MainWindow(QMainWindow):
     def _key_of(self, page: QWidget):
         return next((k for k, p in self.pages.items() if p is page), None)
 
-    def open_report(self, kind: str, code: str, params: ReportParams) -> None:
-        key = (kind, code)
+    def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
+        key = (kind, account_id)
         if key in self.pages:
             self.close_page(key, ask=False)
-        page = REPORTS[kind](self.session, code, params)
+        page = REPORTS[kind](self.session, account_id, params)
         self._wire_report(page)
         self._add_page(key, page, open_item=True)
         self._activate(key)

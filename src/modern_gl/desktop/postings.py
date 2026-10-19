@@ -142,7 +142,7 @@ class PostingsModel(QAbstractTableModel):
             if side in ("debit", "credit"):
                 if pos is None:
                     account_id = getattr(r, side)
-                    return self.catalog.accounts[account_id].code if account_id else ""
+                    return self.catalog.accounts[account_id].short if account_id else ""
                 value_id = getattr(r, f"{side}_sc")[pos - 1]
                 if value_id is not None:
                     return self.catalog.value(value_id).name

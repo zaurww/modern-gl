@@ -171,7 +171,7 @@ class ReportPage(QWidget):
     """Base: header, parameters, table/empty state, footer."""
 
     open_document = Signal(int)
-    open_report = Signal(str, str, object)  # kind, account code, ReportParams
+    open_report = Signal(str, int, object)  # kind, account id, ReportParams
 
     has_period = True
 
@@ -321,9 +321,9 @@ class ReportPage(QWidget):
                 act.triggered.connect(target)
                 menu.addAction(act)
 
-    def _class_actions(self, code: str) -> list:
+    def _class_actions(self, account_id: int) -> list:
         """Submenu to change an account's class and contra flag."""
-        acc = self.s.catalog.by_code.get(code)
+        acc = self.s.catalog.accounts.get(account_id)
         if acc is None:
             return []
 
@@ -332,10 +332,14 @@ class ReportPage(QWidget):
 
         def setter(account_class, contra=None):
             def run():
-                self.s.ledger.set_account_class(self.s.company_id, code, account_class, contra)
+                self.s.ledger.set_account_class(self.s.company_id, acc.id, account_class, contra)
                 self.s.catalog.reload()
                 self.s.notify(
-                    tr("Счёт {code}: класс «{name}»", code=code, name=class_name(account_class))
+                    tr(
+                        "Счёт {code}: класс «{name}»",
+                        code=acc.short,
+                        name=class_name(account_class),
+                    )
                 )
                 self.refresh()
 
@@ -352,19 +356,19 @@ class ReportPage(QWidget):
         ]
         return [None, (tr("Класс счёта"), items)]
 
-    def _account_actions(self, code: str) -> list[tuple[str, Callable[[], None]]]:
-        acc = self.s.catalog.by_code.get(code)
+    def _account_actions(self, account_id: int) -> list[tuple[str, Callable[[], None]]]:
+        acc = self.s.catalog.accounts.get(account_id)
         if acc is None:
             return []
         actions = [
-            (tr("Карточка счёта"), lambda: self.open_report.emit("card", code, self.params)),
-            (tr("Анализ счёта"), lambda: self.open_report.emit("analysis", code, self.params)),
+            (tr("Карточка счёта"), lambda: self.open_report.emit("card", acc.id, self.params)),
+            (tr("Анализ счёта"), lambda: self.open_report.emit("analysis", acc.id, self.params)),
         ]
         if acc.sc_kinds[0] is not None:
             actions.append(
                 (
                     tr("ОСВ по субконто"),
-                    lambda: self.open_report.emit("subconto", code, self.params),
+                    lambda: self.open_report.emit("subconto", acc.id, self.params),
                 )
             )
         return actions
@@ -417,7 +421,7 @@ class OsvPage(ReportPage):
                 blocks[-1].append(r)
         groups: dict[str | None, list[list[OsvRow]]] = {}
         for block in blocks:
-            acc = self.s.catalog.by_code.get(block[0].code)
+            acc = self.s.catalog.accounts.get(block[0].account_id)
             groups.setdefault(acc.account_class if acc else None, []).append(block)
         result = []
         for cls in sorted(groups, key=lambda c: CLASS_ORDER.get(c, len(CLASS_ORDER))):
@@ -482,7 +486,7 @@ class OsvPage(ReportPage):
         )
         wrong = osv.wrong_side
         if wrong:
-            codes = ", ".join(r.code for r in wrong[:8]) + ("…" if len(wrong) > 8 else "")
+            codes = ", ".join(r.code or r.name for r in wrong[:8]) + ("…" if len(wrong) > 8 else "")
             text += "      " + tr(
                 "Сальдо не на своей стороне: {codes} — подсвечено красным", codes=codes
             )
@@ -490,11 +494,11 @@ class OsvPage(ReportPage):
         self.footer.setStyleSheet(f"color: {P.red};" if wrong or not balanced else "")
 
     def drill(self, row: OsvRow) -> None:
-        if row and row.code:
-            self.open_report.emit("card", row.code, self.params)
+        if row and row.account_id:
+            self.open_report.emit("card", row.account_id, self.params)
 
     def _side_warning(self, row: OsvRow) -> str:
-        acc = self.s.catalog.by_code.get(row.code)
+        acc = self.s.catalog.accounts.get(row.account_id)
         if acc is None:
             return ""
         side = normal_side(acc.account_class, acc.contra)
@@ -505,31 +509,38 @@ class OsvPage(ReportPage):
         )
 
     def menu_actions(self, row: OsvRow):
-        if not row or not row.code:
+        if not row or not row.account_id:
             return []
-        return self._account_actions(row.code) + self._class_actions(row.code)
+        return self._account_actions(row.account_id) + self._class_actions(row.account_id)
 
 
 class AccountReportPage(ReportPage):
     kind = ""
     caption = ""
 
-    def __init__(self, session: Session, code: str, params: ReportParams) -> None:
-        self.code = code
-        acc = session.catalog.by_code[code]
-        super().__init__(session, f"{tr(self.caption)} {code}", params)
-        self.header.title.setText(f"{tr(self.caption)} {code}")
+    def __init__(self, session: Session, account_id: int, params: ReportParams) -> None:
+        self.account_id = account_id
+        acc = session.catalog.accounts[account_id]
+        super().__init__(session, f"{tr(self.caption)} {acc.short}", params)
+        self.header.title.setText(f"{tr(self.caption)} {acc.short}")
         self.header.subtitle.setText(acc.name)
-        self.key = (self.kind, code)
+        self.key = (self.kind, account_id)
         self.refresh()
 
+    @property
+    def account(self):
+        return self.s.catalog.accounts[self.account_id]
+
     def title(self) -> str:
-        return f"{tr(self.caption)} {self.code}"
+        return f"{tr(self.caption)} {self.account.short}"
 
     def refresh(self) -> None:
         super().refresh()
-        acc = self.s.catalog.by_code[self.code]
-        self.header.subtitle.setText(f"{acc.name}   ·   {self.params.describe()}")
+        acc = self.account
+        name = acc.name if acc.code else ""  # without a code the name is the title already
+        self.header.subtitle.setText(
+            "   ·   ".join(part for part in (name, self.params.describe()) if part)
+        )
 
 
 class CardPage(AccountReportPage):
@@ -539,7 +550,7 @@ class CardPage(AccountReportPage):
         card = reports.account_card(
             self.s.conn,
             self.s.company_id,
-            self.code,
+            self.account_id,
             self.params.date_from,
             self.params.date_to,
             self.params.layers,
@@ -574,7 +585,7 @@ class SubcontoPage(AccountReportPage):
         rows = reports.subconto_balance(
             self.s.conn,
             self.s.company_id,
-            self.code,
+            self.account_id,
             self.params.date_from,
             self.params.date_to,
             self.params.layers,
@@ -591,7 +602,7 @@ class SubcontoPage(AccountReportPage):
                     r.closing_ct,
                 )
             )
-        kind = self.s.catalog.kinds[self.s.catalog.by_code[self.code].sc_kinds[0]]
+        kind = self.s.catalog.kinds[self.account.sc_kinds[0]]
         columns = [Column(kind, lambda r: r.name), *turnover_columns()]
         self.model.set(
             columns,
@@ -609,7 +620,7 @@ class AnalysisPage(AccountReportPage):
         rows = reports.account_analysis(
             self.s.conn,
             self.s.company_id,
-            self.code,
+            self.account_id,
             self.params.date_from,
             self.params.date_to,
             self.params.layers,
@@ -627,8 +638,8 @@ class AnalysisPage(AccountReportPage):
         )
 
     def drill(self, row) -> None:
-        if row is not None and row.corr_code in self.s.catalog.by_code:
-            self.open_report.emit("card", row.corr_code, self.params)
+        if row is not None and row.corr_id in self.s.catalog.accounts:
+            self.open_report.emit("card", row.corr_id, self.params)
 
 
 class ChartPage(ReportPage):
@@ -683,7 +694,7 @@ class ChartPage(ReportPage):
 
     def drill(self, acc) -> None:
         if acc is not None:
-            self.open_report.emit("card", acc.code, month_of(self.s.working_date))
+            self.open_report.emit("card", acc.id, month_of(self.s.working_date))
 
     def _current(self):
         idx = self.table.currentIndex()
@@ -703,22 +714,22 @@ class ChartPage(ReportPage):
         side = normal_side(acc.account_class, acc.contra)
         return {"debit": tr("Дебет"), "credit": tr("Кредит")}.get(side, "—")
 
-    def edit_account(self, acc, parent_code: str | None = None) -> None:
-        dialog = AccountDialog(self.s, acc, parent_code, self)
+    def edit_account(self, acc, parent_id: int | None = None) -> None:
+        dialog = AccountDialog(self.s, acc, parent_id, self)
         if dialog.exec():
-            self._after_change(
-                dialog.saved_code, tr("Счёт {code} сохранён", code=dialog.saved_code)
-            )
+            self.s.catalog.reload()
+            saved = self.s.catalog.accounts[dialog.saved_id]
+            self._after_change(saved.id, tr("Счёт {code} сохранён", code=saved.short))
 
     def toggle_hidden(self, acc) -> None:
-        self.s.ledger.set_account_active(self.s.company_id, acc.code, not acc.active)
+        self.s.ledger.set_account_active(self.s.company_id, acc.id, not acc.active)
         message = "Счёт {code} снова виден" if not acc.active else "Счёт {code} скрыт"
-        self._after_change(acc.code, tr(message, code=acc.code))
+        self._after_change(acc.id, tr(message, code=acc.short))
 
-    def _after_change(self, code: str, message: str) -> None:
+    def _after_change(self, account_id: int, message: str) -> None:
         self.s.catalog.reload()
         self.refresh()
-        row = next((i for i, a in enumerate(self.model.rows) if a.code == code), None)
+        row = next((i for i, a in enumerate(self.model.rows) if a.id == account_id), None)
         if row is not None:
             self.table.setCurrentIndex(self.model.index(row, 0))
             self.table.scrollTo(self.model.index(row, 0))
@@ -729,11 +740,11 @@ class ChartPage(ReportPage):
             return []
         edit = [
             (tr("Изменить…"), lambda: self.edit_account(acc)),
-            (tr("Добавить субсчёт…"), lambda: self.edit_account(None, acc.code)),
+            (tr("Добавить субсчёт…"), lambda: self.edit_account(None, acc.id)),
             (tr("Показать") if not acc.active else tr("Скрыть"), lambda: self.toggle_hidden(acc)),
             None,
         ]
-        return edit + self._account_actions(acc.code) + self._class_actions(acc.code)
+        return edit + self._account_actions(acc.id) + self._class_actions(acc.id)
 
 
 REPORTS: dict[str, type[AccountReportPage]] = {

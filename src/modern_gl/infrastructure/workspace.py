@@ -14,7 +14,7 @@ from pathlib import Path
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.i18n import sort_key
-from modern_gl.infrastructure.chart_csv import apply_chart_template
+from modern_gl.infrastructure.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
 from modern_gl.infrastructure.db import connect
 
 SUFFIX = ".gl"
@@ -73,7 +73,7 @@ class Workspace:
                 continue  # not a company file (or damaged): never fail the whole list
         return sorted(result, key=lambda c: sort_key(c.name))
 
-    def create(self, name: str, chart: str | None = "1c77") -> Path:
+    def create(self, name: str, chart: str | None = DEFAULT_TEMPLATE) -> Path:
         """New company file with the chart template (in the interface language)."""
         path = self._free_path(name)
         conn = connect(path)

@@ -53,6 +53,16 @@ def _pad(values: Sequence[int | None], line_no: int) -> list[int | None]:
     return [*values, *([None] * (MAX_SUBCONTO - len(values)))]
 
 
+def _code(code: str | None) -> str | None:
+    """Account codes are optional: blank means no code."""
+    return (code or "").strip() or None
+
+
+def _label(account: sqlite3.Row) -> str:
+    """How an account is named in messages: its code, or its name if it has none."""
+    return account["code"] or account["name"]
+
+
 class Ledger:
     def __init__(self, conn: sqlite3.Connection, actor: str = "local") -> None:
         self.conn = conn
@@ -185,10 +195,10 @@ class Ledger:
     def add_account(
         self,
         company_id: int,
-        code: str,
+        code: str | None,
         name: str,
         *,
-        parent_code: str | None = None,
+        parent: int | str | None = None,
         is_group: bool = False,
         subconto: Sequence[int] = (),
         account_class: str | None = None,
@@ -197,30 +207,36 @@ class Ledger:
     ) -> int:
         """Add an account. `subconto` lists subconto kind ids for positions 1..3.
 
-        Without `account_class` the account inherits its parent's class (or stays
-        unclassified). `two_sided` (balance may be on either side, shown expanded per
-        first subconto) is inherited from the parent unless given.
+        The code is optional (empty: the account is known by its name). `parent` is the
+        parent account's id or code. Without `account_class` the account inherits its
+        parent's class (or stays unclassified). `two_sided` (balance may be on either
+        side, shown expanded per first subconto) is inherited from the parent unless given.
         """
-        self._check_class(code, account_class)
+        code = _code(code)
+        name = name.strip()
+        label = code or name
+        if not name:
+            raise ValidationError(tr("название счёта не может быть пустым"))
+        self._check_class(label, account_class)
         if is_group and subconto:
-            raise ValidationError(tr("счёт {code}: у группы не бывает субконто", code=code))
+            raise ValidationError(tr("счёт {code}: у группы не бывает субконто", code=label))
         sc = _pad(subconto, 0)
         with transaction(self.conn):
             parent_id = None
-            if parent_code is not None:
-                parent = self._account_by_code(company_id, parent_code)
-                if not parent["is_group"]:
+            if parent is not None:
+                parent_row = self._account(company_id, parent)
+                if not parent_row["is_group"]:
                     raise ValidationError(
                         tr(
                             "счёт {code}: родитель {parent} не группа",
-                            code=code,
-                            parent=parent_code,
+                            code=label,
+                            parent=_label(parent_row),
                         )
                     )
-                parent_id = parent["id"]
-                account_class = account_class or parent["account_class"]
+                parent_id = parent_row["id"]
+                account_class = account_class or parent_row["account_class"]
                 if two_sided is None:
-                    two_sided = bool(parent["two_sided"])
+                    two_sided = bool(parent_row["two_sided"])
             try:
                 account_id = self.conn.execute(
                     "INSERT INTO accounts (company_id, code, name, parent_id, is_group, "
@@ -239,8 +255,10 @@ class Ledger:
                     ),
                 ).lastrowid
             except sqlite3.IntegrityError as e:
+                if "UNIQUE" in str(e):
+                    raise ValidationError(tr("счёт {code} уже есть", code=label)) from e
                 raise ValidationError(
-                    tr("не удалось добавить счёт {code}: {error}", code=code, error=e)
+                    tr("не удалось добавить счёт {code}: {error}", code=label, error=e)
                 ) from e
             self._audit(
                 company_id,
@@ -252,19 +270,24 @@ class Ledger:
         return account_id
 
     def account_id(self, company_id: int, code: str) -> int:
-        return self._account_by_code(company_id, code)["id"]
+        return self._account(company_id, code)["id"]
 
     def set_account_class(
-        self, company_id: int, code: str, account_class: str | None, contra: bool | None = None
+        self,
+        company_id: int,
+        account: int | str,
+        account_class: str | None,
+        contra: bool | None = None,
     ) -> None:
         """Change an account's class (and optionally its contra flag). Audited.
 
-        Subaccounts that had the same class as the account follow it, so changing a
-        group re-classifies its subaccounts unless they were set differently on purpose.
+        `account` is the account id or code. Subaccounts that had the same class as the
+        account follow it, so changing a group re-classifies its subaccounts unless they
+        were set differently on purpose.
         """
-        self._check_class(code, account_class)
         with transaction(self.conn):
-            acc = self._account_by_code(company_id, code)
+            acc = self._account(company_id, account)
+            self._check_class(_label(acc), account_class)
             old = acc["account_class"]
             ids = [acc["id"]]
             stack = [acc["id"]]
@@ -290,7 +313,7 @@ class Ledger:
                 acc["id"],
                 "set_class",
                 {
-                    "code": code,
+                    "code": acc["code"],
                     "from": old,
                     "to": account_class,
                     "contra": contra,
@@ -301,7 +324,7 @@ class Ledger:
     def update_account(
         self,
         company_id: int,
-        code: str,
+        account: int | str,
         *,
         new_code: str | None = None,
         name: str | None = None,
@@ -309,22 +332,22 @@ class Ledger:
         is_group: bool | None = None,
         subconto: Sequence[int] | None = None,
     ) -> None:
-        """Rename / re-code / reconfigure an account. Audited.
+        """Rename / re-code / reconfigure an account (given by id or code). Audited.
 
-        History is protected: an account with postings cannot become a group and its
-        subconto kinds cannot change (old postings carry values of those kinds).
-        Codes are only labels — postings reference the account id, so re-coding is safe.
+        `new_code=""` removes the code. History is protected: an account with postings
+        cannot become a group and its subconto kinds cannot change (old postings carry
+        values of those kinds). Codes are only labels — postings reference the account
+        id, so re-coding is safe.
         """
         with transaction(self.conn):
-            acc = self._account_by_code(company_id, code)
-            new_code = code if new_code is None else new_code.strip()
+            acc = self._account(company_id, account)
+            label = _label(acc)
+            new_code = acc["code"] if new_code is None else _code(new_code)
             name = acc["name"] if name is None else name.strip()
             two_sided = bool(acc["two_sided"]) if two_sided is None else bool(two_sided)
             group = bool(acc["is_group"]) if is_group is None else bool(is_group)
             current_sc = [acc["sc1_kind_id"], acc["sc2_kind_id"], acc["sc3_kind_id"]]
             sc = current_sc if subconto is None else _pad(list(subconto), 0)
-            if not new_code:
-                raise ValidationError(tr("код счёта не может быть пустым"))
             if not name:
                 raise ValidationError(tr("название счёта не может быть пустым"))
             used = self._has_postings(acc["id"])
@@ -333,7 +356,7 @@ class Ledger:
                     raise ValidationError(
                         tr(
                             "счёт {code}: по счёту есть проводки, он не может стать группой",
-                            code=code,
+                            code=label,
                         )
                     )
                 if (
@@ -342,12 +365,12 @@ class Ledger:
                         "SELECT 1 FROM accounts WHERE parent_id = ?", (acc["id"],)
                     ).fetchone()
                 ):
-                    raise ValidationError(tr("счёт {code}: у группы есть субсчета", code=code))
+                    raise ValidationError(tr("счёт {code}: у группы есть субсчета", code=label))
             if group:
                 sc = [None, None, None]
             if sc != current_sc and used:
                 raise ValidationError(
-                    tr("счёт {code}: по счёту есть проводки, субконто менять нельзя", code=code)
+                    tr("счёт {code}: по счёту есть проводки, субконто менять нельзя", code=label)
                 )
             try:
                 self.conn.execute(
@@ -364,7 +387,7 @@ class Ledger:
                 "update",
                 {
                     "before": {
-                        "code": code,
+                        "code": acc["code"],
                         "name": acc["name"],
                         "two_sided": bool(acc["two_sided"]),
                         "group": bool(acc["is_group"]),
@@ -380,15 +403,19 @@ class Ledger:
                 },
             )
 
-    def set_account_active(self, company_id: int, code: str, active: bool) -> None:
+    def set_account_active(self, company_id: int, account: int | str, active: bool) -> None:
         """Hide an account from entry (history and reports stay intact), or show it again."""
         with transaction(self.conn):
-            acc = self._account_by_code(company_id, code)
+            acc = self._account(company_id, account)
             self.conn.execute(
                 "UPDATE accounts SET active = ? WHERE id = ?", (int(active), acc["id"])
             )
             self._audit(
-                company_id, "account", acc["id"], "show" if active else "hide", {"code": code}
+                company_id,
+                "account",
+                acc["id"],
+                "show" if active else "hide",
+                {"code": acc["code"]},
             )
 
     def _has_postings(self, account_id: int) -> bool:
@@ -724,7 +751,7 @@ class Ledger:
                     "строка {line}, {side} {code}",
                     line=line,
                     side=tr("Дт" if side == "debit" else "Кт"),
-                    code=acc["code"],
+                    code=_label(acc),
                 )
                 if acc["is_group"]:
                     raise ValidationError(
@@ -770,12 +797,15 @@ class Ledger:
             raise NotFoundError(tr("документ {id} не найден", id=doc_id))
         return row
 
-    def _account_by_code(self, company_id: int, code: str) -> sqlite3.Row:
+    def _account(self, company_id: int, account: int | str) -> sqlite3.Row:
+        """An account by id (int) or by code (str)."""
+        column = "id" if isinstance(account, int) else "code"
         row = self.conn.execute(
-            "SELECT * FROM accounts WHERE company_id = ? AND code = ?", (company_id, code)
+            f"SELECT * FROM accounts WHERE company_id = ? AND {column} = ?",
+            (company_id, account),
         ).fetchone()
         if row is None:
-            raise NotFoundError(tr("счёт {code} не найден", code=code))
+            raise NotFoundError(tr("счёт {code} не найден", code=account))
         return row
 
     def _layer_id(self, company_id: int, code: str) -> int:

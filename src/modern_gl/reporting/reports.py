@@ -110,10 +110,11 @@ class CardLine:
     number: int
     document_id: int
     memo: str
-    corr_code: str
+    corr_code: str  # code of the corresponding account, or its name if it has no code
     debit: int
     credit: int
     balance: int  # running net balance (Dt - Ct) after this line
+    corr_id: int = 0
 
 
 @dataclass
@@ -128,10 +129,11 @@ class AccountCard:
 
 @dataclass
 class CorrRow:
-    corr_code: str
+    corr_code: str  # "" when the account has no code
     corr_name: str
     debit: int  # account debited, corr account credited
     credit: int  # account credited, corr account debited
+    corr_id: int = 0
 
 
 def _split(net: int) -> tuple[int, int]:
@@ -161,7 +163,8 @@ def _accounts(conn: sqlite3.Connection, company_id: int) -> dict[int, sqlite3.Ro
     return {
         r["id"]: r
         for r in conn.execute(
-            "SELECT * FROM accounts WHERE company_id = ? ORDER BY code", (company_id,)
+            "SELECT * FROM accounts WHERE company_id = ? ORDER BY code IS NULL, code, name",
+            (company_id,),
         )
     }
 
@@ -178,11 +181,14 @@ def _subtree(accounts: dict[int, sqlite3.Row], root_id: int) -> list[int]:
     return result
 
 
-def _find_account(accounts: dict[int, sqlite3.Row], code: str) -> sqlite3.Row:
+def _find_account(accounts: dict[int, sqlite3.Row], account: int | str) -> sqlite3.Row:
+    """An account by id (int) or by code (str)."""
+    if isinstance(account, int) and account in accounts:
+        return accounts[account]
     for a in accounts.values():
-        if a["code"] == code:
+        if a["code"] == account:
             return a
-    raise NotFoundError(tr("счёт {code} не найден", code=code))
+    raise NotFoundError(tr("счёт {code} не найден", code=account))
 
 
 def trial_balance(
@@ -263,7 +269,7 @@ def trial_balance(
         acc = accounts[account_id]
         row = OsvRow(
             account_id=account_id,
-            code=acc["code"],
+            code=acc["code"] or "",
             name=acc["name"],
             depth=depth,
             is_group=bool(acc["is_group"]),
@@ -311,7 +317,7 @@ def _name_subconto(
 def subconto_balance(
     conn: sqlite3.Connection,
     company_id: int,
-    account_code: str,
+    account: int | str,
     date_from: date | str,
     date_to: date | str,
     layers: Sequence[str] = COMMON,
@@ -322,9 +328,11 @@ def subconto_balance(
         raise ValidationError(tr("позиция субконто должна быть 1, 2 или 3"))
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
-    acc = _find_account(accounts, account_code)
+    acc = _find_account(accounts, account)
     if acc[f"sc{position}_kind_id"] is None:
-        raise ValidationError(tr("у счёта {code} нет субконто {i}", code=account_code, i=position))
+        raise ValidationError(
+            tr("у счёта {code} нет субконто {i}", code=acc["code"] or acc["name"], i=position)
+        )
     params["accounts"] = json.dumps(_subtree(accounts, acc["id"]))
     raw = conn.execute(
         f"""
@@ -359,7 +367,7 @@ def subconto_balance(
 def account_card(
     conn: sqlite3.Connection,
     company_id: int,
-    account_code: str,
+    account: int | str,
     date_from: date | str,
     date_to: date | str,
     layers: Sequence[str] = COMMON,
@@ -370,7 +378,7 @@ def account_card(
     """
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
-    params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account_code)["id"]))
+    params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account)["id"]))
     raw = conn.execute(
         f"""
         WITH {_DOCS_CTE},
@@ -391,7 +399,7 @@ def account_card(
             ) AS balance
             FROM lines
         )
-        SELECT r.*, a.code AS corr_code
+        SELECT r.*, COALESCE(a.code, a.name) AS corr_code
         FROM running r JOIN accounts a ON a.id = r.corr_id
         ORDER BY r.doc_date, r.number, r.line_no, r.side
         """,
@@ -410,6 +418,7 @@ def account_card(
                 document_id=r["document_id"],
                 memo=r["memo"],
                 corr_code=r["corr_code"],
+                corr_id=r["corr_id"],
                 debit=r["dt"],
                 credit=r["ct"],
                 balance=r["balance"],
@@ -422,7 +431,7 @@ def account_card(
 def account_analysis(
     conn: sqlite3.Connection,
     company_id: int,
-    account_code: str,
+    account: int | str,
     date_from: date | str,
     date_to: date | str,
     layers: Sequence[str] = COMMON,
@@ -430,7 +439,7 @@ def account_analysis(
     """Анализ счёта: period turnovers of the account broken down by corresponding account."""
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
-    params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account_code)["id"]))
+    params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account)["id"]))
     raw = conn.execute(
         f"""
         WITH {_DOCS_CTE},
@@ -445,13 +454,19 @@ def account_analysis(
             WHERE docs.doc_date >= :date_from
               AND p.credit_account_id IN (SELECT value FROM json_each(:accounts))
         )
-        SELECT a.code, a.name, SUM(m.dt) AS dt, SUM(m.ct) AS ct
+        SELECT a.id, a.code, a.name, SUM(m.dt) AS dt, SUM(m.ct) AS ct
         FROM moves m JOIN accounts a ON a.id = m.corr_id
-        GROUP BY a.id ORDER BY a.code
+        GROUP BY a.id ORDER BY a.code IS NULL, a.code, a.name
         """,
         params,
     ).fetchall()
     return [
-        CorrRow(corr_code=r["code"], corr_name=r["name"], debit=r["dt"], credit=r["ct"])
+        CorrRow(
+            corr_code=r["code"] or "",
+            corr_name=r["name"],
+            debit=r["dt"],
+            credit=r["ct"],
+            corr_id=r["id"],
+        )
         for r in raw
     ]

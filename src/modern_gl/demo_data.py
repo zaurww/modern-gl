@@ -1,4 +1,4 @@
-"""A small demo company on the 1C 7.7 chart — for screenshots, demos and trying the UI."""
+"""A small demo company on the classic chart — for screenshots, demos and trying the UI."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from modern_gl.infrastructure.chart_csv import apply_chart_template
 
 def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
     cid = ledger.create_company(name or tr("ДЕМО ООО"))
-    apply_chart_template(ledger, cid, "1c77")
+    apply_chart_template(ledger, cid, "classic")
 
     def value(kind: str, title: str) -> int:
         return ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, kind), title)
@@ -34,24 +34,24 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
     post(
         cid,
         "2026-01-05",
-        [p("51", "80", "10000", [bank], [founder])],
+        [p("51", "85", "10000", [bank], [founder])],
         tr("Взнос в уставный капитал"),
     )
     post(
         cid,
         "2026-01-10",
-        [p("10.1", "60.1", "1200", [paper, store], [alfa, c1])],
+        [p("10", "60", "1200", [paper, store], [alfa, c1])],
         tr("Поступление материалов"),
     )
-    post(cid, "2026-01-15", [p("60.1", "51", "1000", [alfa, c1], [bank])], tr("Оплата поставщику"))
+    post(cid, "2026-01-15", [p("60", "51", "1000", [alfa, c1], [bank])], tr("Оплата поставщику"))
     post(
         cid,
         "2026-02-03",
-        [p("10.1", "60.1", "500", [paper, store], [beta, c2])],
+        [p("10", "60", "500", [paper, store], [beta, c2])],
         tr("Поступление материалов"),
     )
     post(cid, "2026-02-04", [p("50", "51", "2000", [], [bank])], tr("Снятие наличных в кассу"))
-    post(cid, "2026-02-10", [p("60.1", "51", "600", [beta, c2], [bank])], tr("Оплата поставщику"))
+    post(cid, "2026-02-10", [p("60", "51", "600", [beta, c2], [bank])], tr("Оплата поставщику"))
     post(cid, "2026-02-12", [p("71", "50", "300", [employee], [])], tr("Выдано под отчёт"))
     post(
         cid,
@@ -65,17 +65,27 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
     post(
         cid,
         "2026-02-20",
-        [p("26", "10.1", "300", [materials], [paper, store])],
+        [p("26", "10", "300", [materials], [paper, store])],
         tr("Списание материалов"),
     )
     post(
         cid,
+        "2026-02-25",
+        [
+            p("62", "46", "1180", [beta, c2], [], tr("Услуги оказаны")),
+            p("46", "68.2", "180", [], [], tr("НДС 18%")),
+        ],
+        tr("Реализация услуг"),
+    )
+    post(cid, "2026-02-27", [p("51", "62", "1180", [bank], [beta, c2])], tr("Оплата от покупателя"))
+    post(
+        cid,
         "2026-02-28",
-        [p("26", "10.1", "50", [materials], [paper, store])],
+        [p("26", "10", "50", [materials], [paper, store])],
         tr("Корректировка оценки запасов"),
         layer="ifrs_adj",
     )
     ledger.create_draft(
-        cid, "2026-02-28", [p("26", "60.1", "400", [rent], [alfa, c1])], tr("Аренда за март")
+        cid, "2026-02-28", [p("26", "60", "400", [rent], [alfa, c1])], tr("Аренда за март")
     )
     return cid

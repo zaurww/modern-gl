@@ -152,7 +152,7 @@ class DirectoriesPage(QWidget):
         self.kind_title.setText(cat.kinds[kind_id])
         accounts = cat.accounts_using(kind_id)
         self.used_in.setText(
-            tr("Используется на счетах: {codes}", codes=", ".join(a.code for a in accounts))
+            tr("Используется на счетах: {codes}", codes=", ".join(a.short for a in accounts))
             if accounts
             else tr("Пока не используется ни на одном счёте")
         )

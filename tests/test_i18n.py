@@ -54,10 +54,10 @@ def test_translated_message_in_azerbaijani():
 def test_azerbaijani_chart_template(ledger, conn):
     set_language("az")
     cid = ledger.create_company("Test MMC")
-    assert apply_chart_template(ledger, cid) == 92
+    assert apply_chart_template(ledger, cid) == 37
     names = dict(conn.execute("SELECT code, name FROM accounts WHERE company_id = ?", (cid,)))
     assert names["50"] == "Kassa"
-    assert names["60.1"] == "Malsatan və podratçılarla hesablaşmalar"
+    assert names["46"] == "Məhsulun (işlərin, xidmətlərin) satışı"
     layers = [r[0] for r in conn.execute("SELECT name FROM layers WHERE company_id = ?", (cid,))]
     assert layers == ["Ümumi uçot", "MHBS düzəlişləri", "Vergi düzəlişləri"]
 
