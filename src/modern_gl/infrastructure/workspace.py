@@ -13,9 +13,10 @@ from datetime import datetime
 from pathlib import Path
 
 from modern_gl.application.ledger import Ledger
-from modern_gl.i18n import sort_key
+from modern_gl.i18n import sort_key, tr
+from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
-from modern_gl.infrastructure.db import connect
+from modern_gl.infrastructure.db import connect, latest_version
 
 SUFFIX = ".gl"
 TRASH = "Silinmiş"
@@ -90,6 +91,35 @@ class Workspace:
             conn.close()
         return path
 
+    # ---- backups ---------------------------------------------------------------------
+
+    def backup_folder(self, company_file: Path) -> Path:
+        return backup.folder_for(self.folder, company_file)
+
+    def open(self, path: Path) -> tuple[sqlite3.Connection, int]:
+        """Open a company file; a file about to get a newer schema is backed up first,
+        and a damaged file is refused (backup.BackupError) so it can be restored."""
+        path = Path(path)
+        backup.check(path)
+        if _file_version(path) < latest_version():
+            backup.make_backup_of_file(path, self.backup_folder(path), tr("до обновления"))
+        return open_company(path)
+
+    def auto_backup(self, conn: sqlite3.Connection, company_file: Path) -> Path | None:
+        """The backup made when a company is closed — only if it changed since the last one."""
+        folder = self.backup_folder(company_file)
+        if not backup.changed_since_last(conn, folder):
+            return None
+        return backup.make_backup(conn, folder, Path(company_file).stem)
+
+    def backups(self, company_file: Path) -> list[backup.Backup]:
+        return backup.list_backups(self.backup_folder(company_file))
+
+    def restore(self, backup_file: Path, company_file: Path) -> Path:
+        """Put a backup in place of a closed company file (the current one is kept as a
+        backup too). Returns that safety copy."""
+        return backup.restore(backup_file, company_file, self.backup_folder(company_file))
+
     def delete(self, path: Path) -> Path:
         """Move a company file to the Silinmiş subfolder; returns where it went."""
         trash = self.folder / TRASH
@@ -160,3 +190,11 @@ class Workspace:
             path = self.folder / f"{stem} ({n}){SUFFIX}"
             n += 1
         return path
+
+
+def _file_version(path: Path) -> int:
+    conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        return conn.execute("PRAGMA user_version").fetchone()[0]
+    finally:
+        conn.close()

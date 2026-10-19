@@ -41,6 +41,11 @@ def schema_version(conn: sqlite3.Connection) -> int:
     return conn.execute("PRAGMA user_version").fetchone()[0]
 
 
+def latest_version() -> int:
+    """The schema version this program brings files up to."""
+    return max(int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("*.sql"))
+
+
 def migrate(conn: sqlite3.Connection) -> None:
     """Apply pending migrations. Foreign keys are off meanwhile, so a migration may
     rebuild a referenced table (the SQLite way to change a column); dangling

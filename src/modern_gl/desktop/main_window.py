@@ -6,6 +6,7 @@ import getpass
 import sqlite3
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import (
@@ -56,7 +57,8 @@ from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.theme import P, dot_icon, fonts
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import LANGUAGES, language, set_language, tr
-from modern_gl.infrastructure.workspace import TRASH, Workspace, open_company
+from modern_gl.infrastructure import backup
+from modern_gl.infrastructure.workspace import TRASH, Workspace
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 PLACES = [  # key, title (translated on display), icon color
@@ -267,7 +269,11 @@ class MainWindow(QMainWindow):
     def open_company(self, path: Path) -> None:
         if not self._confirm_close_all():
             return
-        conn, company_id = open_company(path)
+        try:
+            conn, company_id = self.workspace.open(path)
+        except backup.BackupError as e:
+            self._offer_restore(Path(path), str(e))
+            return
         old_date = self.session.working_date if self.session else None
         self._close_company()
         self.conn, self.company_path = conn, Path(path)
@@ -296,6 +302,13 @@ class MainWindow(QMainWindow):
         self.pages.clear()
         self.sidebar.nav.clear()
         if self.conn is not None:
+            try:
+                if self.company_path is not None:
+                    self.workspace.auto_backup(self.conn, self.company_path)
+            except (backup.BackupError, OSError, sqlite3.Error) as e:
+                QMessageBox.warning(
+                    self, tr("Резервная копия"), tr("Копия не сохранена: {error}", error=e)
+                )
             self.conn.close()
         self.conn = self.ledger = self.session = self.company_path = None
 
@@ -314,6 +327,8 @@ class MainWindow(QMainWindow):
         if self.session is not None:
             menu.addSeparator()
             menu.addAction(tr("Показать файл компании")).triggered.connect(self.show_company_file)
+            menu.addAction(tr("Сохранить копию…")).triggered.connect(self.save_copy)
+            menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
             menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
         menu.addSeparator()
         languages = menu.addMenu(tr("Язык интерфейса"))
@@ -344,6 +359,72 @@ class MainWindow(QMainWindow):
         if added:
             self.open_company(added[0])
             self.notify(tr("Добавлено компаний: {n}", n=len(added)))
+
+    # ---- backups ---------------------------------------------------------------------
+
+    def save_copy(self) -> None:
+        """A copy of the company to hand over or keep elsewhere (a flash drive…)."""
+        if self.conn is None or self.company_path is None:
+            return
+        suggested = Path.home() / f"{self.company_path.stem} {datetime.now():%Y-%m-%d}.gl"
+        target, _ = QFileDialog.getSaveFileName(
+            self, tr("Сохранить копию компании"), str(suggested), tr("Файлы компаний (*.gl)")
+        )
+        if not target:
+            return
+        try:
+            backup.copy_to(self.conn, Path(target))
+        except (backup.BackupError, OSError, sqlite3.Error) as e:
+            QMessageBox.warning(self, tr("Сохранить копию"), str(e))
+            return
+        self.notify(tr("Копия сохранена: {file}", file=target))
+
+    def restore_company(self) -> None:
+        if self.company_path is not None:
+            self._offer_restore(self.company_path)
+
+    def _offer_restore(self, path: Path, problem: str = "") -> None:
+        """Choose one of the company's backups (or another file) and put it in place."""
+        backups = self.workspace.backups(path)
+        other = tr("Другой файл…")
+        labels = [
+            f"{b.made_at:%d.%m.%Y  %H:%M:%S}   ·   {b.size // 1024} KB"
+            + (f"   ·   {b.path.stem.rsplit('(', 1)[1].rstrip(')')}" if "(" in b.path.stem else "")
+            for b in backups
+        ]
+        prompt = (problem + "\n\n" if problem else "") + tr(
+            "Из какой копии восстановить «{name}»? Текущий файл тоже сохранится копией.",
+            name=path.stem,
+        )
+        choice, ok = QInputDialog.getItem(
+            self, tr("Восстановить из копии"), prompt, [*labels, other], 0, False
+        )
+        if not ok:
+            return
+        if choice == other:
+            chosen, _ = QFileDialog.getOpenFileName(
+                self, tr("Восстановить из копии"), "", tr("Файлы компаний (*.gl *.db)")
+            )
+            if not chosen:
+                return
+            source = Path(chosen)
+        else:
+            source = backups[labels.index(choice)].path
+        self.restore_from(source, path)
+
+    def restore_from(self, source: Path, path: Path) -> bool:
+        if not self._confirm_close_all():
+            return False
+        if self.company_path == path:
+            self._close_company()
+        try:
+            self.workspace.restore(source, path)
+        except (backup.BackupError, OSError, sqlite3.Error) as e:
+            QMessageBox.warning(self, tr("Восстановить из копии"), str(e))
+            return False
+        self.open_company(path)
+        self.notify(tr("Компания восстановлена из копии {file}", file=source.name))
+        return True
 
     def show_company_file(self) -> None:
         if self.company_path is None:
