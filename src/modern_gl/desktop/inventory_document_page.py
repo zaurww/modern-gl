@@ -262,14 +262,8 @@ class InventoryLinesModel(QAbstractTableModel):
             )
         if account is None or self.doc_type in {"transfer", "landed_cost"}:
             return InventoryGridRow()
-        subconto: list[int | None] = []
-        for kind_id in account.sc_kinds:
-            values = self.s.catalog.values(kind_id) if kind_id is not None else []
-            subconto.append(values[0].id if values else None)
-        return InventoryGridRow(
-            offset_account_id=account.id,
-            offset_subconto=subconto,
-        )
+        # Subconto (counterparty, contract) stay empty: a guessed value would post silently.
+        return InventoryGridRow(offset_account_id=account.id)
 
     def rowCount(self, parent=QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self.rows)

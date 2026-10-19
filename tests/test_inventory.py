@@ -804,6 +804,8 @@ def test_inventory_grid_tab_commits_adds_counterparty_and_saves_unfinished_draft
     qtbot.addWidget(page)
     page.show()
     model = page.model
+    assert model.rows[0].offset_account_id == demo.payable_account
+    assert model.rows[0].offset_subconto == [None, None, None]  # no guessed counterparty
 
     _type_in_cell(qtbot, page, 0, ITEM, "товар b")
     assert model.rows[0].item_id == demo.other_item
@@ -811,7 +813,7 @@ def test_inventory_grid_tab_commits_adds_counterparty_and_saves_unfinished_draft
     assert model.rows[0].warehouse_id == demo.reserve
     model.setData(model.index(0, model.columns.index(ACCOUNT)), demo.payable_account)
     _type_in_cell(qtbot, page, 0, SC1, "Новый поставщик")
-    qtbot.waitUntil(lambda: model.rows[0].offset_subconto[0] not in (None, demo.supplier))
+    qtbot.waitUntil(lambda: model.rows[0].offset_subconto[0] is not None)
     added = session.catalog.value(model.rows[0].offset_subconto[0])
     assert added.name == "Новый поставщик"
 
