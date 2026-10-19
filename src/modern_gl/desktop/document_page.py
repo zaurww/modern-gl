@@ -51,7 +51,8 @@ from modern_gl.infrastructure.db import transaction
 
 HINT = (
     "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
+    "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
+    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
 )
 
 
@@ -193,6 +194,8 @@ class DocumentPage(QWidget):
         self._grid_shortcut("Ins", self._insert_row, while_editing=True)
         self._grid_shortcut("F9", self._duplicate_row, while_editing=True)
         self._grid_shortcut("Del", self._remove_row)
+        self._grid_shortcut("Ctrl+V", self.paste)  # inside a cell editor: its own paste
+        self._grid_shortcut("Ctrl+C", self.copy)
 
         if doc_id is not None:
             self.load(doc_id)
@@ -564,6 +567,63 @@ class DocumentPage(QWidget):
         self.model.remove_row(cur.row())
         row = min(cur.row(), self.model.rowCount() - 1)
         self.table.setCurrentIndex(self.model.index(row, cur.column()))
+
+    # ---- clipboard -----------------------------------------------------------------------
+
+    def _shown(self, col: int) -> bool:
+        return not self.table.isColumnHidden(col)
+
+    def paste(self, text: str | None = None) -> None:
+        """Lines copied from Excel become postings (see desktop.postings)."""
+        if self.model.read_only:
+            return
+        text = QApplication.clipboard().text() if text is None else text
+        if not text.strip():
+            return
+        self.error.hide()
+        cur = self.table.currentIndex()
+        row, col = (cur.row(), cur.column()) if cur.isValid() else (0, DT)
+        result = self.model.paste(text, row, col, self._shown)
+        if result.unknown and self._add_unknown(result.unknown):
+            result.unknown = []
+        problems = result.errors + [
+            tr("нет в справочнике «{kind}»: {text}", kind=self.s.catalog.kinds[k], text=t)
+            for _, _, k, t in result.unknown
+        ]
+        if problems:
+            more = len(problems) - 6
+            self.show_error(
+                "\n".join(problems[:6]) + (f"\n{tr('и ещё {n}', n=more)}" if more > 0 else "")
+            )
+        self.s.notify(tr("Вставлено строк: {n}", n=result.rows))
+
+    def _add_unknown(self, unknown: list[tuple[int, int, int, str]]) -> bool:
+        """Names pasted that are not in their directories: add them all in one go."""
+        names: dict[tuple[int, str], list[tuple[int, int]]] = {}
+        for row, col, kind_id, text in unknown:
+            names.setdefault((kind_id, text), []).append((row, col))
+        listing = "\n".join(
+            f"{self.s.catalog.kinds[kind]}: {text}" for kind, text in list(names)[:12]
+        )
+        answer = QMessageBox.question(
+            self,
+            tr("Новые элементы справочников"),
+            tr("Этих элементов нет в справочниках. Добавить?\n\n{names}", names=listing),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return False
+        for (kind_id, text), cells in names.items():
+            value_id = self.s.ledger.add_subconto_value(self.s.company_id, kind_id, text)
+            self.s.catalog.add_value(value_id, kind_id, text)
+            for row, col in cells:
+                self.model.setData(self.model.index(row, col), value_id)
+        return True
+
+    def copy(self) -> None:
+        QApplication.clipboard().setText(self.model.copy_text(self._shown))
+        self.s.notify(tr("Проводки скопированы — их можно вставить в Excel"))
 
     def _offer_new_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
         # Deferred: the cell editor has to be fully closed before a dialog takes focus.

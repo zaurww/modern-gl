@@ -163,9 +163,11 @@ AZ: dict[str, str] = {
     "сумма должна быть больше нуля": "məbləğ sıfırdan böyük olmalıdır",
     # ---- document --------------------------------------------------------------------------
     "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
+    "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
+    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
         "Enter — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
-        "Del — sətri sil   ·   Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
+        "Del — sətri sil   ·   Ctrl+V — Excel-dən yapışdır   ·   "
+        "Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
     ),
     "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
@@ -549,4 +551,14 @@ AZ: dict[str, str] = {
     "до восстановления": "bərpadan əvvəl",
     "файл повреждён: {file} ({error})": "fayl zədələnib: {file} ({error})",
     "до обновления": "yenilənmədən əvvəl",
+    # ---- paste from Excel ------------------------------------------------------------------
+    "Вставлено строк: {n}": "Yapışdırılan sətir: {n}",
+    "Новые элементы справочников": "Soraqçaların yeni elementləri",
+    "Этих элементов нет в справочниках. Добавить?\n\n{names}": "Bu elementlər soraqçalarda yoxdur. Əlavə edilsin?\n\n{names}",
+    "Проводки скопированы — их можно вставить в Excel": "Yazılışlar kopyalandı — onları Excel-ə yapışdırmaq olar",
+    "нет в справочнике «{kind}»: {text}": "«{kind}» soraqçasında yoxdur: {text}",
+    "и ещё {n}": "və daha {n}",
+    "у счёта нет этого субконто: {text}": "hesabın bu subkontosu yoxdur: {text}",
+    "строка {n}: {error}": "sətir {n}: {error}",
+    "строка {n}: лишнее значение «{text}»": "sətir {n}: artıq dəyər «{text}»",
 }

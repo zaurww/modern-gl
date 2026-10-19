@@ -6,6 +6,12 @@ are the currency cells of a line without a currency account. On a currency line 
 amount in manat follows the amount in currency at the rate (the rate of the document
 date is offered; both the rate and the manat amount can be typed over).
 Enter on the last cell of the last row starts a new row.
+
+Paste (Ctrl+V) takes lines copied from Excel, one posting per line. With a header line
+(Дебет, Кредит, Сумма… in Russian or Azerbaijani, any order) cells go by the headers;
+without one they go in the order of keyboard entry: Dt, its subconto, Kt, its subconto,
+(currency, amount in currency, rate,) amount, memo — an empty cell skips a field.
+Copy (Ctrl+C) gives the document in the header form, so it can go to Excel and back.
 """
 
 from __future__ import annotations
@@ -46,7 +52,8 @@ from modern_gl.domain import formula
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import SCALE, format_minor, to_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import fold, tr
+from modern_gl.i18n_az import AZ
 
 DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO = 0, 4, 8, 9, 10, 11, 12
 CURRENCY_COLUMNS = (CURRENCY, CURRENCY_AMOUNT, RATE)
@@ -84,6 +91,72 @@ def column_role(col: int) -> tuple[str, int | None]:
         AMOUNT: "amount",
     }
     return names.get(col, "memo"), None
+
+
+class UnknownValue(LookupError):
+    """A subconto name that is not in its directory (yet)."""
+
+    def __init__(self, kind_id: int, text: str) -> None:
+        super().__init__(text)
+        self.kind_id, self.text = kind_id, text
+
+
+@dataclass
+class PasteResult:
+    rows: int = 0
+    errors: list[str] = field(default_factory=list)
+    unknown: list[tuple[int, int, int, str]] = field(default_factory=list)  # row, col, kind
+
+
+def plain_number(text: str) -> str:
+    """Excel numbers as they come: '1 234,50', '1,234.50', '1.234,50' -> '1234.50'."""
+    text = text.strip().replace("\u00a0", "").replace(" ", "").replace("'", "")
+    if "," in text and "." in text:  # the first one separates thousands
+        thousands = "," if text.index(",") < text.index(".") else "."
+        text = text.replace(thousands, "")
+    return text.replace(",", ".")
+
+
+def _names(*sources: str) -> set[str]:
+    """A header in Russian and in Azerbaijani, folded for matching."""
+    return {fold(name) for src in sources for name in (src, AZ.get(src, src))}
+
+
+HEADER_FIELDS = [  # header names -> column (subconto headers are handled separately)
+    (_names("Дебет", "Дт", "Счёт Дт"), DT),
+    (_names("Кредит", "Кт", "Счёт Кт"), CT),
+    (_names("Валюта"), CURRENCY),
+    (_names("В валюте", "Сумма в валюте"), CURRENCY_AMOUNT),
+    (_names("Курс"), RATE),
+    (_names("Сумма"), AMOUNT),
+    (_names("Содержание", "Комментарий"), MEMO),
+]
+SUBCONTO_NAMES = _names("Субконто")
+
+
+def header_columns(cells: list[str]) -> list[int | None] | None:
+    """Columns of a header line, or None if the line is not a header. A bare
+    "Субконто" belongs to the account column before it (1st, 2nd… in a row);
+    "Субконто Дт 2" / "Subkonto Kt 1" say it explicitly."""
+    result: list[int | None] = []
+    base, pos, known = None, 0, 0
+    for cell in cells:
+        name = fold(cell.strip())
+        column = next((col for names, col in HEADER_FIELDS if name in names), None)
+        words = name.split()
+        if column is None and words and words[0] in SUBCONTO_NAMES:
+            side = next((w for w in words[1:] if w in ("дт", "dt", "кт", "kt")), None)
+            digits = [int(w) for w in words if w.isdigit()]
+            if side is not None:
+                base, pos = (DT if side in ("дт", "dt") else CT), 0
+            pos = digits[0] if digits else pos + 1
+            if base is not None and 1 <= pos <= 3:
+                column = base + pos
+        elif column in (DT, CT):
+            base, pos = column, 0
+        known += column is not None
+        result.append(column)
+    return result if known >= 2 else None
 
 
 @dataclass
@@ -344,6 +417,129 @@ class PostingsModel(QAbstractTableModel):
                 self._row_changed(row)
         self.changed.emit()
 
+    # ---- typed text -> values ----------------------------------------------------------
+
+    def parse(self, row: int, col: int, text: str):
+        """The value for a cell from what was typed or pasted; None for an empty text.
+        Raises LookupError / ValueError (UnknownValue for a name not in a directory)."""
+        text = text.strip()
+        side, pos = column_role(col)
+        if not text:  # text fields (memo, a template's formula) stay strings
+            return "" if side == "memo" or (side == "amount" and self.formulas) else None
+        if side in ("debit", "credit") and pos is None:
+            return self.catalog.resolve_account(text).id
+        if side in ("debit", "credit"):
+            kind = self.kind_at(row, col)
+            if kind is None:
+                raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
+            value = self.catalog.resolve_value(kind, text)
+            if value is None:
+                raise UnknownValue(kind, text)
+            return value
+        if side == "currency":
+            return self.catalog.resolve_currency(text).id
+        if side == "rate":
+            return unit_rate(parse_rate(plain_number(text)))
+        if side == "amount" and self.formulas:
+            formula.parse(text)  # check now, not when the template is saved
+            return text
+        if side in ("amount", "currency_amount"):
+            value = to_minor(plain_number(text))
+            if value <= 0:
+                raise ValueError(tr("сумма должна быть больше нуля"))
+            return value
+        return text
+
+    def paste(self, text: str, start_row: int, start_col: int, shown) -> PasteResult:
+        """Put lines copied from Excel into the grid (see the module docstring).
+        `shown(col)` tells whether a column is visible. A single line goes into the
+        current row; more lines fill the current row if it is empty, then new rows."""
+        lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        while lines and not lines[-1].strip():
+            lines.pop()
+        cells = [line.split("\t") for line in lines]
+        result = PasteResult()
+        if not cells:
+            return result
+        mapping = header_columns(cells[0])
+        if mapping is not None:
+            cells = cells[1:]
+        target = start_row
+        for n, line in enumerate(cells, start=1):
+            if not any(c.strip() for c in line):
+                continue
+            if len(cells) > 1 or target >= len(self.rows):
+                if target >= len(self.rows) or not self.rows[target].is_empty():
+                    self.insert_row(target)
+            if mapping is not None:
+                self._paste_by_header(target, line, mapping, n, result)
+            else:
+                self._paste_in_order(target, line, start_col, shown, n, result)
+            result.rows += 1
+            target += 1
+        self.changed.emit()
+        return result
+
+    def _paste_by_header(self, row, line, mapping, n, result) -> None:
+        # accounts first: their subconto columns apply only once the account is known
+        order = sorted(
+            (i for i, col in enumerate(mapping) if col is not None and i < len(line)),
+            key=lambda i: (mapping[i] not in (DT, CT), mapping[i]),
+        )
+        for i in order:
+            if line[i].strip():
+                self._paste_cell(row, mapping[i], line[i], n, result)
+
+    def _paste_in_order(self, row, line, start_col, shown, n, result) -> None:
+        col = start_col
+        for cell in line:
+            while col < len(HEADERS) and not (shown(col) and self.applies(row, col)):
+                col += 1
+            if col >= len(HEADERS):
+                if cell.strip():
+                    result.errors.append(
+                        tr("строка {n}: лишнее значение «{text}»", n=n, text=cell.strip())
+                    )
+                continue
+            if cell.strip():
+                self._paste_cell(row, col, cell, n, result)
+            col += 1
+
+    def _paste_cell(self, row, col, text, n, result) -> None:
+        try:
+            value = self.parse(row, col, text)
+        except UnknownValue as e:
+            result.unknown.append((row, col, e.kind_id, e.text))
+            return
+        except (LookupError, ValueError, TypeError, ValidationError) as e:
+            result.errors.append(tr("строка {n}: {error}", n=n, error=str(e).strip("'\"")))
+            return
+        self.setData(self.index(row, col), value)
+
+    def copy_text(self, shown) -> str:
+        """The document as tab-separated lines with a header, for Excel."""
+        columns = [c for c in range(len(HEADERS)) if shown(c)]
+
+        def title(col: int) -> str:
+            side, pos = column_role(col)
+            if pos is not None:
+                return f"{tr('Субконто')} {tr('Дт' if side == 'debit' else 'Кт')} {pos}"
+            return tr(HEADERS[col])
+
+        lines = ["\t".join(title(c) for c in columns)]
+        for r, row in enumerate(self.rows):
+            if row.is_empty():
+                continue
+            values = []
+            for c in columns:
+                if not self.applies(r, c):
+                    values.append("")
+                    continue
+                value = self.data(self.index(r, c), Qt.ItemDataRole.EditRole)
+                values.append("" if value is None else str(value))
+            lines.append("\t".join(values))
+        return "\n".join(lines) + "\n"
+
     # ---- row operations --------------------------------------------------------------
 
     def insert_row(self, at: int | None = None, row: PostingRow | None = None) -> int:
@@ -532,35 +728,11 @@ class PostingsDelegate(QStyledItemDelegate):
             editor.setText(index.data(Qt.ItemDataRole.EditRole) or "")
 
     def setModelData(self, editor, model, index):
-        text = editor.text().strip()
-        side, pos = column_role(index.column())
         try:
-            if side in ("debit", "credit") and pos is None:
-                value = self.catalog.resolve_account(text).id if text else None
-            elif side in ("debit", "credit"):
-                kind = model.kind_at(index.row(), index.column())
-                value = self.catalog.resolve_value(kind, text) if text else None
-                if text and value is None:
-                    self.unknown_value.emit(QPersistentModelIndex(index), kind, text)
-                    return
-            elif side == "currency":
-                value = self.catalog.resolve_currency(text).id if text else None
-            elif side == "currency_amount":
-                value = to_minor(text) if text else None
-                if value is not None and value <= 0:
-                    raise ValueError(tr("сумма должна быть больше нуля"))
-            elif side == "rate":
-                value = unit_rate(parse_rate(text)) if text else None
-            elif side == "amount" and model.formulas:
-                if text:
-                    formula.parse(text)  # check now, not when the template is saved
-                value = text
-            elif side == "amount":
-                value = to_minor(text) if text else None
-                if value is not None and value <= 0:
-                    raise ValueError(tr("сумма должна быть больше нуля"))
-            else:
-                value = text
+            value = model.parse(index.row(), index.column(), editor.text())
+        except UnknownValue as e:
+            self.unknown_value.emit(QPersistentModelIndex(index), e.kind_id, e.text)
+            return
         except (LookupError, ValueError, TypeError, ValidationError) as e:
             self.error.emit(str(e).strip("'\""))
             return
