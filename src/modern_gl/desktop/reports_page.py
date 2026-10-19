@@ -29,10 +29,14 @@ from PySide6.QtWidgets import (
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
+    ACCOUNT_CLASSES,
+    CLASS_ORDER,
     EmptyState,
     PageHeader,
     balance_text,
     button,
+    class_icon,
+    class_name,
     date_edit,
     money,
     ru_date,
@@ -61,6 +65,7 @@ class Column:
     get: Callable[[Any], Any]
     money: bool = False
     width: int = 0  # 0 = stretch
+    icon: Callable[[Any], Any] | None = None  # optional QIcon in front of the text
 
 
 @dataclass
@@ -141,6 +146,8 @@ class ReportModel(QAbstractTableModel):
                 return QColor(P.secondary)
             if col.money and isinstance(v := col.get(row), int) and v < 0:
                 return QColor(P.red)
+        if role == Qt.ItemDataRole.DecorationRole and col.icon is not None:
+            return col.icon(row)
         if role == Qt.ItemDataRole.UserRole:
             return row
         return None
@@ -283,11 +290,53 @@ class ReportPage(QWidget):
         if not actions:
             return
         menu = QMenu(self)
-        for text, fn in actions:
-            act = QAction(text, menu)
-            act.triggered.connect(fn)
-            menu.addAction(act)
+        self._fill_menu(menu, actions)
         menu.exec(self.table.viewport().mapToGlobal(pos))
+
+    def _fill_menu(self, menu: QMenu, actions) -> None:
+        """(text, callable) = action, (text, [...]) = submenu, None = separator."""
+        for entry in actions:
+            if entry is None:
+                menu.addSeparator()
+                continue
+            text, target = entry
+            if isinstance(target, list):
+                self._fill_menu(menu.addMenu(text), target)
+            else:
+                act = QAction(text, menu)
+                act.triggered.connect(target)
+                menu.addAction(act)
+
+    def _class_actions(self, code: str) -> list:
+        """Submenu to change an account's class and contra flag."""
+        acc = self.s.catalog.by_code.get(code)
+        if acc is None:
+            return []
+
+        def mark(on: bool, text: str) -> str:
+            return ("✓  " if on else "     ") + text
+
+        def setter(account_class, contra=None):
+            def run():
+                self.s.ledger.set_account_class(self.s.company_id, code, account_class, contra)
+                self.s.catalog.reload()
+                self.s.notify(
+                    tr("Счёт {code}: класс «{name}»", code=code, name=class_name(account_class))
+                )
+                self.refresh()
+
+            return run
+
+        items = [
+            (mark(acc.account_class == c, tr(name)), setter(c)) for c, name, _ in ACCOUNT_CLASSES
+        ]
+        items += [
+            None,
+            (mark(acc.account_class is None, tr("Не задан")), setter(None)),
+            None,
+            (mark(acc.contra, tr("Контрсчёт")), setter(acc.account_class, not acc.contra)),
+        ]
+        return [None, (tr("Класс счёта"), items)]
 
     def _account_actions(self, code: str) -> list[tuple[str, Callable[[], None]]]:
         acc = self.s.catalog.by_code.get(code)
@@ -316,10 +365,39 @@ class OsvPage(ReportPage):
         self.top_only.setToolTip(tr("Скрыть субсчета; суммы основных счетов не меняются"))
         self.top_only.toggled.connect(self.refresh)
         self.header.add_action(self.top_only)
+        self.sections = QCheckBox(tr("По разделам"))
+        self.sections.setToolTip(tr("Сгруппировать счета по классам с подытогами"))
+        self.sections.toggled.connect(self.refresh)
+        self.header.add_action(self.sections)
+        self._section_rows: set[int] = set()
         self.refresh()
 
     def title(self) -> str:
         return tr("ОСВ")
+
+    def _by_class(self, rows: list[OsvRow]) -> list[OsvRow]:
+        """Reorder top-level accounts (with their subaccounts) under class headers."""
+        blocks: list[list[OsvRow]] = []
+        for r in rows:
+            if r.depth == 0:
+                blocks.append([r])
+            else:
+                blocks[-1].append(r)
+        groups: dict[str | None, list[list[OsvRow]]] = {}
+        for block in blocks:
+            acc = self.s.catalog.by_code.get(block[0].code)
+            groups.setdefault(acc.account_class if acc else None, []).append(block)
+        result = []
+        for cls in sorted(groups, key=lambda c: CLASS_ORDER.get(c, len(CLASS_ORDER))):
+            header = OsvRow(name=class_name(cls), depth=0, is_group=True)
+            header.account_class = cls
+            for block in groups[cls]:
+                header.add(block[0])
+            self._section_rows.add(id(header))
+            result.append(header)
+            for block in groups[cls]:
+                result.extend(block)
+        return result
 
     def build(self) -> None:
         osv = reports.trial_balance(
@@ -331,17 +409,31 @@ class OsvPage(ReportPage):
         )
         total = OsvRow(name=tr("Итого"), depth=-1)
         total.add(osv.total)
+        sections = self._section_rows
+        sections.clear()
         columns = [
-            Column(tr("Счёт"), lambda r: ("      " * max(r.depth, 0)) + r.code, width=90),
+            Column(
+                tr("Счёт"),
+                lambda r: "" if id(r) in sections else ("      " * max(r.depth, 0)) + r.code,
+                width=90,
+                icon=lambda r: class_icon(r.account_class) if id(r) in sections else None,
+            ),
             Column(tr("Наименование"), lambda r: r.name),
             *turnover_columns(),
         ]
         shown = [r for r in osv.rows if r.depth == 0] if self.top_only.isChecked() else osv.rows
+        if self.sections.isChecked() and shown:
+            shown = self._by_class(shown)
         rows = [*shown, total] if shown else []
+        sectioned = self.sections.isChecked()
         self.model.set(
             columns,
             rows,
-            emphasis=lambda r: r.depth < 0 or (r.is_group and not self.top_only.isChecked()),
+            emphasis=lambda r: (
+                r.depth < 0
+                or id(r) in sections
+                or (r.is_group and not self.top_only.isChecked() and not sectioned)
+            ),
             muted=lambda r: r.depth > 0,
             total=lambda r: r.depth < 0,
         )
@@ -357,7 +449,9 @@ class OsvPage(ReportPage):
             self.open_report.emit("card", row.code, self.params)
 
     def menu_actions(self, row: OsvRow):
-        return self._account_actions(row.code) if row and row.code else []
+        if not row or not row.code:
+            return []
+        return self._account_actions(row.code) + self._class_actions(row.code)
 
 
 class AccountReportPage(ReportPage):
@@ -367,14 +461,14 @@ class AccountReportPage(ReportPage):
     def __init__(self, session: Session, code: str, params: ReportParams) -> None:
         self.code = code
         acc = session.catalog.by_code[code]
-        super().__init__(session, f"{self.caption} {code}", params)
-        self.header.title.setText(f"{self.caption} {code}")
+        super().__init__(session, f"{tr(self.caption)} {code}", params)
+        self.header.title.setText(f"{tr(self.caption)} {code}")
         self.header.subtitle.setText(acc.name)
         self.key = (self.kind, code)
         self.refresh()
 
     def title(self) -> str:
-        return f"{self.caption} {self.code}"
+        return f"{tr(self.caption)} {self.code}"
 
     def refresh(self) -> None:
         super().refresh()
@@ -504,7 +598,10 @@ class ChartPage(ReportPage):
             Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, width=110),
             Column(tr("Наименование"), lambda a: a.name),
             Column(tr("Вид"), lambda a: tr(self.KIND[a.kind]), width=150),
-            Column(tr("Субконто"), subconto, width=300),
+            Column(
+                tr("Класс"), self._class_text, width=190, icon=lambda a: class_icon(a.account_class)
+            ),
+            Column(tr("Субконто"), subconto, width=280),
         ]
         self.model.set(columns, list(cat.accounts.values()), emphasis=lambda a: a.is_group)
         self.footer.setText(tr("Двойной щелчок — карточка счёта за текущий месяц"))
@@ -513,8 +610,15 @@ class ChartPage(ReportPage):
         if acc is not None:
             self.open_report.emit("card", acc.code, month_of(self.s.working_date))
 
+    @staticmethod
+    def _class_text(acc) -> str:
+        text = class_name(acc.account_class)
+        return f"{text} · {tr('контрсчёт')}" if acc.contra else text
+
     def menu_actions(self, acc):
-        return self._account_actions(acc.code) if acc is not None else []
+        if acc is None:
+            return []
+        return self._account_actions(acc.code) + self._class_actions(acc.code)
 
 
 REPORTS: dict[str, type[AccountReportPage]] = {

@@ -1,10 +1,13 @@
 """Import a chart of accounts from CSV (Excel 'CSV UTF-8', ';'-separated).
 
-Columns: code;name;parent;kind;group;subconto
+Columns: code;name;parent;kind;group;subconto[;class;contra]
   parent   - parent account code, empty for top level (parents must come first)
   kind     - A / P / AP
   group    - 1 for a group (no postings allowed), empty or 0 otherwise
   subconto - subconto kind codes for positions 1..3, comma-separated; must already exist
+  class    - optional: asset / liability / equity / revenue / expense
+             (empty: inherited from the parent, or A -> asset, P -> liability)
+  contra   - optional: 1 for a contra account (e.g. accumulated depreciation)
 """
 
 from __future__ import annotations
@@ -73,6 +76,8 @@ def import_chart_csv(
                     parent_code=(row["parent"] or "").strip() or None,
                     is_group=(row["group"] or "").strip() == "1",
                     subconto=[ledger.subconto_kind_id(company_id, k) for k in kinds],
+                    account_class=(row.get("class") or "").strip().lower() or None,
+                    contra=(row.get("contra") or "").strip() == "1",
                 )
             except Exception as e:
                 raise ValidationError(

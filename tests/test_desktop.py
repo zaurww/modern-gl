@@ -290,3 +290,41 @@ def test_switch_language_rebuilds_interface(window):
     finally:
         window.set_ui_language("ru")
     assert current_page(window).title() == "Журнал"
+
+
+def test_osv_sections_by_class(window):
+    window.show_place(("osv",))
+    osv = current_page(window)
+    osv.date_from.setDate(date(2026, 2, 1))
+    osv.date_to.setDate(date(2026, 2, 28))
+    osv.sections.setChecked(True)
+    rows = osv.model.rows
+    headers = [r for r in rows if id(r) in osv._section_rows]
+    assert [h.name for h in headers] == ["Активы", "Обязательства", "Капитал", "Расходы"]
+    total = rows[-1]
+    assert sum(h.closing_dt for h in headers) == total.closing_dt
+    assert sum(h.closing_ct for h in headers) == total.closing_ct
+    assert not osv.menu_actions(headers[0])  # a section header is not an account
+
+
+def test_change_class_from_chart_menu(window):
+    window.show_place(("chart",))
+    chart = current_page(window)
+    acc = window.session.catalog.by_code["76.5"]
+    menu = dict(e for e in chart.menu_actions(acc) if e is not None)
+    submenu = dict(e for e in menu["Класс счёта"] if e is not None)
+    submenu["     Активы"]()
+    assert window.session.catalog.by_code["76.5"].account_class == "asset"
+    row = next(a for a in chart.model.rows if a.code == "76.5")
+    assert chart.model.data(chart.model.index(chart.model.rows.index(row), 3)) == "Активы"
+
+
+def test_open_reports_are_translated_in_sidebar(window):
+    window.set_ui_language("az")
+    try:
+        osv = window.pages.get(("osv",)) or (window.show_place(("osv",)) or current_page(window))
+        window.open_report("card", "51", osv.params)
+        assert window.sidebar.find(("card", "51")).text() == "Hesab kartı 51"
+        assert current_page(window).header.title.text() == "Hesab kartı 51"
+    finally:
+        window.set_ui_language("ru")

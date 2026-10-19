@@ -1,93 +1,93 @@
-code;name;parent;kind;group;subconto
-01;Əsas vəsaitlər;;A;;fixed_asset
-02;Əsas vəsaitlərin amortizasiyası;;P;;fixed_asset
-03;Maddi sərvətlərə gəlirli qoyuluşlar;;A;;fixed_asset
-04;Qeyri-maddi aktivlər;;A;;intangible
-05;Qeyri-maddi aktivlərin amortizasiyası;;P;;intangible
-07;Quraşdırılacaq avadanlıq;;A;;item,warehouse
-08;Dövriyyədənkənar aktivlərə qoyuluşlar;;A;;fixed_asset
-09;Təxirə salınmış vergi aktivləri;;A;;
-10;Materiallar;;A;1;
-10.1;Xammal və materiallar;10;A;;item,warehouse
-10.3;Yanacaq;10;A;;item,warehouse
-10.5;Ehtiyat hissələri;10;A;;item,warehouse
-10.9;İnventar və təsərrüfat ləvazimatı;10;A;;item,warehouse
-14;Maddi sərvətlərin dəyərinin azalmasına görə ehtiyatlar;;P;;
-15;Maddi sərvətlərin tədarükü və əldə edilməsi;;A;;
-16;Maddi sərvətlərin dəyərində kənarlaşmalar;;AP;;
-19;Alınmış sərvətlər üzrə ƏDV;;A;1;
-19.1;Əsas vəsaitlərin alınması üzrə ƏDV;19;A;;counterparty
-19.3;Alınmış material-istehsal ehtiyatları üzrə ƏDV;19;A;;counterparty
-19.4;Alınmış iş və xidmətlər üzrə ƏDV;19;A;;counterparty
-20;Əsas istehsalat;;A;;department,cost_item
-21;Öz istehsalımızın yarımfabrikatları;;A;;item,warehouse
-23;Köməkçi istehsalatlar;;A;;department,cost_item
-25;Ümumistehsalat xərcləri;;A;;department,cost_item
-26;Ümumtəsərrüfat xərcləri;;A;;cost_item
-28;İstehsalatda zay;;A;;department
-29;Xidmətedici istehsalatlar və təsərrüfatlar;;A;;department,cost_item
-40;Məhsul (iş, xidmət) buraxılışı;;AP;;
-41;Mallar;;A;1;
-41.1;Anbarlarda mallar;41;A;;item,warehouse
-41.2;Pərakəndə ticarətdə mallar;41;A;;item,warehouse
-42;Ticarət əlavəsi;;P;;
-43;Hazır məhsul;;A;;item,warehouse
-44;Satış xərcləri;;A;;cost_item
-45;Göndərilmiş mallar;;A;;item
-46;Başa çatmamış işlər üzrə yerinə yetirilmiş mərhələlər;;A;;
-50;Kassa;;A;;
-51;Hesablaşma hesabları;;A;;bank_account
-52;Valyuta hesabları;;A;;bank_account
-55;Banklarda xüsusi hesablar;;A;;bank_account
-57;Yolda olan köçürmələr;;A;;
-58;Maliyyə qoyuluşları;;A;;counterparty
-59;Maliyyə qoyuluşlarının dəyərsizləşməsinə görə ehtiyatlar;;P;;
-60;Malsatan və podratçılarla hesablaşmalar;;AP;1;
-60.1;Malsatan və podratçılarla hesablaşmalar;60;AP;;counterparty,contract
-60.2;Verilmiş avanslar;60;AP;;counterparty,contract
-62;Alıcılar və sifarişçilərlə hesablaşmalar;;AP;1;
-62.1;Alıcılar və sifarişçilərlə hesablaşmalar;62;AP;;counterparty,contract
-62.2;Alınmış avanslar;62;AP;;counterparty,contract
-63;Şübhəli borclar üzrə ehtiyatlar;;P;;counterparty
-66;Qısamüddətli kreditlər və borclar üzrə hesablaşmalar;;P;;counterparty,contract
-67;Uzunmüddətli kreditlər və borclar üzrə hesablaşmalar;;P;;counterparty,contract
-68;Vergi və rüsumlar üzrə hesablaşmalar;;AP;1;
-68.1;Fiziki şəxslərin gəlir vergisi;68;AP;;
-68.2;Əlavə dəyər vergisi;68;AP;;
-68.4;Mənfəət vergisi;68;AP;;
-68.8;Digər vergi və rüsumlar;68;AP;;
-69;Sosial sığorta və təminat üzrə hesablaşmalar;;AP;;
-70;Əməyin ödənişi üzrə heyətlə hesablaşmalar;;AP;;employee
-71;Təhtəlhesab şəxslərlə hesablaşmalar;;AP;;employee
-73;Digər əməliyyatlar üzrə heyətlə hesablaşmalar;;AP;;employee
-75;Təsisçilərlə hesablaşmalar;;AP;1;
-75.1;Nizamnamə kapitalına qoyuluşlar üzrə hesablaşmalar;75;AP;;counterparty
-75.2;Gəlirlərin ödənilməsi üzrə hesablaşmalar;75;AP;;counterparty
-76;Müxtəlif debitor və kreditorlarla hesablaşmalar;;AP;1;
-76.1;Əmlak və şəxsi sığorta üzrə hesablaşmalar;76;AP;;counterparty,contract
-76.2;İddialar üzrə hesablaşmalar;76;AP;;counterparty,contract
-76.3;Çatası dividendlər və digər gəlirlər üzrə hesablaşmalar;76;AP;;counterparty
-76.4;Deponentləşdirilmiş məbləğlər üzrə hesablaşmalar;76;AP;;employee
-76.5;Digər debitor və kreditorlarla hesablaşmalar;76;AP;;counterparty,contract
-77;Təxirə salınmış vergi öhdəlikləri;;P;;
-79;Təsərrüfatdaxili hesablaşmalar;;AP;;
-80;Nizamnamə kapitalı;;P;;counterparty
-81;Xüsusi səhmlər (paylar);;A;;
-82;Ehtiyat kapitalı;;P;;
-83;Əlavə kapital;;P;;
-84;Bölüşdürülməmiş mənfəət (ödənilməmiş zərər);;AP;;
-86;Məqsədli maliyyələşdirmə;;P;;counterparty
-90;Satışlar;;AP;1;
-90.1;Satışdan gəlir;90;P;;
-90.2;Satışın maya dəyəri;90;A;;
-90.3;Əlavə dəyər vergisi;90;A;;
-90.9;Satışdan mənfəət / zərər;90;AP;;
-91;Digər gəlir və xərclər;;AP;1;
-91.1;Digər gəlirlər;91;P;;other_income
-91.2;Digər xərclər;91;A;;other_income
-91.9;Digər gəlir və xərclərin saldosu;91;AP;;
-94;Qıtlıqlar və sərvətlərin korlanmasından itkilər;;A;;
-96;Gələcək xərclər üzrə ehtiyatlar;;P;;
-97;Gələcək dövrlərin xərcləri;;A;;
-98;Gələcək dövrlərin gəlirləri;;P;;
-99;Mənfəət və zərərlər;;AP;;
+code;name;parent;kind;group;subconto;class;contra
+01;Əsas vəsaitlər;;A;;fixed_asset;asset;
+02;Əsas vəsaitlərin amortizasiyası;;P;;fixed_asset;asset;1
+03;Maddi sərvətlərə gəlirli qoyuluşlar;;A;;fixed_asset;asset;
+04;Qeyri-maddi aktivlər;;A;;intangible;asset;
+05;Qeyri-maddi aktivlərin amortizasiyası;;P;;intangible;asset;1
+07;Quraşdırılacaq avadanlıq;;A;;item,warehouse;asset;
+08;Dövriyyədənkənar aktivlərə qoyuluşlar;;A;;fixed_asset;asset;
+09;Təxirə salınmış vergi aktivləri;;A;;;asset;
+10;Materiallar;;A;1;;asset;
+10.1;Xammal və materiallar;10;A;;item,warehouse;asset;
+10.3;Yanacaq;10;A;;item,warehouse;asset;
+10.5;Ehtiyat hissələri;10;A;;item,warehouse;asset;
+10.9;İnventar və təsərrüfat ləvazimatı;10;A;;item,warehouse;asset;
+14;Maddi sərvətlərin dəyərinin azalmasına görə ehtiyatlar;;P;;;asset;1
+15;Maddi sərvətlərin tədarükü və əldə edilməsi;;A;;;asset;
+16;Maddi sərvətlərin dəyərində kənarlaşmalar;;AP;;;asset;
+19;Alınmış sərvətlər üzrə ƏDV;;A;1;;asset;
+19.1;Əsas vəsaitlərin alınması üzrə ƏDV;19;A;;counterparty;asset;
+19.3;Alınmış material-istehsal ehtiyatları üzrə ƏDV;19;A;;counterparty;asset;
+19.4;Alınmış iş və xidmətlər üzrə ƏDV;19;A;;counterparty;asset;
+20;Əsas istehsalat;;A;;department,cost_item;asset;
+21;Öz istehsalımızın yarımfabrikatları;;A;;item,warehouse;asset;
+23;Köməkçi istehsalatlar;;A;;department,cost_item;asset;
+25;Ümumistehsalat xərcləri;;A;;department,cost_item;expense;
+26;Ümumtəsərrüfat xərcləri;;A;;cost_item;expense;
+28;İstehsalatda zay;;A;;department;expense;
+29;Xidmətedici istehsalatlar və təsərrüfatlar;;A;;department,cost_item;asset;
+40;Məhsul (iş, xidmət) buraxılışı;;AP;;;expense;
+41;Mallar;;A;1;;asset;
+41.1;Anbarlarda mallar;41;A;;item,warehouse;asset;
+41.2;Pərakəndə ticarətdə mallar;41;A;;item,warehouse;asset;
+42;Ticarət əlavəsi;;P;;;asset;1
+43;Hazır məhsul;;A;;item,warehouse;asset;
+44;Satış xərcləri;;A;;cost_item;expense;
+45;Göndərilmiş mallar;;A;;item;asset;
+46;Başa çatmamış işlər üzrə yerinə yetirilmiş mərhələlər;;A;;;asset;
+50;Kassa;;A;;;asset;
+51;Hesablaşma hesabları;;A;;bank_account;asset;
+52;Valyuta hesabları;;A;;bank_account;asset;
+55;Banklarda xüsusi hesablar;;A;;bank_account;asset;
+57;Yolda olan köçürmələr;;A;;;asset;
+58;Maliyyə qoyuluşları;;A;;counterparty;asset;
+59;Maliyyə qoyuluşlarının dəyərsizləşməsinə görə ehtiyatlar;;P;;;asset;1
+60;Malsatan və podratçılarla hesablaşmalar;;AP;1;;liability;
+60.1;Malsatan və podratçılarla hesablaşmalar;60;AP;;counterparty,contract;liability;
+60.2;Verilmiş avanslar;60;AP;;counterparty,contract;asset;
+62;Alıcılar və sifarişçilərlə hesablaşmalar;;AP;1;;asset;
+62.1;Alıcılar və sifarişçilərlə hesablaşmalar;62;AP;;counterparty,contract;asset;
+62.2;Alınmış avanslar;62;AP;;counterparty,contract;liability;
+63;Şübhəli borclar üzrə ehtiyatlar;;P;;counterparty;asset;1
+66;Qısamüddətli kreditlər və borclar üzrə hesablaşmalar;;P;;counterparty,contract;liability;
+67;Uzunmüddətli kreditlər və borclar üzrə hesablaşmalar;;P;;counterparty,contract;liability;
+68;Vergi və rüsumlar üzrə hesablaşmalar;;AP;1;;liability;
+68.1;Fiziki şəxslərin gəlir vergisi;68;AP;;;liability;
+68.2;Əlavə dəyər vergisi;68;AP;;;liability;
+68.4;Mənfəət vergisi;68;AP;;;liability;
+68.8;Digər vergi və rüsumlar;68;AP;;;liability;
+69;Sosial sığorta və təminat üzrə hesablaşmalar;;AP;;;liability;
+70;Əməyin ödənişi üzrə heyətlə hesablaşmalar;;AP;;employee;liability;
+71;Təhtəlhesab şəxslərlə hesablaşmalar;;AP;;employee;asset;
+73;Digər əməliyyatlar üzrə heyətlə hesablaşmalar;;AP;;employee;asset;
+75;Təsisçilərlə hesablaşmalar;;AP;1;;liability;
+75.1;Nizamnamə kapitalına qoyuluşlar üzrə hesablaşmalar;75;AP;;counterparty;asset;
+75.2;Gəlirlərin ödənilməsi üzrə hesablaşmalar;75;AP;;counterparty;liability;
+76;Müxtəlif debitor və kreditorlarla hesablaşmalar;;AP;1;;liability;
+76.1;Əmlak və şəxsi sığorta üzrə hesablaşmalar;76;AP;;counterparty,contract;liability;
+76.2;İddialar üzrə hesablaşmalar;76;AP;;counterparty,contract;asset;
+76.3;Çatası dividendlər və digər gəlirlər üzrə hesablaşmalar;76;AP;;counterparty;asset;
+76.4;Deponentləşdirilmiş məbləğlər üzrə hesablaşmalar;76;AP;;employee;liability;
+76.5;Digər debitor və kreditorlarla hesablaşmalar;76;AP;;counterparty,contract;liability;
+77;Təxirə salınmış vergi öhdəlikləri;;P;;;liability;
+79;Təsərrüfatdaxili hesablaşmalar;;AP;;;liability;
+80;Nizamnamə kapitalı;;P;;counterparty;equity;
+81;Xüsusi səhmlər (paylar);;A;;;equity;1
+82;Ehtiyat kapitalı;;P;;;equity;
+83;Əlavə kapital;;P;;;equity;
+84;Bölüşdürülməmiş mənfəət (ödənilməmiş zərər);;AP;;;equity;
+86;Məqsədli maliyyələşdirmə;;P;;counterparty;liability;
+90;Satışlar;;AP;1;;revenue;
+90.1;Satışdan gəlir;90;P;;;revenue;
+90.2;Satışın maya dəyəri;90;A;;;expense;
+90.3;Əlavə dəyər vergisi;90;A;;;revenue;1
+90.9;Satışdan mənfəət / zərər;90;AP;;;equity;
+91;Digər gəlir və xərclər;;AP;1;;revenue;
+91.1;Digər gəlirlər;91;P;;other_income;revenue;
+91.2;Digər xərclər;91;A;;other_income;expense;
+91.9;Digər gəlir və xərclərin saldosu;91;AP;;;equity;
+94;Qıtlıqlar və sərvətlərin korlanmasından itkilər;;A;;;asset;
+96;Gələcək xərclər üzrə ehtiyatlar;;P;;;liability;
+97;Gələcək dövrlərin xərcləri;;A;;;asset;
+98;Gələcək dövrlərin gəlirləri;;P;;;liability;
+99;Mənfəət və zərərlər;;AP;;;equity;

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import QDate, Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.theme import P, dot_icon, fonts
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 
@@ -152,3 +153,27 @@ def ask_date(parent: QWidget, title: str, prompt: str, default: date) -> date | 
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
     return edit.date().toPython()
+
+
+# Account classes (level 1 of statement classification): order, name, color.
+ACCOUNT_CLASSES = [
+    ("asset", "Активы", P.accent),
+    ("liability", "Обязательства", P.amber),
+    ("equity", "Капитал", P.violet),
+    ("revenue", "Доходы", P.green),
+    ("expense", "Расходы", P.red),
+]
+CLASS_ORDER = {code: i for i, (code, _, _) in enumerate(ACCOUNT_CLASSES)}
+_CLASS_ICONS: dict[str | None, QIcon] = {}
+
+
+def class_name(account_class: str | None) -> str:
+    names = {code: name for code, name, _ in ACCOUNT_CLASSES}
+    return tr(names[account_class]) if account_class in names else tr("Без класса")
+
+
+def class_icon(account_class: str | None) -> QIcon:
+    if account_class not in _CLASS_ICONS:
+        colors = {code: color for code, _, color in ACCOUNT_CLASSES}
+        _CLASS_ICONS[account_class] = dot_icon(colors.get(account_class, P.hairline), 10)
+    return _CLASS_ICONS[account_class]

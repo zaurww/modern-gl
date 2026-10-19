@@ -84,6 +84,9 @@ def main() -> None:
     win.pages[("osv",)].top_only.setChecked(True)
     shot("5b_osv_top_only")
     win.pages[("osv",)].top_only.setChecked(False)
+    win.pages[("osv",)].sections.setChecked(True)
+    shot("5c_osv_sections")
+    win.pages[("osv",)].sections.setChecked(False)
     osv = win.pages[("osv",)]
     win.open_report("subconto", "60.1", osv.params)
     shot("6_subconto")

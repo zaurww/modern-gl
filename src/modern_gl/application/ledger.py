@@ -25,6 +25,9 @@ DEFAULT_LAYERS = (
     ("tax_adj", "Налоговые корректировки"),
 )
 ACCOUNT_KINDS = ("A", "P", "AP")
+ACCOUNT_CLASSES = ("asset", "liability", "equity", "revenue", "expense")
+# Without an explicit class, an active account is an asset and a passive one a liability.
+CLASS_BY_KIND = {"A": "asset", "P": "liability"}
 MAX_SUBCONTO = 3
 SIDES = (("debit", "dt"), ("credit", "ct"))
 
@@ -141,8 +144,15 @@ class Ledger:
         parent_code: str | None = None,
         is_group: bool = False,
         subconto: Sequence[int] = (),
+        account_class: str | None = None,
+        contra: bool = False,
     ) -> int:
-        """Add an account. `subconto` lists subconto kind ids for positions 1..3."""
+        """Add an account. `subconto` lists subconto kind ids for positions 1..3.
+
+        Without `account_class` the account inherits its parent's class, or gets one
+        from its kind (A -> asset, P -> liability); active-passive stays unclassified.
+        """
+        self._check_class(code, account_class)
         if kind not in ACCOUNT_KINDS:
             raise ValidationError(
                 tr("счёт {code}: вид должен быть одним из {kinds}", code=code, kinds=ACCOUNT_KINDS)
@@ -163,11 +173,24 @@ class Ledger:
                         )
                     )
                 parent_id = parent["id"]
+                account_class = account_class or parent["account_class"]
+            account_class = account_class or CLASS_BY_KIND.get(kind)
             try:
                 account_id = self.conn.execute(
                     "INSERT INTO accounts (company_id, code, name, parent_id, kind, is_group, "
-                    "sc1_kind_id, sc2_kind_id, sc3_kind_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (company_id, code, name, parent_id, kind, int(is_group), *sc),
+                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, contra) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        company_id,
+                        code,
+                        name,
+                        parent_id,
+                        kind,
+                        int(is_group),
+                        *sc,
+                        account_class,
+                        int(contra),
+                    ),
                 ).lastrowid
             except sqlite3.IntegrityError as e:
                 raise ValidationError(
@@ -178,12 +201,67 @@ class Ledger:
                 "account",
                 account_id,
                 "create",
-                {"code": code, "name": name, "kind": kind},
+                {"code": code, "name": name, "kind": kind, "class": account_class},
             )
         return account_id
 
     def account_id(self, company_id: int, code: str) -> int:
         return self._account_by_code(company_id, code)["id"]
+
+    def set_account_class(
+        self, company_id: int, code: str, account_class: str | None, contra: bool | None = None
+    ) -> None:
+        """Change an account's class (and optionally its contra flag). Audited.
+
+        Subaccounts that had the same class as the account follow it, so changing a
+        group re-classifies its subaccounts unless they were set differently on purpose.
+        """
+        self._check_class(code, account_class)
+        with transaction(self.conn):
+            acc = self._account_by_code(company_id, code)
+            old = acc["account_class"]
+            ids = [acc["id"]]
+            stack = [acc["id"]]
+            while stack:
+                children = self.conn.execute(
+                    "SELECT id FROM accounts WHERE company_id = ? AND parent_id = ? "
+                    "AND account_class IS ?",
+                    (company_id, stack.pop(), old),
+                ).fetchall()
+                ids += [c["id"] for c in children]
+                stack += [c["id"] for c in children]
+            self.conn.executemany(
+                "UPDATE accounts SET account_class = ? WHERE id = ?",
+                [(account_class, i) for i in ids],
+            )
+            if contra is not None:
+                self.conn.execute(
+                    "UPDATE accounts SET contra = ? WHERE id = ?", (int(contra), acc["id"])
+                )
+            self._audit(
+                company_id,
+                "account",
+                acc["id"],
+                "set_class",
+                {
+                    "code": code,
+                    "from": old,
+                    "to": account_class,
+                    "contra": contra,
+                    "subaccounts": len(ids) - 1,
+                },
+            )
+
+    @staticmethod
+    def _check_class(code: str, account_class: str | None) -> None:
+        if account_class is not None and account_class not in ACCOUNT_CLASSES:
+            raise ValidationError(
+                tr(
+                    "счёт {code}: класс должен быть одним из {classes}",
+                    code=code,
+                    classes=ACCOUNT_CLASSES,
+                )
+            )
 
     # ---- documents -------------------------------------------------------------------
 

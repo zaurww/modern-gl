@@ -5,7 +5,7 @@ import pytest
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.chart_csv import import_chart_csv
-from modern_gl.infrastructure.db import connect, schema_version
+from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
 from modern_gl.reporting.reports import trial_balance
 from tests.conftest import build_demo
 
@@ -20,7 +20,7 @@ def test_posted_data_survives_restart(tmp_path):
     conn.close()
 
     conn = connect(path)
-    assert schema_version(conn) == 1
+    assert schema_version(conn) == len(list(MIGRATIONS_DIR.glob("*.sql")))
     assert trial_balance(conn, demo.company_id, "2026-01-01", "2026-02-28") == expected
     conn.close()
 
