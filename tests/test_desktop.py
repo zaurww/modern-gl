@@ -6,6 +6,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCompleter, QMessageBox
 
+from modern_gl.application.ledger import PostingInput
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
@@ -285,7 +286,7 @@ def test_switch_language_rebuilds_interface(window):
     window.set_ui_language("az")
     try:
         assert current_page(window).title() == "Jurnal"
-        assert window.sidebar.find(("osv",)).text() == "Dövriyyə-saldo"
+        assert window.sidebar.find(("osv",)).text() == "Dövriyyə-qalıq"
         assert window.sidebar.hint.text().startswith("Ctrl+N  yeni sənəd")
     finally:
         window.set_ui_language("ru")
@@ -383,3 +384,26 @@ def test_account_dialog_adds_subaccount_and_renames(window, monkeypatch):
     run(bad)
     chart.edit_account(cat.by_code["51"])
     assert not cat.by_code["51"].is_group
+
+
+def test_osv_highlights_balance_on_wrong_side(window):
+    led, s = window.ledger, window.session
+    cat = s.catalog
+    cost_item = cat.values(cat.by_code["26"].sc_kinds[0])[0].id
+    # Spend 5 000 in cash when the cash box holds 1 750: Kassa goes into credit.
+    led.post_new(
+        s.company_id,
+        "2026-02-27",
+        [PostingInput(cat.by_code["26"].id, cat.by_code["50"].id, "5000", [cost_item])],
+    )
+    window.show_place(("osv",))
+    osv = current_page(window)
+    osv.date_from.setDate(date(2026, 2, 1))
+    osv.date_to.setDate(date(2026, 2, 28))
+    osv.refresh()
+    i = next(i for i, r in enumerate(osv.model.rows) if r.code == "50")
+    closing_ct = osv.model.index(i, 7)
+    assert osv.model.data(closing_ct) == "3 250.00"
+    assert osv.model.data(closing_ct, Qt.ItemDataRole.ForegroundRole).name() == "#dc4446"
+    assert "дебетовое" in osv.model.data(closing_ct, Qt.ItemDataRole.ToolTipRole)
+    assert "50" in osv.footer.text()

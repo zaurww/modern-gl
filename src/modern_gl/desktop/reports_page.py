@@ -42,6 +42,7 @@ from modern_gl.desktop.widgets import (
     money,
     ru_date,
 )
+from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting import reports
@@ -67,6 +68,7 @@ class Column:
     money: bool = False
     width: int = 0  # 0 = stretch
     icon: Callable[[Any], Any] | None = None  # optional QIcon in front of the text
+    warn: Callable[[Any], str | None] | None = None  # text -> red cell with a tooltip
 
 
 @dataclass
@@ -91,9 +93,16 @@ def month_of(d: date) -> ReportParams:
     return ReportParams(date(d.year, d.month, 1), date.fromordinal(nxt.toordinal() - 1))
 
 
-def turnover_columns() -> list[Column]:
+def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:
+    warns = {"opening": warn_opening, "closing": warn_closing}
     return [
-        Column(tr(t), (lambda r, a=a: getattr(r, a)), money=True, width=120)
+        Column(
+            tr(t),
+            (lambda r, a=a: getattr(r, a)),
+            money=True,
+            width=120,
+            warn=warns.get(a.split("_")[0]),
+        )
         for t, a in TURNOVER_COLUMNS
     ]
 
@@ -142,6 +151,10 @@ class ReportModel(QAbstractTableModel):
             f = QFont()
             f.setWeight(QFont.Weight.DemiBold)
             return f
+        if role in (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.ToolTipRole) and col.warn:
+            message = col.warn(row)
+            if message and col.get(row):
+                return QColor(P.red) if role == Qt.ItemDataRole.ForegroundRole else message
         if role == Qt.ItemDataRole.ForegroundRole:
             if self.muted(row):
                 return QColor(P.secondary)
@@ -438,7 +451,10 @@ class OsvPage(ReportPage):
                 icon=lambda r: class_icon(r.account_class) if id(r) in sections else None,
             ),
             Column(tr("Наименование"), lambda r: r.name),
-            *turnover_columns(),
+            *turnover_columns(
+                warn_opening=lambda r: self._side_warning(r) if r.opening_wrong else None,
+                warn_closing=lambda r: self._side_warning(r) if r.closing_wrong else None,
+            ),
         ]
         shown = [r for r in osv.rows if r.depth == 0] if self.top_only.isChecked() else osv.rows
         if self.expand.isChecked():
@@ -459,15 +475,34 @@ class OsvPage(ReportPage):
             total=lambda r: r.depth < 0,
         )
         balanced = osv.total.closing_dt == osv.total.closing_ct
-        self.footer.setText(
+        text = (
             tr("Дебет и кредит сходятся  ✓")
             if balanced
             else tr("Внимание: итоги дебета и кредита не сходятся")
         )
+        wrong = osv.wrong_side
+        if wrong:
+            codes = ", ".join(r.code for r in wrong[:8]) + ("…" if len(wrong) > 8 else "")
+            text += "      " + tr(
+                "Сальдо не на своей стороне: {codes} — подсвечено красным", codes=codes
+            )
+        self.footer.setText(text)
+        self.footer.setStyleSheet(f"color: {P.red};" if wrong or not balanced else "")
 
     def drill(self, row: OsvRow) -> None:
         if row and row.code:
             self.open_report.emit("card", row.code, self.params)
+
+    def _side_warning(self, row: OsvRow) -> str:
+        acc = self.s.catalog.by_code.get(row.code)
+        if acc is None:
+            return ""
+        side = normal_side(acc.account_class, acc.contra)
+        return tr(
+            "Сальдо не на своей стороне: для «{cls}» ожидается {side} сальдо",
+            cls=class_name(acc.account_class) + (f" · {tr('контрсчёт')}" if acc.contra else ""),
+            side=tr("дебетовое") if side == "debit" else tr("кредитовое"),
+        )
 
     def menu_actions(self, row: OsvRow):
         if not row or not row.code:
@@ -599,7 +634,6 @@ class AnalysisPage(AccountReportPage):
 class ChartPage(ReportPage):
     key = ("chart",)
     has_period = False
-    KIND = {"A": "Активный", "P": "Пассивный", "AP": "Активно-пассивный"}
 
     def __init__(self, session: Session) -> None:
         super().__init__(session, tr("План счетов"))
@@ -631,7 +665,7 @@ class ChartPage(ReportPage):
         columns = [
             Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, width=110),
             Column(tr("Наименование"), name),
-            Column(tr("Вид"), lambda a: tr(self.KIND[a.kind]), width=150),
+            Column(tr("Сальдо"), self._side_text, width=150),
             Column(
                 tr("Класс"), self._class_text, width=190, icon=lambda a: class_icon(a.account_class)
             ),
@@ -659,6 +693,15 @@ class ChartPage(ReportPage):
     def _class_text(acc) -> str:
         text = class_name(acc.account_class)
         return f"{text} · {tr('контрсчёт')}" if acc.contra else text
+
+    @staticmethod
+    def _side_text(acc) -> str:
+        if acc.is_group:
+            return ""
+        if acc.two_sided:
+            return tr("Дт и Кт")
+        side = normal_side(acc.account_class, acc.contra)
+        return {"debit": tr("Дебет"), "credit": tr("Кредит")}.get(side, "—")
 
     def edit_account(self, acc, parent_code: str | None = None) -> None:
         dialog = AccountDialog(self.s, acc, parent_code, self)

@@ -31,12 +31,12 @@ def test_import_demo_chart(ledger, conn):
     ledger.add_subconto_kind(cid, "contract", "Договоры")
     assert import_chart_csv(ledger, cid, DEMO_CHART) == 7
     row = conn.execute(
-        "SELECT a.kind, p.code AS parent "
+        "SELECT a.account_class, p.code AS parent "
         "FROM accounts a LEFT JOIN accounts p ON p.id = a.parent_id "
         "WHERE a.company_id = ? AND a.code = '221'",
         (cid,),
     ).fetchone()
-    assert (row["kind"], row["parent"]) == ("A", "22")
+    assert (row["account_class"], row["parent"]) == ("asset", "22")
     sc = conn.execute(
         "SELECT sc1_kind_id, sc2_kind_id, sc3_kind_id FROM accounts WHERE code = '531'"
     ).fetchone()

@@ -77,14 +77,18 @@ def build_demo(ledger: Ledger, name: str = "ООО Тест") -> Demo:
     a = ledger.add_subconto_value(cid, cp, "Поставщик A")
     b = ledger.add_subconto_value(cid, cp, "Поставщик B")
     acc = {
-        "201": ledger.add_account(cid, "201", "Материалы", kind="A"),
-        "22": ledger.add_account(cid, "22", "Банковские счета", kind="A", is_group=True),
+        "201": ledger.add_account(cid, "201", "Материалы", account_class="asset"),
+        "22": ledger.add_account(
+            cid, "22", "Банковские счета", account_class="asset", is_group=True
+        ),
     }
-    acc["221"] = ledger.add_account(cid, "221", "Банк 1", kind="A", parent_code="22")
-    acc["222"] = ledger.add_account(cid, "222", "Банк 2", kind="A", parent_code="22")
-    acc["301"] = ledger.add_account(cid, "301", "Капитал", kind="P")
-    acc["531"] = ledger.add_account(cid, "531", "Поставщики", kind="AP", subconto=[cp])
-    acc["721"] = ledger.add_account(cid, "721", "Адм. расходы", kind="A")
+    acc["221"] = ledger.add_account(cid, "221", "Банк 1", parent_code="22")
+    acc["222"] = ledger.add_account(cid, "222", "Банк 2", parent_code="22")
+    acc["301"] = ledger.add_account(cid, "301", "Капитал", account_class="equity")
+    acc["531"] = ledger.add_account(
+        cid, "531", "Поставщики", subconto=[cp], account_class="liability", two_sided=True
+    )
+    acc["721"] = ledger.add_account(cid, "721", "Адм. расходы", account_class="expense")
     demo = Demo(ledger, cid, acc, a, b, [])
     p = demo.p
     for doc_date, posting in [

@@ -15,7 +15,7 @@ def company(ledger):
 
 def test_template_structure(company, conn):
     rows = conn.execute(
-        "SELECT a.code, a.kind, a.is_group, p.code AS parent "
+        "SELECT a.code, a.two_sided, a.is_group, p.code AS parent "
         "FROM accounts a LEFT JOIN accounts p ON p.id = a.parent_id WHERE a.company_id = ?",
         (company,),
     ).fetchall()
@@ -24,8 +24,8 @@ def test_template_structure(company, conn):
     assert by_code["60"]["is_group"] == 1
     assert by_code["60.1"]["parent"] == "60"
     assert by_code["26"]["is_group"] == 0
-    assert by_code["02"]["kind"] == "P"
-    assert by_code["76.5"]["kind"] == "AP"
+    assert by_code["02"]["two_sided"] == 0
+    assert by_code["76.5"]["two_sided"] == 1
 
 
 def test_typical_entries_on_template(ledger, conn, company):

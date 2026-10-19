@@ -33,20 +33,41 @@ def test_template_classes(ledger, conn):
     assert c["26"] == ("expense", 0)
 
 
-def test_new_account_inherits_or_infers_class(ledger, conn):
+def test_new_account_inherits_class_and_two_sided(ledger, conn):
     cid = ledger.create_company("Классы")
-    ledger.add_account(cid, "60", "Поставщики", kind="AP", is_group=True, account_class="liability")
-    ledger.add_account(cid, "60.9", "Прочие", kind="AP", parent_code="60")
-    ledger.add_account(cid, "50", "Касса", kind="A")
-    ledger.add_account(cid, "66", "Кредиты", kind="P")
-    ledger.add_account(cid, "76", "Разные", kind="AP")
+    ledger.add_account(
+        cid, "60", "Поставщики", is_group=True, account_class="liability", two_sided=True
+    )
+    ledger.add_account(cid, "60.9", "Прочие", parent_code="60")
+    ledger.add_account(cid, "60.8", "Особые", parent_code="60", two_sided=False)
+    ledger.add_account(cid, "76", "Разные")
     c = classes(conn, cid)
     assert c["60.9"][0] == "liability"  # from the parent
-    assert c["50"][0] == "asset"  # from the kind
-    assert c["66"][0] == "liability"
-    assert c["76"][0] is None  # active-passive without a hint: user decides
+    assert c["76"][0] is None  # nothing to inherit: the user decides
+    sided = dict(conn.execute("SELECT code, two_sided FROM accounts WHERE company_id = ?", (cid,)))
+    assert sided == {"60": 1, "60.9": 1, "60.8": 0, "76": 0}
     with pytest.raises(ValidationError, match="класс"):
         ledger.add_account(cid, "99", "X", account_class="profit")
+
+
+def test_csv_understands_1c_kind_column(ledger, conn, tmp_path):
+    cid = ledger.create_company("CSV 1C")
+    f = tmp_path / "chart.csv"
+    lines = [
+        "code;name;parent;kind;group;subconto",
+        "50;Касса;;A;;",
+        "66;Кредиты;;P;;",
+        "76;Разные;;AP;;",
+    ]
+    f.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    import_chart_csv(ledger, cid, f)
+    rows = {
+        r["code"]: (r["account_class"], r["two_sided"])
+        for r in conn.execute(
+            "SELECT code, account_class, two_sided FROM accounts WHERE company_id = ?", (cid,)
+        )
+    }
+    assert rows == {"50": ("asset", 0), "66": ("liability", 0), "76": (None, 1)}
 
 
 def test_changing_group_class_moves_subaccounts_that_followed_it(ledger, conn):
@@ -101,7 +122,11 @@ def test_migration_classifies_existing_template_companies(tmp_path):
     assert c["01"] == ("asset", 0)
     assert c["02"] == ("asset", 1)
     assert c["60.1"] == ("liability", 0)
-    assert c["777"] == (None, 0)  # not a template code: left for the user
+    assert c["777"] == ("asset", 0)  # not a template code: class from its old kind "A"
+    sided = dict(conn.execute("SELECT code, two_sided FROM accounts WHERE company_id = 1"))
+    assert sided["60.1"] == 1 and sided["01"] == 0  # the old "AP" became two-sided
+    columns = [r[1] for r in conn.execute("PRAGMA table_info(accounts)")]
+    assert "kind" not in columns
     conn.close()
 
 
@@ -120,9 +145,10 @@ def test_update_account_protects_history(demo, conn):
         led.update_account(cid, "201", new_code="301")
     with pytest.raises(ValidationError, match="у группы есть субсчета"):
         led.update_account(cid, "22", is_group=False)
-    led.add_account(cid, "55", "Спецсчёт", kind="A")  # no postings yet: free to reshape
+    # no postings yet: free to reshape
+    led.add_account(cid, "55", "Спецсчёт", account_class="asset")
     led.update_account(cid, "55", is_group=True)
-    led.add_account(cid, "55.1", "Аккредитив", kind="A", parent_code="55")
+    led.add_account(cid, "55.1", "Аккредитив", parent_code="55")
 
 
 def test_hidden_account_keeps_history_but_takes_no_new_postings(demo, conn):
@@ -153,3 +179,39 @@ def test_trial_balance_split_by_first_subconto(demo, conn):
         ("Поставщик B", 50000),
     ]
     assert demo.acc["201"] not in osv.subconto  # no subconto on that account
+
+
+@pytest.mark.parametrize(
+    ("cls", "contra", "two_sided", "net", "wrong"),
+    [
+        ("asset", False, False, 100, False),
+        ("asset", False, False, -100, True),  # cash in credit
+        ("asset", True, False, -100, False),  # accumulated depreciation: credit is normal
+        ("asset", True, False, 100, True),
+        ("liability", False, False, 100, True),
+        ("equity", False, False, -100, False),
+        ("revenue", False, False, 100, True),
+        ("expense", False, False, 100, False),
+        ("liability", False, True, 100, False),  # two-sided: never flagged
+        (None, False, False, -100, False),  # unclassified: no opinion
+        ("asset", False, False, 0, False),
+    ],
+)
+def test_wrong_side_rule(cls, contra, two_sided, net, wrong):
+    from modern_gl.domain.accounts import wrong_side
+
+    assert wrong_side(cls, contra, two_sided, net) is wrong
+
+
+def test_trial_balance_flags_balance_on_wrong_side(demo, conn):
+    from modern_gl.reporting.reports import trial_balance
+
+    led, cid = demo.ledger, demo.company_id
+    # Pay 12 000 from bank 221 that only has 7 000 left: the bank goes into credit.
+    led.post_new(cid, "2026-02-25", [demo.p("721", "221", "12000")])
+    osv = trial_balance(conn, cid, "2026-02-01", "2026-02-28")
+    rows = {r.code: r for r in osv.rows}
+    assert rows["221"].closing_wrong and not rows["221"].opening_wrong
+    assert not rows["531"].closing_wrong  # supplier advance: two-sided account
+    assert not rows["22"].closing_wrong  # groups are not judged
+    assert [r.code for r in osv.wrong_side] == ["221"]

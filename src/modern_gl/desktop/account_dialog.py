@@ -22,7 +22,6 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
-KINDS = [("A", "Активный"), ("P", "Пассивный"), ("AP", "Активно-пассивный")]
 AUTO = "auto"  # class combobox: let the ledger decide (parent's class or from kind)
 
 
@@ -60,9 +59,13 @@ class AccountDialog(QDialog):
         for a in cat.accounts.values():
             if a.is_group or (account is None and a.code == parent_code):
                 self.parent_box.addItem(a.label, a.code)
-        self.kind = QComboBox()
-        for code, name in KINDS:
-            self.kind.addItem(tr(name), code)
+        self.two_sided = QCheckBox(tr("Сальдо бывает с обеих сторон"))
+        self.two_sided.setToolTip(
+            tr(
+                "Расчёты с контрагентами, налоги: дебетовые и кредитовые остатки "
+                "показываются развёрнуто и не считаются ошибкой"
+            )
+        )
         self.group = QCheckBox(tr("Группа (есть субсчета, проводки только на субсчета)"))
         self.account_class = QComboBox()
         if account is None:
@@ -85,9 +88,9 @@ class AccountDialog(QDialog):
         form.addRow(tr("Код"), self.code)
         form.addRow(tr("Наименование"), self.name)
         form.addRow(tr("Родитель"), self.parent_box)
-        form.addRow(tr("Вид"), self.kind)
         form.addRow("", self.group)
         form.addRow(tr("Класс"), class_row)
+        form.addRow("", self.two_sided)
         for i, box in enumerate(self.subconto, start=1):
             form.addRow(tr("Субконто {i}", i=i), box)
         root.addLayout(form)
@@ -126,7 +129,7 @@ class AccountDialog(QDialog):
         parent = next((p for p in self.s.catalog.accounts.values() if p.id == a.parent_id), None)
         self._select(self.parent_box, parent.code if parent else None)
         self.parent_box.setEnabled(False)  # moving accounts between groups: not yet
-        self._select(self.kind, a.kind)
+        self.two_sided.setChecked(a.two_sided)
         self.group.setChecked(a.is_group)
         self._select(self.account_class, a.account_class)
         self.contra.setChecked(a.contra)
@@ -139,7 +142,7 @@ class AccountDialog(QDialog):
         cat = self.s.catalog
         parent = cat.by_code[parent_code]
         self._select(self.parent_box, parent_code)
-        self._select(self.kind, parent.kind)
+        self.two_sided.setChecked(parent.two_sided)
         n = 1
         while f"{parent_code}.{n}" in cat.by_code:
             n += 1
@@ -155,7 +158,7 @@ class AccountDialog(QDialog):
     def save(self) -> None:
         led, cid = self.s.ledger, self.s.company_id
         code, name = self.code.text().strip(), self.name.text().strip()
-        kind = self.kind.currentData()
+        two_sided = self.two_sided.isChecked()
         group = self.group.isChecked()
         subconto = [] if group else [b.currentData() for b in self.subconto]
         while subconto and subconto[-1] is None:
@@ -172,7 +175,7 @@ class AccountDialog(QDialog):
                         cid,
                         code,
                         name,
-                        kind=kind,
+                        two_sided=two_sided,
                         parent_code=parent_code,
                         is_group=group,
                         subconto=subconto,
@@ -186,7 +189,7 @@ class AccountDialog(QDialog):
                         a.code,
                         new_code=code,
                         name=name,
-                        kind=kind,
+                        two_sided=two_sided,
                         is_group=group,
                         subconto=subconto,
                     )

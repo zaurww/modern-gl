@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
+from modern_gl.domain.accounts import ACCOUNT_CLASSES
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.domain.money import to_minor
@@ -24,10 +25,6 @@ DEFAULT_LAYERS = (
     ("ifrs_adj", "Корректировки МСФО"),
     ("tax_adj", "Налоговые корректировки"),
 )
-ACCOUNT_KINDS = ("A", "P", "AP")
-ACCOUNT_CLASSES = ("asset", "liability", "equity", "revenue", "expense")
-# Without an explicit class, an active account is an asset and a passive one a liability.
-CLASS_BY_KIND = {"A": "asset", "P": "liability"}
 MAX_SUBCONTO = 3
 SIDES = (("debit", "dt"), ("credit", "ct"))
 
@@ -140,23 +137,20 @@ class Ledger:
         code: str,
         name: str,
         *,
-        kind: str = "AP",
         parent_code: str | None = None,
         is_group: bool = False,
         subconto: Sequence[int] = (),
         account_class: str | None = None,
         contra: bool = False,
+        two_sided: bool | None = None,
     ) -> int:
         """Add an account. `subconto` lists subconto kind ids for positions 1..3.
 
-        Without `account_class` the account inherits its parent's class, or gets one
-        from its kind (A -> asset, P -> liability); active-passive stays unclassified.
+        Without `account_class` the account inherits its parent's class (or stays
+        unclassified). `two_sided` (balance may be on either side, shown expanded per
+        first subconto) is inherited from the parent unless given.
         """
         self._check_class(code, account_class)
-        if kind not in ACCOUNT_KINDS:
-            raise ValidationError(
-                tr("счёт {code}: вид должен быть одним из {kinds}", code=code, kinds=ACCOUNT_KINDS)
-            )
         if is_group and subconto:
             raise ValidationError(tr("счёт {code}: у группы не бывает субконто", code=code))
         sc = _pad(subconto, 0)
@@ -174,22 +168,23 @@ class Ledger:
                     )
                 parent_id = parent["id"]
                 account_class = account_class or parent["account_class"]
-            account_class = account_class or CLASS_BY_KIND.get(kind)
+                if two_sided is None:
+                    two_sided = bool(parent["two_sided"])
             try:
                 account_id = self.conn.execute(
-                    "INSERT INTO accounts (company_id, code, name, parent_id, kind, is_group, "
-                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, contra) "
+                    "INSERT INTO accounts (company_id, code, name, parent_id, is_group, "
+                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, contra, two_sided) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         company_id,
                         code,
                         name,
                         parent_id,
-                        kind,
                         int(is_group),
                         *sc,
                         account_class,
                         int(contra),
+                        int(bool(two_sided)),
                     ),
                 ).lastrowid
             except sqlite3.IntegrityError as e:
@@ -201,7 +196,7 @@ class Ledger:
                 "account",
                 account_id,
                 "create",
-                {"code": code, "name": name, "kind": kind, "class": account_class},
+                {"code": code, "name": name, "class": account_class, "two_sided": bool(two_sided)},
             )
         return account_id
 
@@ -259,7 +254,7 @@ class Ledger:
         *,
         new_code: str | None = None,
         name: str | None = None,
-        kind: str | None = None,
+        two_sided: bool | None = None,
         is_group: bool | None = None,
         subconto: Sequence[int] | None = None,
     ) -> None:
@@ -273,7 +268,7 @@ class Ledger:
             acc = self._account_by_code(company_id, code)
             new_code = code if new_code is None else new_code.strip()
             name = acc["name"] if name is None else name.strip()
-            kind = acc["kind"] if kind is None else kind
+            two_sided = bool(acc["two_sided"]) if two_sided is None else bool(two_sided)
             group = bool(acc["is_group"]) if is_group is None else bool(is_group)
             current_sc = [acc["sc1_kind_id"], acc["sc2_kind_id"], acc["sc3_kind_id"]]
             sc = current_sc if subconto is None else _pad(list(subconto), 0)
@@ -281,14 +276,6 @@ class Ledger:
                 raise ValidationError(tr("код счёта не может быть пустым"))
             if not name:
                 raise ValidationError(tr("название счёта не может быть пустым"))
-            if kind not in ACCOUNT_KINDS:
-                raise ValidationError(
-                    tr(
-                        "счёт {code}: вид должен быть одним из {kinds}",
-                        code=code,
-                        kinds=ACCOUNT_KINDS,
-                    )
-                )
             used = self._has_postings(acc["id"])
             if group != bool(acc["is_group"]):
                 if group and used:
@@ -313,9 +300,9 @@ class Ledger:
                 )
             try:
                 self.conn.execute(
-                    "UPDATE accounts SET code = ?, name = ?, kind = ?, is_group = ?, "
+                    "UPDATE accounts SET code = ?, name = ?, two_sided = ?, is_group = ?, "
                     "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ? WHERE id = ?",
-                    (new_code, name, kind, int(group), *sc, acc["id"]),
+                    (new_code, name, int(two_sided), int(group), *sc, acc["id"]),
                 )
             except sqlite3.IntegrityError as e:
                 raise ValidationError(tr("счёт {code} уже есть", code=new_code)) from e
@@ -328,14 +315,14 @@ class Ledger:
                     "before": {
                         "code": code,
                         "name": acc["name"],
-                        "kind": acc["kind"],
+                        "two_sided": bool(acc["two_sided"]),
                         "group": bool(acc["is_group"]),
                         "subconto": current_sc,
                     },
                     "after": {
                         "code": new_code,
                         "name": name,
-                        "kind": kind,
+                        "two_sided": two_sided,
                         "group": group,
                         "subconto": sc,
                     },

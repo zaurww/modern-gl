@@ -17,13 +17,13 @@ class AccountInfo:
     id: int
     code: str
     name: str
-    kind: str
     is_group: bool
     parent_id: int | None
     sc_kinds: tuple[int | None, int | None, int | None]
     account_class: str | None = None
     contra: bool = False
     active: bool = True
+    two_sided: bool = False
 
     @property
     def label(self) -> str:
@@ -54,13 +54,13 @@ class Catalog:
                 r["id"],
                 r["code"],
                 r["name"],
-                r["kind"],
                 bool(r["is_group"]),
                 r["parent_id"],
                 (r["sc1_kind_id"], r["sc2_kind_id"], r["sc3_kind_id"]),
                 r["account_class"],
                 bool(r["contra"]),
                 bool(r["active"]),
+                bool(r["two_sided"]),
             )
             for r in self.conn.execute(
                 "SELECT * FROM accounts WHERE company_id = ? ORDER BY code",

@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
+from modern_gl.domain.accounts import wrong_side
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
@@ -79,6 +80,9 @@ class OsvRow(Turnovers):
     name: str = ""
     depth: int = 0
     is_group: bool = False
+    # balance on the side this account should not have (see domain.accounts.wrong_side)
+    opening_wrong: bool = False
+    closing_wrong: bool = False
 
 
 @dataclass
@@ -87,6 +91,11 @@ class Osv:
     total: Turnovers
     # account id -> balances split by its first subconto (only accounts that have one)
     subconto: dict[int, list[SubcontoRow]] = field(default_factory=dict)
+
+    @property
+    def wrong_side(self) -> list[OsvRow]:
+        """Accounts whose opening or closing balance sits on the unexpected side."""
+        return [r for r in self.rows if r.opening_wrong or r.closing_wrong]
 
 
 @dataclass
@@ -217,10 +226,11 @@ def trial_balance(
         per_account[r["account_id"]].append(r)
 
     values: dict[int, Turnovers] = {}
+    flags: dict[int, tuple[bool, bool]] = {}
     by_value: dict[int, list[tuple[int | None, Turnovers]]] = {}
     for account_id, parts in per_account.items():
         acc = accounts[account_id]
-        if acc["kind"] == "AP" and acc["sc1_kind_id"] is not None:
+        if acc["two_sided"] and acc["sc1_kind_id"] is not None:
             t = Turnovers()
             for part in parts:
                 t.add(Turnovers.from_net(part["opening"], part["dt"], part["ct"]))
@@ -231,6 +241,11 @@ def trial_balance(
                 sum(p["ct"] for p in parts),
             )
         values[account_id] = t
+        check = (acc["account_class"], bool(acc["contra"]), bool(acc["two_sided"]))
+        flags[account_id] = (
+            wrong_side(*check, t.opening_dt - t.opening_ct),
+            wrong_side(*check, t.closing_dt - t.closing_ct),
+        )
         if acc["sc1_kind_id"] is not None:
             by_value[account_id] = [
                 (part["sc"], Turnovers.from_net(part["opening"], part["dt"], part["ct"]))
@@ -258,6 +273,7 @@ def trial_balance(
         own = values.get(account_id)
         if own is not None:
             row.add(own)
+            row.opening_wrong, row.closing_wrong = flags[account_id]
         for child in children[account_id]:
             row.add(visit(child, depth + 1))
         if row.is_zero():

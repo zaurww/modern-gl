@@ -151,7 +151,7 @@ def test_companies_are_isolated(ledger, conn):
     a = build_demo(ledger, "Компания A")
     b = ledger.create_company("Компания B")
     assert trial_balance(conn, b, "2026-01-01", "2026-12-31").rows == []
-    b_cash = ledger.add_account(b, "221", "Банк", kind="A")
+    b_cash = ledger.add_account(b, "221", "Банк", account_class="asset")
     with pytest.raises(ValidationError, match="другой компании"):
         ledger.post_new(b, "2026-03-01", [PostingInput(a.acc["721"], b_cash, "1")])
     with pytest.raises(NotFoundError):

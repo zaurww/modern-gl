@@ -1,13 +1,15 @@
 """Import a chart of accounts from CSV (Excel 'CSV UTF-8', ';'-separated).
 
-Columns: code;name;parent;kind;group;subconto[;class;contra]
-  parent   - parent account code, empty for top level (parents must come first)
-  kind     - A / P / AP
-  group    - 1 for a group (no postings allowed), empty or 0 otherwise
-  subconto - subconto kind codes for positions 1..3, comma-separated; must already exist
-  class    - optional: asset / liability / equity / revenue / expense
-             (empty: inherited from the parent, or A -> asset, P -> liability)
-  contra   - optional: 1 for a contra account (e.g. accumulated depreciation)
+Columns: code;name;parent;group;subconto[;class;contra;two_sided]
+  parent    - parent account code, empty for top level (parents must come first)
+  group     - 1 for a group (no postings allowed), empty or 0 otherwise
+  subconto  - subconto kind codes for positions 1..3, comma-separated; must already exist
+  class     - optional: asset / liability / equity / revenue / expense (empty: parent's)
+  contra    - optional: 1 for a contra account (e.g. accumulated depreciation)
+  two_sided - optional: 1 if the balance may be on either side (settlements, taxes)
+
+A 1C-style `kind` column (A / P / AP) is also understood: AP means two-sided,
+and A / P give the class (asset / liability) when `class` is empty.
 """
 
 from __future__ import annotations
@@ -20,9 +22,10 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import language, tr
 from modern_gl.infrastructure.db import transaction
 
-COLUMNS = ("code", "name", "parent", "kind", "group", "subconto")
+COLUMNS = ("code", "name", "parent", "group", "subconto")
 SUBCONTO_COLUMNS = ("code", "name")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+LEGACY_CLASS = {"A": "asset", "P": "liability"}
 # Each template exists per language: chart_<name>_<lang>.csv, chart_<name>_subconto_<lang>.csv
 TEMPLATES = ("1c77",)
 
@@ -68,16 +71,21 @@ def import_chart_csv(
         for line_no, row in enumerate(rows, start=2):
             try:
                 kinds = [c.strip() for c in (row["subconto"] or "").split(",") if c.strip()]
+                legacy = (row.get("kind") or "").strip().upper()
+                account_class = (row.get("class") or "").strip().lower() or LEGACY_CLASS.get(legacy)
+                two_sided = (row.get("two_sided") or "").strip() == "1" or legacy == "AP"
+                if row.get("two_sided") is None and not legacy:
+                    two_sided = None  # no such column: inherit from the parent
                 ledger.add_account(
                     company_id,
                     row["code"].strip(),
                     row["name"].strip(),
-                    kind=(row["kind"] or "AP").strip().upper(),
                     parent_code=(row["parent"] or "").strip() or None,
                     is_group=(row["group"] or "").strip() == "1",
                     subconto=[ledger.subconto_kind_id(company_id, k) for k in kinds],
-                    account_class=(row.get("class") or "").strip().lower() or None,
+                    account_class=account_class,
                     contra=(row.get("contra") or "").strip() == "1",
+                    two_sided=two_sided,
                 )
             except Exception as e:
                 raise ValidationError(
