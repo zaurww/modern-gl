@@ -5,6 +5,7 @@ uv run python scripts/demo.py
 
 from __future__ import annotations
 
+import io
 import sys
 
 from modern_gl.application.ledger import Ledger, PostingInput
@@ -42,7 +43,7 @@ def print_turnovers(title: str, rows, label) -> None:
 
 
 def main() -> None:
-    if hasattr(sys.stdout, "reconfigure"):
+    if isinstance(sys.stdout, io.TextIOWrapper):  # Windows console: print Cyrillic safely
         sys.stdout.reconfigure(encoding="utf-8")
     conn = connect(":memory:")
     led = Ledger(conn)
