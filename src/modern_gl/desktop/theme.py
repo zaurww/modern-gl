@@ -190,6 +190,15 @@ QScrollBar::handle:horizontal {{ background: #D5D9DF; border-radius: 3px; min-wi
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 
+QListView#completer {{
+    background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 10px;
+    padding: 4px; outline: 0;
+}}
+QListView#completer::item {{ padding: 6px 10px; border-radius: 6px; color: {P.text}; }}
+QListView#completer::item:hover {{ background: {P.subtle}; }}
+QListView#completer::item:selected {{ background: {P.selection}; color: {P.text}; }}
+QCheckBox {{ color: {P.secondary}; spacing: 8px; }}
+
 QMenu {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 10px; padding: 6px;
 }}

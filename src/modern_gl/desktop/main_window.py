@@ -5,8 +5,17 @@ from __future__ import annotations
 import getpass
 import sqlite3
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QPropertyAnimation,
+    QRect,
+    QRectF,
+    QSettings,
+    QSize,
+    Qt,
+)
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -19,6 +28,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QStackedWidget,
+    QStyle,
+    QStyledItemDelegate,
     QVBoxLayout,
     QWidget,
 )
@@ -31,14 +42,51 @@ from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, dot_icon, fonts
+from modern_gl.i18n import LANGUAGES, language, set_language, tr
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
-PLACES = [
-    (("journal",), "Журнал", P.accent, "Ж", "Ctrl+1"),
-    (("osv",), "ОСВ", P.green, "О", "Ctrl+2"),
-    (("chart",), "План счетов", P.violet, "П", "Ctrl+3"),
+PLACES = [  # key, title (translated on display), icon color
+    (("journal",), "Журнал", P.accent),
+    (("osv",), "ОСВ", P.green),
+    (("chart",), "План счетов", P.violet),
 ]
+PLACE_KEYS = [key for key, _, _ in PLACES]
+
+
+def doc_glyph() -> str:
+    return tr("Документ №{n}", n="")[0]
+
+
+class NavDelegate(QStyledItemDelegate):
+    """Draws a small × on open items (on hover or when selected), like a tab's close button."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+
+    @staticmethod
+    def closable(key) -> bool:
+        return key is not None and key not in PLACE_KEYS
+
+    @staticmethod
+    def close_rect(rect: QRect) -> QRect:
+        return QRect(rect.right() - 32, rect.center().y() - 8, 16, 16)
+
+    def paint(self, painter, option, index) -> None:
+        super().paint(painter, option, index)
+        state = option.state
+        hot = state & (QStyle.StateFlag.State_MouseOver | QStyle.StateFlag.State_Selected)
+        if not hot or not self.closable(index.data(KEY_ROLE)):
+            return
+        r = QRectF(self.close_rect(option.rect)).adjusted(4.5, 4.5, -4.5, -4.5)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(P.secondary), 1.5)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        painter.drawLine(r.topLeft(), r.bottomRight())
+        painter.drawLine(r.topRight(), r.bottomLeft())
+        painter.restore()
 
 
 class Sidebar(QWidget):
@@ -61,11 +109,17 @@ class Sidebar(QWidget):
         self.nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.nav.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         lay.addWidget(self.nav, 1)
-        hint = QLabel("Ctrl+N  новый документ\nCtrl+W  закрыть")
-        hint.setObjectName("tertiary")
-        hint.setFont(fonts().small)
-        hint.setContentsMargins(20, 0, 0, 0)
-        lay.addWidget(hint)
+        self.nav.setMouseTracking(True)
+        self.nav.setItemDelegate(NavDelegate(self.nav))
+        self.hint = QLabel()
+        self.hint.setObjectName("tertiary")
+        self.hint.setFont(fonts().small)
+        self.hint.setContentsMargins(20, 0, 0, 0)
+        lay.addWidget(self.hint)
+        self.retranslate()
+
+    def retranslate(self) -> None:
+        self.hint.setText(tr("Ctrl+N  новый документ\nCtrl+W  закрыть"))
 
     def add_section(self, title: str) -> None:
         item = QListWidgetItem(title.upper())
@@ -114,6 +168,7 @@ class MainWindow(QMainWindow):
         self.sidebar.nav.currentItemChanged.connect(self._on_nav)
         self.sidebar.nav.customContextMenuRequested.connect(self._nav_menu)
         self.sidebar.company.clicked.connect(self._company_menu)
+        self.sidebar.nav.viewport().installEventFilter(self)
 
         for keys, fn in (
             ("Ctrl+N", self.new_document),
@@ -139,11 +194,11 @@ class MainWindow(QMainWindow):
 
     def create_company(self, first: bool = False) -> bool:
         prompt = (
-            "Добро пожаловать! Как называется первая компания?"
+            tr("Добро пожаловать! Как называется первая компания?")
             if first
-            else "Название новой компании:"
+            else tr("Название новой компании:")
         )
-        name, ok = QInputDialog.getText(self, "Новая компания", prompt)
+        name, ok = QInputDialog.getText(self, tr("Новая компания"), prompt)
         if not ok or not name.strip():
             return False
         cid = self.ledger.create_company(name.strip())
@@ -175,9 +230,10 @@ class MainWindow(QMainWindow):
         self.sidebar.nav.clear()
         self.sidebar.company.setText(f"{name}   ▾")
         self.setWindowTitle(f"{name} — Modern GL")
-        for key, text, color, glyph, _ in PLACES:
-            self.sidebar.add_item(key, text, color, glyph)
-        self.sidebar.add_section("Открытые")
+        self.sidebar.retranslate()
+        for key, text, color in PLACES:
+            self.sidebar.add_item(key, tr(text), color, tr(text)[0])
+        self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
 
     def _company_menu(self) -> None:
@@ -188,7 +244,11 @@ class MainWindow(QMainWindow):
             )
             act.triggered.connect(lambda _=False, c=cid: self.open_company(c))
         menu.addSeparator()
-        menu.addAction("Новая компания…").triggered.connect(lambda: self.create_company())
+        languages = menu.addMenu(tr("Язык интерфейса"))
+        for code, title in LANGUAGES.items():
+            act = languages.addAction(("✓  " if code == language() else "    ") + title)
+            act.triggered.connect(lambda _=False, c=code: self.set_ui_language(c))
+        menu.addAction(tr("Новая компания…")).triggered.connect(lambda: self.create_company())
         btn = self.sidebar.company
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
@@ -225,7 +285,7 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(page)
         if open_item:
             color = {"doc": P.amber, "new": P.accent}.get(key[0], P.teal)
-            glyph = {"doc": "Д", "new": "+"}.get(key[0], "О")
+            glyph = {"doc": doc_glyph(), "new": "+"}.get(key[0], page.title()[:1])
             self.sidebar.add_item(key, page.title(), color, glyph)
 
     def _activate(self, key) -> None:
@@ -268,10 +328,10 @@ class MainWindow(QMainWindow):
     def _nav_menu(self, pos) -> None:
         item = self.sidebar.nav.itemAt(pos)
         key = item.data(KEY_ROLE) if item else None
-        if key is None or key in [p[0] for p in PLACES]:
+        if not NavDelegate.closable(key):
             return
         menu = QMenu(self)
-        menu.addAction("Закрыть").triggered.connect(lambda: self.close_page(key))
+        menu.addAction(tr("Закрыть")).triggered.connect(lambda: self.close_page(key))
         menu.exec(self.sidebar.nav.viewport().mapToGlobal(pos))
 
     def open_document(self, doc_id: int) -> None:
@@ -303,7 +363,7 @@ class MainWindow(QMainWindow):
             item = self.sidebar.find(old_key)
             if item is not None:
                 item.setData(KEY_ROLE, page.key)
-                item.setIcon(dot_icon(P.amber, 18, "Д"))
+                item.setIcon(dot_icon(P.amber, 18, doc_glyph()))
         self._retitle(page)
         journal = self.pages.get(("journal",))
         if journal is not None:
@@ -329,7 +389,7 @@ class MainWindow(QMainWindow):
 
     def close_current(self) -> None:
         key = self._key_of(self.stack.currentWidget())
-        if key is not None and key not in [p[0] for p in PLACES]:
+        if NavDelegate.closable(key):
             self.close_page(key)
 
     def close_page(self, key, ask: bool = True) -> None:
@@ -351,8 +411,8 @@ class MainWindow(QMainWindow):
             return True
         answer = QMessageBox.question(
             self,
-            "Несохранённые изменения",
-            f"Сохранить «{page.title().rstrip(' •')}»?",
+            tr("Несохранённые изменения"),
+            tr("Сохранить «{title}»?", title=page.title().rstrip(" •")),
             QMessageBox.StandardButton.Save
             | QMessageBox.StandardButton.Discard
             | QMessageBox.StandardButton.Cancel,
@@ -370,6 +430,32 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
+    def set_ui_language(self, code: str) -> None:
+        if code == language() or not self._confirm_close_all():
+            return
+        set_language(code)
+        if self.settings:
+            self.settings.setValue("language", code)
+        if self.session:
+            self.open_company(self.session.company_id)
+
+    def eventFilter(self, obj, event) -> bool:
+        """Click on the × of an open item in the sidebar closes it."""
+        if obj is self.sidebar.nav.viewport() and event.type() in (
+            QEvent.Type.MouseButtonPress,
+            QEvent.Type.MouseButtonRelease,
+        ):
+            pos = event.position().toPoint()
+            item = self.sidebar.nav.itemAt(pos)
+            key = item.data(KEY_ROLE) if item else None
+            if NavDelegate.closable(key):
+                rect = NavDelegate.close_rect(self.sidebar.nav.visualItemRect(item))
+                if rect.adjusted(-4, -4, 4, 4).contains(pos):
+                    if event.type() == QEvent.Type.MouseButtonRelease:
+                        self.close_page(key)
+                    return True
+        return super().eventFilter(obj, event)
 
     def notify(self, message: str) -> None:
         self.statusBar().showMessage(message, 6000)

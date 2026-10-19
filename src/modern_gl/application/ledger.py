@@ -16,6 +16,7 @@ from decimal import Decimal
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.domain.money import to_minor
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 DEFAULT_LAYERS = (
@@ -46,7 +47,9 @@ def _now() -> str:
 
 def _pad(values: Sequence[int | None], line_no: int) -> list[int | None]:
     if len(values) > MAX_SUBCONTO:
-        raise ValidationError(f"строка {line_no}: больше {MAX_SUBCONTO} субконто")
+        raise ValidationError(
+            tr("строка {line}: больше {n} субконто", line=line_no, n=MAX_SUBCONTO)
+        )
     return [*values, *([None] * (MAX_SUBCONTO - len(values)))]
 
 
@@ -65,7 +68,7 @@ class Ledger:
             ).lastrowid
             self.conn.executemany(
                 "INSERT INTO layers (company_id, code, name) VALUES (?, ?, ?)",
-                [(company_id, code, title) for code, title in DEFAULT_LAYERS],
+                [(company_id, code, tr(title)) for code, title in DEFAULT_LAYERS],
             )
             self._audit(
                 company_id,
@@ -104,7 +107,7 @@ class Ledger:
             "SELECT id FROM subconto_kinds WHERE company_id = ? AND code = ?", (company_id, code)
         ).fetchone()
         if row is None:
-            raise NotFoundError(f"вид субконто {code!r} не найден")
+            raise NotFoundError(tr("вид субконто {code} не найден", code=code))
         return row["id"]
 
     def add_subconto_value(
@@ -118,7 +121,9 @@ class Ledger:
                     (company_id, kind_id, code, name),
                 ).lastrowid
             except sqlite3.IntegrityError as e:
-                raise ValidationError(f"не удалось добавить субконто {name!r}: {e}") from e
+                raise ValidationError(
+                    tr("не удалось добавить субконто {name}: {error}", name=name, error=e)
+                ) from e
             self._audit(
                 company_id, "subconto_value", value_id, "create", {"kind_id": kind_id, "name": name}
             )
@@ -139,16 +144,24 @@ class Ledger:
     ) -> int:
         """Add an account. `subconto` lists subconto kind ids for positions 1..3."""
         if kind not in ACCOUNT_KINDS:
-            raise ValidationError(f"счёт {code}: вид должен быть одним из {ACCOUNT_KINDS}")
+            raise ValidationError(
+                tr("счёт {code}: вид должен быть одним из {kinds}", code=code, kinds=ACCOUNT_KINDS)
+            )
         if is_group and subconto:
-            raise ValidationError(f"счёт {code}: у группы не бывает субконто")
+            raise ValidationError(tr("счёт {code}: у группы не бывает субконто", code=code))
         sc = _pad(subconto, 0)
         with transaction(self.conn):
             parent_id = None
             if parent_code is not None:
                 parent = self._account_by_code(company_id, parent_code)
                 if not parent["is_group"]:
-                    raise ValidationError(f"счёт {code}: родитель {parent_code} не группа")
+                    raise ValidationError(
+                        tr(
+                            "счёт {code}: родитель {parent} не группа",
+                            code=code,
+                            parent=parent_code,
+                        )
+                    )
                 parent_id = parent["id"]
             try:
                 account_id = self.conn.execute(
@@ -157,7 +170,9 @@ class Ledger:
                     (company_id, code, name, parent_id, kind, int(is_group), *sc),
                 ).lastrowid
             except sqlite3.IntegrityError as e:
-                raise ValidationError(f"не удалось добавить счёт {code}: {e}") from e
+                raise ValidationError(
+                    tr("не удалось добавить счёт {code}: {error}", code=code, error=e)
+                ) from e
             self._audit(
                 company_id,
                 "account",
@@ -238,17 +253,17 @@ class Ledger:
         with transaction(self.conn):
             orig = self._document(company_id, doc_id)
             if orig["status"] != "posted":
-                raise ValidationError(f"документ №{orig['number']} не проведён")
+                raise ValidationError(tr("документ №{n} не проведён", n=orig["number"]))
             if orig["reversal_of"] is not None:
-                raise ValidationError(f"документ №{orig['number']} сам является сторно")
+                raise ValidationError(tr("документ №{n} сам является сторно", n=orig["number"]))
             if self.conn.execute(
                 "SELECT 1 FROM documents WHERE reversal_of = ?", (doc_id,)
             ).fetchone():
-                raise ValidationError(f"документ №{orig['number']} уже сторнирован")
+                raise ValidationError(tr("документ №{n} уже сторнирован", n=orig["number"]))
             new_id = self._insert_document(
                 company_id,
                 doc_date,
-                memo if memo is not None else f"Сторно документа №{orig['number']}",
+                memo if memo is not None else tr("Сторно документа №{n}", n=orig["number"]),
                 orig["layer"],
                 reversal_of=doc_id,
             )
@@ -302,9 +317,9 @@ class Ledger:
             try:
                 amount = to_minor(p.amount)
             except (TypeError, ValueError) as e:
-                raise ValidationError(f"строка {line_no}: {e}") from e
+                raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
             if amount == 0:
-                raise ValidationError(f"строка {line_no}: нулевая сумма")
+                raise ValidationError(tr("строка {line}: нулевая сумма", line=line_no))
             rows.append(
                 (
                     company_id,
@@ -327,7 +342,7 @@ class Ledger:
             )
         except sqlite3.IntegrityError as e:
             raise ValidationError(
-                "счёт или субконто не существует или принадлежит другой компании"
+                tr("счёт или субконто не существует или принадлежит другой компании")
             ) from e
 
     def _post(self, company_id: int, doc_id: int) -> None:
@@ -350,13 +365,18 @@ class Ledger:
         closed = self._company(company_id)["closed_through"]
         if closed is not None and doc["doc_date"] <= closed:
             raise PeriodClosedError(
-                f"документ №{doc['number']} от {doc['doc_date']}: период закрыт по {closed}"
+                tr(
+                    "документ №{number} от {date}: период закрыт по {closed}",
+                    number=doc["number"],
+                    date=doc["doc_date"],
+                    closed=closed,
+                )
             )
         postings = self.conn.execute(
             "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
         ).fetchall()
         if not postings:
-            raise ValidationError(f"документ №{doc['number']} без проводок")
+            raise ValidationError(tr("документ №{n} без проводок", n=doc["number"]))
 
         account_ids = {p[f"{side}_account_id"] for p in postings for side, _ in SIDES}
         accounts = {
@@ -388,36 +408,53 @@ class Ledger:
         for p in postings:
             line = p["line_no"]
             if is_reversal and p["amount"] >= 0:
-                raise ValidationError(f"строка {line}: сумма сторно должна быть отрицательной")
+                raise ValidationError(
+                    tr("строка {line}: сумма сторно должна быть отрицательной", line=line)
+                )
             if not is_reversal and p["amount"] <= 0:
-                raise ValidationError(f"строка {line}: сумма должна быть положительной")
+                raise ValidationError(
+                    tr("строка {line}: сумма должна быть положительной", line=line)
+                )
             for side, prefix in SIDES:
                 acc = accounts[p[f"{side}_account_id"]]
-                label = f"строка {line}, {'Дт' if side == 'debit' else 'Кт'} {acc['code']}"
+                label = tr(
+                    "строка {line}, {side} {code}",
+                    line=line,
+                    side=tr("Дт" if side == "debit" else "Кт"),
+                    code=acc["code"],
+                )
                 if acc["is_group"]:
-                    raise ValidationError(f"{label}: нельзя проводить на группу счетов")
+                    raise ValidationError(
+                        tr("{label}: нельзя проводить на группу счетов", label=label)
+                    )
                 if not acc["active"] and not is_reversal:
-                    raise ValidationError(f"{label}: счёт не активен")
+                    raise ValidationError(tr("{label}: счёт не активен", label=label))
                 for i in range(1, MAX_SUBCONTO + 1):
                     kind_id = acc[f"sc{i}_kind_id"]
                     value_id = p[f"{prefix}_sc{i}"]
                     if kind_id is None:
                         if value_id is not None:
-                            raise ValidationError(f"{label}: у счёта нет субконто {i}")
+                            raise ValidationError(
+                                tr("{label}: у счёта нет субконто {i}", label=label, i=i)
+                            )
                         continue
                     if value_id is None:
-                        raise ValidationError(f"{label}: не заполнено субконто {i}")
+                        raise ValidationError(
+                            tr("{label}: не заполнено субконто {i}", label=label, i=i)
+                        )
                     if values[value_id]["kind_id"] != kind_id:
-                        raise ValidationError(f"{label}: субконто {i} не того вида")
+                        raise ValidationError(
+                            tr("{label}: субконто {i} не того вида", label=label, i=i)
+                        )
 
     def _require_draft(self, doc: sqlite3.Row) -> None:
         if doc["status"] != "draft":
-            raise ValidationError(f"документ №{doc['number']} уже проведён и не изменяется")
+            raise ValidationError(tr("документ №{n} уже проведён и не изменяется", n=doc["number"]))
 
     def _company(self, company_id: int) -> sqlite3.Row:
         row = self.conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
         if row is None:
-            raise NotFoundError(f"компания {company_id} не найдена")
+            raise NotFoundError(tr("компания {id} не найдена", id=company_id))
         return row
 
     def _document(self, company_id: int, doc_id: int) -> sqlite3.Row:
@@ -427,7 +464,7 @@ class Ledger:
             (company_id, doc_id),
         ).fetchone()
         if row is None:
-            raise NotFoundError(f"документ {doc_id} не найден в компании {company_id}")
+            raise NotFoundError(tr("документ {id} не найден", id=doc_id))
         return row
 
     def _account_by_code(self, company_id: int, code: str) -> sqlite3.Row:
@@ -435,7 +472,7 @@ class Ledger:
             "SELECT * FROM accounts WHERE company_id = ? AND code = ?", (company_id, code)
         ).fetchone()
         if row is None:
-            raise NotFoundError(f"счёт {code} не найден")
+            raise NotFoundError(tr("счёт {code} не найден", code=code))
         return row
 
     def _layer_id(self, company_id: int, code: str) -> int:
@@ -443,7 +480,7 @@ class Ledger:
             "SELECT id FROM layers WHERE company_id = ? AND code = ?", (company_id, code)
         ).fetchone()
         if row is None:
-            raise NotFoundError(f"слой {code!r} не найден")
+            raise NotFoundError(tr("слой {code} не найден", code=code))
         return row["id"]
 
     def _audit(

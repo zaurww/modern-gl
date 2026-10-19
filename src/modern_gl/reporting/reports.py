@@ -16,6 +16,7 @@ from datetime import date
 
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
+from modern_gl.i18n import tr
 
 COMMON = ("common",)
 IFRS = ("common", "ifrs_adj")
@@ -129,14 +130,14 @@ def _split(net: int) -> tuple[int, int]:
 def _params(conn, company_id, date_from, date_to, layers) -> dict:
     date_from, date_to = iso_date(date_from), iso_date(date_to)
     if date_from > date_to:
-        raise ValidationError("начало периода позже конца")
+        raise ValidationError(tr("начало периода позже конца"))
     known = {
         r["code"]
         for r in conn.execute("SELECT code FROM layers WHERE company_id = ?", (company_id,))
     }
     unknown = set(layers) - known
     if unknown:
-        raise NotFoundError(f"неизвестные слои: {sorted(unknown)}")
+        raise NotFoundError(tr("неизвестные слои: {layers}", layers=sorted(unknown)))
     return {
         "company_id": company_id,
         "date_from": date_from,
@@ -170,7 +171,7 @@ def _find_account(accounts: dict[int, sqlite3.Row], code: str) -> sqlite3.Row:
     for a in accounts.values():
         if a["code"] == code:
             return a
-    raise NotFoundError(f"счёт {code} не найден")
+    raise NotFoundError(tr("счёт {code} не найден", code=code))
 
 
 def trial_balance(
@@ -271,12 +272,12 @@ def subconto_balance(
 ) -> list[SubcontoRow]:
     """ОСВ по субконто: balances of one account split by the subconto at `position`."""
     if position not in (1, 2, 3):
-        raise ValidationError("позиция субконто должна быть 1, 2 или 3")
+        raise ValidationError(tr("позиция субконто должна быть 1, 2 или 3"))
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     acc = _find_account(accounts, account_code)
     if acc[f"sc{position}_kind_id"] is None:
-        raise ValidationError(f"у счёта {account_code} нет субконто {position}")
+        raise ValidationError(tr("у счёта {code} нет субконто {i}", code=account_code, i=position))
     params["accounts"] = json.dumps(_subtree(accounts, acc["id"]))
     raw = conn.execute(
         f"""

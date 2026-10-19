@@ -14,15 +14,14 @@ from pathlib import Path
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.errors import ValidationError
+from modern_gl.i18n import language, tr
 from modern_gl.infrastructure.db import transaction
 
 COLUMNS = ("code", "name", "parent", "kind", "group", "subconto")
 SUBCONTO_COLUMNS = ("code", "name")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-# name -> (chart file, subconto kinds file)
-TEMPLATES = {
-    "1c77": ("chart_1c77.csv", "chart_1c77_subconto.csv"),
-}
+# Each template exists per language: chart_<name>_<lang>.csv, chart_<name>_subconto_<lang>.csv
+TEMPLATES = ("1c77",)
 
 
 def _read_rows(path: str | Path, columns: tuple[str, ...], delimiter: str) -> list[dict]:
@@ -30,23 +29,30 @@ def _read_rows(path: str | Path, columns: tuple[str, ...], delimiter: str) -> li
         reader = csv.DictReader(f, delimiter=delimiter)
         missing = set(columns) - set(reader.fieldnames or ())
         if missing:
-            raise ValidationError(f"{Path(path).name}: нет колонок {sorted(missing)}")
+            raise ValidationError(
+                tr("{file}: нет колонок {cols}", file=Path(path).name, cols=sorted(missing))
+            )
         return list(reader)
 
 
-def apply_chart_template(ledger: Ledger, company_id: int, name: str = "1c77") -> int:
+def apply_chart_template(
+    ledger: Ledger, company_id: int, name: str = "1c77", lang: str | None = None
+) -> int:
     """Create a template's subconto kinds and accounts in one transaction.
 
     "1c77" is the 1C 7.7 style chart (two-digit codes, subaccounts like 60.1).
-    It is a starting point: accounts can be added afterwards.
+    Names come in the given language (default: the interface language).
     """
     if name not in TEMPLATES:
-        raise ValidationError(f"нет шаблона {name!r}; есть: {sorted(TEMPLATES)}")
-    chart_file, kinds_file = TEMPLATES[name]
+        raise ValidationError(
+            tr("нет шаблона {name}; есть: {names}", name=name, names=list(TEMPLATES))
+        )
+    lang = lang or language()
     with transaction(ledger.conn):
-        for row in _read_rows(TEMPLATES_DIR / kinds_file, SUBCONTO_COLUMNS, ";"):
+        kinds_file = TEMPLATES_DIR / f"chart_{name}_subconto_{lang}.csv"
+        for row in _read_rows(kinds_file, SUBCONTO_COLUMNS, ";"):
             ledger.add_subconto_kind(company_id, row["code"].strip(), row["name"].strip())
-        return import_chart_csv(ledger, company_id, TEMPLATES_DIR / chart_file)
+        return import_chart_csv(ledger, company_id, TEMPLATES_DIR / f"chart_{name}_{lang}.csv")
 
 
 def import_chart_csv(
@@ -69,5 +75,12 @@ def import_chart_csv(
                     subconto=[ledger.subconto_kind_id(company_id, k) for k in kinds],
                 )
             except Exception as e:
-                raise ValidationError(f"{Path(path).name}, строка {line_no}: {e}") from e
+                raise ValidationError(
+                    tr(
+                        "{file}, строка {line}: {error}",
+                        file=Path(path).name,
+                        line=line_no,
+                        error=e,
+                    )
+                ) from e
     return len(rows)

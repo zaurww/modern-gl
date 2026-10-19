@@ -37,6 +37,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 HINT = (
@@ -84,7 +85,7 @@ class DocumentPage(QWidget):
         for code, name in session.layers:
             self.layer.addItem(name, code)
         self.layer.setFixedWidth(230)
-        for label, w in (("Дата", self.date), ("Книга", self.layer)):
+        for label, w in ((tr("Дата"), self.date), (tr("Книга"), self.layer)):
             caption = QLabel(label)
             caption.setObjectName("secondary")
             meta.addWidget(caption)
@@ -105,11 +106,11 @@ class DocumentPage(QWidget):
         root.addWidget(self.error)
 
         bottom = QHBoxLayout()
-        self.hint = QLabel(HINT)
+        self.hint = QLabel(tr(HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         bottom.addWidget(self.hint, 1)
-        total_caption = QLabel("Итого")
+        total_caption = QLabel(tr("Итого"))
         total_caption.setObjectName("secondary")
         bottom.addWidget(total_caption)
         self.total = QLabel()
@@ -121,15 +122,15 @@ class DocumentPage(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.btn_delete = button("Удалить черновик", "danger")
-        self.btn_reverse = button("Сторно…", "danger", "Создать документ красного сторно")
-        self.btn_copy = button("Копировать", "flat", "Новый документ на основе этого")
+        self.btn_delete = button(tr("Удалить черновик"), "danger")
+        self.btn_reverse = button(tr("Сторно…"), "danger", tr("Создать документ красного сторно"))
+        self.btn_copy = button(tr("Копировать"), "flat", tr("Новый документ на основе этого"))
         actions.addWidget(self.btn_delete)
         actions.addWidget(self.btn_reverse)
         actions.addWidget(self.btn_copy)
         actions.addStretch(1)
-        self.btn_save = button("Сохранить черновик", tooltip="Ctrl+S")
-        self.btn_post = button("Провести", "primary", "Ctrl+Enter")
+        self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
+        self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
         self.btn_post.setMinimumWidth(130)
         actions.addWidget(self.btn_save)
         actions.addWidget(self.btn_post)
@@ -163,7 +164,7 @@ class DocumentPage(QWidget):
         edit = QLineEdit()
         edit.setObjectName("titleEdit")
         edit.setFont(fonts().title)
-        edit.setPlaceholderText("Содержание операции")
+        edit.setPlaceholderText(tr("Содержание операции"))
         return edit
 
     def _shortcut(self, keys: str, fn) -> None:
@@ -193,7 +194,7 @@ class DocumentPage(QWidget):
         return ("doc", self.doc_id) if self.doc else ("new", id(self))
 
     def title(self) -> str:
-        name = f"Документ №{self.doc.number}" if self.doc else "Новый документ"
+        name = tr("Документ №{n}", n=self.doc.number) if self.doc else tr("Новый документ")
         return name + (" •" if self.dirty else "")
 
     def is_dirty(self) -> bool:
@@ -209,8 +210,8 @@ class DocumentPage(QWidget):
         self.total.setText(money(self.model.total(), blank_zero=False))
 
     def _set_new(self, template: DocumentData | None) -> None:
-        self.number.setText("Новый")
-        self.status.set("Новый", "blue")
+        self.number.setText(tr("Новый"))
+        self.status.set(tr("Новый"), "blue")
         if template:
             self.memo.setText(template.memo)
             self._select_layer(template.layer)
@@ -235,13 +236,13 @@ class DocumentPage(QWidget):
         self.model.read_only = read_only
         self.model.endResetModel()
         if d.status == "draft":
-            self.status.set("Черновик", "amber")
+            self.status.set(tr("Черновик"), "amber")
         elif d.reversal_of is not None:
-            self.status.set("Сторно", "red")
+            self.status.set(tr("Сторно"), "red")
         elif d.reversed_by is not None:
-            self.status.set("Сторнирован", "red")
+            self.status.set(tr("Сторнирован"), "red")
         else:
-            self.status.set("Проведён", "green")
+            self.status.set(tr("Проведён"), "green")
         self._apply_mode(read_only, d.status)
         self.dirty = False
         self._update_total()
@@ -303,7 +304,9 @@ class DocumentPage(QWidget):
             return False
         self.s.working_date = doc_date
         self.load(doc_id)
-        self.s.notify(f"Документ №{self.doc.number} {'проведён' if post else 'сохранён'}")
+        self.s.notify(
+            tr("Документ №{n} проведён" if post else "Документ №{n} сохранён", n=self.doc.number)
+        )
         self.saved.emit(doc_id)
         return True
 
@@ -311,12 +314,12 @@ class DocumentPage(QWidget):
         if self.doc is None or self.doc.status != "draft":
             return
         answer = QMessageBox.question(
-            self, "Удалить черновик", f"Удалить черновик №{self.doc.number}?"
+            self, tr("Удалить черновик"), tr("Удалить черновик №{n}?", n=self.doc.number)
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
         self.s.ledger.delete_draft(self.s.company_id, self.doc.id)
-        self.s.notify(f"Черновик №{self.doc.number} удалён")
+        self.s.notify(tr("Черновик №{n} удалён", n=self.doc.number))
         self.dirty = False
         self.saved.emit(self.doc.id)
         self.close_requested.emit()
@@ -326,8 +329,12 @@ class DocumentPage(QWidget):
             return
         when = ask_date(
             self,
-            "Сторно",
-            f"Дата документа сторно для №{self.doc.number} от {ru_date(self.doc.doc_date)}:",
+            tr("Сторно"),
+            tr(
+                "Дата документа сторно для №{n} от {date}:",
+                n=self.doc.number,
+                date=ru_date(self.doc.doc_date),
+            ),
             self.s.working_date,
         )
         if when is None:
@@ -380,8 +387,8 @@ class DocumentPage(QWidget):
         kind = self.s.catalog.kinds[kind_id]
         answer = QMessageBox.question(
             self,
-            "Новый элемент справочника",
-            f"«{text}» нет в справочнике «{kind}». Добавить?",
+            tr("Новый элемент справочника"),
+            tr("«{text}» нет в справочнике «{kind}». Добавить?", text=text, kind=kind),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
@@ -390,4 +397,4 @@ class DocumentPage(QWidget):
         value_id = self.s.ledger.add_subconto_value(self.s.company_id, kind_id, text)
         self.s.catalog.add_value(value_id, kind_id, text)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
-        self.s.notify(f"Добавлено в «{kind}»: {text}")
+        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))

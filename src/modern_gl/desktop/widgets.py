@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain.money import format_minor
+from modern_gl.i18n import tr
 
 DATE_FORMAT = "dd.MM.yyyy"
 
@@ -36,7 +37,7 @@ def money(minor: int | None, blank_zero: bool = True) -> str:
 def balance_text(net: int) -> str:
     if net == 0:
         return "0.00"
-    return f"{format_minor(abs(net))} {'Дт' if net > 0 else 'Кт'}"
+    return f"{format_minor(abs(net))} {tr('Дт') if net > 0 else tr('Кт')}"
 
 
 def to_qdate(d: date) -> QDate:

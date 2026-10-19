@@ -34,3 +34,6 @@ select = ["E", "F", "I", "B", "UP"]
 
 [project.gui-scripts]
 modern-gl = "modern_gl.desktop.app:main"
+
+[tool.ruff.lint.per-file-ignores]
+"src/modern_gl/i18n_az.py" = ["E501"]  # translation strings are kept on one line

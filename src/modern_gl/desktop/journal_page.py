@@ -25,6 +25,7 @@ from modern_gl.application.queries import DocumentSummary, list_documents
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money, ru_date
+from modern_gl.i18n import tr
 
 COLUMNS = ["Дата", "№", "Содержание", "Книга", "Сумма", ""]
 DATE, NUMBER, MEMO, BOOK, TOTAL, STATUS = range(6)
@@ -53,7 +54,7 @@ class JournalModel(QAbstractTableModel):
         if orientation != Qt.Orientation.Horizontal:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
-            return COLUMNS[section]
+            return tr(COLUMNS[section]) if COLUMNS[section] else ""
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return RIGHT if section in (NUMBER, TOTAL) else LEFT
         return None
@@ -68,7 +69,9 @@ class JournalModel(QAbstractTableModel):
                 MEMO: d.memo or "—",
                 BOOK: "" if d.layer == "common" else self.layer_names.get(d.layer, d.layer),
                 TOTAL: money(d.total),
-                STATUS: "" if d.status_text == "Проведён" else d.status_text,
+                STATUS: d.status_text
+                if d.status == "draft" or d.reversal_of_number or d.reversed_by_number
+                else "",
             }[col]
         if role == Qt.ItemDataRole.UserRole:
             return d.id
@@ -106,10 +109,10 @@ class JournalPage(QWidget):
         root.setContentsMargins(40, 30, 40, 24)
         root.setSpacing(18)
 
-        self.header = PageHeader("Журнал", session.company_name)
+        self.header = PageHeader(tr("Журнал"), session.company_name)
         self.search = QLineEdit()
         self.search.setObjectName("search")
-        self.search.setPlaceholderText("Поиск по содержанию или номеру   Ctrl+F")
+        self.search.setPlaceholderText(tr("Поиск по содержанию или номеру   Ctrl+F"))
         self.search.setClearButtonEnabled(True)
         self.header.add_action(self.search)
         root.addWidget(self.header)
@@ -138,7 +141,7 @@ class JournalPage(QWidget):
         self.table.doubleClicked.connect(self._open_current)
 
         self.empty = EmptyState(
-            "◎", "Документов пока нет", "Нажмите + или Ins, чтобы ввести первую операцию."
+            "◎", tr("Документов пока нет"), tr("Нажмите + или Ins, чтобы ввести первую операцию.")
         )
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
@@ -146,7 +149,7 @@ class JournalPage(QWidget):
         root.addLayout(self.stack, 1)
 
         # Floating "+" in the corner, like Things' Magic Plus.
-        self.fab = button("+", "fab", "Новый документ (Ins)")
+        self.fab = button("+", "fab", tr("Новый документ (Ins)"))
         self.fab.setParent(self)
         self.fab.setFixedSize(52, 52)
         self.fab.clicked.connect(self.new_document.emit)
@@ -166,7 +169,7 @@ class JournalPage(QWidget):
         self.refresh()
 
     def title(self) -> str:
-        return "Журнал"
+        return tr("Журнал")
 
     def is_dirty(self) -> bool:
         return False
@@ -209,10 +212,12 @@ class JournalPage(QWidget):
         if doc is None:
             return
         if doc.status != "draft":
-            self.s.notify("Проведённый документ не удаляется — используйте сторно")
+            self.s.notify(tr("Проведённый документ не удаляется — используйте сторно"))
             return
-        answer = QMessageBox.question(self, "Удалить черновик", f"Удалить черновик №{doc.number}?")
+        answer = QMessageBox.question(
+            self, tr("Удалить черновик"), tr("Удалить черновик №{n}?", n=doc.number)
+        )
         if answer == QMessageBox.StandardButton.Yes:
             self.s.ledger.delete_draft(self.s.company_id, doc.id)
-            self.s.notify(f"Черновик №{doc.number} удалён")
+            self.s.notify(tr("Черновик №{n} удалён", n=doc.number))
             self.refresh()

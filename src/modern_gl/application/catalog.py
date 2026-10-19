@@ -9,6 +9,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from modern_gl.i18n import fold, tr
+
 
 @dataclass(frozen=True)
 class AccountInfo:
@@ -102,34 +104,57 @@ class Catalog:
         """'60.1', '60.1  Расчёты…' or a unique fragment of a name -> postable account."""
         text = text.strip()
         if not text:
-            raise LookupError("счёт не указан")
+            raise LookupError(tr("счёт не указан"))
         found = self.by_code.get(text.split()[0])
         if found is None:
-            needle = text.casefold()
-            matches = [a for a in self.leaf_accounts if needle in a.name.casefold()]
+            needle = fold(text)
+            matches = [a for a in self.leaf_accounts if needle in fold(a.name)]
             if len(matches) > 1:  # prefer names that start with what was typed
-                starts = [a for a in matches if a.name.casefold().startswith(needle)]
+                starts = [a for a in matches if fold(a.name).startswith(needle)]
                 matches = starts if len(starts) == 1 else matches
             if len(matches) != 1:
                 if not matches:
-                    raise LookupError(f"счёт «{text}» не найден")
+                    raise LookupError(tr("счёт «{text}» не найден", text=text))
                 codes = ", ".join(a.code for a in matches[:6])
-                raise LookupError(f"«{text}» подходит к нескольким счетам: {codes}")
+                raise LookupError(
+                    tr("«{text}» подходит к нескольким счетам: {codes}", text=text, codes=codes)
+                )
             found = matches[0]
         if found.is_group:
             subs = ", ".join(a.code for a in self.accounts.values() if a.parent_id == found.id)
-            raise LookupError(f"счёт {found.code} — группа, выберите субсчёт: {subs}")
+            raise LookupError(
+                tr("счёт {code} — группа, выберите субсчёт: {subs}", code=found.code, subs=subs)
+            )
         return found
 
     def resolve_value(self, kind_id: int, text: str) -> int | None:
         """Exact or unique partial name match; None if nothing matches."""
-        needle = text.strip().casefold()
+        needle = fold(text.strip())
         values = self.values(kind_id)
-        exact = [v for v in values if v.name.casefold() == needle or (v.code or "") == text.strip()]
+        exact = [v for v in values if fold(v.name) == needle or (v.code or "") == text.strip()]
         if exact:
             return exact[0].id
-        partial = [v for v in values if needle in v.name.casefold()]
+        partial = [v for v in values if needle in fold(v.name)]
+        if len(partial) > 1:
+            starts = [v for v in partial if fold(v.name).startswith(needle)]
+            partial = starts if len(starts) == 1 else partial
         if len(partial) > 1:
             names = ", ".join(v.name for v in partial[:5])
-            raise LookupError(f"«{text}» подходит к нескольким: {names}")
+            raise LookupError(tr("«{text}» подходит к нескольким: {names}", text=text, names=names))
         return partial[0].id if partial else None
+
+
+def search(labels: list[str], text: str) -> list[str]:
+    """Filter completion labels: names/codes starting with the text first, then containing it."""
+    needle = fold(text.strip())
+    if not needle:
+        return list(labels)
+    starts, contains = [], []
+    for label in labels:
+        f = fold(label)
+        words = f.split()
+        if f.startswith(needle) or any(w.startswith(needle) for w in words):
+            starts.append(label)
+        elif needle in f:
+            contains.append(label)
+    return starts + contains

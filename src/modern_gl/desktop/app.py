@@ -11,6 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 
+from modern_gl import i18n
 from modern_gl.application.queries import list_companies
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
@@ -25,11 +26,14 @@ def main() -> int:
     app.setApplicationName("Modern GL")
     app.setOrganizationName("ModernGL")
     theme.apply(app)
+    settings = QSettings()
+    lang = str(settings.value("language", i18n.DEFAULT))
+    i18n.set_language(lang if lang in i18n.LANGUAGES else i18n.DEFAULT)
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     path = Path(args[0]) if args else DEFAULT_DB
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = connect(path)
-    window = MainWindow(conn, QSettings())
+    window = MainWindow(conn, settings)
     if "--demo" in sys.argv and not list_companies(conn):
         create_demo_company(window.ledger)
     if not window.start():

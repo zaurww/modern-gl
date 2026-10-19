@@ -6,6 +6,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from modern_gl.domain.errors import NotFoundError
+from modern_gl.i18n import tr
 
 
 @dataclass(frozen=True)
@@ -24,12 +25,12 @@ class DocumentSummary:
     @property
     def status_text(self) -> str:
         if self.status == "draft":
-            return "Черновик"
+            return tr("Черновик")
         if self.reversal_of_number is not None:
-            return f"Сторно №{self.reversal_of_number}"
+            return tr("Сторно №{n}", n=self.reversal_of_number)
         if self.reversed_by_number is not None:
-            return f"Сторнирован №{self.reversed_by_number}"
-        return "Проведён"
+            return tr("Сторнирован №{n}", n=self.reversed_by_number)
+        return tr("Проведён")
 
 
 @dataclass
@@ -101,7 +102,7 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
         (company_id, doc_id),
     ).fetchone()
     if row is None:
-        raise NotFoundError(f"документ {doc_id} не найден")
+        raise NotFoundError(tr("документ {id} не найден", id=doc_id))
     doc = DocumentData(**dict(row))
     for p in conn.execute(
         "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc_id,)

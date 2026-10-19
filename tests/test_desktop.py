@@ -4,12 +4,12 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QCompleter, QMessageBox
 
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
-from modern_gl.desktop.main_window import MainWindow
+from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
 from modern_gl.reporting.reports import trial_balance
 
@@ -202,3 +202,91 @@ def test_closing_dirty_document_asks(window, monkeypatch):
     window.close_current()
     assert asked == [page]
     assert current_page(window) is page
+
+
+def type_text(editor, text):
+    """Type like a user would. (QTest.keyClicks crashes PySide on Windows for non-Latin
+    characters, so Cyrillic/Azerbaijani letters are inserted and announced directly.)"""
+    editor.insert(text)
+    editor.textEdited.emit(editor.text())
+
+
+def open_cell_editor(page, row, col):
+    QApplication.processEvents()  # let the new document finish focusing its title first
+    idx = page.model.index(row, col)
+    page.table.setCurrentIndex(idx)
+    page.table.edit(idx)
+    QApplication.processEvents()  # the list opens on the next event loop turn
+    editor = QApplication.focusWidget()
+    return editor, editor.findChild(QCompleter)
+
+
+def test_subconto_list_opens_at_once_and_filters_from_first_letter(window, qtbot):
+    window.new_document()
+    page = current_page(window)
+    cat = window.session.catalog
+    page.model.setData(page.model.index(0, CT), cat.by_code["60.1"].id)
+
+    editor, completer = open_cell_editor(page, 0, CT + 1)
+    popup = completer.popup()
+    all_counterparties = len(cat.values(cat.by_code["60.1"].sc_kinds[0]))
+    assert popup.isVisible()
+    assert completer.model().rowCount() == all_counterparties  # whole directory, like 1C
+
+    type_text(editor, "б")  # first letter already filters
+    assert popup.isVisible()
+    assert completer.model().stringList() == ["Бета Сервис"]
+    assert popup.currentIndex().row() == 0  # best match preselected
+
+    qtbot.keyClick(popup, Qt.Key.Key_Return)
+    assert page.model.data(page.model.index(0, CT + 1)) == "Бета Сервис"
+
+
+def test_account_list_appears_while_typing(window, qtbot):
+    window.new_document()
+    page = current_page(window)
+    editor, completer = open_cell_editor(page, 0, DT)
+    assert not completer.popup().isVisible()  # empty account cell: no noise
+    qtbot.keyClicks(editor, "60")
+    assert completer.model().stringList()[:2] == [
+        "60.1  Расчёты с поставщиками и подрядчиками",
+        "60.2  Авансы выданные",
+    ]
+
+
+def test_osv_top_level_only(window):
+    window.show_place(("osv",))
+    osv = current_page(window)
+    osv.date_from.setDate(date(2026, 2, 1))
+    osv.date_to.setDate(date(2026, 2, 28))
+    osv.top_only.setChecked(True)
+    codes = [r.code for r in osv.model.rows]
+    assert "10" in codes and "10.1" not in codes and "60.1" not in codes
+    total = osv.model.rows[-1]
+    assert osv.model.data(osv.model.index(len(osv.model.rows) - 1, 2)) == "0.00" or (
+        total.opening_dt != 0
+    )
+
+
+def test_close_cross_in_sidebar(window, qtbot):
+    window.new_document()
+    page = current_page(window)
+    nav = window.sidebar.nav
+    item = window.sidebar.find(page.key)
+    cross = NavDelegate.close_rect(nav.visualItemRect(item)).center()
+    qtbot.mouseClick(nav.viewport(), Qt.MouseButton.LeftButton, pos=cross)
+    assert window.sidebar.find(page.key) is None
+    assert current_page(window).title() == "Журнал"
+    places = [window.sidebar.find(k) for k in PLACE_KEYS]
+    assert all(places)  # places can't be closed
+
+
+def test_switch_language_rebuilds_interface(window):
+    window.set_ui_language("az")
+    try:
+        assert current_page(window).title() == "Jurnal"
+        assert window.sidebar.find(("osv",)).text() == "Dövriyyə-saldo"
+        assert window.sidebar.hint.text().startswith("Ctrl+N  yeni sənəd")
+    finally:
+        window.set_ui_language("ru")
+    assert current_page(window).title() == "Журнал"

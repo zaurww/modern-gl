@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
+from modern_gl.i18n import tr
+
 SCALE = 2
 _QUANTUM = Decimal(1).scaleb(-SCALE)
 
@@ -20,11 +22,11 @@ def to_minor(value: str | int | Decimal) -> int:
     try:
         d = Decimal(value)
     except InvalidOperation:
-        raise ValueError(f"not an amount: {value!r}") from None
+        raise ValueError(tr("не число: {value}", value=value)) from None
     if not d.is_finite():
-        raise ValueError(f"not an amount: {value!r}")
+        raise ValueError(tr("не число: {value}", value=value))
     if d != d.quantize(_QUANTUM):
-        raise ValueError(f"more than {SCALE} decimal places: {value!r}")
+        raise ValueError(tr("больше {n} знаков после запятой: {value}", n=SCALE, value=value))
     return int(d.scaleb(SCALE))
 
 

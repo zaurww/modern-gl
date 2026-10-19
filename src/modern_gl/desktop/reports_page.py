@@ -14,6 +14,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QHBoxLayout,
     QHeaderView,
@@ -37,6 +38,7 @@ from modern_gl.desktop.widgets import (
     ru_date,
 )
 from modern_gl.domain.errors import LedgerError
+from modern_gl.i18n import tr
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import COMMON, IFRS, TAX, OsvRow, SubcontoRow, Turnovers
 
@@ -74,7 +76,7 @@ class ReportParams:
     def describe(self) -> str:
         return (
             f"{ru_date(self.date_from.isoformat())} — {ru_date(self.date_to.isoformat())}"
-            f"   ·   {BOOKS[self.book][0]}"
+            f"   ·   {tr(BOOKS[self.book][0])}"
         )
 
 
@@ -85,7 +87,7 @@ def month_of(d: date) -> ReportParams:
 
 def turnover_columns() -> list[Column]:
     return [
-        Column(t, (lambda r, a=a: getattr(r, a)), money=True, width=120)
+        Column(tr(t), (lambda r, a=a: getattr(r, a)), money=True, width=120)
         for t, a in TURNOVER_COLUMNS
     ]
 
@@ -98,11 +100,12 @@ class ReportModel(QAbstractTableModel):
         self.emphasis: Callable[[Any], bool] = lambda r: False
         self.muted: Callable[[Any], bool] = lambda r: False
 
-    def set(self, columns, rows, emphasis=None, muted=None) -> None:
+    def set(self, columns, rows, emphasis=None, muted=None, total=None) -> None:
         self.beginResetModel()
         self.columns, self.rows = columns, rows
         self.emphasis = emphasis or (lambda r: False)
         self.muted = muted or (lambda r: False)
+        self.total = total or (lambda r: False)  # totals show 0.00 instead of blanks
         self.endResetModel()
 
     def rowCount(self, parent=QModelIndex()) -> int:  # noqa: B008
@@ -124,7 +127,9 @@ class ReportModel(QAbstractTableModel):
         row, col = self.rows[index.row()], self.columns[index.column()]
         if role == Qt.ItemDataRole.DisplayRole:
             value = col.get(row)
-            return money(value) if col.money else ("" if value is None else str(value))
+            if col.money:
+                return money(value, blank_zero=not self.total(row))
+            return "" if value is None else str(value)
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return RIGHT if col.money else LEFT
         if role == Qt.ItemDataRole.FontRole and self.emphasis(row):
@@ -168,12 +173,12 @@ class ReportPage(QWidget):
             self.date_to = date_edit(self.params.date_to)
             self.book = QComboBox()
             for name, _ in BOOKS:
-                self.book.addItem(name)
+                self.book.addItem(tr(name))
             self.book.setCurrentIndex(self.params.book)
             for caption, w, width in (
-                ("Период с", self.date_from, 130),
-                ("по", self.date_to, 130),
-                ("Книга", self.book, 170),
+                (tr("Период с"), self.date_from, 130),
+                (tr("по"), self.date_to, 130),
+                (tr("Книга"), self.book, 170),
             ):
                 label = QLabel(caption)
                 label.setObjectName("secondary")
@@ -181,7 +186,7 @@ class ReportPage(QWidget):
                 bar.addWidget(label)
                 bar.addWidget(w)
                 bar.addSpacing(6)
-            run = button("Сформировать", "primary", "F5")
+            run = button(tr("Сформировать"), "primary", "F5")
             run.clicked.connect(self.refresh)
             bar.addWidget(run)
             bar.addStretch(1)
@@ -202,7 +207,7 @@ class ReportPage(QWidget):
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._context_menu)
 
-        self.empty = EmptyState("○", "Нет данных", "За выбранный период движений не было.")
+        self.empty = EmptyState("○", tr("Нет данных"), tr("За выбранный период движений не было."))
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
@@ -289,12 +294,15 @@ class ReportPage(QWidget):
         if acc is None:
             return []
         actions = [
-            ("Карточка счёта", lambda: self.open_report.emit("card", code, self.params)),
-            ("Анализ счёта", lambda: self.open_report.emit("analysis", code, self.params)),
+            (tr("Карточка счёта"), lambda: self.open_report.emit("card", code, self.params)),
+            (tr("Анализ счёта"), lambda: self.open_report.emit("analysis", code, self.params)),
         ]
         if acc.sc_kinds[0] is not None:
             actions.append(
-                ("ОСВ по субконто", lambda: self.open_report.emit("subconto", code, self.params))
+                (
+                    tr("ОСВ по субконто"),
+                    lambda: self.open_report.emit("subconto", code, self.params),
+                )
             )
         return actions
 
@@ -303,11 +311,15 @@ class OsvPage(ReportPage):
     key = ("osv",)
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
-        super().__init__(session, "Оборотно-сальдовая ведомость", params)
+        super().__init__(session, tr("Оборотно-сальдовая ведомость"), params)
+        self.top_only = QCheckBox(tr("Только основные счета"))
+        self.top_only.setToolTip(tr("Скрыть субсчета; суммы основных счетов не меняются"))
+        self.top_only.toggled.connect(self.refresh)
+        self.header.add_action(self.top_only)
         self.refresh()
 
     def title(self) -> str:
-        return "ОСВ"
+        return tr("ОСВ")
 
     def build(self) -> None:
         osv = reports.trial_balance(
@@ -317,22 +329,27 @@ class OsvPage(ReportPage):
             self.params.date_to,
             self.params.layers,
         )
-        total = OsvRow(name="Итого", depth=-1)
+        total = OsvRow(name=tr("Итого"), depth=-1)
         total.add(osv.total)
         columns = [
-            Column("Счёт", lambda r: ("      " * max(r.depth, 0)) + r.code, width=90),
-            Column("Наименование", lambda r: r.name),
+            Column(tr("Счёт"), lambda r: ("      " * max(r.depth, 0)) + r.code, width=90),
+            Column(tr("Наименование"), lambda r: r.name),
             *turnover_columns(),
         ]
-        rows = [*osv.rows, total] if osv.rows else []
+        shown = [r for r in osv.rows if r.depth == 0] if self.top_only.isChecked() else osv.rows
+        rows = [*shown, total] if shown else []
         self.model.set(
-            columns, rows, emphasis=lambda r: r.is_group or r.depth < 0, muted=lambda r: r.depth > 0
+            columns,
+            rows,
+            emphasis=lambda r: r.depth < 0 or (r.is_group and not self.top_only.isChecked()),
+            muted=lambda r: r.depth > 0,
+            total=lambda r: r.depth < 0,
         )
         balanced = osv.total.closing_dt == osv.total.closing_ct
         self.footer.setText(
-            "Дебет и кредит сходятся  ✓"
+            tr("Дебет и кредит сходятся  ✓")
             if balanced
-            else "Внимание: итоги дебета и кредита не сходятся"
+            else tr("Внимание: итоги дебета и кредита не сходятся")
         )
 
     def drill(self, row: OsvRow) -> None:
@@ -378,18 +395,21 @@ class CardPage(AccountReportPage):
             self.params.layers,
         )
         columns = [
-            Column("Дата", lambda ln: ru_date(ln.doc_date), width=100),
+            Column(tr("Дата"), lambda ln: ru_date(ln.doc_date), width=100),
             Column("№", lambda ln: ln.number, width=60),
-            Column("Содержание", lambda ln: ln.memo),
-            Column("Корр. счёт", lambda ln: ln.corr_code, width=100),
-            Column("Дебет", lambda ln: ln.debit, money=True, width=130),
-            Column("Кредит", lambda ln: ln.credit, money=True, width=130),
-            Column("Сальдо", lambda ln: balance_text(ln.balance), width=150),
+            Column(tr("Содержание"), lambda ln: ln.memo),
+            Column(tr("Корр. счёт"), lambda ln: ln.corr_code, width=100),
+            Column(tr("Дебет"), lambda ln: ln.debit, money=True, width=130),
+            Column(tr("Кредит"), lambda ln: ln.credit, money=True, width=130),
+            Column(tr("Сальдо"), lambda ln: balance_text(ln.balance), width=150),
         ]
         self.model.set(columns, card.lines)
         self.footer.setText(
-            f"Сальдо на начало: {balance_text(card.opening)}"
-            f"      Сальдо на конец: {balance_text(card.closing)}"
+            tr(
+                "Сальдо на начало: {start}      Сальдо на конец: {end}",
+                start=balance_text(card.opening),
+                end=balance_text(card.closing),
+            )
         )
 
     def drill(self, line) -> None:
@@ -409,7 +429,7 @@ class SubcontoPage(AccountReportPage):
             self.params.date_to,
             self.params.layers,
         )
-        total = SubcontoRow(name="Итого")
+        total = SubcontoRow(name=tr("Итого"))
         for r in rows:
             total.add(
                 Turnovers(
@@ -426,7 +446,8 @@ class SubcontoPage(AccountReportPage):
         self.model.set(
             columns,
             [*rows, total] if rows else [],
-            emphasis=lambda r: r.value_id is None and r.name == "Итого",
+            emphasis=lambda r: r is total,
+            total=lambda r: r is total,
         )
         self.footer.setText("")
 
@@ -444,14 +465,16 @@ class AnalysisPage(AccountReportPage):
             self.params.layers,
         )
         columns = [
-            Column("Корр. счёт", lambda r: r.corr_code, width=110),
-            Column("Наименование", lambda r: r.corr_name),
-            Column("С кредита счетов (Дт)", lambda r: r.debit, money=True, width=170),
-            Column("В дебет счетов (Кт)", lambda r: r.credit, money=True, width=170),
+            Column(tr("Корр. счёт"), lambda r: r.corr_code, width=110),
+            Column(tr("Наименование"), lambda r: r.corr_name),
+            Column(tr("С кредита счетов (Дт)"), lambda r: r.debit, money=True, width=190),
+            Column(tr("В дебет счетов (Кт)"), lambda r: r.credit, money=True, width=190),
         ]
         self.model.set(columns, rows)
         dt, ct = sum(r.debit for r in rows), sum(r.credit for r in rows)
-        self.footer.setText(f"Оборот Дт: {money(dt, False)}      Оборот Кт: {money(ct, False)}")
+        self.footer.setText(
+            tr("Оборот Дт: {dt}      Оборот Кт: {ct}", dt=money(dt, False), ct=money(ct, False))
+        )
 
     def drill(self, row) -> None:
         if row is not None and row.corr_code in self.s.catalog.by_code:
@@ -464,12 +487,12 @@ class ChartPage(ReportPage):
     KIND = {"A": "Активный", "P": "Пассивный", "AP": "Активно-пассивный"}
 
     def __init__(self, session: Session) -> None:
-        super().__init__(session, "План счетов")
-        self.header.subtitle.setText(f"{len(session.catalog.accounts)} счетов")
+        super().__init__(session, tr("План счетов"))
+        self.header.subtitle.setText(tr("{n} счетов", n=len(session.catalog.accounts)))
         self.refresh()
 
     def title(self) -> str:
-        return "План счетов"
+        return tr("План счетов")
 
     def build(self) -> None:
         cat = self.s.catalog
@@ -478,13 +501,13 @@ class ChartPage(ReportPage):
             return ", ".join(cat.kinds[k] for k in a.sc_kinds if k)
 
         columns = [
-            Column("Код", lambda a: ("      " if a.parent_id else "") + a.code, width=110),
-            Column("Наименование", lambda a: a.name),
-            Column("Вид", lambda a: self.KIND[a.kind], width=150),
-            Column("Субконто", subconto, width=300),
+            Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, width=110),
+            Column(tr("Наименование"), lambda a: a.name),
+            Column(tr("Вид"), lambda a: tr(self.KIND[a.kind]), width=150),
+            Column(tr("Субконто"), subconto, width=300),
         ]
         self.model.set(columns, list(cat.accounts.values()), emphasis=lambda a: a.is_group)
-        self.footer.setText("Двойной щелчок — карточка счёта за текущий месяц")
+        self.footer.setText(tr("Двойной щелчок — карточка счёта за текущий месяц"))
 
     def drill(self, acc) -> None:
         if acc is not None:

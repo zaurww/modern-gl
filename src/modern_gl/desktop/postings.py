@@ -15,7 +15,9 @@ from PySide6.QtCore import (
     QEvent,
     QModelIndex,
     QPersistentModelIndex,
+    QStringListModel,
     Qt,
+    QTimer,
     Signal,
 )
 from PySide6.QtGui import QColor, QFont
@@ -29,15 +31,17 @@ from PySide6.QtWidgets import (
     QTableView,
 )
 
-from modern_gl.application.catalog import Catalog
+from modern_gl.application.catalog import Catalog, search
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import PostingData
 from modern_gl.desktop.theme import P
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import SCALE, format_minor, to_minor
+from modern_gl.i18n import tr
 
 DT, CT, AMOUNT, MEMO = 0, 4, 8, 9
 HEADERS = ["Дебет", "Субконто", "", "", "Кредит", "Субконто", "", "", "Сумма", "Содержание"]
+# translated at display time: tr(HEADERS[i])
 ALIGN_RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
@@ -102,7 +106,7 @@ class PostingsModel(QAbstractTableModel):
     def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                return HEADERS[section]
+                return tr(HEADERS[section]) if HEADERS[section] else ""
             return str(section + 1)
         if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
             return ALIGN_RIGHT if section == AMOUNT else ALIGN_LEFT
@@ -236,11 +240,11 @@ class PostingsModel(QAbstractTableModel):
             if r.is_empty():
                 continue
             if r.debit is None:
-                raise ValidationError(f"строка {n}: не указан счёт дебета")
+                raise ValidationError(tr("строка {line}: не указан счёт дебета", line=n))
             if r.credit is None:
-                raise ValidationError(f"строка {n}: не указан счёт кредита")
+                raise ValidationError(tr("строка {line}: не указан счёт кредита", line=n))
             if r.amount is None:
-                raise ValidationError(f"строка {n}: не указана сумма")
+                raise ValidationError(tr("строка {line}: не указана сумма", line=n))
             result.append(
                 PostingInput(
                     r.debit,
@@ -252,7 +256,7 @@ class PostingsModel(QAbstractTableModel):
                 )
             )
         if not result:
-            raise ValidationError("в документе нет проводок")
+            raise ValidationError(tr("в документе нет проводок"))
         return result
 
 
@@ -270,26 +274,53 @@ class PostingsDelegate(QStyledItemDelegate):
         editor = QLineEdit(parent)
         editor.setFrame(False)
         side, pos = column_role(index.column())
-        items: list[str] | None = None
         if side in ("debit", "credit"):
             if pos is None:
                 items = [a.label for a in self.catalog.leaf_accounts]
             else:
                 kind = index.model().kind_at(index.row(), index.column())
                 items = [v.label for v in self.catalog.values(kind)]
+            # A subconto cell opens with its whole list, like a 1C directory;
+            # an account cell shows suggestions from the first typed character.
+            self._attach_list(editor, items, show_all=pos is not None)
         elif side == "amount":
             editor.setAlignment(ALIGN_RIGHT)
-        if items is not None:
-            completer = QCompleter(items, editor)
-            completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-            completer.setFilterMode(Qt.MatchFlag.MatchContains)
-            completer.setMaxVisibleItems(12)
-            completer.popup().setMinimumWidth(360)
-            editor.setCompleter(completer)
-            completer.activated.connect(lambda _text, e=editor: self._commit_and_next(e))
-        # Enter forwarded by an open completer popup reaches the editor as returnPressed.
+        # Enter forwarded by an open popup reaches the editor as returnPressed.
         editor.returnPressed.connect(lambda e=editor: self._commit_and_next(e))
         return editor
+
+    def _attach_list(self, editor: QLineEdit, items: list[str], show_all: bool) -> None:
+        model = QStringListModel(editor)
+        completer = QCompleter(model, editor)
+        completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
+        completer.setMaxVisibleItems(12)
+        completer.setWidget(editor)  # filtering is ours (search), not Qt's prefix matching
+        popup = completer.popup()
+        popup.setObjectName("completer")
+
+        def refresh(text: str) -> None:
+            try:
+                typed = bool(text.strip())
+                matches = search(items, text) if (typed or show_all) else []
+                model.setStringList(matches)
+                if not matches:
+                    popup.hide()
+                    return
+                rect = editor.rect()
+                rect.setWidth(max(rect.width(), 380))
+                completer.complete(rect)
+                if typed:  # Enter takes the best match
+                    popup.setCurrentIndex(model.index(0))
+            except RuntimeError:  # editor already closed
+                pass
+
+        def chosen(text: str) -> None:
+            editor.setText(text)
+            self._commit_and_next(editor)
+
+        editor.textEdited.connect(refresh)
+        completer.activated.connect(chosen)
+        QTimer.singleShot(0, lambda: refresh(editor.text()))
 
     def setEditorData(self, editor, index):
         if not editor.text():  # keep the key that started editing
@@ -310,7 +341,7 @@ class PostingsDelegate(QStyledItemDelegate):
             elif side == "amount":
                 value = to_minor(text) if text else None
                 if value is not None and value <= 0:
-                    raise ValueError("сумма должна быть больше нуля")
+                    raise ValueError(tr("сумма должна быть больше нуля"))
             else:
                 value = text
         except (LookupError, ValueError, TypeError) as e:
