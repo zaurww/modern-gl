@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+from typing import cast
 
 from PySide6.QtCore import (
     QAbstractTableModel,
@@ -155,8 +156,9 @@ class PostingsModel(QAbstractTableModel):
                 if value_id is not None:
                     return self.catalog.value(value_id).name
                 kind = self.kind_at(index.row(), col)
-                show_hint = role == Qt.ItemDataRole.DisplayRole and kind and not self.read_only
-                return self.catalog.kinds[kind] if show_hint else ""
+                if kind is None or role != Qt.ItemDataRole.DisplayRole or self.read_only:
+                    return ""
+                return self.catalog.kinds[kind]
             if side == "amount":
                 if self.formulas:
                     return r.formula
@@ -328,7 +330,7 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
     completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
     completer.setMaxVisibleItems(12)
     completer.setWidget(editor)  # filtering is ours (search), not Qt's prefix matching
-    popup = completer.popup()
+    popup = cast(QAbstractItemView, completer.popup())
     popup.setObjectName("completer")
 
     def refresh(text: str) -> None:
@@ -348,7 +350,10 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
             pass
 
     editor.textEdited.connect(refresh)
-    completer.activated[str].connect(lambda text: chosen(editor, text))  # mouse click
+    # mouse click; the str overload of the signal is not in the PySide6 stubs
+    completer.activated[str].connect(  # pyright: ignore[reportIndexIssue]
+        lambda text: chosen(editor, text)
+    )
     # Enter / Tab on a highlighted item: Qt would hand the key to the editor *before*
     # reporting the choice, so the editor would commit what was typed (often nothing).
     _PickWithKeys(popup, lambda text: chosen(editor, text))
@@ -468,7 +473,7 @@ class PostingsTable(QTableView):
                 self.setColumnHidden(CT + pos, True)
 
     def model(self) -> PostingsModel:  # typed accessor
-        return super().model()
+        return cast(PostingsModel, super().model())
 
     def _last_enabled_column(self, row: int) -> int:
         cols = [

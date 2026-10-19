@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import cast
 
 from PySide6.QtCore import (
     QAbstractTableModel,
@@ -641,7 +642,7 @@ class InventoryLinesTable(QTableView):
         self.horizontalHeader().setStretchLastSection(True)
 
     def model(self) -> InventoryLinesModel:
-        return super().model()
+        return cast(InventoryLinesModel, super().model())
 
     def closeEditor(self, editor, hint):
         index = self.currentIndex()
