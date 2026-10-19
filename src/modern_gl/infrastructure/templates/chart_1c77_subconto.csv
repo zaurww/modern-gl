@@ -1,0 +1,12 @@
+code;name
+counterparty;Контрагенты
+contract;Договоры
+item;Номенклатура
+warehouse;Склады
+fixed_asset;Основные средства
+intangible;Нематериальные активы
+department;Подразделения
+cost_item;Статьи затрат
+employee;Сотрудники
+bank_account;Банковские счета
+other_income;Прочие доходы и расходы

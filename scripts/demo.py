@@ -6,15 +6,12 @@ uv run python scripts/demo.py
 from __future__ import annotations
 
 import sys
-from pathlib import Path
 
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.money import format_minor
-from modern_gl.infrastructure.chart_csv import import_chart_csv
+from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.reports import IFRS, account_card, subconto_balance, trial_balance
-
-CHART = Path(__file__).parent.parent / "examples" / "demo_chart.csv"
 
 
 def money(v: int) -> str:
@@ -50,26 +47,42 @@ def main() -> None:
     conn = connect(":memory:")
     led = Ledger(conn)
     cid = led.create_company("ДЕМО ООО")
-    cp = led.add_subconto_kind(cid, "counterparty", "Контрагенты")
-    ct = led.add_subconto_kind(cid, "contract", "Договоры")
-    import_chart_csv(led, cid, CHART)
-    alfa = led.add_subconto_value(cid, cp, "ДЕМО Поставщик Альфа")
-    beta = led.add_subconto_value(cid, cp, "ДЕМО Поставщик Бета")
-    c1 = led.add_subconto_value(cid, ct, "Договор №1")
-    c2 = led.add_subconto_value(cid, ct, "Договор №2")
-    a = {code: led.account_id(cid, code) for code in ("201", "221", "222", "301", "531", "721")}
+    apply_chart_template(led, cid, "1c77")
 
-    def p(dt, ct_, amount, dt_sc=(), ct_sc=()):
-        return PostingInput(a[dt], a[ct_], amount, dt_sc, ct_sc)
+    def value(kind: str, name: str) -> int:
+        return led.add_subconto_value(cid, led.subconto_kind_id(cid, kind), name)
 
-    led.post_new(cid, "2026-01-05", [p("221", "301", "10000")], "Взнос в капитал")
-    led.post_new(cid, "2026-01-10", [p("201", "531", "1200", ct_sc=[alfa, c1])], "Поступление")
-    led.post_new(cid, "2026-01-15", [p("531", "221", "1000", dt_sc=[alfa, c1])], "Оплата")
-    led.post_new(cid, "2026-02-03", [p("201", "531", "500", ct_sc=[beta, c2])], "Поступление")
-    led.post_new(cid, "2026-02-10", [p("531", "221", "600", dt_sc=[beta, c2])], "Оплата")
-    led.post_new(cid, "2026-02-04", [p("222", "221", "2000")], "Перевод")
-    led.post_new(cid, "2026-02-20", [p("721", "201", "300")], "Списание")
-    led.post_new(cid, "2026-02-28", [p("721", "201", "50")], "МСФО корр.", layer="ifrs_adj")
+    alfa, beta = value("counterparty", "Поставщик Альфа"), value("counterparty", "Поставщик Бета")
+    founder = value("counterparty", "Учредитель")
+    c1, c2 = value("contract", "Договор №1"), value("contract", "Договор №2")
+    bank = value("bank_account", "Основной расчётный счёт")
+    paper = value("item", "Бумага офисная")
+    store = value("warehouse", "Основной склад")
+    materials = value("cost_item", "Материальные расходы")
+
+    def p(dt, ct, amount, dt_sc=(), ct_sc=()):
+        return PostingInput(led.account_id(cid, dt), led.account_id(cid, ct), amount, dt_sc, ct_sc)
+
+    led.post_new(cid, "2026-01-05", [p("51", "80", "10000", [bank], [founder])], "Взнос в УК")
+    led.post_new(
+        cid, "2026-01-10", [p("10.1", "60.1", "1200", [paper, store], [alfa, c1])], "Поступление"
+    )
+    led.post_new(cid, "2026-01-15", [p("60.1", "51", "1000", [alfa, c1], [bank])], "Оплата")
+    led.post_new(
+        cid, "2026-02-03", [p("10.1", "60.1", "500", [paper, store], [beta, c2])], "Поступление"
+    )
+    led.post_new(cid, "2026-02-10", [p("60.1", "51", "600", [beta, c2], [bank])], "Оплата")
+    led.post_new(cid, "2026-02-04", [p("50", "51", "2000", [], [bank])], "Снятие в кассу")
+    led.post_new(
+        cid, "2026-02-20", [p("26", "10.1", "300", [materials], [paper, store])], "Списание"
+    )
+    led.post_new(
+        cid,
+        "2026-02-28",
+        [p("26", "10.1", "50", [materials], [paper, store])],
+        "МСФО корр.",
+        layer="ifrs_adj",
+    )
 
     period = ("2026-02-01", "2026-02-28")
     osv = trial_balance(conn, cid, *period)
@@ -85,13 +98,13 @@ def main() -> None:
         lambda r: f"{'  ' * r.depth}{r.code} {r.name}" if hasattr(r, "code") else "Итого",
     )
     print_turnovers(
-        "ОСВ по субконто: счёт 531 / Контрагенты",
-        subconto_balance(conn, cid, "531", *period),
+        "ОСВ по субконто: счёт 60 / Контрагенты",
+        subconto_balance(conn, cid, "60.1", *period),
         lambda r: r.name,
     )
 
-    card = account_card(conn, cid, "221", *period)
-    print(f"\nКарточка счёта 221, сальдо на начало {format_minor(card.opening)}")
+    card = account_card(conn, cid, "51", *period)
+    print(f"\nКарточка счёта 51, сальдо на начало {format_minor(card.opening)}")
     for ln in card.lines:
         print(
             f"  {ln.doc_date}  №{ln.number:<4} {ln.memo:<18} корр. {ln.corr_code:<5}"
