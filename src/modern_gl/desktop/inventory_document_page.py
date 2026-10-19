@@ -64,6 +64,15 @@ SC1 = "sc1"
 SC2 = "sc2"
 SC3 = "sc3"
 MEMO = "memo"
+# cells that store the edited value as is
+STORED_FIELDS = {
+    ITEM: "item_id",
+    WAREHOUSE: "warehouse_id",
+    TO_WAREHOUSE: "to_warehouse_id",
+    QUANTITY: "quantity",
+    AMOUNT: "amount",
+    MEMO: "memo",
+}
 LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, SC1, SC2, SC3}
 
 HEADERS = {
@@ -266,59 +275,10 @@ class InventoryLinesModel(QAbstractTableModel):
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         row = self.rows[index.row()]
         key = self.key(index)
-        if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
-            if key == ITEM:
-                if role == Qt.ItemDataRole.EditRole:
-                    return row.item_id
-                return self.items[row.item_id].label if row.item_id in self.items else ""
-            if key in {WAREHOUSE, TO_WAREHOUSE}:
-                warehouse_id = row.warehouse_id if key == WAREHOUSE else row.to_warehouse_id
-                if role == Qt.ItemDataRole.EditRole:
-                    return warehouse_id
-                return (
-                    self.warehouses[warehouse_id].label if warehouse_id in self.warehouses else ""
-                )
-            if key == QUANTITY:
-                if row.quantity is None:
-                    return ""
-                precision = self.items[row.item_id].precision if row.item_id in self.items else 6
-                return format_quantity(
-                    row.quantity, 6 if role == Qt.ItemDataRole.EditRole else precision
-                )
-            if key == UNIT:
-                return self.items[row.item_id].unit if row.item_id in self.items else ""
-            if key == PRICE:
-                price = self._price(row)
-                if price is None:
-                    return ""
-                return (
-                    format_minor(price).replace(" ", "")
-                    if role == Qt.ItemDataRole.EditRole
-                    else money(price)
-                )
-            if key == AMOUNT:
-                if row.amount is None:
-                    return ""
-                return (
-                    format_minor(row.amount).replace(" ", "")
-                    if role == Qt.ItemDataRole.EditRole
-                    else money(row.amount)
-                )
-            if key == ACCOUNT:
-                if role == Qt.ItemDataRole.EditRole:
-                    return row.offset_account_id
-                account = self.s.catalog.accounts.get(row.offset_account_id)
-                return account.label if account else ""
-            if key in {SC1, SC2, SC3}:
-                position = int(key[-1]) - 1
-                value_id = row.offset_subconto[position]
-                if role == Qt.ItemDataRole.EditRole:
-                    return value_id
-                if value_id is not None:
-                    return self.s.catalog.value(value_id).name
-                kind_id = self.kind_at(index.row(), key)
-                return self.s.catalog.kinds[kind_id] if kind_id else ""
-            return row.memo
+        if role == Qt.ItemDataRole.EditRole:
+            return self._edit_value(index.row(), key)
+        if role == Qt.ItemDataRole.DisplayRole:
+            return self._display_text(index.row(), key)
         if role == Qt.ItemDataRole.TextAlignmentRole and key in {QUANTITY, PRICE, AMOUNT}:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         if role == Qt.ItemDataRole.ForegroundRole and key in {SC1, SC2, SC3}:
@@ -326,43 +286,86 @@ class InventoryLinesModel(QAbstractTableModel):
                 return QColor(P.tertiary)
         return None
 
+    def _edit_value(self, row_index: int, key: str):
+        """What an editor starts with: ids for list cells, plain numbers for amounts."""
+        row = self.rows[row_index]
+        if key == ITEM:
+            return row.item_id
+        if key in {WAREHOUSE, TO_WAREHOUSE}:
+            return row.warehouse_id if key == WAREHOUSE else row.to_warehouse_id
+        if key == ACCOUNT:
+            return row.offset_account_id
+        if key in {SC1, SC2, SC3}:
+            return row.offset_subconto[int(key[-1]) - 1]
+        if key == QUANTITY:
+            return "" if row.quantity is None else format_quantity(row.quantity, 6)
+        if key in {PRICE, AMOUNT}:
+            value = self._price(row) if key == PRICE else row.amount
+            return "" if value is None else format_minor(value).replace(" ", "")
+        if key == UNIT:
+            return self._display_text(row_index, key)
+        return row.memo
+
+    def _display_text(self, row_index: int, key: str) -> str:
+        row = self.rows[row_index]
+        item = self.items.get(row.item_id) if row.item_id is not None else None
+        if key == ITEM:
+            return item.label if item else ""
+        if key in {WAREHOUSE, TO_WAREHOUSE}:
+            warehouse_id = row.warehouse_id if key == WAREHOUSE else row.to_warehouse_id
+            warehouse = self.warehouses.get(warehouse_id) if warehouse_id is not None else None
+            return warehouse.label if warehouse else ""
+        if key == QUANTITY:
+            if row.quantity is None:
+                return ""
+            return format_quantity(row.quantity, item.precision if item else 6)
+        if key == UNIT:
+            return item.unit if item else ""
+        if key in {PRICE, AMOUNT}:
+            value = self._price(row) if key == PRICE else row.amount
+            return "" if value is None else money(value)
+        if key == ACCOUNT:
+            account = self.s.catalog.accounts.get(row.offset_account_id)
+            return account.label if account else ""
+        if key in {SC1, SC2, SC3}:
+            value_id = row.offset_subconto[int(key[-1]) - 1]
+            if value_id is not None:
+                return self.s.catalog.value(value_id).name
+            kind_id = self.kind_at(row_index, key)
+            return self.s.catalog.kinds[kind_id] if kind_id else ""
+        return row.memo
+
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole) -> bool:
         if self.read_only or role != Qt.ItemDataRole.EditRole:
             return False
         row = self.rows[index.row()]
         key = self.key(index)
-        if key == ITEM:
-            row.item_id = value
-        elif key == WAREHOUSE:
-            row.warehouse_id = value
-        elif key == TO_WAREHOUSE:
-            row.to_warehouse_id = value
-        elif key == QUANTITY:
-            row.quantity = value
-        elif key == PRICE:
+        if key == PRICE:
             if not row.quantity:
                 raise ValidationError(tr("сначала укажите количество"))
             row.amount = round_ratio(value * row.quantity, QUANTITY_FACTOR)
-        elif key == AMOUNT:
-            row.amount = value
         elif key == ACCOUNT:
-            row.offset_account_id = value
-            kinds = self.s.catalog.accounts[value].sc_kinds if value else (None, None, None)
-            for position, kind in enumerate(kinds):
-                current = row.offset_subconto[position]
-                if current is not None and (
-                    kind is None or self.s.catalog.value(current).kind_id != kind
-                ):
-                    row.offset_subconto[position] = None
+            self._set_account(row, value)
         elif key in {SC1, SC2, SC3}:
             row.offset_subconto[int(key[-1]) - 1] = value
         else:
-            row.memo = value
+            setattr(row, STORED_FIELDS[key], value)
         self.dataChanged.emit(
             self.index(index.row(), 0), self.index(index.row(), len(self.columns) - 1)
         )
         self.changed.emit()
         return True
+
+    def _set_account(self, row: InventoryGridRow, account_id: int | None) -> None:
+        """Set the offset account and drop subconto values it no longer accepts."""
+        row.offset_account_id = account_id
+        kinds = self.s.catalog.accounts[account_id].sc_kinds if account_id else (None, None, None)
+        for position, kind in enumerate(kinds):
+            current = row.offset_subconto[position]
+            if current is not None and (
+                kind is None or self.s.catalog.value(current).kind_id != kind
+            ):
+                row.offset_subconto[position] = None
 
     def insert_row(self, at: int | None = None, row: InventoryGridRow | None = None) -> int:
         at = len(self.rows) if at is None else at

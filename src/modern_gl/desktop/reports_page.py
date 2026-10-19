@@ -11,7 +11,7 @@ from datetime import date
 from typing import Any
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.account_dialog import AccountDialog
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import P
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
     ACCOUNT_CLASSES,
     CLASS_ORDER,
@@ -148,9 +148,7 @@ class ReportModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return RIGHT if col.money else LEFT
         if role == Qt.ItemDataRole.FontRole and self.emphasis(row):
-            f = QFont()
-            f.setWeight(QFont.Weight.DemiBold)
-            return f
+            return fonts().cell_bold
         if role in (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.ToolTipRole) and col.warn:
             message = col.warn(row)
             if message and col.get(row):

@@ -9,7 +9,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.queries import DocumentSummary, list_documents
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import P
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -91,9 +91,7 @@ class JournalModel(QAbstractTableModel):
             if col in (DATE, NUMBER, BOOK):
                 return QColor(P.secondary)
         if role == Qt.ItemDataRole.FontRole and d.status == "draft" and col == MEMO:
-            f = QFont()
-            f.setItalic(True)
-            return f
+            return fonts().cell_italic
         return None
 
 

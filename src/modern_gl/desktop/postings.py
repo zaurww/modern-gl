@@ -39,7 +39,7 @@ from PySide6.QtCore import (
     QTimer,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
@@ -53,7 +53,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog, search
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import PostingData
-from modern_gl.desktop.theme import P
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain import formula
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
@@ -285,114 +285,122 @@ class PostingsModel(QAbstractTableModel):
         return flags
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        r, col = self.rows[index.row()], index.column()
-        side, pos = column_role(col)
+        row, col = index.row(), index.column()
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
-            if side in ("debit", "credit"):
-                if pos is None:
-                    account_id = getattr(r, side)
-                    return self.catalog.accounts[account_id].short if account_id else ""
-                value_id = getattr(r, f"{side}_sc")[pos - 1]
-                if value_id is not None:
-                    return self.catalog.value(value_id).name
-                kind = self.kind_at(index.row(), col)
-                if kind is None or role != Qt.ItemDataRole.DisplayRole or self.read_only:
-                    return ""
-                return self.catalog.kinds[kind]
-            if side == "currency":
-                currency = self.catalog.currencies.get(r.currency_id or 0)
-                return currency.code if currency and self.is_currency(index.row()) else ""
-            if side == "currency_amount":
-                if r.currency_amount is None or not self.is_currency(index.row()):
-                    return ""
-                text = format_minor(r.currency_amount)
-                return text if role == Qt.ItemDataRole.DisplayRole else text.replace(" ", "")
-            if side == "rate":
-                if r.rate is None or not self.is_currency(index.row()):
-                    return ""
-                return format_unit_rate(r.rate)
-            if side == "amount":
-                if self.formulas:
-                    return r.formula
-                if r.amount is None:
-                    return ""
-                return (
-                    format_minor(r.amount)
-                    if role == Qt.ItemDataRole.DisplayRole
-                    else (format_minor(r.amount).replace(" ", ""))
-                )
-            return r.memo
+            return self._text(row, col, display=role == Qt.ItemDataRole.DisplayRole)
         if role == Qt.ItemDataRole.ForegroundRole:
-            if pos is not None and getattr(r, f"{side}_sc")[pos - 1] is None:
-                return QColor(P.tertiary)  # placeholder with the subconto kind name
-            if side in ("amount", "currency_amount") and (
-                getattr(r, side) is not None and getattr(r, side) < 0
-            ):
-                return QColor(P.red)
-            if side == "rate":
-                return QColor(P.secondary)
-        if role == Qt.ItemDataRole.FontRole and pos is not None:
-            if getattr(r, f"{side}_sc")[pos - 1] is None:
-                f = QFont()
-                f.setItalic(True)
-                return f
+            return self._foreground(row, col)
+        if role == Qt.ItemDataRole.FontRole and self._is_placeholder(row, col):
+            return fonts().cell_italic
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return ALIGN_RIGHT if col in NUMBER_COLUMNS else ALIGN_LEFT
-        if role == Qt.ItemDataRole.ToolTipRole and side in ("debit", "credit") and pos is None:
-            account_id = getattr(r, side)
-            return self.catalog.accounts[account_id].label if account_id else None
+        if role == Qt.ItemDataRole.ToolTipRole:
+            side, pos = column_role(col)
+            if side in ("debit", "credit") and pos is None:
+                account_id = getattr(self.rows[row], side)
+                return self.catalog.accounts[account_id].label if account_id else None
+        return None
+
+    def _is_placeholder(self, row: int, col: int) -> bool:
+        """An empty subconto cell, which shows the name of its kind instead."""
+        side, pos = column_role(col)
+        return pos is not None and getattr(self.rows[row], f"{side}_sc")[pos - 1] is None
+
+    def _text(self, row: int, col: int, display: bool) -> str:
+        r = self.rows[row]
+        side, pos = column_role(col)
+        if side in ("debit", "credit"):
+            if pos is None:
+                account_id = getattr(r, side)
+                return self.catalog.accounts[account_id].short if account_id else ""
+            return self._subconto_text(row, col, getattr(r, f"{side}_sc")[pos - 1], display)
+        if side == "amount" and self.formulas:
+            return r.formula
+        if side in ("currency", "currency_amount", "rate") and not self.is_currency(row):
+            return ""
+        if side == "currency":
+            currency = self.catalog.currencies.get(r.currency_id or 0)
+            return currency.code if currency else ""
+        if side == "rate":
+            return "" if r.rate is None else format_unit_rate(r.rate)
+        if side in ("amount", "currency_amount"):
+            value = getattr(r, side)
+            if value is None:
+                return ""
+            text = format_minor(value)
+            return text if display else text.replace(" ", "")
+        return r.memo
+
+    def _subconto_text(self, row: int, col: int, value_id: int | None, display: bool) -> str:
+        if value_id is not None:
+            return self.catalog.value(value_id).name
+        kind = self.kind_at(row, col)
+        if kind is None or not display or self.read_only:
+            return ""
+        return self.catalog.kinds[kind]
+
+    def _foreground(self, row: int, col: int) -> QColor | None:
+        side, _ = column_role(col)
+        if self._is_placeholder(row, col):
+            return QColor(P.tertiary)  # placeholder with the subconto kind name
+        if side in ("amount", "currency_amount"):
+            value = getattr(self.rows[row], side)
+            return QColor(P.red) if value is not None and value < 0 else None
+        if side == "rate":
+            return QColor(P.secondary)
         return None
 
     def setData(self, index, value, role=Qt.ItemDataRole.EditRole) -> bool:
         if self.read_only or role != Qt.ItemDataRole.EditRole:
             return False
-        r, col = self.rows[index.row()], index.column()
+        row, col = index.row(), index.column()
+        r = self.rows[row]
         side, pos = column_role(col)
         if side in ("debit", "credit"):
             if pos is None:
-                setattr(r, side, value)
-                kinds = self.catalog.accounts[value].sc_kinds if value else (None, None, None)
-                sc = getattr(r, f"{side}_sc")
-                for i, kind in enumerate(kinds):
-                    if sc[i] is not None and (
-                        kind is None or self.catalog.value(sc[i]).kind_id != kind
-                    ):
-                        sc[i] = None
-                self._fit_currency(index.row())
-                self._row_changed(index.row())
+                self._set_account(r, side, value)
             else:
                 getattr(r, f"{side}_sc")[pos - 1] = value
-                self._fit_currency(index.row())
-                self._row_changed(index.row())
-        elif side == "currency":
+            self._fit_currency(row)
+        elif side in ("currency", "currency_amount", "rate"):
+            self._set_currency_field(r, side, value)
+        elif side == "amount":
+            if self.formulas:
+                r.formula = value
+            else:
+                r.amount = value
+                r.formula = ""  # typed by hand: no longer follows the operation amount
+        else:
+            r.memo = value
+        if side in ("amount", "memo"):
+            self.dataChanged.emit(index, index)
+        else:
+            self._row_changed(row)
+        self.changed.emit()
+        return True
+
+    def _set_account(self, r: PostingRow, side: str, account_id: int | None) -> None:
+        """Set an account and drop subconto values its positions no longer accept."""
+        setattr(r, side, account_id)
+        kinds = self.catalog.accounts[account_id].sc_kinds if account_id else (None, None, None)
+        sc = getattr(r, f"{side}_sc")
+        for i, kind in enumerate(kinds):
+            if sc[i] is not None and (kind is None or self.catalog.value(sc[i]).kind_id != kind):
+                sc[i] = None
+
+    def _set_currency_field(self, r: PostingRow, side: str, value) -> None:
+        if side == "currency":
             r.currency_id = value
             r.rate_auto = True
             r.rate = self.rate_for(value) if value is not None else None
-            self._follow_rate(r)
-            self._row_changed(index.row())
         elif side == "currency_amount":
             r.currency_amount = value
-            self._follow_rate(r)
-            self._row_changed(index.row())
-        elif side == "rate":
+        else:
             r.rate = value
             r.rate_auto = value is None
             if value is None and r.currency_id is not None:
                 r.rate = self.rate_for(r.currency_id)
-            self._follow_rate(r)
-            self._row_changed(index.row())
-        elif side == "amount" and self.formulas:
-            r.formula = value
-            self.dataChanged.emit(index, index)
-        elif side == "amount":
-            r.amount = value
-            r.formula = ""  # typed by hand: no longer follows the operation amount
-            self.dataChanged.emit(index, index)
-        else:
-            r.memo = value
-            self.dataChanged.emit(index, index)
-        self.changed.emit()
-        return True
+        self._follow_rate(r)
 
     # ---- currency ----------------------------------------------------------------------
 

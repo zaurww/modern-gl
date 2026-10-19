@@ -466,32 +466,21 @@ class DocumentCommands(SubcontoCommands):
         if not postings:
             raise ValidationError(tr("документ №{n} без проводок", n=doc["number"]))
 
-        account_ids = {p[f"{side}_account_id"] for p in postings for side, _ in SIDES}
-        accounts = {
-            r["id"]: r
-            for r in self.conn.execute(
-                "SELECT * FROM accounts "
-                "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
-                (company_id, json.dumps(sorted(account_ids))),
-            )
-        }
-        value_ids = {
-            p[f"{prefix}_sc{i}"]
-            for p in postings
-            for _, prefix in SIDES
-            for i in range(1, MAX_SUBCONTO + 1)
-        } - {None}
-        values = (
+        accounts = self._rows_by_id(
+            "accounts",
+            company_id,
+            {p[f"{side}_account_id"] for p in postings for side, _ in SIDES},
+        )
+        values = self._rows_by_id(
+            "subconto_values",
+            company_id,
             {
-                r["id"]: r
-                for r in self.conn.execute(
-                    "SELECT * FROM subconto_values "
-                    "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
-                    (company_id, json.dumps(sorted(value_ids))),
-                )
+                p[f"{prefix}_sc{i}"]
+                for p in postings
+                for _, prefix in SIDES
+                for i in range(1, MAX_SUBCONTO + 1)
             }
-            if value_ids
-            else {}
+            - {None},
         )
 
         is_reversal = doc["reversal_of"] is not None
@@ -526,23 +515,39 @@ class DocumentCommands(SubcontoCommands):
                     )
                 if not acc["active"] and not is_reversal:
                     raise ValidationError(tr("{label}: счёт не активен", label=label))
-                for i in range(1, MAX_SUBCONTO + 1):
-                    kind_id = acc[f"sc{i}_kind_id"]
-                    value_id = p[f"{prefix}_sc{i}"]
-                    if kind_id is None:
-                        if value_id is not None:
-                            raise ValidationError(
-                                tr("{label}: у счёта нет субконто {i}", label=label, i=i)
-                            )
-                        continue
-                    if value_id is None:
-                        raise ValidationError(
-                            tr("{label}: не заполнено субконто {i}", label=label, i=i)
-                        )
-                    if values[value_id]["kind_id"] != kind_id:
-                        raise ValidationError(
-                            tr("{label}: субконто {i} не того вида", label=label, i=i)
-                        )
+                self._validate_subconto(acc, p, prefix, label, values)
+
+    def _rows_by_id(self, table: str, company_id: int, ids: set[int]) -> dict[int, sqlite3.Row]:
+        """Rows of a company table (accounts, subconto_values) with these ids, by id."""
+        if not ids:
+            return {}
+        rows = self.conn.execute(
+            f"SELECT * FROM {table} "
+            "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
+            (company_id, json.dumps(sorted(ids))),
+        )
+        return {r["id"]: r for r in rows}
+
+    @staticmethod
+    def _validate_subconto(
+        acc: sqlite3.Row,
+        p: sqlite3.Row,
+        prefix: str,
+        label: str,
+        values: dict[int, sqlite3.Row],
+    ) -> None:
+        """Each subconto position of the account is filled with a value of its kind."""
+        for i in range(1, MAX_SUBCONTO + 1):
+            kind_id = acc[f"sc{i}_kind_id"]
+            value_id = p[f"{prefix}_sc{i}"]
+            if kind_id is None:
+                if value_id is not None:
+                    raise ValidationError(tr("{label}: у счёта нет субконто {i}", label=label, i=i))
+                continue
+            if value_id is None:
+                raise ValidationError(tr("{label}: не заполнено субконто {i}", label=label, i=i))
+            if values[value_id]["kind_id"] != kind_id:
+                raise ValidationError(tr("{label}: субконто {i} не того вида", label=label, i=i))
 
     @staticmethod
     def _validate_currency(

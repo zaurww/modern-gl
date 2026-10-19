@@ -849,18 +849,7 @@ class Inventory:
             if cost_type_id is not None:
                 self._cost_type(company_id, cost_type_id)
             receipts = [self._receipt_line(company_id, line_id) for line_id in ids]
-            if method == "manual":
-                if manual_amounts is None or set(manual_amounts) != set(ids):
-                    raise ValidationError(tr("ручные суммы заданы не для всех поступлений"))
-                allocations = {
-                    line_id: self._nonnegative_amount(value)
-                    for line_id, value in manual_amounts.items()
-                }
-                if sum(allocations.values()) != amount:
-                    raise ValidationError(tr("сумма ручного распределения не равна расходу"))
-            else:
-                field = "amount" if method == "value" else "quantity"
-                allocations = _allocate_minor(amount, [(row["id"], row[field]) for row in receipts])
+            allocations = self._landed_cost_allocations(receipts, amount, method, manual_amounts)
 
             inv_id = self._insert_document(
                 company_id, doc_date, "landed_cost", memo, cost_type_id=cost_type_id
@@ -896,73 +885,148 @@ class Inventory:
                 )
 
                 if inventory_amount:
-                    balances = self._item_warehouse_quantities(company_id, item["id"])
-                    if not balances:
+                    stock_postings = self._landed_cost_to_stock(
+                        company_id,
+                        inv_id,
+                        line_id,
+                        doc_date,
+                        item,
+                        inventory_amount,
+                        credit_account_id,
+                        credit_subconto,
+                        memo,
+                    )
+                    if stock_postings is None:  # nothing left in stock: all of it is expense
                         expense_amount += inventory_amount
-                        inventory_amount = 0
                         self.conn.execute(
                             "UPDATE inventory_lines SET inventory_amount = 0, "
                             "expense_amount = ? WHERE id = ?",
                             (expense_amount, line_id),
                         )
                     else:
-                        by_warehouse = _allocate_minor(inventory_amount, balances)
-                        for warehouse_id, share in by_warehouse.items():
-                            if not share:
-                                continue
-                            warehouse = self._warehouse(company_id, warehouse_id)
-                            self._insert_movement(
-                                company_id,
-                                inv_id,
-                                line_id,
-                                doc_date,
-                                item["id"],
-                                warehouse_id,
-                                "landed_cost",
-                                0,
-                                share,
-                            )
-                            postings.append(
-                                PostingInput(
-                                    item["inventory_account_id"],
-                                    credit_account_id,
-                                    _money(share),
-                                    self._inventory_subconto(company_id, item, warehouse),
-                                    credit_subconto,
-                                    memo,
-                                )
-                            )
-
+                        postings.extend(stock_postings)
                 if expense_amount:
-                    if not consumptions:
-                        raise ValidationError(tr("не найдены списания для распределения расхода"))
-                    by_issue = _allocate_minor(
-                        expense_amount,
-                        [(row["issue_line_id"], row["quantity"]) for row in consumptions],
+                    postings.extend(
+                        self._landed_cost_to_expense(
+                            company_id,
+                            inv_id,
+                            line_id,
+                            consumptions,
+                            expense_amount,
+                            credit_account_id,
+                            credit_subconto,
+                            memo,
+                        )
                     )
-                    issues = {row["issue_line_id"]: row for row in consumptions}
-                    for issue_line_id, share in by_issue.items():
-                        if not share:
-                            continue
-                        issue = issues[issue_line_id]
-                        self.conn.execute(
-                            "INSERT INTO landed_cost_expense_allocations "
-                            "(company_id, document_id, landed_cost_line_id, issue_line_id, amount) "
-                            "VALUES (?, ?, ?, ?, ?)",
-                            (company_id, inv_id, line_id, issue_line_id, share),
-                        )
-                        postings.append(
-                            PostingInput(
-                                issue["offset_account_id"],
-                                credit_account_id,
-                                _money(share),
-                                (issue["offset_sc1"], issue["offset_sc2"], issue["offset_sc3"]),
-                                credit_subconto,
-                                memo,
-                            )
-                        )
             self._finish(inv_id, company_id, doc_date, postings, memo)
         return inv_id
+
+    def _landed_cost_allocations(
+        self,
+        receipts: list[sqlite3.Row],
+        amount: int,
+        method: str,
+        manual_amounts: Mapping[int, str | int | Decimal] | None,
+    ) -> dict[int, int]:
+        """Receipt line id -> its share of the landed cost (qəpik)."""
+        if method != "manual":
+            field = "amount" if method == "value" else "quantity"
+            return _allocate_minor(amount, [(row["id"], row[field]) for row in receipts])
+        if manual_amounts is None or set(manual_amounts) != {row["id"] for row in receipts}:
+            raise ValidationError(tr("ручные суммы заданы не для всех поступлений"))
+        allocations = {
+            line_id: self._nonnegative_amount(value) for line_id, value in manual_amounts.items()
+        }
+        if sum(allocations.values()) != amount:
+            raise ValidationError(tr("сумма ручного распределения не равна расходу"))
+        return allocations
+
+    def _landed_cost_to_stock(
+        self,
+        company_id: int,
+        inv_id: int,
+        line_id: int,
+        doc_date: date | str,
+        item: sqlite3.Row,
+        amount: int,
+        credit_account_id: int,
+        credit_subconto: Sequence[int | None],
+        memo: str,
+    ) -> list[PostingInput] | None:
+        """Add `amount` to the item's stock value in each warehouse in proportion to its
+        quantity there. None when no warehouse has the item any more."""
+        balances = self._item_warehouse_quantities(company_id, item["id"])
+        if not balances:
+            return None
+        postings = []
+        for warehouse_id, share in _allocate_minor(amount, balances).items():
+            if not share:
+                continue
+            warehouse = self._warehouse(company_id, warehouse_id)
+            self._insert_movement(
+                company_id,
+                inv_id,
+                line_id,
+                doc_date,
+                item["id"],
+                warehouse_id,
+                "landed_cost",
+                0,
+                share,
+            )
+            postings.append(
+                PostingInput(
+                    item["inventory_account_id"],
+                    credit_account_id,
+                    _money(share),
+                    self._inventory_subconto(company_id, item, warehouse),
+                    credit_subconto,
+                    memo,
+                )
+            )
+        return postings
+
+    def _landed_cost_to_expense(
+        self,
+        company_id: int,
+        inv_id: int,
+        line_id: int,
+        consumptions: list[sqlite3.Row],
+        amount: int,
+        credit_account_id: int,
+        credit_subconto: Sequence[int | None],
+        memo: str,
+    ) -> list[PostingInput]:
+        """Charge `amount` to the expense accounts of the issues that consumed the receipt,
+        in proportion to the quantity each took."""
+        if not consumptions:
+            raise ValidationError(tr("не найдены списания для распределения расхода"))
+        by_issue = _allocate_minor(
+            amount, [(row["issue_line_id"], row["quantity"]) for row in consumptions]
+        )
+        issues = {row["issue_line_id"]: row for row in consumptions}
+        postings = []
+        for issue_line_id, share in by_issue.items():
+            if not share:
+                continue
+            issue = issues[issue_line_id]
+            self.conn.execute(
+                "INSERT INTO landed_cost_expense_allocations "
+                "(company_id, document_id, landed_cost_line_id, issue_line_id, amount) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (company_id, inv_id, line_id, issue_line_id, share),
+            )
+            postings.append(
+                PostingInput(
+                    issue["offset_account_id"],
+                    credit_account_id,
+                    _money(share),
+                    (issue["offset_sc1"], issue["offset_sc2"], issue["offset_sc3"]),
+                    credit_subconto,
+                    memo,
+                )
+            )
+        return postings
 
     def delete_document(self, company_id: int, document_id: int) -> None:
         """Remove a posted inventory document in an open period, with a full audit copy."""

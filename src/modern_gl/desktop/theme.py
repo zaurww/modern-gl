@@ -65,6 +65,11 @@ class Fonts:
         self.total.setWeight(QFont.Weight.DemiBold)
         self.bold = QFont(self.body)
         self.bold.setWeight(QFont.Weight.DemiBold)
+        # Table cells: only the property is set, the rest comes from the view's font.
+        self.cell_italic = QFont()
+        self.cell_italic.setItalic(True)
+        self.cell_bold = QFont()
+        self.cell_bold.setWeight(QFont.Weight.DemiBold)
 
 
 FONTS: Fonts | None = None
