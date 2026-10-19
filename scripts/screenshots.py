@@ -16,21 +16,21 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if sys.platform == "win32":  # the offscreen platform doesn't see system fonts by itself
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["WINDIR"], "Fonts"))
 
-from PySide6.QtCore import QEventLoop, QTimer  # noqa: E402
-from PySide6.QtGui import QPainter  # noqa: E402
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtGui import QPainter
+from PySide6.QtWidgets import QApplication
 
-from modern_gl import i18n  # noqa: E402
-from modern_gl.desktop import theme  # noqa: E402
-from modern_gl.desktop.app import add_demo_company  # noqa: E402
-from modern_gl.desktop.directories_page import DirectoriesPage  # noqa: E402
-from modern_gl.desktop.document_page import DocumentPage  # noqa: E402
-from modern_gl.desktop.inventory_document_page import InventoryDocumentPage  # noqa: E402
-from modern_gl.desktop.inventory_page import InventoryPage  # noqa: E402
-from modern_gl.desktop.journal_page import JournalPage  # noqa: E402
-from modern_gl.desktop.main_window import MainWindow  # noqa: E402
-from modern_gl.desktop.reports_page import OsvPage  # noqa: E402
-from modern_gl.infrastructure.workspace import Workspace  # noqa: E402
+from modern_gl import i18n
+from modern_gl.desktop import theme
+from modern_gl.desktop.app import add_demo_company
+from modern_gl.desktop.directories_page import DirectoriesPage
+from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
+from modern_gl.desktop.inventory_page import InventoryPage
+from modern_gl.desktop.journal_page import JournalPage
+from modern_gl.desktop.main_window import MainWindow
+from modern_gl.desktop.reports_page import OsvPage
+from modern_gl.infrastructure.workspace import Workspace
 
 
 def main() -> None:
@@ -143,9 +143,9 @@ def main() -> None:
     inventory.refresh()
     shot("8c_inventory")
     inventory_document = next(
-        row for row in inventory.documents_model.rows if row["doc_type"] == "receipt"
+        row for row in inventory.documents_model.rows if row.doc_type == "receipt"
     )
-    win.open_inventory_document(inventory_document["id"])
+    win.open_inventory_document(inventory_document.id)
     assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
     shot("8c2_inventory_document")
     win.show_place(("templates",))

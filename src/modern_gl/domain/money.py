@@ -16,7 +16,7 @@ def to_minor(value: str | int | Decimal) -> int:
 
     More than two decimal places is an error, never silently rounded.
     """
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, (bool, float)):
         raise TypeError("amounts must be str, int or Decimal, never float")
     if isinstance(value, str):
         value = value.strip().replace(" ", "").replace(" ", "").replace(",", ".")

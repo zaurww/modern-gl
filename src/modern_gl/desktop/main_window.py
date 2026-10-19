@@ -519,10 +519,7 @@ class MainWindow(QMainWindow):
             )
             page.edit_template.connect(self.open_template)
             return page
-        if key == ("osv",):
-            page = OsvPage(s)
-        else:
-            page = ChartPage(s)
+        page = OsvPage(s) if key == ("osv",) else ChartPage(s)
         self._wire_report(page)
         return page
 

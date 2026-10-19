@@ -90,7 +90,7 @@ class InventoryDocumentData:
 
 def to_quantity(value: str | int | Decimal) -> int:
     """Convert a user quantity to millionths of a base unit, without float rounding."""
-    if isinstance(value, bool) or isinstance(value, float):
+    if isinstance(value, (bool, float)):
         raise TypeError("quantities must be str, int or Decimal, never float")
     if isinstance(value, str):
         value = value.strip().replace(" ", "").replace(" ", "").replace(",", ".")

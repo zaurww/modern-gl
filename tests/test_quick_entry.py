@@ -52,7 +52,7 @@ def rate(_currency, _day):
 
 
 def test_posting_with_subconto_amount_and_memo(books):
-    conn, _, cid, cat, v = books
+    _conn, _, _cid, cat, v = books
     entry = parse("26 аренда / 60 альфа, договор 400 Аренда за март", cat, today=TODAY)
     [ln] = entry.lines
     assert (ln.debit, ln.credit, ln.amount, ln.memo) == (

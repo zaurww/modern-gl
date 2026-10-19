@@ -39,7 +39,14 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = ["E", "F", "I", "B", "UP", "C90", "SIM", "RUF", "PIE", "PERF"]
+ignore = [
+    "RUF001", "RUF002", "RUF003",  # Cyrillic and Azerbaijani text is intended
+    "SIM118",  # `key in row.keys()` is required: iterating a sqlite3.Row yields values
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
 
 [project.gui-scripts]
 modern-gl = "modern_gl.desktop.app:main"

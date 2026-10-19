@@ -136,7 +136,7 @@ def test_new_elements_when_allowed(books):
 
 
 def test_currency_rows(books):
-    conn, ledger, cid, cat = books
+    _conn, ledger, cid, cat = books
     usd = ledger.currency_id(cid, "USD")
     bank_usd = next(v for v in cat.all_values(cat.by_code["52"].sc_kinds[0]) if "USD" in v.name)
     ledger.set_subconto_value_currency(cid, bank_usd.id, usd)
@@ -162,7 +162,7 @@ def test_currency_rows(books):
 def test_excel_and_csv_files(books, tmp_path):
     from openpyxl import Workbook
 
-    conn, ledger, cid, cat = books
+    _conn, _ledger, _cid, cat = books
     book = Workbook()
     sheet = book.active
     sheet.append(["Дата", "Дебет", "Кредит", "Сумма", "Содержание"])

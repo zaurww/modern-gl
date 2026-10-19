@@ -15,7 +15,7 @@ def test_one_file_per_company(tmp_path):
     assert a.name == "Alfa MMC.gl"
     assert b.name == "Beta Gamma test.gl"
     assert [c.name for c in ws.companies()] == ["Alfa MMC", "Alfa MMC", "Beta / Gamma: test"]
-    conn, cid = open_company(a)
+    conn, _cid = open_company(a)
     assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 37  # classic chart
     conn.close()
 

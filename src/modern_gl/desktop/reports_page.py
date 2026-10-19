@@ -749,8 +749,8 @@ class ChartPage(ReportPage):
         if acc.two_sided:
             return tr("Дт и Кт")
         side = normal_side(acc.account_class, acc.contra)
-        names = {"debit": tr("Дебет"), "credit": tr("Кредит")}
-        return names[side] if side in names else "—"
+        names: dict[str | None, str] = {"debit": tr("Дебет"), "credit": tr("Кредит")}
+        return names.get(side, "—")
 
     def edit_account(self, acc, parent_id: int | None = None) -> None:
         dialog = AccountDialog(self.s, acc, parent_id, self)

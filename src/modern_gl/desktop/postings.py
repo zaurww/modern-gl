@@ -113,7 +113,7 @@ class EntryHints:
 
     recent: Callable[[int, int], list[int]] = lambda _account, _position: []
     memo: Callable[[int, int], str] = lambda _debit, _credit: ""
-    templates: Callable[[], list[tuple[int, str]]] = lambda: []  # (id, name)
+    templates: Callable[[], list[tuple[int, str]]] = list  # (id, name)
 
 
 TEMPLATE_MARK = "#"
@@ -498,9 +498,9 @@ class PostingsModel(QAbstractTableModel):
         for n, line in enumerate(cells, start=1):
             if not any(c.strip() for c in line):
                 continue
-            if len(cells) > 1 or target >= len(self.rows):
-                if target >= len(self.rows) or not self.rows[target].is_empty():
-                    self.insert_row(target)
+            needs_row = target >= len(self.rows) or not self.rows[target].is_empty()
+            if (len(cells) > 1 or target >= len(self.rows)) and needs_row:
+                self.insert_row(target)
             if mapping is not None:
                 self._paste_by_header(target, line, mapping, n, result)
             else:

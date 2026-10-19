@@ -281,9 +281,12 @@ class InventoryLinesModel(QAbstractTableModel):
             return self._display_text(index.row(), key)
         if role == Qt.ItemDataRole.TextAlignmentRole and key in {QUANTITY, PRICE, AMOUNT}:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        if role == Qt.ItemDataRole.ForegroundRole and key in {SC1, SC2, SC3}:
-            if row.offset_subconto[int(key[-1]) - 1] is None:
-                return QColor(P.tertiary)
+        if (
+            role == Qt.ItemDataRole.ForegroundRole
+            and key in {SC1, SC2, SC3}
+            and row.offset_subconto[int(key[-1]) - 1] is None
+        ):
+            return QColor(P.tertiary)
         return None
 
     def _edit_value(self, row_index: int, key: str):

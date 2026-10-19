@@ -64,7 +64,7 @@ def check_code(code: str) -> str:
 
 def parse_rate(text: str | int | Decimal) -> int:
     """'1,7' / '1.7000' / Decimal('1.7') -> 1700000 (millionths). Must be positive."""
-    if isinstance(text, bool) or isinstance(text, float):
+    if isinstance(text, (bool, float)):
         raise TypeError("rates must be str, int or Decimal, never float")
     if isinstance(text, str):
         text = text.strip().replace(" ", "").replace(",", ".")

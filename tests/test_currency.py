@@ -216,7 +216,7 @@ def test_revaluation(ledger, conn, books):
 
 
 def test_revaluation_needs_a_rate_and_a_manat_account(ledger, books):
-    cid, acc, usd, bank, _ = books
+    cid, acc, _usd, bank, _ = books
     eur = ledger.currency_id(cid, "EUR")
     ledger.post_new(
         cid,
