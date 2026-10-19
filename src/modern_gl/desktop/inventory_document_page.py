@@ -48,7 +48,7 @@ from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, button, date_edit, money, to_qdate
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
-from modern_gl.domain.money import format_minor, to_minor
+from modern_gl.domain.money import format_minor, round_ratio, to_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.reporting.inventory import Choice, ItemChoice, item_choices, warehouse_choices
 
@@ -93,11 +93,6 @@ HINT = (
     "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
 )
-
-
-def _round_ratio(numerator: int, denominator: int) -> int:
-    quotient, remainder = divmod(numerator, denominator)
-    return quotient + int(remainder * 2 >= denominator)
 
 
 @dataclass
@@ -266,7 +261,7 @@ class InventoryLinesModel(QAbstractTableModel):
     def _price(self, row: InventoryGridRow) -> int | None:
         if not row.quantity or row.amount is None:
             return None
-        return _round_ratio(row.amount * QUANTITY_FACTOR, row.quantity)
+        return round_ratio(row.amount * QUANTITY_FACTOR, row.quantity)
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
         row = self.rows[index.row()]
@@ -347,7 +342,7 @@ class InventoryLinesModel(QAbstractTableModel):
         elif key == PRICE:
             if not row.quantity:
                 raise ValidationError(tr("сначала укажите количество"))
-            row.amount = _round_ratio(value * row.quantity, QUANTITY_FACTOR)
+            row.amount = round_ratio(value * row.quantity, QUANTITY_FACTOR)
         elif key == AMOUNT:
             row.amount = value
         elif key == ACCOUNT:

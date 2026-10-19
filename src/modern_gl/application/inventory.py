@@ -6,18 +6,18 @@ document creates an ordinary GL document in the same SQLite transaction.
 
 from __future__ import annotations
 
-import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from modern_gl.application.common import company_row, now, pad_subconto, write_audit
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
-from modern_gl.domain.money import to_minor
+from modern_gl.domain.money import round_ratio, to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
@@ -118,27 +118,9 @@ def _blank(value: object) -> bool:
     return value is None or (isinstance(value, str) and not value.strip())
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
 def _money(minor: int) -> Decimal:
     """Convert stored minor units back to the exact value expected by PostingInput."""
     return Decimal(minor).scaleb(-MONEY_SCALE)
-
-
-def _pad_subconto(values: Sequence[int | None]) -> tuple[int | None, int | None, int | None]:
-    if len(values) > 3:
-        raise ValidationError(tr("больше 3 субконто"))
-    return tuple([*values, *([None] * (3 - len(values)))])  # type: ignore[return-value]
-
-
-def _round_ratio(numerator: int, denominator: int) -> int:
-    """Round a non-negative rational to an integer, halves away from zero."""
-    if numerator < 0 or denominator <= 0:
-        raise ValueError("_round_ratio expects a non-negative numerator and positive denominator")
-    quotient, remainder = divmod(numerator, denominator)
-    return quotient + int(remainder * 2 >= denominator)
 
 
 def _allocate_minor(total: int, weights: Sequence[tuple[int, int]]) -> dict[int, int]:
@@ -521,7 +503,7 @@ class Inventory:
                 amount = (
                     balance_amount
                     if line["quantity"] == balance_qty
-                    else _round_ratio(balance_amount * line["quantity"], balance_qty)
+                    else round_ratio(balance_amount * line["quantity"], balance_qty)
                 )
                 self.conn.execute(
                     "UPDATE inventory_lines SET amount = ?, inventory_amount = ?, "
@@ -656,7 +638,7 @@ class Inventory:
                 line_credit_account = source.credit_account_id or credit_account_id
                 self._account(company_id, line_credit_account)
                 line_credit_subconto = source.credit_subconto or credit_subconto
-                offset_sc = _pad_subconto(line_credit_subconto)
+                offset_sc = pad_subconto(line_credit_subconto)
                 line_id = self._insert_line(
                     inv_id,
                     company_id,
@@ -721,9 +703,9 @@ class Inventory:
                 amount = (
                     balance_amount
                     if quantity == balance_qty
-                    else _round_ratio(balance_amount * quantity, balance_qty)
+                    else round_ratio(balance_amount * quantity, balance_qty)
                 )
-                expense_sc = _pad_subconto(source.expense_subconto)
+                expense_sc = pad_subconto(source.expense_subconto)
                 line_id = self._insert_line(
                     inv_id,
                     company_id,
@@ -792,7 +774,7 @@ class Inventory:
                 amount = (
                     balance_amount
                     if quantity == balance_qty
-                    else _round_ratio(balance_amount * quantity, balance_qty)
+                    else round_ratio(balance_amount * quantity, balance_qty)
                 )
                 line_id = self._insert_line(
                     inv_id,
@@ -883,7 +865,7 @@ class Inventory:
             inv_id = self._insert_document(
                 company_id, doc_date, "landed_cost", memo, cost_type_id=cost_type_id
             )
-            credit_sc = _pad_subconto(credit_subconto)
+            credit_sc = pad_subconto(credit_subconto)
             postings: list[PostingInput] = []
             for line_no, receipt in enumerate(receipts, 1):
                 allocated = allocations[receipt["id"]]
@@ -892,7 +874,7 @@ class Inventory:
                 consumptions = self._receipt_consumptions(company_id, receipt["id"])
                 consumed_quantity = sum(row["quantity"] for row in consumptions)
                 remaining_quantity = receipt["quantity"] - consumed_quantity
-                inventory_amount = _round_ratio(allocated * remaining_quantity, receipt["quantity"])
+                inventory_amount = round_ratio(allocated * remaining_quantity, receipt["quantity"])
                 expense_amount = allocated - inventory_amount
                 item = self._item(company_id, receipt["item_id"])
                 source_warehouse = self._warehouse(company_id, receipt["warehouse_id"])
@@ -1037,7 +1019,7 @@ class Inventory:
             line_credit_account = source.credit_account_id or credit_account_id
             if line_credit_account is not None:
                 self._account(company_id, line_credit_account)
-            line_credit_sc = _pad_subconto(source.credit_subconto or credit_subconto)
+            line_credit_sc = pad_subconto(source.credit_subconto or credit_subconto)
             self._insert_line(
                 document_id,
                 company_id,
@@ -1066,7 +1048,7 @@ class Inventory:
             quantity = self._draft_quantity(item, source.quantity, line_no)
             if source.expense_account_id is not None:
                 self._account(company_id, source.expense_account_id)
-            expense_sc = _pad_subconto(source.expense_subconto)
+            expense_sc = pad_subconto(source.expense_subconto)
             self._insert_line(
                 document_id,
                 company_id,
@@ -1236,7 +1218,7 @@ class Inventory:
             "INSERT INTO inventory_documents "
             "(company_id, number, doc_date, doc_type, memo, status, landed_cost_type_id, "
             "created_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)",
-            (company_id, number, value_date, doc_type, memo, cost_type_id, _now()),
+            (company_id, number, value_date, doc_type, memo, cost_type_id, now()),
         ).lastrowid
 
     def _insert_line(
@@ -1256,7 +1238,7 @@ class Inventory:
         source_receipt_line_id: int | None,
         memo: str,
     ) -> int:
-        sc = _pad_subconto(offset_subconto)
+        sc = pad_subconto(offset_subconto)
         return self.conn.execute(
             "INSERT INTO inventory_lines (company_id, document_id, line_no, item_id, "
             "warehouse_id, to_warehouse_id, quantity, amount, inventory_amount, "
@@ -1323,7 +1305,7 @@ class Inventory:
         self.conn.execute(
             "UPDATE inventory_documents SET status = 'posted', gl_document_id = ?, "
             "posted_at = ? WHERE id = ?",
-            (gl_document_id, _now(), inventory_document_id),
+            (gl_document_id, now(), inventory_document_id),
         )
         doc = self._document(company_id, inventory_document_id)
         self._audit(
@@ -1547,10 +1529,7 @@ class Inventory:
             )
 
     def _company(self, company_id: int) -> sqlite3.Row:
-        row = self.conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
-        if row is None:
-            raise NotFoundError(tr("компания {id} не найдена", id=company_id))
-        return row
+        return company_row(self.conn, company_id)
 
     def _unit(self, company_id: int, unit_id: int) -> sqlite3.Row:
         row = self.conn.execute(
@@ -1674,16 +1653,4 @@ class Inventory:
     def _audit(
         self, company_id: int, entity: str, entity_id: int, action: str, details: dict
     ) -> None:
-        self.conn.execute(
-            "INSERT INTO audit_events (company_id, at, actor, entity, entity_id, action, details) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                company_id,
-                _now(),
-                self.actor,
-                entity,
-                entity_id,
-                action,
-                json.dumps(details, ensure_ascii=False),
-            ),
-        )
+        write_audit(self.conn, company_id, self.actor, entity, entity_id, action, details)

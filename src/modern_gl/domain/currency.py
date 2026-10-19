@@ -10,6 +10,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 
+from modern_gl.domain.money import round_half_away
 from modern_gl.i18n import language, tr
 
 RATE_SCALE = 6
@@ -88,7 +89,7 @@ def format_rate(rate: int, nominal: int = 1) -> str:
 
 def format_unit_rate(value: Fraction) -> str:
     """Manat per unit, with at least 4 decimals and up to 6 when they matter."""
-    scaled = _round(value * RATE_UNIT)
+    scaled = round_half_away(value * RATE_UNIT)
     whole, frac = divmod(abs(scaled), RATE_UNIT)
     digits = f"{frac:0{RATE_SCALE}d}".rstrip("0").ljust(4, "0")
     return f"{'-' if scaled < 0 else ''}{whole}.{digits}"
@@ -102,11 +103,4 @@ def unit_rate(rate: int, nominal: int = 1) -> Fraction:
 def to_base(currency_minor: int, rate: Fraction) -> int:
     """A currency amount (minor units) at `rate` (manat per unit) -> qəpik,
     rounded half away from zero."""
-    return _round(currency_minor * rate)
-
-
-def _round(value: Fraction) -> int:
-    whole = int(abs(value))
-    if abs(value) - whole >= Fraction(1, 2):
-        whole += 1
-    return whole if value >= 0 else -whole
+    return round_half_away(currency_minor * rate)

@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from fractions import Fraction
 
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import SCALE
+from modern_gl.domain.money import SCALE, round_half_away
 from modern_gl.i18n import tr
 
 MINOR = 10**SCALE  # kopecks in a manat
@@ -133,11 +133,7 @@ def _evaluate(node, values: dict[str, Fraction]) -> Fraction:
 
 def _round_minor(value: Fraction) -> int:
     """Major units (exact) -> kopecks, half away from zero."""
-    scaled = abs(value) * MINOR
-    whole = int(scaled)
-    if scaled - whole >= Fraction(1, 2):
-        whole += 1
-    return whole if value >= 0 else -whole
+    return round_half_away(value * MINOR)
 
 
 def check(formulas: Sequence[str]) -> None:

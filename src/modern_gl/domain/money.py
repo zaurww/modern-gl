@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 
 from modern_gl.i18n import tr
 
@@ -28,6 +29,19 @@ def to_minor(value: str | int | Decimal) -> int:
     if d != d.quantize(_QUANTUM):
         raise ValueError(tr("больше {n} знаков после запятой: {value}", n=SCALE, value=value))
     return int(d.scaleb(SCALE))
+
+
+def round_half_away(value: Fraction) -> int:
+    """Round an exact value to an integer, halves away from zero (0.5 -> 1, -0.5 -> -1)."""
+    whole = int(abs(value))
+    if abs(value) - whole >= Fraction(1, 2):
+        whole += 1
+    return whole if value >= 0 else -whole
+
+
+def round_ratio(numerator: int, denominator: int) -> int:
+    """numerator / denominator rounded to an integer, halves away from zero."""
+    return round_half_away(Fraction(numerator, denominator))
 
 
 def format_minor(minor: int) -> str:

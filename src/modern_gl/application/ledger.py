@@ -10,9 +10,16 @@ import json
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
-from datetime import UTC, date, datetime
+from datetime import date
 from decimal import Decimal
 
+from modern_gl.application.common import (
+    MAX_SUBCONTO,
+    company_row,
+    now,
+    pad_subconto,
+    write_audit,
+)
 from modern_gl.application.currencies import rate_on
 from modern_gl.domain import formula as formulas
 from modern_gl.domain.accounts import ACCOUNT_CLASSES
@@ -33,7 +40,6 @@ DEFAULT_LAYERS = (
     ("ifrs_adj", "Корректировки МСФО"),
     ("tax_adj", "Налоговые корректировки"),
 )
-MAX_SUBCONTO = 3
 SIDES = (("debit", "dt"), ("credit", "ct"))
 
 
@@ -83,18 +89,6 @@ class _Discard(Exception):
     """Rolls back an import that had problems or was only a check."""
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-def _pad(values: Sequence[int | None], line_no: int) -> list[int | None]:
-    if len(values) > MAX_SUBCONTO:
-        raise ValidationError(
-            tr("строка {line}: больше {n} субконто", line=line_no, n=MAX_SUBCONTO)
-        )
-    return [*values, *([None] * (MAX_SUBCONTO - len(values)))]
-
-
 def _code(code: str | None) -> str | None:
     """Account codes are optional: blank means no code."""
     return (code or "").strip() or None
@@ -116,7 +110,7 @@ class Ledger:
         with transaction(self.conn):
             company_id = self.conn.execute(
                 "INSERT INTO companies (name, base_currency, created_at) VALUES (?, ?, ?)",
-                (name, base_currency, _now()),
+                (name, base_currency, now()),
             ).lastrowid
             self.conn.executemany(
                 "INSERT INTO layers (company_id, code, name) VALUES (?, ?, ?)",
@@ -408,7 +402,7 @@ class Ledger:
         self._check_class(label, account_class)
         if is_group and subconto:
             raise ValidationError(tr("счёт {code}: у группы не бывает субконто", code=label))
-        sc = _pad(subconto, 0)
+        sc = pad_subconto(subconto)
         with transaction(self.conn):
             parent_id = None
             if parent is not None:
@@ -545,8 +539,8 @@ class Ledger:
             two_sided = bool(acc["two_sided"]) if two_sided is None else bool(two_sided)
             group = bool(acc["is_group"]) if is_group is None else bool(is_group)
             currency = bool(acc["currency"]) if currency is None else bool(currency)
-            current_sc = [acc["sc1_kind_id"], acc["sc2_kind_id"], acc["sc3_kind_id"]]
-            sc = current_sc if subconto is None else _pad(list(subconto), 0)
+            current_sc = (acc["sc1_kind_id"], acc["sc2_kind_id"], acc["sc3_kind_id"])
+            sc = current_sc if subconto is None else pad_subconto(subconto)
             if not name:
                 raise ValidationError(tr("название счёта не может быть пустым"))
             used = self._has_postings(acc["id"])
@@ -566,7 +560,7 @@ class Ledger:
                 ):
                     raise ValidationError(tr("счёт {code}: у группы есть субсчета", code=label))
             if group:
-                sc = [None, None, None]
+                sc = (None, None, None)
             if sc != current_sc and used:
                 raise ValidationError(
                     tr("счёт {code}: по счёту есть проводки, субконто менять нельзя", code=label)
@@ -695,8 +689,8 @@ class Ledger:
                         line_no,
                         ln.debit_account_id,
                         ln.credit_account_id,
-                        *_pad(ln.debit_subconto, line_no),
-                        *_pad(ln.credit_subconto, line_no),
+                        *pad_subconto(ln.debit_subconto, line_no),
+                        *pad_subconto(ln.credit_subconto, line_no),
                         ln.formula.strip(),
                         ln.memo.strip(),
                     ),
@@ -1078,7 +1072,7 @@ class Ledger:
                 memo,
                 self._layer_id(company_id, layer),
                 reversal_of,
-                _now(),
+                now(),
             ),
         ).lastrowid
 
@@ -1111,8 +1105,8 @@ class Ledger:
                     p.debit_account_id,
                     p.credit_account_id,
                     amount,
-                    *_pad(p.debit_subconto, line_no),
-                    *_pad(p.credit_subconto, line_no),
+                    *pad_subconto(p.debit_subconto, line_no),
+                    *pad_subconto(p.credit_subconto, line_no),
                     p.memo,
                     p.currency_id,
                     currency_amount,
@@ -1136,7 +1130,7 @@ class Ledger:
         self._require_draft(doc)
         self._validate_for_posting(company_id, doc)
         self.conn.execute(
-            "UPDATE documents SET status = 'posted', posted_at = ? WHERE id = ?", (_now(), doc_id)
+            "UPDATE documents SET status = 'posted', posted_at = ? WHERE id = ?", (now(), doc_id)
         )
         action = "reverse" if doc["reversal_of"] is not None else "post"
         self._audit(
@@ -1298,10 +1292,7 @@ class Ledger:
             raise ValidationError(tr("документ №{n} уже проведён и не изменяется", n=doc["number"]))
 
     def _company(self, company_id: int) -> sqlite3.Row:
-        row = self.conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
-        if row is None:
-            raise NotFoundError(tr("компания {id} не найдена", id=company_id))
-        return row
+        return company_row(self.conn, company_id)
 
     def _document(self, company_id: int, doc_id: int) -> sqlite3.Row:
         row = self.conn.execute(
@@ -1335,16 +1326,4 @@ class Ledger:
     def _audit(
         self, company_id: int | None, entity: str, entity_id: int, action: str, details: dict
     ) -> None:
-        self.conn.execute(
-            "INSERT INTO audit_events (company_id, at, actor, entity, entity_id, action, details) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (
-                company_id,
-                _now(),
-                self.actor,
-                entity,
-                entity_id,
-                action,
-                json.dumps(details, ensure_ascii=False),
-            ),
-        )
+        write_audit(self.conn, company_id, self.actor, entity, entity_id, action, details)
