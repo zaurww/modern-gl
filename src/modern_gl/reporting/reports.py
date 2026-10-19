@@ -308,7 +308,7 @@ def trial_balance(
     return Osv(
         rows=rows,
         total=total,
-        subconto=_name_subconto(conn, by_value),
+        subconto=_name_subconto(conn, company_id, by_value),
         currency=_currency_turnovers(conn, params),
     )
 
@@ -349,14 +349,17 @@ def _currency_turnovers(conn: sqlite3.Connection, params: dict) -> dict[int, lis
 
 
 def _name_subconto(
-    conn: sqlite3.Connection, by_value: dict[int, list[tuple[int | None, Turnovers]]]
+    conn: sqlite3.Connection,
+    company_id: int,
+    by_value: dict[int, list[tuple[int | None, Turnovers]]],
 ) -> dict[int, list[SubcontoRow]]:
     ids = {v for parts in by_value.values() for v, _ in parts if v is not None}
     names = {
         r["id"]: r["name"]
         for r in conn.execute(
-            "SELECT id, name FROM subconto_values WHERE id IN (SELECT value FROM json_each(?))",
-            (json.dumps(sorted(ids)),),
+            "SELECT id, name FROM subconto_values "
+            "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
+            (company_id, json.dumps(sorted(ids))),
         )
     }
     result = {}

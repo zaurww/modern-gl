@@ -64,6 +64,13 @@ def list_companies(conn: sqlite3.Connection) -> list[tuple[int, str]]:
     ]
 
 
+def company_name(conn: sqlite3.Connection, company_id: int) -> str:
+    row = conn.execute("SELECT name FROM companies WHERE id = ?", (company_id,)).fetchone()
+    if row is None:
+        raise NotFoundError(tr("компания {id} не найдена", id=company_id))
+    return row[0]
+
+
 def list_layers(conn: sqlite3.Connection, company_id: int) -> list[tuple[str, str]]:
     return [
         (r["code"], r["name"])

@@ -39,11 +39,19 @@ from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, date_edit, money, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.reporting.inventory import stock_balances
-
-
-def _label(code: str | None, name: str) -> str:
-    return f"{code}  {name}" if code else name
+from modern_gl.reporting.inventory import (
+    InventoryDocumentSummary,
+    code_label,
+    has_units,
+    item_choices,
+    landed_cost_type_choices,
+    list_inventory_documents,
+    receipt_line_choices,
+    stock_account_choices,
+    stock_balances,
+    unit_choices,
+    warehouse_choices,
+)
 
 
 class AccountPicker(QWidget):
@@ -119,31 +127,11 @@ class ItemDialog(QDialog):
         self.name = QLineEdit(name)
         self.code = QLineEdit()
         self.units = QComboBox()
-        for row in session.conn.execute(
-            "SELECT id, code, name FROM inventory_units WHERE company_id = ? AND active = 1 "
-            "ORDER BY name",
-            (session.company_id,),
-        ):
-            self.units.addItem(_label(row["code"], row["name"]), row["id"])
+        for unit in unit_choices(session.conn, session.company_id):
+            self.units.addItem(unit.label, unit.id)
         self.accounts = QComboBox()
-        for row in session.conn.execute(
-            """
-            SELECT a.id, a.code, a.name FROM accounts a
-            WHERE a.company_id = ? AND a.active = 1 AND a.is_group = 0
-              AND EXISTS (
-                SELECT 1 FROM subconto_kinds k WHERE k.company_id = a.company_id
-                  AND k.code = 'item' AND k.id IN (a.sc1_kind_id, a.sc2_kind_id, a.sc3_kind_id)
-              )
-              AND EXISTS (
-                SELECT 1 FROM subconto_kinds k WHERE k.company_id = a.company_id
-                  AND k.code = 'warehouse'
-                  AND k.id IN (a.sc1_kind_id, a.sc2_kind_id, a.sc3_kind_id)
-              )
-            ORDER BY a.code IS NULL, a.code, a.name
-            """,
-            (session.company_id,),
-        ):
-            self.accounts.addItem(_label(row["code"], row["name"]), row["id"])
+        for account in stock_account_choices(session.conn, session.company_id):
+            self.accounts.addItem(account.label, account.id)
         form.addRow(tr("Наименование"), self.name)
         form.addRow(tr("Артикул"), self.code)
         form.addRow(tr("Единица измерения"), self.units)
@@ -207,12 +195,8 @@ class OperationDialog(QDialog):
         self.allocation_method.addItem(tr("По количеству"), "quantity")
         self.cost_type = QComboBox()
         self.cost_type.addItem(tr("Без статьи"), None)
-        for row in session.conn.execute(
-            "SELECT id, code, name FROM landed_cost_types "
-            "WHERE company_id = ? AND active = 1 ORDER BY name",
-            (session.company_id,),
-        ):
-            self.cost_type.addItem(_label(row["code"], row["name"]), row["id"])
+        for cost_type in landed_cost_type_choices(session.conn, session.company_id):
+            self.cost_type.addItem(cost_type.label, cost_type.id)
         self.quantity = QLineEdit()
         self.quantity.setPlaceholderText("0")
         self.amount = QLineEdit()
@@ -220,53 +204,25 @@ class OperationDialog(QDialog):
         self.offset = AccountPicker(session)
         self.memo = QLineEdit()
 
-        for row in session.conn.execute(
-            """
-            SELECT i.id, v.code, v.name FROM inventory_items i
-            JOIN subconto_values v ON v.id = i.subconto_value_id
-            WHERE i.company_id = ? AND v.active = 1 ORDER BY v.name
-            """,
-            (session.company_id,),
-        ):
-            self.item.addItem(_label(row["code"], row["name"]), row["id"])
-        for row in session.conn.execute(
-            """
-            SELECT w.id, v.code, v.name FROM warehouses w
-            JOIN subconto_values v ON v.id = w.subconto_value_id
-            WHERE w.company_id = ? AND v.active = 1 ORDER BY v.name
-            """,
-            (session.company_id,),
-        ):
-            label = _label(row["code"], row["name"])
-            self.warehouse.addItem(label, row["id"])
-            self.to_warehouse.addItem(label, row["id"])
+        for item in item_choices(session.conn, session.company_id):
+            self.item.addItem(item.label, item.id)
+        for warehouse in warehouse_choices(session.conn, session.company_id):
+            self.warehouse.addItem(warehouse.label, warehouse.id)
+            self.to_warehouse.addItem(warehouse.label, warehouse.id)
 
         if operation == "landed_cost":
-            for row in session.conn.execute(
-                """
-                SELECT l.id, d.doc_date, d.number, v.name, l.quantity, l.amount, u.precision
-                FROM inventory_lines l
-                JOIN inventory_documents d ON d.id = l.document_id
-                JOIN inventory_items i ON i.id = l.item_id
-                JOIN subconto_values v ON v.id = i.subconto_value_id
-                JOIN inventory_units u ON u.id = i.unit_id
-                WHERE l.company_id = ? AND d.status = 'posted'
-                  AND d.doc_type IN ('opening', 'receipt')
-                ORDER BY d.doc_date DESC, d.id DESC, l.line_no
-                """,
-                (session.company_id,),
-            ):
+            for line in receipt_line_choices(session.conn, session.company_id):
                 entry = QListWidgetItem(
                     tr(
                         "{date} №{number} · {item} · {quantity} · {amount}",
-                        date=row["doc_date"],
-                        number=row["number"],
-                        item=row["name"],
-                        quantity=format_quantity(row["quantity"], row["precision"]),
-                        amount=money(row["amount"], blank_zero=False),
+                        date=line.doc_date,
+                        number=line.number,
+                        item=line.item_name,
+                        quantity=format_quantity(line.quantity, line.precision),
+                        amount=money(line.amount, blank_zero=False),
                     )
                 )
-                entry.setData(Qt.ItemDataRole.UserRole, row["id"])
+                entry.setData(Qt.ItemDataRole.UserRole, line.id)
                 self.receipt_lines.addItem(entry)
             if self.receipt_lines.count():
                 self.receipt_lines.item(0).setSelected(True)
@@ -485,7 +441,9 @@ class InventoryPage(QWidget):
 
         self.model.set(
             [
-                Column(tr("Товар"), lambda row: _label(row.item_code, row.item_name), width=260),
+                Column(
+                    tr("Товар"), lambda row: code_label(row.item_code, row.item_name), width=260
+                ),
                 Column(tr("Склад"), lambda row: row.warehouse_name, width=220),
                 Column(
                     tr("Количество"),
@@ -512,39 +470,24 @@ class InventoryPage(QWidget):
                 amount=money(sum(r.amount for r in rows), False),
             )
         )
-        documents = self.s.conn.execute(
-            """
-            SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.status,
-                   d.gl_document_id,
-                   ct.name AS cost_type_name,
-                   COALESCE(SUM(l.amount), 0) AS amount
-            FROM inventory_documents d
-            LEFT JOIN inventory_lines l ON l.document_id = d.id
-            LEFT JOIN landed_cost_types ct ON ct.id = d.landed_cost_type_id
-            WHERE d.company_id = ?
-            GROUP BY d.id
-            ORDER BY d.doc_date DESC, d.id DESC
-            LIMIT 100
-            """,
-            (self.s.company_id,),
-        ).fetchall()
+        documents = list_inventory_documents(self.s.conn, self.s.company_id)
         self.documents_model.set(
             [
-                Column(tr("Дата"), lambda row: ru_date(row["doc_date"]), width=110),
-                Column(tr("№"), lambda row: row["number"], width=65),
+                Column(tr("Дата"), lambda row: ru_date(row.doc_date), width=110),
+                Column(tr("№"), lambda row: row.number, width=65),
                 Column(
                     tr("Операция"),
-                    lambda row: self._document_type(row["doc_type"]),
+                    lambda row: self._document_type(row.doc_type),
                     width=170,
                 ),
                 Column(
                     tr("Статус"),
-                    lambda row: tr("Проведён") if row["status"] == "posted" else tr("Черновик"),
+                    lambda row: tr("Проведён") if row.status == "posted" else tr("Черновик"),
                     width=105,
                 ),
-                Column(tr("Статья расходов"), lambda row: row["cost_type_name"], width=160),
-                Column(tr("Комментарий"), lambda row: row["memo"], width=260),
-                Column(tr("Сумма"), lambda row: row["amount"], money=True, width=130),
+                Column(tr("Статья расходов"), lambda row: row.cost_type_name, width=160),
+                Column(tr("Комментарий"), lambda row: row.memo, width=260),
+                Column(tr("Сумма"), lambda row: row.amount, money=True, width=130),
             ],
             documents,
         )
@@ -570,10 +513,7 @@ class InventoryPage(QWidget):
         self.s.notify(tr("Единица «{name}» добавлена", name=name.strip()))
 
     def add_item(self) -> None:
-        units = self.s.conn.execute(
-            "SELECT 1 FROM inventory_units WHERE company_id = ? LIMIT 1", (self.s.company_id,)
-        ).fetchone()
-        if units is None:
+        if not has_units(self.s.conn, self.s.company_id):
             self.s.notify(tr("Сначала добавьте единицу измерения"))
             return
         dialog = ItemDialog(self.s, self.inventory, self)
@@ -629,13 +569,13 @@ class InventoryPage(QWidget):
             "landed_cost": tr("Дополнительные расходы"),
         }.get(doc_type, doc_type)
 
-    def _selected_document(self):
+    def _selected_document(self) -> InventoryDocumentSummary | None:
         index = self.documents.currentIndex()
         return index.data(Qt.ItemDataRole.UserRole) if index.isValid() else None
 
-    def _open_document(self, row) -> None:
+    def _open_document(self, row: InventoryDocumentSummary | None) -> None:
         if row is not None:
-            self.open_inventory_document.emit(row["id"])
+            self.open_inventory_document.emit(row.id)
 
     def delete_document(self) -> None:
         row = self._selected_document()
@@ -645,14 +585,14 @@ class InventoryPage(QWidget):
         answer = QMessageBox.question(
             self,
             tr("Удалить складской документ"),
-            tr("Удалить складской документ №{n}?", n=row["number"]),
+            tr("Удалить складской документ №{n}?", n=row.number),
         )
         if answer != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.inventory.delete_document(self.s.company_id, row["id"])
+            self.inventory.delete_document(self.s.company_id, row.id)
         except LedgerError as exc:
             self.s.notify(str(exc))
             return
-        self.s.notify(tr("Складской документ №{n} удалён", n=row["number"]))
+        self.s.notify(tr("Складской документ №{n} удалён", n=row.number))
         self.refresh()

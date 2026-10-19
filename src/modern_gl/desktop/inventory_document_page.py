@@ -50,6 +50,7 @@ from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import fold, tr
+from modern_gl.reporting.inventory import Choice, ItemChoice, item_choices, warehouse_choices
 
 ITEM = "item"
 WAREHOUSE = "warehouse"
@@ -97,20 +98,6 @@ HINT = (
 def _round_ratio(numerator: int, denominator: int) -> int:
     quotient, remainder = divmod(numerator, denominator)
     return quotient + int(remainder * 2 >= denominator)
-
-
-@dataclass(frozen=True)
-class ItemChoice:
-    id: int
-    label: str
-    unit: str
-    precision: int
-
-
-@dataclass(frozen=True)
-class WarehouseChoice:
-    id: int
-    label: str
 
 
 @dataclass
@@ -194,43 +181,10 @@ class InventoryLinesModel(QAbstractTableModel):
             ]
 
     def _items(self) -> dict[int, ItemChoice]:
-        rows = self.s.conn.execute(
-            """
-            SELECT i.id, v.code, v.name, u.code AS unit_code, u.precision
-            FROM inventory_items i
-            JOIN subconto_values v ON v.id = i.subconto_value_id
-            JOIN inventory_units u ON u.id = i.unit_id
-            WHERE i.company_id = ? AND v.active = 1
-            ORDER BY v.name
-            """,
-            (self.s.company_id,),
-        )
-        return {
-            row["id"]: ItemChoice(
-                row["id"],
-                f"{row['code']}  {row['name']}" if row["code"] else row["name"],
-                row["unit_code"],
-                row["precision"],
-            )
-            for row in rows
-        }
+        return {c.id: c for c in item_choices(self.s.conn, self.s.company_id)}
 
-    def _warehouses(self) -> dict[int, WarehouseChoice]:
-        rows = self.s.conn.execute(
-            """
-            SELECT w.id, v.code, v.name FROM warehouses w
-            JOIN subconto_values v ON v.id = w.subconto_value_id
-            WHERE w.company_id = ? AND v.active = 1 ORDER BY v.name
-            """,
-            (self.s.company_id,),
-        )
-        return {
-            row["id"]: WarehouseChoice(
-                row["id"],
-                f"{row['code']}  {row['name']}" if row["code"] else row["name"],
-            )
-            for row in rows
-        }
+    def _warehouses(self) -> dict[int, Choice]:
+        return {c.id: c for c in warehouse_choices(self.s.conn, self.s.company_id)}
 
     def refresh_choices(self) -> None:
         self.items = self._items()

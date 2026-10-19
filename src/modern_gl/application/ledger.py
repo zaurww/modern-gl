@@ -1168,8 +1168,9 @@ class Ledger:
         accounts = {
             r["id"]: r
             for r in self.conn.execute(
-                f"SELECT * FROM accounts WHERE id IN ({','.join('?' * len(account_ids))})",
-                tuple(account_ids),
+                "SELECT * FROM accounts "
+                "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
+                (company_id, json.dumps(sorted(account_ids))),
             )
         }
         value_ids = {
@@ -1182,8 +1183,9 @@ class Ledger:
             {
                 r["id"]: r
                 for r in self.conn.execute(
-                    f"SELECT * FROM subconto_values WHERE id IN ({','.join('?' * len(value_ids))})",
-                    tuple(value_ids),
+                    "SELECT * FROM subconto_values "
+                    "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
+                    (company_id, json.dumps(sorted(value_ids))),
                 )
             }
             if value_ids

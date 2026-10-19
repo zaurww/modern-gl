@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import load_document, load_template
+from modern_gl.application.queries import company_name, load_document, load_template
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
@@ -280,7 +280,7 @@ class MainWindow(QMainWindow):
         self._close_company()
         self.conn, self.company_path = conn, Path(path)
         self.ledger = Ledger(conn, actor=getpass.getuser())
-        name = conn.execute("SELECT name FROM companies WHERE id = ?", (company_id,)).fetchone()[0]
+        name = company_name(conn, company_id)
         self.session = Session(
             conn, self.ledger, company_id, name, Catalog(conn, company_id), notify=self.notify
         )

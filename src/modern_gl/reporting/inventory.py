@@ -9,6 +9,51 @@ from datetime import date
 from modern_gl.domain.dates import iso_date
 
 
+def code_label(code: str | None, name: str) -> str:
+    """'code  name' for lists, or just the name when there is no code."""
+    return f"{code}  {name}" if code else name
+
+
+@dataclass(frozen=True)
+class Choice:
+    """An entry offered in a list: id and the text shown for it."""
+
+    id: int
+    label: str
+
+
+@dataclass(frozen=True)
+class ItemChoice(Choice):
+    unit: str
+    precision: int
+
+
+@dataclass(frozen=True)
+class ReceiptLineChoice:
+    """A posted receipt line that landed cost can be allocated to."""
+
+    id: int
+    doc_date: str
+    number: int
+    item_name: str
+    quantity: int
+    amount: int
+    precision: int
+
+
+@dataclass(frozen=True)
+class InventoryDocumentSummary:
+    id: int
+    number: int
+    doc_date: str
+    doc_type: str
+    memo: str
+    status: str
+    gl_document_id: int | None
+    cost_type_name: str | None
+    amount: int
+
+
 @dataclass(frozen=True)
 class StockBalance:
     item_id: int
@@ -138,3 +183,130 @@ def stock_card(
             )
         )
     return result
+
+
+def item_choices(conn: sqlite3.Connection, company_id: int) -> list[ItemChoice]:
+    """Active items with their unit, by name."""
+    rows = conn.execute(
+        """
+        SELECT i.id, v.code, v.name, u.code AS unit_code, u.precision
+        FROM inventory_items i
+        JOIN subconto_values v ON v.company_id = i.company_id AND v.id = i.subconto_value_id
+        JOIN inventory_units u ON u.company_id = i.company_id AND u.id = i.unit_id
+        WHERE i.company_id = ? AND v.active = 1
+        ORDER BY v.name
+        """,
+        (company_id,),
+    )
+    return [
+        ItemChoice(r["id"], code_label(r["code"], r["name"]), r["unit_code"], r["precision"])
+        for r in rows
+    ]
+
+
+def warehouse_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+    """Active warehouses, by name."""
+    rows = conn.execute(
+        """
+        SELECT w.id, v.code, v.name FROM warehouses w
+        JOIN subconto_values v ON v.company_id = w.company_id AND v.id = w.subconto_value_id
+        WHERE w.company_id = ? AND v.active = 1 ORDER BY v.name
+        """,
+        (company_id,),
+    )
+    return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
+
+
+def unit_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+    """Active units of measure, by name."""
+    rows = conn.execute(
+        "SELECT id, code, name FROM inventory_units WHERE company_id = ? AND active = 1 "
+        "ORDER BY name",
+        (company_id,),
+    )
+    return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
+
+
+def landed_cost_type_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+    """Active kinds of additional costs, by name."""
+    rows = conn.execute(
+        "SELECT id, code, name FROM landed_cost_types "
+        "WHERE company_id = ? AND active = 1 ORDER BY name",
+        (company_id,),
+    )
+    return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
+
+
+def stock_account_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+    """Active posting accounts that track both item and warehouse subconto."""
+    rows = conn.execute(
+        """
+        SELECT a.id, a.code, a.name FROM accounts a
+        WHERE a.company_id = ? AND a.active = 1 AND a.is_group = 0
+          AND EXISTS (
+            SELECT 1 FROM subconto_kinds k WHERE k.company_id = a.company_id
+              AND k.code = 'item' AND k.id IN (a.sc1_kind_id, a.sc2_kind_id, a.sc3_kind_id)
+          )
+          AND EXISTS (
+            SELECT 1 FROM subconto_kinds k WHERE k.company_id = a.company_id
+              AND k.code = 'warehouse'
+              AND k.id IN (a.sc1_kind_id, a.sc2_kind_id, a.sc3_kind_id)
+          )
+        ORDER BY a.code IS NULL, a.code, a.name
+        """,
+        (company_id,),
+    )
+    return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
+
+
+def has_units(conn: sqlite3.Connection, company_id: int) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM inventory_units WHERE company_id = ? LIMIT 1", (company_id,)
+        ).fetchone()
+        is not None
+    )
+
+
+def receipt_line_choices(conn: sqlite3.Connection, company_id: int) -> list[ReceiptLineChoice]:
+    """Posted opening and receipt lines, newest first."""
+    rows = conn.execute(
+        """
+        SELECT l.id, d.doc_date, d.number, v.name AS item_name, l.quantity, l.amount,
+               u.precision
+        FROM inventory_lines l
+        JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
+        JOIN inventory_items i ON i.company_id = l.company_id AND i.id = l.item_id
+        JOIN subconto_values v ON v.company_id = i.company_id AND v.id = i.subconto_value_id
+        JOIN inventory_units u ON u.company_id = i.company_id AND u.id = i.unit_id
+        WHERE l.company_id = ? AND d.status = 'posted'
+          AND d.doc_type IN ('opening', 'receipt')
+        ORDER BY d.doc_date DESC, d.id DESC, l.line_no
+        """,
+        (company_id,),
+    )
+    return [ReceiptLineChoice(**dict(r)) for r in rows]
+
+
+def list_inventory_documents(
+    conn: sqlite3.Connection, company_id: int, limit: int = 100
+) -> list[InventoryDocumentSummary]:
+    """The latest inventory documents with their total amount, newest first."""
+    rows = conn.execute(
+        """
+        SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.status,
+               d.gl_document_id,
+               ct.name AS cost_type_name,
+               COALESCE(SUM(l.amount), 0) AS amount
+        FROM inventory_documents d
+        LEFT JOIN inventory_lines l ON l.company_id = d.company_id AND l.document_id = d.id
+        LEFT JOIN landed_cost_types ct
+          ON ct.company_id = d.company_id AND ct.id = d.landed_cost_type_id
+        WHERE d.company_id = ?
+        GROUP BY d.id
+        ORDER BY d.doc_date DESC, d.id DESC
+        LIMIT ?
+        """,
+        (company_id, limit),
+    )
+    return [InventoryDocumentSummary(**dict(r)) for r in rows]

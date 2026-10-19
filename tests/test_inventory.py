@@ -28,7 +28,17 @@ from modern_gl.desktop.inventory_page import InventoryPage, OperationDialog
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
-from modern_gl.reporting.inventory import stock_balances, stock_card
+from modern_gl.reporting.inventory import (
+    has_units,
+    item_choices,
+    list_inventory_documents,
+    receipt_line_choices,
+    stock_account_choices,
+    stock_balances,
+    stock_card,
+    unit_choices,
+    warehouse_choices,
+)
 from modern_gl.reporting.reports import trial_balance
 
 
@@ -830,3 +840,41 @@ def test_inventory_grid_tab_commits_adds_counterparty_and_saves_unfinished_draft
     )
     assert not page.save(post=True)
     assert "не указано количество" in page.error.text()
+
+
+def test_lookups_list_only_this_company(inventory_demo, ledger, conn):
+    demo = inventory_demo
+    other = ledger.create_company("Другая")
+    Inventory(conn, actor="test").add_unit(other, "кг", "Килограмм")
+    assert [(c.label, c.unit, c.precision) for c in item_choices(conn, demo.company_id)] == [
+        ("A  Товар A", "шт", 3),
+        ("B  Товар B", "шт", 3),
+    ]
+    assert [c.label for c in warehouse_choices(conn, demo.company_id)] == [
+        "MAIN  Основной",
+        "RESERVE  Резервный",
+    ]
+    assert [c.label for c in unit_choices(conn, demo.company_id)] == ["шт  Штука"]
+    assert [c.id for c in stock_account_choices(conn, demo.company_id)] == [demo.inventory_account]
+    assert has_units(conn, other)
+    assert not has_units(conn, ledger.create_company("Пустая"))
+    assert item_choices(conn, other) == []
+
+
+def test_receipt_lines_and_document_list(inventory_demo, conn):
+    demo = inventory_demo
+    document_id = receipt(demo, "10", "100.00")
+    [line] = receipt_line_choices(conn, demo.company_id)
+    assert (line.number, line.item_name, line.quantity, line.amount) == (
+        1,
+        "Товар A",
+        10 * QUANTITY_FACTOR,
+        10_000,
+    )
+    [summary] = list_inventory_documents(conn, demo.company_id)
+    assert (summary.id, summary.doc_type, summary.status, summary.amount) == (
+        document_id,
+        "receipt",
+        "posted",
+        10_000,
+    )

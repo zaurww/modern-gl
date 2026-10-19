@@ -1121,8 +1121,8 @@ class Inventory:
     ) -> None:
         value_date = iso_date(doc_date)
         self.conn.execute(
-            "UPDATE inventory_documents SET doc_date = ?, memo = ? WHERE id = ?",
-            (value_date, memo.strip(), document_id),
+            "UPDATE inventory_documents SET doc_date = ?, memo = ? WHERE company_id = ? AND id = ?",
+            (value_date, memo.strip(), company_id, document_id),
         )
 
     def _draft_warehouse(self, company_id: int, warehouse_id: int | None) -> int | None:
