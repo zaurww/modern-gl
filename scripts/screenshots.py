@@ -25,6 +25,7 @@ from modern_gl.desktop import theme  # noqa: E402
 from modern_gl.desktop.app import add_demo_company  # noqa: E402
 from modern_gl.desktop.directories_page import DirectoriesPage  # noqa: E402
 from modern_gl.desktop.document_page import DocumentPage  # noqa: E402
+from modern_gl.desktop.inventory_document_page import InventoryDocumentPage  # noqa: E402
 from modern_gl.desktop.inventory_page import InventoryPage  # noqa: E402
 from modern_gl.desktop.journal_page import JournalPage  # noqa: E402
 from modern_gl.desktop.main_window import MainWindow  # noqa: E402
@@ -118,6 +119,12 @@ def main() -> None:
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()
     shot("8c_inventory")
+    inventory_document = next(
+        row for row in inventory.documents_model.rows if row["doc_type"] == "receipt"
+    )
+    win.open_inventory_document(inventory_document["id"])
+    assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
+    shot("8c2_inventory_document")
     win.show_place(("templates",))
     shot("8d_templates")
     from modern_gl.application.queries import list_templates

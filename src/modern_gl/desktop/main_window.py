@@ -46,6 +46,7 @@ from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import load_document, load_template
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
@@ -391,7 +392,8 @@ class MainWindow(QMainWindow):
             return DirectoriesPage(s)
         if key == ("inventory",):
             page = InventoryPage(s)
-            page.open_document.connect(self.open_document)
+            page.open_inventory_document.connect(self.open_inventory_document)
+            page.new_inventory_document.connect(self.new_inventory_document)
             return page
         if key == ("templates",):
             page = TemplatesPage(s)
@@ -493,6 +495,39 @@ class MainWindow(QMainWindow):
         page.template_saved.connect(self.open_template)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
         page.title_changed.connect(lambda p=page: self._retitle(p))
+
+    def open_inventory_document(self, document_id: int) -> None:
+        key = ("inventory_doc", document_id)
+        if key not in self.pages:
+            page = InventoryDocumentPage(self.session, document_id=document_id)
+            self._wire_inventory_document(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def new_inventory_document(self, doc_type: str) -> None:
+        page = InventoryDocumentPage(self.session, doc_type=doc_type)
+        self._wire_inventory_document(page)
+        self._add_page(page.key, page, open_item=True)
+        self._activate(page.key)
+
+    def _wire_inventory_document(self, page: InventoryDocumentPage) -> None:
+        page.saved.connect(lambda _id, p=page: self._inventory_document_saved(p))
+        page.open_gl_document.connect(self.open_document)
+        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
+        page.title_changed.connect(lambda p=page: self._retitle(p))
+
+    def _inventory_document_saved(self, page: InventoryDocumentPage) -> None:
+        old_key = self._key_of(page)
+        if old_key is not None and old_key != page.key and page.doc is not None:
+            self.pages[page.key] = self.pages.pop(old_key)
+            item = self.sidebar.find(old_key)
+            if item is not None:
+                item.setData(KEY_ROLE, page.key)
+                item.setIcon(dot_icon(P.teal, 18, doc_glyph()))
+        self._retitle(page)
+        inventory = self.pages.get(("inventory",))
+        if inventory is not None:
+            inventory.refresh()
 
     def open_template(self, template_id: int | None) -> None:
         """The template editor; a saved (or deleted) template returns to the list."""

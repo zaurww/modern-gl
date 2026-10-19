@@ -375,7 +375,8 @@ class OperationDialog(QDialog):
 
 class InventoryPage(QWidget):
     key = ("inventory",)
-    open_document = Signal(int)
+    open_inventory_document = Signal(int)
+    new_inventory_document = Signal(str)
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -512,13 +513,14 @@ class InventoryPage(QWidget):
         )
         documents = self.s.conn.execute(
             """
-            SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.gl_document_id,
+            SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.status,
+                   d.gl_document_id,
                    ct.name AS cost_type_name,
                    COALESCE(SUM(l.amount), 0) AS amount
             FROM inventory_documents d
             LEFT JOIN inventory_lines l ON l.document_id = d.id
             LEFT JOIN landed_cost_types ct ON ct.id = d.landed_cost_type_id
-            WHERE d.company_id = ? AND d.status = 'posted'
+            WHERE d.company_id = ?
             GROUP BY d.id
             ORDER BY d.doc_date DESC, d.id DESC
             LIMIT 100
@@ -533,6 +535,11 @@ class InventoryPage(QWidget):
                     tr("Операция"),
                     lambda row: self._document_type(row["doc_type"]),
                     width=170,
+                ),
+                Column(
+                    tr("Статус"),
+                    lambda row: tr("Проведён") if row["status"] == "posted" else tr("Черновик"),
+                    width=105,
                 ),
                 Column(tr("Статья расходов"), lambda row: row["cost_type_name"], width=160),
                 Column(tr("Комментарий"), lambda row: row["memo"], width=260),
@@ -603,6 +610,9 @@ class InventoryPage(QWidget):
         self.s.notify(tr("Вид расходов «{name}» добавлен", name=name.strip()))
 
     def operation(self, operation: str) -> None:
+        if operation != "landed_cost":
+            self.new_inventory_document.emit(operation)
+            return
         dialog = OperationDialog(self.s, self.inventory, operation, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.s.notify(tr("Складской документ проведён"))
@@ -623,8 +633,8 @@ class InventoryPage(QWidget):
         return index.data(Qt.ItemDataRole.UserRole) if index.isValid() else None
 
     def _open_document(self, row) -> None:
-        if row is not None and row["gl_document_id"] is not None:
-            self.open_document.emit(row["gl_document_id"])
+        if row is not None:
+            self.open_inventory_document.emit(row["id"])
 
     def delete_document(self) -> None:
         row = self._selected_document()

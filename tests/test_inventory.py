@@ -14,6 +14,10 @@ from modern_gl.application.inventory import (
     format_quantity,
     to_quantity,
 )
+from modern_gl.desktop.inventory_document_page import (
+    InventoryDocumentPage,
+    InventoryGridRow,
+)
 from modern_gl.desktop.inventory_page import InventoryPage, OperationDialog
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
@@ -129,6 +133,146 @@ def test_quantity_is_exact_and_rejects_float():
         to_quantity(1.5)
     with pytest.raises(ValueError, match="больше 6"):
         to_quantity("1.0000001")
+
+
+def test_multiline_draft_can_be_saved_edited_and_posted(inventory_demo, conn):
+    demo = inventory_demo
+    document_id = demo.inventory.create_receipt_draft(
+        demo.company_id,
+        "2026-01-10",
+        [
+            ReceiptLine(demo.item, demo.main, "2", "20"),
+            ReceiptLine(demo.other_item, demo.main, "3", "45"),
+        ],
+        demo.payable_account,
+        [demo.supplier],
+        "Черновик поставки",
+    )
+    assert stock_balances(conn, demo.company_id) == []
+    loaded = demo.inventory.load_document(demo.company_id, document_id)
+    assert loaded.status == "draft"
+    assert [line.quantity for line in loaded.lines] == [
+        2 * QUANTITY_FACTOR,
+        3 * QUANTITY_FACTOR,
+    ]
+
+    demo.inventory.update_receipt_draft(
+        demo.company_id,
+        document_id,
+        "2026-01-11",
+        [
+            ReceiptLine(demo.item, demo.main, "4", "44"),
+            ReceiptLine(demo.other_item, demo.reserve, "1.5", "30"),
+        ],
+        demo.payable_account,
+        [demo.supplier],
+        "Исправленная поставка",
+    )
+    demo.inventory.post_document(demo.company_id, document_id)
+    loaded = demo.inventory.load_document(demo.company_id, document_id)
+    assert loaded.status == "posted"
+    assert loaded.gl_document_id is not None
+    balances = {
+        (row.item_id, row.warehouse_id): row for row in stock_balances(conn, demo.company_id)
+    }
+    assert balances[(demo.item, demo.main)].amount == 4_400
+    assert balances[(demo.other_item, demo.reserve)].quantity == 1_500_000
+
+
+def test_posting_failed_draft_remains_editable(inventory_demo, conn):
+    demo = inventory_demo
+    document_id = demo.inventory.create_issue_draft(
+        demo.company_id,
+        "2026-01-10",
+        [IssueLine(demo.item, demo.main, "1", demo.expense_account)],
+    )
+    with pytest.raises(ValidationError, match="недостаточно товара"):
+        demo.inventory.post_document(demo.company_id, document_id)
+    loaded = demo.inventory.load_document(demo.company_id, document_id)
+    assert loaded.status == "draft"
+    assert loaded.lines[0].amount == 0
+    assert conn.execute("SELECT COUNT(*) FROM stock_movements").fetchone()[0] == 0
+
+
+def test_inventory_document_can_be_unposted_edited_and_reposted(inventory_demo, conn):
+    demo = inventory_demo
+    document_id = receipt(demo, "2", "20")
+    gl_document_id = demo.inventory.load_document(demo.company_id, document_id).gl_document_id
+    demo.inventory.unpost_document(demo.company_id, document_id)
+    loaded = demo.inventory.load_document(demo.company_id, document_id)
+    assert loaded.status == "draft"
+    assert loaded.gl_document_id is None
+    assert stock_balances(conn, demo.company_id) == []
+    assert (
+        conn.execute("SELECT COUNT(*) FROM documents WHERE id = ?", (gl_document_id,)).fetchone()[0]
+        == 0
+    )
+
+    demo.inventory.update_receipt_draft(
+        demo.company_id,
+        document_id,
+        "2026-01-11",
+        [ReceiptLine(demo.item, demo.main, "3", "36")],
+        demo.payable_account,
+        [demo.supplier],
+    )
+    demo.inventory.post_document(demo.company_id, document_id)
+    assert stock_balances(conn, demo.company_id)[0].amount == 3_600
+
+
+def test_issue_and_transfer_drafts_calculate_cost_when_posted(inventory_demo, conn):
+    demo = inventory_demo
+    receipt(demo, "10", "100")
+    issue = demo.inventory.create_issue_draft(
+        demo.company_id,
+        "2026-01-11",
+        [
+            IssueLine(demo.item, demo.main, "2", demo.expense_account),
+            IssueLine(demo.item, demo.main, "3", demo.expense_account),
+        ],
+    )
+    demo.inventory.post_document(demo.company_id, issue)
+    assert [line.amount for line in demo.inventory.load_document(demo.company_id, issue).lines] == [
+        2_000,
+        3_000,
+    ]
+    assert stock_balances(conn, demo.company_id)[0].quantity == 5 * QUANTITY_FACTOR
+
+    demo.inventory.unpost_document(demo.company_id, issue)
+    assert [line.amount for line in demo.inventory.load_document(demo.company_id, issue).lines] == [
+        0,
+        0,
+    ]
+    assert stock_balances(conn, demo.company_id)[0].quantity == 10 * QUANTITY_FACTOR
+
+    transfer = demo.inventory.create_transfer_draft(
+        demo.company_id,
+        "2026-01-12",
+        [TransferLine(demo.item, demo.main, demo.reserve, "4")],
+    )
+    demo.inventory.post_document(demo.company_id, transfer)
+    balances = {row.warehouse_id: row for row in stock_balances(conn, demo.company_id)}
+    assert balances[demo.main].quantity == 6 * QUANTITY_FACTOR
+    assert balances[demo.reserve].amount == 4_000
+
+
+def test_unpost_preserves_receipt_lineage_dependencies(inventory_demo):
+    demo = inventory_demo
+    first = receipt(demo, "5", "50")
+    demo.inventory.post_receipt(
+        demo.company_id,
+        "2026-01-11",
+        [ReceiptLine(demo.item, demo.main, "10", "100")],
+        demo.payable_account,
+        [demo.supplier],
+    )
+    demo.inventory.post_issue(
+        demo.company_id,
+        "2026-01-12",
+        [IssueLine(demo.item, demo.main, "4", demo.expense_account)],
+    )
+    with pytest.raises(ValidationError, match="последующими"):
+        demo.inventory.unpost_document(demo.company_id, first)
 
 
 def test_catalogs_share_subconto_values(inventory_demo, conn):
@@ -480,6 +624,45 @@ def test_inventory_page_shows_balance(inventory_demo, conn, qtbot):
     assert page.model.index(0, 0).data().endswith("Товар A")
     assert page.model.index(0, 2).data() == "3"
     assert page.model.index(0, 5).data() == "45.00"
+
+
+def test_multiline_inventory_document_page_posts_rows(inventory_demo, conn, qtbot):
+    demo = inventory_demo
+    session = Session(
+        conn,
+        demo.inventory.ledger,
+        demo.company_id,
+        "Склад",
+        Catalog(conn, demo.company_id),
+        working_date=date(2026, 1, 10),
+    )
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    page.memo.setText("Две позиции")
+    page.model.beginResetModel()
+    page.model.rows = [
+        InventoryGridRow(
+            demo.item,
+            demo.main,
+            quantity=2 * QUANTITY_FACTOR,
+            amount=2_000,
+            offset_account_id=demo.payable_account,
+            offset_subconto=[demo.supplier, None, None],
+        ),
+        InventoryGridRow(
+            demo.other_item,
+            demo.main,
+            quantity=3 * QUANTITY_FACTOR,
+            amount=4_500,
+            offset_account_id=demo.payable_account,
+            offset_subconto=[demo.supplier, None, None],
+        ),
+    ]
+    page.model.endResetModel()
+    assert page.save(post=True)
+    assert page.doc is not None and page.doc.status == "posted"
+    assert len(page.doc.lines) == 2
+    assert sum(row.amount for row in stock_balances(conn, demo.company_id)) == 6_500
 
 
 def test_landed_cost_dialog_selects_multiple_receipts(inventory_demo, conn, qtbot):

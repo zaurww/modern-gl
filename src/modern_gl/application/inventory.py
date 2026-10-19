@@ -33,6 +33,8 @@ class ReceiptLine:
     quantity: str | int | Decimal
     amount: str | int | Decimal
     memo: str = ""
+    credit_account_id: int | None = None
+    credit_subconto: Sequence[int | None] = ()
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,36 @@ class TransferLine:
     to_warehouse_id: int
     quantity: str | int | Decimal
     memo: str = ""
+
+
+@dataclass(frozen=True)
+class InventoryLineData:
+    id: int
+    line_no: int
+    item_id: int
+    warehouse_id: int | None
+    to_warehouse_id: int | None
+    quantity: int
+    amount: int
+    inventory_amount: int
+    expense_amount: int
+    offset_account_id: int | None
+    offset_subconto: tuple[int | None, int | None, int | None]
+    source_receipt_line_id: int | None
+    memo: str
+
+
+@dataclass(frozen=True)
+class InventoryDocumentData:
+    id: int
+    number: int
+    doc_date: str
+    doc_type: str
+    memo: str
+    status: str
+    landed_cost_type_id: int | None
+    gl_document_id: int | None
+    lines: tuple[InventoryLineData, ...]
 
 
 def to_quantity(value: str | int | Decimal) -> int:
@@ -262,6 +294,324 @@ class Inventory:
 
     # ---- operational documents ----------------------------------------------------
 
+    def load_document(self, company_id: int, document_id: int) -> InventoryDocumentData:
+        """Load a warehouse document with its source and calculated line fields."""
+        doc = self._document(company_id, document_id)
+        rows = self.conn.execute(
+            "SELECT * FROM inventory_lines WHERE company_id = ? AND document_id = ? "
+            "ORDER BY line_no",
+            (company_id, document_id),
+        ).fetchall()
+        return InventoryDocumentData(
+            doc["id"],
+            doc["number"],
+            doc["doc_date"],
+            doc["doc_type"],
+            doc["memo"],
+            doc["status"],
+            doc["landed_cost_type_id"],
+            doc["gl_document_id"],
+            tuple(
+                InventoryLineData(
+                    row["id"],
+                    row["line_no"],
+                    row["item_id"],
+                    row["warehouse_id"],
+                    row["to_warehouse_id"],
+                    row["quantity"],
+                    row["amount"],
+                    row["inventory_amount"],
+                    row["expense_amount"],
+                    row["offset_account_id"],
+                    (row["offset_sc1"], row["offset_sc2"], row["offset_sc3"]),
+                    row["source_receipt_line_id"],
+                    row["memo"],
+                )
+                for row in rows
+            ),
+        )
+
+    def create_receipt_draft(
+        self,
+        company_id: int,
+        doc_date: date | str,
+        lines: Sequence[ReceiptLine],
+        credit_account_id: int,
+        credit_subconto: Sequence[int | None] = (),
+        memo: str = "",
+        *,
+        opening: bool = False,
+    ) -> int:
+        """Save an editable receipt/opening document without affecting stock or GL."""
+        with transaction(self.conn):
+            document_id = self._insert_document(
+                company_id, doc_date, "opening" if opening else "receipt", memo
+            )
+            self._write_receipt_draft(
+                company_id, document_id, lines, credit_account_id, credit_subconto
+            )
+            self._audit(
+                company_id,
+                "inventory_document",
+                document_id,
+                "create_draft",
+                {"type": "opening" if opening else "receipt"},
+            )
+        return document_id
+
+    def create_issue_draft(
+        self,
+        company_id: int,
+        doc_date: date | str,
+        lines: Sequence[IssueLine],
+        memo: str = "",
+    ) -> int:
+        """Save an editable issue document without affecting stock or GL."""
+        with transaction(self.conn):
+            document_id = self._insert_document(company_id, doc_date, "issue", memo)
+            self._write_issue_draft(company_id, document_id, lines)
+            self._audit(
+                company_id,
+                "inventory_document",
+                document_id,
+                "create_draft",
+                {"type": "issue"},
+            )
+        return document_id
+
+    def create_transfer_draft(
+        self,
+        company_id: int,
+        doc_date: date | str,
+        lines: Sequence[TransferLine],
+        memo: str = "",
+    ) -> int:
+        """Save an editable transfer document without affecting stock or GL."""
+        with transaction(self.conn):
+            document_id = self._insert_document(company_id, doc_date, "transfer", memo)
+            self._write_transfer_draft(company_id, document_id, lines)
+            self._audit(
+                company_id,
+                "inventory_document",
+                document_id,
+                "create_draft",
+                {"type": "transfer"},
+            )
+        return document_id
+
+    def update_receipt_draft(
+        self,
+        company_id: int,
+        document_id: int,
+        doc_date: date | str,
+        lines: Sequence[ReceiptLine],
+        credit_account_id: int,
+        credit_subconto: Sequence[int | None] = (),
+        memo: str = "",
+    ) -> None:
+        with transaction(self.conn):
+            doc = self._require_inventory_draft(company_id, document_id)
+            if doc["doc_type"] not in {"opening", "receipt"}:
+                raise ValidationError(tr("тип складского документа нельзя изменить"))
+            self._update_draft_header(company_id, document_id, doc_date, memo)
+            self.conn.execute("DELETE FROM inventory_lines WHERE document_id = ?", (document_id,))
+            self._write_receipt_draft(
+                company_id, document_id, lines, credit_account_id, credit_subconto
+            )
+            self._audit(company_id, "inventory_document", document_id, "update_draft", {})
+
+    def update_issue_draft(
+        self,
+        company_id: int,
+        document_id: int,
+        doc_date: date | str,
+        lines: Sequence[IssueLine],
+        memo: str = "",
+    ) -> None:
+        with transaction(self.conn):
+            doc = self._require_inventory_draft(company_id, document_id)
+            if doc["doc_type"] != "issue":
+                raise ValidationError(tr("тип складского документа нельзя изменить"))
+            self._update_draft_header(company_id, document_id, doc_date, memo)
+            self.conn.execute("DELETE FROM inventory_lines WHERE document_id = ?", (document_id,))
+            self._write_issue_draft(company_id, document_id, lines)
+            self._audit(company_id, "inventory_document", document_id, "update_draft", {})
+
+    def update_transfer_draft(
+        self,
+        company_id: int,
+        document_id: int,
+        doc_date: date | str,
+        lines: Sequence[TransferLine],
+        memo: str = "",
+    ) -> None:
+        with transaction(self.conn):
+            doc = self._require_inventory_draft(company_id, document_id)
+            if doc["doc_type"] != "transfer":
+                raise ValidationError(tr("тип складского документа нельзя изменить"))
+            self._update_draft_header(company_id, document_id, doc_date, memo)
+            self.conn.execute("DELETE FROM inventory_lines WHERE document_id = ?", (document_id,))
+            self._write_transfer_draft(company_id, document_id, lines)
+            self._audit(company_id, "inventory_document", document_id, "update_draft", {})
+
+    def post_document(self, company_id: int, document_id: int) -> None:
+        """Post a saved warehouse draft and calculate all derived amounts atomically."""
+        with transaction(self.conn):
+            doc = self._require_inventory_draft(company_id, document_id)
+            if doc["doc_type"] == "landed_cost":
+                raise ValidationError(tr("дополнительные расходы проводятся через распределение"))
+            self._require_chronological(company_id, doc["doc_date"], document_id)
+            lines = self.conn.execute(
+                "SELECT * FROM inventory_lines WHERE document_id = ? ORDER BY line_no",
+                (document_id,),
+            ).fetchall()
+            if not lines:
+                raise ValidationError(tr("складской документ без строк"))
+            postings: list[PostingInput] = []
+            for line in lines:
+                item = self._item(company_id, line["item_id"])
+                warehouse = self._warehouse(company_id, line["warehouse_id"])
+                offset_sc = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
+                if doc["doc_type"] in {"opening", "receipt"}:
+                    amount = line["amount"]
+                    self._insert_movement(
+                        company_id,
+                        document_id,
+                        line["id"],
+                        doc["doc_date"],
+                        item["id"],
+                        warehouse["id"],
+                        doc["doc_type"],
+                        line["quantity"],
+                        amount,
+                    )
+                    postings.append(
+                        PostingInput(
+                            item["inventory_account_id"],
+                            line["offset_account_id"],
+                            _money(amount),
+                            self._inventory_subconto(company_id, item, warehouse),
+                            offset_sc,
+                            line["memo"],
+                        )
+                    )
+                    continue
+
+                balance_qty, balance_amount = self._balance(
+                    company_id, item["id"], warehouse["id"], document_id
+                )
+                self._require_stock(item, warehouse, line["quantity"], balance_qty)
+                amount = (
+                    balance_amount
+                    if line["quantity"] == balance_qty
+                    else _round_ratio(balance_amount * line["quantity"], balance_qty)
+                )
+                self.conn.execute(
+                    "UPDATE inventory_lines SET amount = ?, inventory_amount = ?, "
+                    "expense_amount = ? WHERE id = ?",
+                    (
+                        amount,
+                        amount if doc["doc_type"] == "transfer" else 0,
+                        amount if doc["doc_type"] == "issue" else 0,
+                        line["id"],
+                    ),
+                )
+                if doc["doc_type"] == "issue":
+                    self._consume_receipts(
+                        company_id, document_id, line["id"], item["id"], line["quantity"]
+                    )
+                    self._insert_movement(
+                        company_id,
+                        document_id,
+                        line["id"],
+                        doc["doc_date"],
+                        item["id"],
+                        warehouse["id"],
+                        "issue",
+                        -line["quantity"],
+                        -amount,
+                    )
+                    postings.append(
+                        PostingInput(
+                            line["offset_account_id"],
+                            item["inventory_account_id"],
+                            _money(amount),
+                            offset_sc,
+                            self._inventory_subconto(company_id, item, warehouse),
+                            line["memo"],
+                        )
+                    )
+                    continue
+
+                to_warehouse = self._warehouse(company_id, line["to_warehouse_id"])
+                if warehouse["id"] == to_warehouse["id"]:
+                    raise ValidationError(tr("склад отправитель и получатель совпадают"))
+                for target, movement_type, sign in (
+                    (warehouse, "transfer_out", -1),
+                    (to_warehouse, "transfer_in", 1),
+                ):
+                    self._insert_movement(
+                        company_id,
+                        document_id,
+                        line["id"],
+                        doc["doc_date"],
+                        item["id"],
+                        target["id"],
+                        movement_type,
+                        sign * line["quantity"],
+                        sign * amount,
+                    )
+                postings.append(
+                    PostingInput(
+                        item["inventory_account_id"],
+                        item["inventory_account_id"],
+                        _money(amount),
+                        self._inventory_subconto(company_id, item, to_warehouse),
+                        self._inventory_subconto(company_id, item, warehouse),
+                        line["memo"],
+                    )
+                )
+            self._finish(document_id, company_id, doc["doc_date"], postings, doc["memo"])
+
+    def unpost_document(self, company_id: int, document_id: int) -> None:
+        """Return a posted warehouse document to an editable draft in an open period."""
+        with transaction(self.conn):
+            doc = self._document(company_id, document_id)
+            if doc["status"] != "posted":
+                raise ValidationError(tr("складской документ уже является черновиком"))
+            if doc["doc_type"] == "landed_cost":
+                raise ValidationError(tr("редактирование дополнительных расходов пока недоступно"))
+            self._require_open_period(doc)
+            self._require_removable(company_id, document_id)
+            self._require_no_line_dependencies(company_id, document_id)
+            snapshot = self._snapshot(doc)
+            self.conn.execute(
+                "UPDATE inventory_documents SET status = 'draft' WHERE id = ?", (document_id,)
+            )
+            gl_document_id = doc["gl_document_id"]
+            self.conn.execute(
+                "UPDATE inventory_documents SET gl_document_id = NULL, posted_at = NULL "
+                "WHERE id = ?",
+                (document_id,),
+            )
+            self.conn.execute(
+                "DELETE FROM landed_cost_expense_allocations WHERE document_id = ?",
+                (document_id,),
+            )
+            self.conn.execute(
+                "DELETE FROM stock_consumptions WHERE document_id = ?", (document_id,)
+            )
+            self.conn.execute("DELETE FROM stock_movements WHERE document_id = ?", (document_id,))
+            if doc["doc_type"] in {"issue", "transfer"}:
+                self.conn.execute(
+                    "UPDATE inventory_lines SET amount = 0, inventory_amount = 0, "
+                    "expense_amount = 0 WHERE document_id = ?",
+                    (document_id,),
+                )
+            if gl_document_id is not None:
+                self.ledger.delete_document(company_id, gl_document_id)
+            self._audit(company_id, "inventory_document", document_id, "unpost", snapshot)
+
     def post_receipt(
         self,
         company_id: int,
@@ -276,7 +626,6 @@ class Inventory:
         """Post a receipt/opening balance and its Dr inventory / Cr offset entries."""
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
-        offset_sc = _pad_subconto(credit_subconto)
         with transaction(self.conn):
             inv_id = self._insert_document(
                 company_id, doc_date, "opening" if opening else "receipt", memo
@@ -287,6 +636,10 @@ class Inventory:
                 warehouse = self._warehouse(company_id, source.warehouse_id)
                 quantity = self._quantity(item, source.quantity, line_no)
                 amount = self._positive_amount(source.amount, line_no)
+                line_credit_account = source.credit_account_id or credit_account_id
+                self._account(company_id, line_credit_account)
+                line_credit_subconto = source.credit_subconto or credit_subconto
+                offset_sc = _pad_subconto(line_credit_subconto)
                 line_id = self._insert_line(
                     inv_id,
                     company_id,
@@ -298,7 +651,7 @@ class Inventory:
                     amount,
                     amount,
                     0,
-                    credit_account_id,
+                    line_credit_account,
                     offset_sc,
                     None,
                     source.memo,
@@ -317,10 +670,10 @@ class Inventory:
                 postings.append(
                     PostingInput(
                         item["inventory_account_id"],
-                        credit_account_id,
+                        line_credit_account,
                         _money(amount),
                         self._inventory_subconto(company_id, item, warehouse),
-                        credit_subconto,
+                        line_credit_subconto,
                         source.memo,
                     )
                 )
@@ -649,6 +1002,172 @@ class Inventory:
 
     # ---- internals -----------------------------------------------------------------
 
+    def _write_receipt_draft(
+        self,
+        company_id: int,
+        document_id: int,
+        lines: Sequence[ReceiptLine],
+        credit_account_id: int,
+        credit_subconto: Sequence[int | None],
+    ) -> None:
+        if not lines:
+            raise ValidationError(tr("складской документ без строк"))
+        self._account(company_id, credit_account_id)
+        for line_no, source in enumerate(lines, 1):
+            item = self._item(company_id, source.item_id)
+            warehouse = self._warehouse(company_id, source.warehouse_id)
+            quantity = self._quantity(item, source.quantity, line_no)
+            amount = self._positive_amount(source.amount, line_no)
+            line_credit_account = source.credit_account_id or credit_account_id
+            self._account(company_id, line_credit_account)
+            line_credit_sc = _pad_subconto(source.credit_subconto or credit_subconto)
+            self._insert_line(
+                document_id,
+                company_id,
+                line_no,
+                item["id"],
+                warehouse["id"],
+                None,
+                quantity,
+                amount,
+                amount,
+                0,
+                line_credit_account,
+                line_credit_sc,
+                None,
+                source.memo.strip(),
+            )
+
+    def _write_issue_draft(
+        self, company_id: int, document_id: int, lines: Sequence[IssueLine]
+    ) -> None:
+        if not lines:
+            raise ValidationError(tr("складской документ без строк"))
+        for line_no, source in enumerate(lines, 1):
+            item = self._item(company_id, source.item_id)
+            warehouse = self._warehouse(company_id, source.warehouse_id)
+            quantity = self._quantity(item, source.quantity, line_no)
+            self._account(company_id, source.expense_account_id)
+            expense_sc = _pad_subconto(source.expense_subconto)
+            self._insert_line(
+                document_id,
+                company_id,
+                line_no,
+                item["id"],
+                warehouse["id"],
+                None,
+                quantity,
+                0,
+                0,
+                0,
+                source.expense_account_id,
+                expense_sc,
+                None,
+                source.memo.strip(),
+            )
+
+    def _write_transfer_draft(
+        self, company_id: int, document_id: int, lines: Sequence[TransferLine]
+    ) -> None:
+        if not lines:
+            raise ValidationError(tr("складской документ без строк"))
+        for line_no, source in enumerate(lines, 1):
+            if source.from_warehouse_id == source.to_warehouse_id:
+                raise ValidationError(tr("склад отправитель и получатель совпадают"))
+            item = self._item(company_id, source.item_id)
+            from_warehouse = self._warehouse(company_id, source.from_warehouse_id)
+            to_warehouse = self._warehouse(company_id, source.to_warehouse_id)
+            quantity = self._quantity(item, source.quantity, line_no)
+            self._insert_line(
+                document_id,
+                company_id,
+                line_no,
+                item["id"],
+                from_warehouse["id"],
+                to_warehouse["id"],
+                quantity,
+                0,
+                0,
+                0,
+                None,
+                (),
+                None,
+                source.memo.strip(),
+            )
+
+    def _update_draft_header(
+        self, company_id: int, document_id: int, doc_date: date | str, memo: str
+    ) -> None:
+        value_date = iso_date(doc_date)
+        self._require_chronological(company_id, value_date, document_id)
+        self.conn.execute(
+            "UPDATE inventory_documents SET doc_date = ?, memo = ? WHERE id = ?",
+            (value_date, memo.strip(), document_id),
+        )
+
+    def _require_inventory_draft(self, company_id: int, document_id: int) -> sqlite3.Row:
+        doc = self._document(company_id, document_id)
+        if doc["status"] != "draft":
+            raise ValidationError(tr("сначала отмените проведение складского документа"))
+        return doc
+
+    def _require_chronological(
+        self, company_id: int, doc_date: date | str, excluding_id: int | None = None
+    ) -> None:
+        value_date = iso_date(doc_date)
+        latest = self.conn.execute(
+            "SELECT MAX(doc_date) FROM inventory_documents "
+            "WHERE company_id = ? AND status = 'posted' AND id <> COALESCE(?, -1)",
+            (company_id, excluding_id),
+        ).fetchone()[0]
+        if latest is not None and value_date < latest:
+            raise ValidationError(
+                tr(
+                    "складские документы проводятся по порядку дат; "
+                    "последняя проведённая дата {date}",
+                    date=latest,
+                )
+            )
+
+    def _require_open_period(self, doc: sqlite3.Row) -> None:
+        closed = self._company(doc["company_id"])["closed_through"]
+        if closed is not None and doc["doc_date"] <= closed:
+            raise PeriodClosedError(
+                tr(
+                    "складской документ №{number} от {date}: период закрыт по {closed}",
+                    number=doc["number"],
+                    date=doc["doc_date"],
+                    closed=closed,
+                )
+            )
+
+    def _require_no_line_dependencies(self, company_id: int, document_id: int) -> None:
+        linked = self.conn.execute(
+            """
+            SELECT 1
+            FROM inventory_lines own
+            WHERE own.company_id = ? AND own.document_id = ? AND (
+                EXISTS (
+                    SELECT 1 FROM stock_consumptions c
+                    WHERE c.receipt_line_id = own.id AND c.document_id <> ?
+                )
+                OR EXISTS (
+                    SELECT 1 FROM inventory_lines later
+                    WHERE later.source_receipt_line_id = own.id
+                      AND later.document_id <> ?
+                )
+                OR EXISTS (
+                    SELECT 1 FROM landed_cost_expense_allocations a
+                    WHERE a.issue_line_id = own.id AND a.document_id <> ?
+                )
+            )
+            LIMIT 1
+            """,
+            (company_id, document_id, document_id, document_id, document_id),
+        ).fetchone()
+        if linked is not None:
+            raise ValidationError(tr("документ связан с последующими складскими операциями"))
+
     def _insert_document(
         self,
         company_id: int,
@@ -660,19 +1179,7 @@ class Inventory:
     ) -> int:
         self._company(company_id)
         value_date = iso_date(doc_date)
-        latest = self.conn.execute(
-            "SELECT MAX(doc_date) FROM inventory_documents "
-            "WHERE company_id = ? AND status = 'posted'",
-            (company_id,),
-        ).fetchone()[0]
-        if latest is not None and value_date < latest:
-            raise ValidationError(
-                tr(
-                    "складские документы проводятся по порядку дат; "
-                    "последняя проведённая дата {date}",
-                    date=latest,
-                )
-            )
+        self._require_chronological(company_id, value_date)
         number = self.conn.execute(
             "UPDATE companies SET last_inventory_number = last_inventory_number + 1 "
             "WHERE id = ? RETURNING last_inventory_number",
