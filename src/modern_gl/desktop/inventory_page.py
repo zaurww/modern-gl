@@ -110,12 +110,13 @@ class AccountPicker(QWidget):
 
 
 class ItemDialog(QDialog):
-    def __init__(self, session: Session, inventory: Inventory, parent=None) -> None:
+    def __init__(self, session: Session, inventory: Inventory, parent=None, name: str = "") -> None:
         super().__init__(parent)
         self.s, self.inventory = session, inventory
+        self.item_id: int | None = None
         self.setWindowTitle(tr("Новый товар"))
         form = QFormLayout(self)
-        self.name = QLineEdit()
+        self.name = QLineEdit(name)
         self.code = QLineEdit()
         self.units = QComboBox()
         for row in session.conn.execute(
@@ -166,7 +167,7 @@ class ItemDialog(QDialog):
             )
             return
         try:
-            self.inventory.add_item(
+            self.item_id = self.inventory.add_item(
                 self.s.company_id,
                 self.name.text(),
                 int(self.units.currentData()),

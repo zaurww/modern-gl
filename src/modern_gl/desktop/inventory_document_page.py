@@ -6,13 +6,20 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QModelIndex,
+    QPersistentModelIndex,
+    Qt,
+    QTimer,
+    Signal,
+)
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
     QApplication,
-    QComboBox,
+    QDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -33,13 +40,15 @@ from modern_gl.application.inventory import (
     format_quantity,
     to_quantity,
 )
+from modern_gl.desktop.inventory_page import ItemDialog
+from modern_gl.desktop.postings import attach_list
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, button, date_edit, money, to_qdate
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, to_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import fold, tr
 
 ITEM = "item"
 WAREHOUSE = "warehouse"
@@ -53,6 +62,7 @@ SC1 = "sc1"
 SC2 = "sc2"
 SC3 = "sc3"
 MEMO = "memo"
+LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, SC1, SC2, SC3}
 
 HEADERS = {
     ITEM: "Товар",
@@ -78,7 +88,7 @@ DOCUMENT_TYPES = {
 }
 
 HINT = (
-    "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
 )
 
@@ -114,14 +124,13 @@ class InventoryGridRow:
     memo: str = ""
 
     def is_empty(self) -> bool:
+        """Nothing typed yet: the account and subconto prefilled by default do not count."""
         return (
             self.item_id is None
             and self.warehouse_id is None
             and self.to_warehouse_id is None
             and self.quantity is None
             and self.amount is None
-            and self.offset_account_id is None
-            and not any(self.offset_subconto)
             and not self.memo.strip()
         )
 
@@ -221,6 +230,23 @@ class InventoryLinesModel(QAbstractTableModel):
             )
             for row in rows
         }
+
+    def refresh_choices(self) -> None:
+        self.items = self._items()
+        self.warehouses = self._warehouses()
+
+    def choices(self, row_index: int, key: str) -> list[tuple[int, str]]:
+        """(id, label) offered in a list cell."""
+        if key == ITEM:
+            return [(item.id, item.label) for item in self.items.values()]
+        if key in {WAREHOUSE, TO_WAREHOUSE}:
+            return [(warehouse.id, warehouse.label) for warehouse in self.warehouses.values()]
+        if key == ACCOUNT:
+            return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
+        kind_id = self.kind_at(row_index, key)
+        return (
+            [(value.id, value.label) for value in self.s.catalog.values(kind_id)] if kind_id else []
+        )
 
     def default_row(self) -> InventoryGridRow:
         code = "60" if self.doc_type in {"opening", "receipt"} else "46"
@@ -416,7 +442,10 @@ class InventoryLinesModel(QAbstractTableModel):
     def total(self) -> int:
         return sum(row.amount or 0 for row in self.rows)
 
-    def to_inputs(self) -> list[ReceiptLine] | list[IssueLine] | list[TransferLine]:
+    def to_inputs(
+        self, complete: bool = True
+    ) -> list[ReceiptLine] | list[IssueLine] | list[TransferLine]:
+        """Lines for saving. A draft (complete=False) needs only the item of each line."""
         rows = [row for row in self.rows if not row.is_empty()]
         if not rows:
             raise ValidationError(tr("складской документ без строк"))
@@ -424,28 +453,22 @@ class InventoryLinesModel(QAbstractTableModel):
         for line_no, row in enumerate(rows, 1):
             if row.item_id is None:
                 raise ValidationError(tr("строка {line}: не указан товар", line=line_no))
-            if row.warehouse_id is None:
-                raise ValidationError(tr("строка {line}: не указан склад", line=line_no))
-            if row.quantity is None or row.quantity <= 0:
-                raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
-            quantity = Decimal(row.quantity).scaleb(-6)
+            if complete:
+                self._validate_complete(row, line_no)
+            quantity = None if row.quantity is None else Decimal(row.quantity).scaleb(-6)
             if self.doc_type in {"opening", "receipt"}:
-                if row.amount is None or row.amount <= 0:
-                    raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
-                self._validate_offset(row, line_no)
                 result.append(
                     ReceiptLine(
                         row.item_id,
                         row.warehouse_id,
                         quantity,
-                        Decimal(row.amount).scaleb(-MONEY_SCALE),
+                        None if row.amount is None else Decimal(row.amount).scaleb(-MONEY_SCALE),
                         row.memo.strip(),
                         row.offset_account_id,
                         tuple(row.offset_subconto),
                     )
                 )
             elif self.doc_type == "issue":
-                self._validate_offset(row, line_no)
                 result.append(
                     IssueLine(
                         row.item_id,
@@ -457,10 +480,6 @@ class InventoryLinesModel(QAbstractTableModel):
                     )
                 )
             elif self.doc_type == "transfer":
-                if row.to_warehouse_id is None:
-                    raise ValidationError(
-                        tr("строка {line}: не указан склад-получатель", line=line_no)
-                    )
                 result.append(
                     TransferLine(
                         row.item_id,
@@ -472,7 +491,17 @@ class InventoryLinesModel(QAbstractTableModel):
                 )
         return result
 
-    def _validate_offset(self, row: InventoryGridRow, line_no: int) -> None:
+    def _validate_complete(self, row: InventoryGridRow, line_no: int) -> None:
+        if row.warehouse_id is None:
+            raise ValidationError(tr("строка {line}: не указан склад", line=line_no))
+        if row.quantity is None or row.quantity <= 0:
+            raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
+        if self.doc_type == "transfer":
+            if row.to_warehouse_id is None:
+                raise ValidationError(tr("строка {line}: не указан склад-получатель", line=line_no))
+            return
+        if self.doc_type in {"opening", "receipt"} and (row.amount is None or row.amount <= 0):
+            raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
         if row.offset_account_id is None:
             raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
         account = self.s.catalog.accounts[row.offset_account_id]
@@ -487,64 +516,89 @@ class InventoryLinesModel(QAbstractTableModel):
                 )
 
 
+def _resolve_choice(choices: list[tuple[int, str]], text: str) -> int | None:
+    """Exact label, name or code, else a unique fragment; None if nothing matches."""
+    needle = fold(text)
+    exact = [
+        choice_id
+        for choice_id, label in choices
+        if needle in {fold(label), fold(label.split("  ", 1)[-1]), fold(label.split("  ", 1)[0])}
+    ]
+    if exact:
+        return exact[0]
+    partial = [(choice_id, label) for choice_id, label in choices if needle in fold(label)]
+    if len(partial) > 1:
+        starts = [choice for choice in partial if fold(choice[1]).startswith(needle)]
+        partial = starts if len(starts) == 1 else partial
+    if len(partial) > 1:
+        names = ", ".join(label for _, label in partial[:5])
+        raise LookupError(tr("«{text}» подходит к нескольким: {names}", text=text, names=names))
+    return partial[0][0] if partial else None
+
+
 class InventoryLinesDelegate(QStyledItemDelegate):
+    """Enter or Tab commits a cell; a name missing from a directory can be added on the spot."""
+
     error = Signal(str)
+    unknown_value = Signal(QPersistentModelIndex, int, str)  # index, kind_id, typed text
+    unknown_item = Signal(QPersistentModelIndex, str)
+    unknown_warehouse = Signal(QPersistentModelIndex, str)
 
     def createEditor(self, parent, option, index):
         model: InventoryLinesModel = index.model()
         key = model.key(index)
-        if key in {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, SC1, SC2, SC3}:
-            editor = QComboBox(parent)
-            editor.setEditable(True)
-            editor.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
-            if key == ITEM:
-                values = [(value.label, value.id) for value in model.items.values()]
-            elif key in {WAREHOUSE, TO_WAREHOUSE}:
-                values = [(value.label, value.id) for value in model.warehouses.values()]
-            elif key == ACCOUNT:
-                values = [(account.label, account.id) for account in model.s.catalog.leaf_accounts]
-            else:
-                kind_id = model.kind_at(index.row(), key)
-                values = [(value.label, value.id) for value in model.s.catalog.values(kind_id)]
-            editor.addItem("", None)
-            for label, value_id in values:
-                editor.addItem(label, value_id)
-            editor.completer().setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-            editor.activated.connect(lambda _=0, widget=editor: self._commit_and_next(widget))
-            return editor
         editor = QLineEdit(parent)
         editor.setFrame(False)
-        if key in {QUANTITY, PRICE, AMOUNT}:
+        if key in LIST_KEYS:
+            # Directory cells open with the whole list; the account list starts with typing.
+            labels = [label for _, label in model.choices(index.row(), key)]
+            attach_list(editor, labels, key != ACCOUNT, self._chosen)
+        elif key in {QUANTITY, PRICE, AMOUNT}:
             editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         editor.returnPressed.connect(lambda widget=editor: self._commit_and_next(widget))
         return editor
 
+    def _chosen(self, editor: QLineEdit, text: str) -> None:
+        editor.setText(text)
+        self._commit_and_next(editor)
+
     def setEditorData(self, editor, index):
+        model: InventoryLinesModel = index.model()
         value = index.data(Qt.ItemDataRole.EditRole)
-        if isinstance(editor, QComboBox):
-            editor.setCurrentIndex(max(0, editor.findData(value)))
-        else:
-            editor.setText(value or "")
-            editor.selectAll()
+        if model.key(index) in LIST_KEYS:
+            value = "" if value is None else index.data(Qt.ItemDataRole.DisplayRole)
+        editor.setText(value or "")
+        editor.selectAll()
 
     def setModelData(self, editor, model: InventoryLinesModel, index):
         key = model.key(index)
+        text = editor.text().strip()
         try:
-            if isinstance(editor, QComboBox):
-                value = editor.currentData()
+            if key == ACCOUNT:
+                value = model.s.catalog.resolve_account(text).id if text else None
+            elif key in {SC1, SC2, SC3}:
+                kind_id = model.kind_at(index.row(), key)
+                value = model.s.catalog.resolve_value(kind_id, text) if text else None
+                if text and value is None:
+                    self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
+                    return
+            elif key in LIST_KEYS:
+                value = _resolve_choice(model.choices(index.row(), key), text) if text else None
+                if text and value is None:
+                    signal = self.unknown_item if key == ITEM else self.unknown_warehouse
+                    signal.emit(QPersistentModelIndex(index), text)
+                    return
+            elif key == QUANTITY:
+                value = to_quantity(text) if text else None
+            elif key in {PRICE, AMOUNT}:
+                value = to_minor(text) if text else None
+                if value is not None and value <= 0:
+                    raise ValueError(tr("сумма должна быть больше нуля"))
             else:
-                text = editor.text().strip()
-                if key == QUANTITY:
-                    value = to_quantity(text) if text else None
-                elif key in {PRICE, AMOUNT}:
-                    value = to_minor(text) if text else None
-                    if value is not None and value <= 0:
-                        raise ValueError(tr("сумма должна быть больше нуля"))
-                else:
-                    value = text
+                value = text
             model.setData(index, value)
-        except (LedgerError, ValueError, TypeError) as exc:
-            self.error.emit(str(exc))
+        except (LedgerError, LookupError, ValueError, TypeError) as exc:
+            self.error.emit(str(exc).strip("'\""))
 
     def _commit_and_next(self, editor) -> None:
         if editor.property("inventory_done"):
@@ -738,7 +792,7 @@ class InventoryDocumentPage(QWidget):
         self.btn_delete.clicked.connect(self.delete)
         self.btn_unpost.clicked.connect(self.unpost)
         self.btn_gl.clicked.connect(self._open_gl)
-        self.delegate.error.connect(self.show_error)
+        self._connect_delegate()
         self.model.changed.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
@@ -818,6 +872,67 @@ class InventoryDocumentPage(QWidget):
             self.table.commitData(editor)
             self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
 
+    def _connect_delegate(self) -> None:
+        self.delegate.error.connect(self.show_error)
+        # Deferred: the cell editor has to be fully closed before a dialog takes focus.
+        self.delegate.unknown_value.connect(
+            lambda index, kind_id, text: QTimer.singleShot(
+                0, lambda: self._create_value(index, kind_id, text)
+            )
+        )
+        self.delegate.unknown_item.connect(
+            lambda index, text: QTimer.singleShot(0, lambda: self._create_item(index, text))
+        )
+        self.delegate.unknown_warehouse.connect(
+            lambda index, text: QTimer.singleShot(0, lambda: self._create_warehouse(index, text))
+        )
+
+    def _ask_add(self, text: str, directory: str) -> bool:
+        answer = QMessageBox.question(
+            self,
+            tr("Новый элемент справочника"),
+            tr("«{text}» нет в справочнике «{kind}». Добавить?", text=text, kind=directory),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
+    def _create_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
+        kind = self.s.catalog.kinds[kind_id]
+        if not index.isValid() or not self._ask_add(text, kind):
+            return
+        value_id = self.s.ledger.add_subconto_value(self.s.company_id, kind_id, text)
+        self.s.catalog.add_value(value_id, kind_id, text)
+        self.model.setData(self.model.index(index.row(), index.column()), value_id)
+        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
+
+    def _create_item(self, index: QPersistentModelIndex, text: str) -> None:
+        if not index.isValid():
+            return
+        dialog = ItemDialog(self.s, self.inventory, self, name=text)
+        if dialog.units.count() == 0:
+            self.show_error(tr("Сначала добавьте единицу измерения"))
+            return
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.item_id is None:
+            return
+        self.s.catalog.reload()
+        self.model.refresh_choices()
+        self.model.setData(self.model.index(index.row(), index.column()), dialog.item_id)
+        self.s.notify(tr("Товар добавлен"))
+
+    def _create_warehouse(self, index: QPersistentModelIndex, text: str) -> None:
+        if not index.isValid() or not self._ask_add(text, tr("Склад")):
+            return
+        try:
+            warehouse_id = self.inventory.add_warehouse(self.s.company_id, text)
+        except LedgerError as exc:
+            self.show_error(str(exc))
+            return
+        self.s.catalog.reload()
+        self.model.refresh_choices()
+        self.model.setData(self.model.index(index.row(), index.column()), warehouse_id)
+        self.s.notify(tr("Склад «{name}» добавлен", name=text))
+
     def _changed(self, *_args) -> None:
         self.total.setText(money(self.model.total(), blank_zero=False))
         if not self.model.read_only and not self.dirty:
@@ -856,7 +971,7 @@ class InventoryDocumentPage(QWidget):
         self.table.setModel(self.model)
         self.table.configure_columns()
         self.delegate = InventoryLinesDelegate(self)
-        self.delegate.error.connect(self.show_error)
+        self._connect_delegate()
         self.table.setItemDelegate(self.delegate)
         self.model.changed.connect(self._changed)
         if self.doc.status == "posted":
@@ -893,7 +1008,7 @@ class InventoryDocumentPage(QWidget):
         self.table.setFocus()
         self.error.hide()
         try:
-            inputs = self.model.to_inputs()
+            inputs = self.model.to_inputs(complete=post)
             document_id = self._save_draft(inputs)
             if post:
                 self.inventory.post_document(self.s.company_id, document_id)

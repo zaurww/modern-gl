@@ -167,6 +167,11 @@ AZ: dict[str, str] = {
         "Enter — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
         "Del — sətri sil   ·   Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
     ),
+    "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
+        "Enter / Tab — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
+        "Del — sətri sil   ·   Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
+    ),
     "Дата": "Tarix",
     "Книга": "Kitab",
     "Итого": "Cəmi",

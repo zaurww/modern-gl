@@ -321,6 +321,40 @@ class _PickWithKeys(QObject):
         return False
 
 
+def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> None:
+    """Completion list under a cell editor; `chosen(editor, text)` gets the picked item."""
+    model = QStringListModel(editor)
+    completer = QCompleter(model, editor)
+    completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
+    completer.setMaxVisibleItems(12)
+    completer.setWidget(editor)  # filtering is ours (search), not Qt's prefix matching
+    popup = completer.popup()
+    popup.setObjectName("completer")
+
+    def refresh(text: str) -> None:
+        try:
+            typed = bool(text.strip())
+            matches = search(items, text) if (typed or show_all) else []
+            model.setStringList(matches)
+            if not matches:
+                popup.hide()
+                return
+            rect = editor.rect()
+            rect.setWidth(max(rect.width(), 380))
+            completer.complete(rect)
+            if typed:  # Enter takes the best match
+                popup.setCurrentIndex(model.index(0))
+        except RuntimeError:  # editor already closed
+            pass
+
+    editor.textEdited.connect(refresh)
+    completer.activated[str].connect(lambda text: chosen(editor, text))  # mouse click
+    # Enter / Tab on a highlighted item: Qt would hand the key to the editor *before*
+    # reporting the choice, so the editor would commit what was typed (often nothing).
+    _PickWithKeys(popup, lambda text: chosen(editor, text))
+    QTimer.singleShot(0, lambda: refresh(editor.text()))
+
+
 class PostingsDelegate(QStyledItemDelegate):
     """Line editors with completion for accounts and subconto; Enter = next cell."""
 
@@ -343,48 +377,16 @@ class PostingsDelegate(QStyledItemDelegate):
                 items = [v.label for v in self.catalog.values(kind)]
             # A subconto cell opens with its whole list, like a 1C directory;
             # an account cell shows suggestions from the first typed character.
-            self._attach_list(editor, items, show_all=pos is not None)
+            attach_list(editor, items, pos is not None, self._chosen)
         elif side == "amount":
             editor.setAlignment(ALIGN_RIGHT)
         # Enter forwarded by an open popup reaches the editor as returnPressed.
         editor.returnPressed.connect(lambda e=editor: self._commit_and_next(e))
         return editor
 
-    def _attach_list(self, editor: QLineEdit, items: list[str], show_all: bool) -> None:
-        model = QStringListModel(editor)
-        completer = QCompleter(model, editor)
-        completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
-        completer.setMaxVisibleItems(12)
-        completer.setWidget(editor)  # filtering is ours (search), not Qt's prefix matching
-        popup = completer.popup()
-        popup.setObjectName("completer")
-
-        def refresh(text: str) -> None:
-            try:
-                typed = bool(text.strip())
-                matches = search(items, text) if (typed or show_all) else []
-                model.setStringList(matches)
-                if not matches:
-                    popup.hide()
-                    return
-                rect = editor.rect()
-                rect.setWidth(max(rect.width(), 380))
-                completer.complete(rect)
-                if typed:  # Enter takes the best match
-                    popup.setCurrentIndex(model.index(0))
-            except RuntimeError:  # editor already closed
-                pass
-
-        def chosen(text: str) -> None:
-            editor.setText(text)
-            self._commit_and_next(editor)
-
-        editor.textEdited.connect(refresh)
-        completer.activated[str].connect(chosen)  # mouse click on an item
-        # Enter / Tab on a highlighted item: Qt would hand the key to the editor *before*
-        # reporting the choice, so the editor would commit what was typed (often nothing).
-        _PickWithKeys(popup, lambda text: chosen(text))
-        QTimer.singleShot(0, lambda: refresh(editor.text()))
+    def _chosen(self, editor: QLineEdit, text: str) -> None:
+        editor.setText(text)
+        self._commit_and_next(editor)
 
     def setEditorData(self, editor, index):
         if not editor.text():  # keep the key that started editing

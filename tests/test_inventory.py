@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import date
 
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
@@ -15,6 +17,10 @@ from modern_gl.application.inventory import (
     to_quantity,
 )
 from modern_gl.desktop.inventory_document_page import (
+    ACCOUNT,
+    ITEM,
+    SC1,
+    WAREHOUSE,
     InventoryDocumentPage,
     InventoryGridRow,
 )
@@ -704,3 +710,121 @@ def test_landed_cost_dialog_selects_multiple_receipts(inventory_demo, conn, qtbo
         ).fetchone()[0]
         == freight
     )
+
+
+def test_unfinished_receipt_draft_is_saved_and_completed_before_posting(inventory_demo, conn):
+    demo = inventory_demo
+    document_id = demo.inventory.create_receipt_draft(
+        demo.company_id,
+        "2026-01-10",
+        [ReceiptLine(demo.item, None, None, None)],
+        None,
+        (),
+        "Не дописан",
+    )
+    line = demo.inventory.load_document(demo.company_id, document_id).lines[0]
+    assert (line.warehouse_id, line.quantity, line.amount, line.offset_account_id) == (
+        None,
+        0,
+        0,
+        None,
+    )
+    with pytest.raises(ValidationError, match="строка 1: не указан склад"):
+        demo.inventory.post_document(demo.company_id, document_id)
+
+    demo.inventory.update_receipt_draft(
+        demo.company_id,
+        document_id,
+        "2026-01-10",
+        [ReceiptLine(demo.item, demo.main, "2", None)],
+        demo.payable_account,
+        [demo.supplier],
+    )
+    with pytest.raises(ValidationError, match="строка 1: не указана сумма"):
+        demo.inventory.post_document(demo.company_id, document_id)
+
+    demo.inventory.update_receipt_draft(
+        demo.company_id,
+        document_id,
+        "2026-01-10",
+        [ReceiptLine(demo.item, demo.main, "2", "30")],
+        demo.payable_account,
+        [demo.supplier],
+    )
+    demo.inventory.post_document(demo.company_id, document_id)
+    balance = stock_balances(conn, demo.company_id)[0]
+    assert (balance.quantity, balance.amount) == (2 * QUANTITY_FACTOR, 3_000)
+
+
+def test_draft_may_be_dated_before_last_posted_document(inventory_demo):
+    demo = inventory_demo
+    receipt(demo, "10", "100")  # 2026-01-10, 10.00 a piece
+    issue = demo.inventory.create_issue_draft(
+        demo.company_id,
+        "2026-01-05",
+        [IssueLine(demo.item, demo.main, "1", demo.expense_account)],
+    )
+    with pytest.raises(ValidationError, match="по порядку дат"):
+        demo.inventory.post_document(demo.company_id, issue)
+    demo.inventory.update_issue_draft(
+        demo.company_id,
+        issue,
+        "2026-01-12",
+        [IssueLine(demo.item, demo.main, "1", demo.expense_account)],
+    )
+    demo.inventory.post_document(demo.company_id, issue)
+    assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 1_000
+
+
+def _type_in_cell(qtbot, page: InventoryDocumentPage, row: int, key: str, text: str) -> None:
+    index = page.model.index(row, page.model.columns.index(key))
+    page.table.setCurrentIndex(index)
+    page.table.edit(index)
+    editor = page.table.indexWidget(index)
+    editor.setText(text)
+    qtbot.keyClick(editor, Qt.Key.Key_Tab)
+
+
+def test_inventory_grid_tab_commits_adds_counterparty_and_saves_unfinished_draft(
+    inventory_demo, conn, qtbot, monkeypatch
+):
+    demo = inventory_demo
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+    )
+    session = Session(
+        conn,
+        demo.inventory.ledger,
+        demo.company_id,
+        "Склад",
+        Catalog(conn, demo.company_id),
+        working_date=date(2026, 1, 10),
+    )
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    page.show()
+    model = page.model
+
+    _type_in_cell(qtbot, page, 0, ITEM, "товар b")
+    assert model.rows[0].item_id == demo.other_item
+    _type_in_cell(qtbot, page, 0, WAREHOUSE, "резерв")
+    assert model.rows[0].warehouse_id == demo.reserve
+    model.setData(model.index(0, model.columns.index(ACCOUNT)), demo.payable_account)
+    _type_in_cell(qtbot, page, 0, SC1, "Новый поставщик")
+    qtbot.waitUntil(lambda: model.rows[0].offset_subconto[0] not in (None, demo.supplier))
+    added = session.catalog.value(model.rows[0].offset_subconto[0])
+    assert added.name == "Новый поставщик"
+
+    model.insert_row()  # a prefilled trailing row is not a line
+    assert page.save(post=False), page.error.text()
+    assert page.doc.status == "draft"
+    assert len(page.doc.lines) == 1
+    line = page.doc.lines[0]
+    assert (line.item_id, line.warehouse_id, line.quantity, line.offset_subconto[0]) == (
+        demo.other_item,
+        demo.reserve,
+        0,
+        added.id,
+    )
+    assert not page.save(post=True)
+    assert "не указано количество" in page.error.text()

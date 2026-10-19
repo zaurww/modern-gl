@@ -28,10 +28,12 @@ _QUANTITY_QUANTUM = Decimal(1).scaleb(-QUANTITY_SCALE)
 
 @dataclass(frozen=True)
 class ReceiptLine:
+    """Receipt/opening line. In a draft, everything except the item may be left empty."""
+
     item_id: int
-    warehouse_id: int
-    quantity: str | int | Decimal
-    amount: str | int | Decimal
+    warehouse_id: int | None
+    quantity: str | int | Decimal | None
+    amount: str | int | Decimal | None
     memo: str = ""
     credit_account_id: int | None = None
     credit_subconto: Sequence[int | None] = ()
@@ -40,9 +42,9 @@ class ReceiptLine:
 @dataclass(frozen=True)
 class IssueLine:
     item_id: int
-    warehouse_id: int
-    quantity: str | int | Decimal
-    expense_account_id: int
+    warehouse_id: int | None
+    quantity: str | int | Decimal | None
+    expense_account_id: int | None
     expense_subconto: Sequence[int | None] = ()
     memo: str = ""
 
@@ -50,9 +52,9 @@ class IssueLine:
 @dataclass(frozen=True)
 class TransferLine:
     item_id: int
-    from_warehouse_id: int
-    to_warehouse_id: int
-    quantity: str | int | Decimal
+    from_warehouse_id: int | None
+    to_warehouse_id: int | None
+    quantity: str | int | Decimal | None
     memo: str = ""
 
 
@@ -110,6 +112,10 @@ def format_quantity(quantity: int, precision: int = 3) -> str:
     value = Decimal(quantity).scaleb(-QUANTITY_SCALE)
     text = f"{value:.{precision}f}"
     return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def _blank(value: object) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def _now() -> str:
@@ -336,16 +342,22 @@ class Inventory:
         company_id: int,
         doc_date: date | str,
         lines: Sequence[ReceiptLine],
-        credit_account_id: int,
+        credit_account_id: int | None,
         credit_subconto: Sequence[int | None] = (),
         memo: str = "",
         *,
         opening: bool = False,
     ) -> int:
-        """Save an editable receipt/opening document without affecting stock or GL."""
+        """Save an editable receipt/opening document without affecting stock or GL.
+
+        A draft may be unfinished: only the item of each line is required."""
         with transaction(self.conn):
             document_id = self._insert_document(
-                company_id, doc_date, "opening" if opening else "receipt", memo
+                company_id,
+                doc_date,
+                "opening" if opening else "receipt",
+                memo,
+                chronological=False,
             )
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
@@ -368,7 +380,9 @@ class Inventory:
     ) -> int:
         """Save an editable issue document without affecting stock or GL."""
         with transaction(self.conn):
-            document_id = self._insert_document(company_id, doc_date, "issue", memo)
+            document_id = self._insert_document(
+                company_id, doc_date, "issue", memo, chronological=False
+            )
             self._write_issue_draft(company_id, document_id, lines)
             self._audit(
                 company_id,
@@ -388,7 +402,9 @@ class Inventory:
     ) -> int:
         """Save an editable transfer document without affecting stock or GL."""
         with transaction(self.conn):
-            document_id = self._insert_document(company_id, doc_date, "transfer", memo)
+            document_id = self._insert_document(
+                company_id, doc_date, "transfer", memo, chronological=False
+            )
             self._write_transfer_draft(company_id, document_id, lines)
             self._audit(
                 company_id,
@@ -405,7 +421,7 @@ class Inventory:
         document_id: int,
         doc_date: date | str,
         lines: Sequence[ReceiptLine],
-        credit_account_id: int,
+        credit_account_id: int | None,
         credit_subconto: Sequence[int | None] = (),
         memo: str = "",
     ) -> None:
@@ -469,6 +485,7 @@ class Inventory:
                 raise ValidationError(tr("складской документ без строк"))
             postings: list[PostingInput] = []
             for line in lines:
+                self._require_complete(doc["doc_type"], line)
                 item = self._item(company_id, line["item_id"])
                 warehouse = self._warehouse(company_id, line["warehouse_id"])
                 offset_sc = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
@@ -1007,26 +1024,26 @@ class Inventory:
         company_id: int,
         document_id: int,
         lines: Sequence[ReceiptLine],
-        credit_account_id: int,
+        credit_account_id: int | None,
         credit_subconto: Sequence[int | None],
     ) -> None:
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
-        self._account(company_id, credit_account_id)
         for line_no, source in enumerate(lines, 1):
             item = self._item(company_id, source.item_id)
-            warehouse = self._warehouse(company_id, source.warehouse_id)
-            quantity = self._quantity(item, source.quantity, line_no)
-            amount = self._positive_amount(source.amount, line_no)
+            warehouse_id = self._draft_warehouse(company_id, source.warehouse_id)
+            quantity = self._draft_quantity(item, source.quantity, line_no)
+            amount = 0 if _blank(source.amount) else self._positive_amount(source.amount, line_no)
             line_credit_account = source.credit_account_id or credit_account_id
-            self._account(company_id, line_credit_account)
+            if line_credit_account is not None:
+                self._account(company_id, line_credit_account)
             line_credit_sc = _pad_subconto(source.credit_subconto or credit_subconto)
             self._insert_line(
                 document_id,
                 company_id,
                 line_no,
                 item["id"],
-                warehouse["id"],
+                warehouse_id,
                 None,
                 quantity,
                 amount,
@@ -1045,16 +1062,17 @@ class Inventory:
             raise ValidationError(tr("складской документ без строк"))
         for line_no, source in enumerate(lines, 1):
             item = self._item(company_id, source.item_id)
-            warehouse = self._warehouse(company_id, source.warehouse_id)
-            quantity = self._quantity(item, source.quantity, line_no)
-            self._account(company_id, source.expense_account_id)
+            warehouse_id = self._draft_warehouse(company_id, source.warehouse_id)
+            quantity = self._draft_quantity(item, source.quantity, line_no)
+            if source.expense_account_id is not None:
+                self._account(company_id, source.expense_account_id)
             expense_sc = _pad_subconto(source.expense_subconto)
             self._insert_line(
                 document_id,
                 company_id,
                 line_no,
                 item["id"],
-                warehouse["id"],
+                warehouse_id,
                 None,
                 quantity,
                 0,
@@ -1072,19 +1090,22 @@ class Inventory:
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
         for line_no, source in enumerate(lines, 1):
-            if source.from_warehouse_id == source.to_warehouse_id:
+            if (
+                source.from_warehouse_id is not None
+                and source.from_warehouse_id == source.to_warehouse_id
+            ):
                 raise ValidationError(tr("склад отправитель и получатель совпадают"))
             item = self._item(company_id, source.item_id)
-            from_warehouse = self._warehouse(company_id, source.from_warehouse_id)
-            to_warehouse = self._warehouse(company_id, source.to_warehouse_id)
-            quantity = self._quantity(item, source.quantity, line_no)
+            from_warehouse_id = self._draft_warehouse(company_id, source.from_warehouse_id)
+            to_warehouse_id = self._draft_warehouse(company_id, source.to_warehouse_id)
+            quantity = self._draft_quantity(item, source.quantity, line_no)
             self._insert_line(
                 document_id,
                 company_id,
                 line_no,
                 item["id"],
-                from_warehouse["id"],
-                to_warehouse["id"],
+                from_warehouse_id,
+                to_warehouse_id,
                 quantity,
                 0,
                 0,
@@ -1099,11 +1120,35 @@ class Inventory:
         self, company_id: int, document_id: int, doc_date: date | str, memo: str
     ) -> None:
         value_date = iso_date(doc_date)
-        self._require_chronological(company_id, value_date, document_id)
         self.conn.execute(
             "UPDATE inventory_documents SET doc_date = ?, memo = ? WHERE id = ?",
             (value_date, memo.strip(), document_id),
         )
+
+    def _draft_warehouse(self, company_id: int, warehouse_id: int | None) -> int | None:
+        return None if warehouse_id is None else self._warehouse(company_id, warehouse_id)["id"]
+
+    def _draft_quantity(
+        self, item: sqlite3.Row, value: str | int | Decimal | None, line_no: int
+    ) -> int:
+        return 0 if _blank(value) else self._quantity(item, value, line_no)
+
+    @staticmethod
+    def _require_complete(doc_type: str, line: sqlite3.Row) -> None:
+        """A draft may be unfinished; posting needs every field of the line."""
+        line_no = line["line_no"]
+        if line["warehouse_id"] is None:
+            raise ValidationError(tr("строка {line}: не указан склад", line=line_no))
+        if line["quantity"] <= 0:
+            raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
+        if doc_type == "transfer":
+            if line["to_warehouse_id"] is None:
+                raise ValidationError(tr("строка {line}: не указан склад-получатель", line=line_no))
+            return
+        if doc_type in {"opening", "receipt"} and line["amount"] <= 0:
+            raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
+        if line["offset_account_id"] is None:
+            raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
 
     def _require_inventory_draft(self, company_id: int, document_id: int) -> sqlite3.Row:
         doc = self._document(company_id, document_id)
@@ -1176,10 +1221,12 @@ class Inventory:
         memo: str,
         *,
         cost_type_id: int | None = None,
+        chronological: bool = True,
     ) -> int:
         self._company(company_id)
         value_date = iso_date(doc_date)
-        self._require_chronological(company_id, value_date)
+        if chronological:  # drafts do not touch stock; only posting must keep date order
+            self._require_chronological(company_id, value_date)
         number = self.conn.execute(
             "UPDATE companies SET last_inventory_number = last_inventory_number + 1 "
             "WHERE id = ? RETURNING last_inventory_number",
