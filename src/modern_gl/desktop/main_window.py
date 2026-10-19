@@ -43,12 +43,13 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import load_document
+from modern_gl.application.queries import load_document, load_template
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.theme import P, dot_icon, fonts
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import LANGUAGES, language, set_language, tr
@@ -60,6 +61,7 @@ PLACES = [  # key, title (translated on display), icon color
     (("osv",), "ОСВ", P.green),
     (("chart",), "План счетов", P.violet),
     (("directories",), "Справочники", P.teal),
+    (("templates",), "Шаблоны", P.amber),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES]
 
@@ -225,6 +227,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+2", lambda: self.show_place(("osv",))),
             ("Ctrl+3", lambda: self.show_place(("chart",))),
             ("Ctrl+4", lambda: self.show_place(("directories",))),
+            ("Ctrl+5", lambda: self.show_place(("templates",))),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
 
@@ -383,6 +386,13 @@ class MainWindow(QMainWindow):
             return page
         if key == ("directories",):
             return DirectoriesPage(s)
+        if key == ("templates",):
+            page = TemplatesPage(s)
+            page.use_template.connect(
+                lambda tid: self.new_document(entry=load_template(s.conn, s.company_id, tid))
+            )
+            page.edit_template.connect(self.open_template)
+            return page
         if key == ("osv",):
             page = OsvPage(s)
         else:
@@ -403,7 +413,7 @@ class MainWindow(QMainWindow):
         self.pages[key] = page
         self.stack.addWidget(page)
         if open_item:
-            color = {"doc": P.amber, "new": P.accent}.get(key[0], P.teal)
+            color = {"doc": P.amber, "new": P.accent, "template": P.amber}.get(key[0], P.teal)
             glyph = {"doc": doc_glyph(), "new": "+"}.get(key[0], page.title()[:1])
             self.sidebar.add_item(key, page.title(), color, glyph)
 
@@ -461,8 +471,8 @@ class MainWindow(QMainWindow):
             self._add_page(key, page, open_item=True)
         self._activate(key)
 
-    def new_document(self, template=None) -> None:
-        page = DocumentPage(self.session, template=template)
+    def new_document(self, template=None, entry=None) -> None:
+        page = DocumentPage(self.session, template=template, entry=entry)
         self._wire_document(page)
         self._add_page(page.key, page, open_item=True)
         self._activate(page.key)
@@ -471,8 +481,30 @@ class MainWindow(QMainWindow):
         page.saved.connect(lambda _id, p=page: self._document_saved(p))
         page.open_document.connect(self.open_document)
         page.copy_requested.connect(self.new_document)
+        page.template_saved.connect(self.open_template)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
         page.title_changed.connect(lambda p=page: self._retitle(p))
+
+    def open_template(self, template_id: int | None) -> None:
+        """The template editor; a saved (or deleted) template returns to the list."""
+        key = ("template", template_id)
+        if template_id is not None and key in self.pages:
+            self._activate(key)
+            return
+        page = TemplatePage(self.session, template_id)
+        key = page.key
+        page.saved.connect(lambda tid, p=page: self._template_saved(p, tid))
+        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
+        page.title_changed.connect(lambda p=page: self._retitle(p))
+        self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def _template_saved(self, page: TemplatePage, template_id: int) -> None:
+        templates = self.pages.get(("templates",))
+        if templates is not None:
+            templates.refresh(select_id=template_id)
+        self.close_page(self._key_of(page), ask=False)
+        self.show_place(("templates",))
 
     def _document_saved(self, page: DocumentPage) -> None:
         old_key = self._key_of(page)

@@ -36,6 +36,7 @@ from modern_gl.application.catalog import Catalog, search
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import PostingData
 from modern_gl.desktop.theme import P
+from modern_gl.domain import formula
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import SCALE, format_minor, to_minor
 from modern_gl.i18n import tr
@@ -64,12 +65,14 @@ class PostingRow:
     credit_sc: list[int | None] = field(default_factory=lambda: [None, None, None])
     amount: int | None = None
     memo: str = ""
+    formula: str = ""  # entry templates: amount formula (S, S*18/118…), see domain.formula
 
     def is_empty(self) -> bool:
         return (
             self.debit is None
             and self.credit is None
             and self.amount is None
+            and not self.formula
             and not self.memo.strip()
         )
 
@@ -89,12 +92,17 @@ class PostingsModel(QAbstractTableModel):
     changed = Signal()
 
     def __init__(
-        self, catalog: Catalog, rows: list[PostingRow] | None = None, read_only: bool = False
+        self,
+        catalog: Catalog,
+        rows: list[PostingRow] | None = None,
+        read_only: bool = False,
+        formulas: bool = False,
     ) -> None:
         super().__init__()
         self.catalog = catalog
         self.rows = rows or [PostingRow()]
         self.read_only = read_only
+        self.formulas = formulas  # template editing: the amount column holds formulas
 
     # ---- Qt model API ----------------------------------------------------------------
 
@@ -150,6 +158,8 @@ class PostingsModel(QAbstractTableModel):
                 show_hint = role == Qt.ItemDataRole.DisplayRole and kind and not self.read_only
                 return self.catalog.kinds[kind] if show_hint else ""
             if side == "amount":
+                if self.formulas:
+                    return r.formula
                 if r.amount is None:
                     return ""
                 return (
@@ -196,8 +206,12 @@ class PostingsModel(QAbstractTableModel):
             else:
                 getattr(r, f"{side}_sc")[pos - 1] = value
                 self.dataChanged.emit(index, index)
+        elif side == "amount" and self.formulas:
+            r.formula = value
+            self.dataChanged.emit(index, index)
         elif side == "amount":
             r.amount = value
+            r.formula = ""  # typed by hand: no longer follows the operation amount
             self.dataChanged.emit(index, index)
         else:
             r.memo = value
@@ -220,9 +234,35 @@ class PostingsModel(QAbstractTableModel):
         return self.insert_row(
             i + 1,
             PostingRow(
-                src.debit, list(src.debit_sc), src.credit, list(src.credit_sc), src.amount, src.memo
+                src.debit,
+                list(src.debit_sc),
+                src.credit,
+                list(src.credit_sc),
+                src.amount,
+                src.memo,
+                src.formula,
             ),
         )
+
+    def recalculate(self, total: int | None) -> str | None:
+        """Set the amounts of rows that have a formula for the operation amount S.
+        Rows typed by hand take part with their amount. Returns an error text, if any."""
+        if not any(r.formula for r in self.rows):
+            return None
+        sources = [
+            r.formula or (format_minor(r.amount).replace(" ", "") if r.amount else "")
+            for r in self.rows
+        ]
+        try:
+            amounts = formula.compute(sources, total) if total else [None] * len(sources)
+        except ValidationError as e:
+            return str(e)
+        for r, amount in zip(self.rows, amounts, strict=True):
+            if r.formula:
+                r.amount = amount if amount and amount > 0 else None
+        self.dataChanged.emit(self.index(0, AMOUNT), self.index(len(self.rows) - 1, AMOUNT))
+        self.changed.emit()
+        return None
 
     def remove_row(self, i: int) -> None:
         self.beginRemoveRows(QModelIndex(), i, i)
@@ -362,13 +402,17 @@ class PostingsDelegate(QStyledItemDelegate):
                 if text and value is None:
                     self.unknown_value.emit(QPersistentModelIndex(index), kind, text)
                     return
+            elif side == "amount" and model.formulas:
+                if text:
+                    formula.parse(text)  # check now, not when the template is saved
+                value = text
             elif side == "amount":
                 value = to_minor(text) if text else None
                 if value is not None and value <= 0:
                     raise ValueError(tr("сумма должна быть больше нуля"))
             else:
                 value = text
-        except (LookupError, ValueError, TypeError) as e:
+        except (LookupError, ValueError, TypeError, ValidationError) as e:
             self.error.emit(str(e).strip("'\""))
             return
         model.setData(index, value)

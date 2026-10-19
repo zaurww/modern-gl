@@ -113,6 +113,23 @@ def main() -> None:
     session.catalog.reload()
     directories.refresh(select_kind=banks)
     shot("8b_directories")
+    win.show_place(("templates",))
+    shot("8c_templates")
+    from modern_gl.application.queries import list_templates
+
+    sale = list_templates(session.conn, session.company_id)[0]
+    sale = next(
+        (t for t in list_templates(session.conn, session.company_id) if len(t.lines) == 2), sale
+    )
+    win.open_template(sale.id)
+    shot("8d_template_editor")
+    win.close_current()
+    win.show_place(("templates",))
+    win.new_document(entry=sale)
+    page = cast(DocumentPage, win.stack.currentWidget())
+    page.amount.setText("1180")
+    page.amount.textEdited.emit("1180")
+    shot("8e_document_from_template")
     from modern_gl.desktop.account_dialog import AccountDialog
 
     dialog = AccountDialog(session, session.catalog.by_code["02"], parent=win)

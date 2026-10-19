@@ -22,6 +22,8 @@ TRASH = "Silinmiş"
 # Every table that belongs to a company (used when splitting an old shared file).
 COMPANY_TABLES = (
     "audit_events",
+    "entry_template_lines",
+    "entry_templates",
     "postings",
     "documents",
     "accounts",

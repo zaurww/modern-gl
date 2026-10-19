@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from modern_gl.domain.errors import NotFoundError
-from modern_gl.i18n import tr
+from modern_gl.i18n import sort_key, tr
 
 
 @dataclass(frozen=True)
@@ -118,3 +118,53 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
             )
         )
     return doc
+
+
+@dataclass
+class TemplateLineData:
+    debit_account_id: int | None
+    credit_account_id: int | None
+    formula: str
+    debit_subconto: tuple[int | None, int | None, int | None]
+    credit_subconto: tuple[int | None, int | None, int | None]
+    memo: str
+
+
+@dataclass
+class TemplateData:
+    id: int
+    name: str
+    memo: str
+    lines: list[TemplateLineData] = field(default_factory=list)
+
+
+def list_templates(conn: sqlite3.Connection, company_id: int) -> list[TemplateData]:
+    """All entry templates with their lines, alphabetically."""
+    templates = {
+        r["id"]: TemplateData(r["id"], r["name"], r["memo"])
+        for r in conn.execute(
+            "SELECT id, name, memo FROM entry_templates WHERE company_id = ?", (company_id,)
+        )
+    }
+    for r in conn.execute(
+        "SELECT * FROM entry_template_lines WHERE company_id = ? ORDER BY template_id, line_no",
+        (company_id,),
+    ):
+        templates[r["template_id"]].lines.append(
+            TemplateLineData(
+                r["debit_account_id"],
+                r["credit_account_id"],
+                r["formula"],
+                (r["dt_sc1"], r["dt_sc2"], r["dt_sc3"]),
+                (r["ct_sc1"], r["ct_sc2"], r["ct_sc3"]),
+                r["memo"],
+            )
+        )
+    return sorted(templates.values(), key=lambda t: sort_key(t.name))
+
+
+def load_template(conn: sqlite3.Connection, company_id: int, template_id: int) -> TemplateData:
+    found = next((t for t in list_templates(conn, company_id) if t.id == template_id), None)
+    if found is None:
+        raise NotFoundError(tr("шаблон не найден"))
+    return found

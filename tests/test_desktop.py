@@ -598,3 +598,61 @@ def test_f9_copies_row_and_ctrl_s_saves_while_a_cell_is_edited(window, qtbot):
     qtbot.keyClick(QApplication.focusWidget(), Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
     assert page.doc is not None, page.error.text()  # saved as a draft
     assert page.status.text() == "Черновик"
+
+
+def test_document_from_template_follows_operation_amount(window, qtbot):
+    window.show_place(("templates",))
+    templates = current_page(window)
+    sale = next(t for t in templates.model.rows if t.name == "Реализация с НДС")
+    templates.use_template.emit(sale.id)
+    page = current_page(window)
+    assert isinstance(page, DocumentPage)
+    assert page.memo.text() == "Реализация с НДС"
+    assert page.amount.isVisible()
+
+    type_text(page.amount, "1 180,00")
+    assert [r.amount for r in page.model.rows] == [118000, 18000]
+    page.model.setData(page.model.index(1, AMOUNT), 17000)  # typed by hand: stays
+    page.amount.clear()
+    type_text(page.amount, "2360")
+    assert [r.amount for r in page.model.rows] == [236000, 17000]
+
+    cat = window.session.catalog
+    kinds = cat.by_code["62"].sc_kinds
+    page.model.rows[0].debit_sc = [cat.values(kinds[0])[0].id, cat.values(kinds[1])[0].id, None]
+    assert page.save(post=True), page.error.text()
+    osv = trial_balance(window.conn, window.session.company_id, "2026-03-01", "2026-03-31")
+    assert {r.code: r.turnover_ct for r in osv.rows}["68.2"] == 17000
+
+
+def test_make_template_from_document_and_edit_formula(window, monkeypatch):
+    monkeypatch.setattr(
+        "modern_gl.desktop.document_page.QInputDialog.getText",
+        staticmethod(lambda *a, **k: ("Kassaya mədaxil", True)),
+    )
+    window.new_document()
+    page = current_page(window)
+    cat = window.session.catalog
+    bank = cat.values(cat.by_code["51"].sc_kinds[0])[0].id
+    page.model.rows = [
+        PostingRow(
+            debit=cat.by_code["50"].id,
+            credit=cat.by_code["51"].id,
+            credit_sc=[bank, None, None],
+            amount=50000,
+        ),
+        PostingRow(debit=cat.by_code["26"].id, credit=cat.by_code["50"].id, amount=1500),
+    ]
+    page.save_as_template()
+    editor = current_page(window)
+    assert editor.name.text() == "Kassaya mədaxil"
+    assert [r.formula for r in editor.model.rows] == ["S", "15.00"]
+    assert editor.model.rows[0].credit_sc[0] == bank  # subconto kept
+
+    editor.model.setData(editor.model.index(1, AMOUNT), "S*3/100")
+    assert "1 000.00" in editor.preview.text() and "30.00" in editor.preview.text()
+    assert editor.save()
+    templates = current_page(window)
+    assert templates.title() == "Шаблоны"
+    saved = next(t for t in templates.model.rows if t.name == "Kassaya mədaxil")
+    assert [ln.formula for ln in saved.lines] == ["S", "S*3/100"]

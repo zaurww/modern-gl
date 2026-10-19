@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -19,7 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.queries import DocumentData, load_document
+from modern_gl.application.ledger import TemplateLine
+from modern_gl.application.queries import DocumentData, TemplateData, load_document
 from modern_gl.desktop.postings import (
     DT,
     PostingRow,
@@ -38,8 +40,10 @@ from modern_gl.desktop.widgets import (
     ru_date,
     to_qdate,
 )
+from modern_gl.domain import formula
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
@@ -53,11 +57,16 @@ class DocumentPage(QWidget):
     saved = Signal(int)  # document id
     open_document = Signal(int)
     copy_requested = Signal(object)  # DocumentData to prefill a new document
+    template_saved = Signal(int)  # entry template made from this document
     close_requested = Signal()
     title_changed = Signal()
 
     def __init__(
-        self, session: Session, doc_id: int | None = None, template: DocumentData | None = None
+        self,
+        session: Session,
+        doc_id: int | None = None,
+        template: DocumentData | None = None,
+        entry: TemplateData | None = None,
     ) -> None:
         super().__init__()
         self.setObjectName("page")
@@ -89,12 +98,24 @@ class DocumentPage(QWidget):
         for code, name in session.layers:
             self.layer.addItem(name, code)
         self.layer.setFixedWidth(230)
+        # A document from an entry template asks for the operation amount once (S);
+        # lines with a formula follow it.
+        self.amount = QLineEdit()
+        self.amount.setFixedWidth(150)
+        self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.amount.setPlaceholderText("0.00")
+        self.amount_caption = QLabel(tr("Сумма операции"))
         for label, w in ((tr("Дата"), self.date), (tr("Книга"), self.layer)):
             caption = QLabel(label)
             caption.setObjectName("secondary")
             meta.addWidget(caption)
             meta.addWidget(w)
             meta.addSpacing(10)
+        self.amount_caption.setObjectName("secondary")
+        meta.addWidget(self.amount_caption)
+        meta.addWidget(self.amount)
+        self.amount_caption.hide()
+        self.amount.hide()
         meta.addStretch(1)
         root.addLayout(meta)
 
@@ -132,10 +153,14 @@ class DocumentPage(QWidget):
             tr("Отменить проведение"), "flat", tr("Вернуть в черновик, чтобы исправить")
         )
         self.btn_copy = button(tr("Копировать"), "flat", tr("Новый документ на основе этого"))
+        self.btn_template = button(
+            tr("Сделать шаблоном"), "flat", tr("Сохранить проводки как шаблон операции")
+        )
         actions.addWidget(self.btn_delete)
         actions.addWidget(self.btn_reverse)
         actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_copy)
+        actions.addWidget(self.btn_template)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
@@ -150,6 +175,9 @@ class DocumentPage(QWidget):
         self.btn_reverse.clicked.connect(self.reverse)
         self.btn_unpost.clicked.connect(self.unpost)
         self.btn_copy.clicked.connect(lambda: self.copy_requested.emit(self._as_template()))
+        self.btn_template.clicked.connect(self.save_as_template)
+        self.amount.textEdited.connect(self._amount_edited)
+        self.amount.returnPressed.connect(self._focus_grid)
         self.delegate.error.connect(self.show_error)
         self.delegate.unknown_value.connect(self._offer_new_value)
         self.memo.returnPressed.connect(self._focus_grid)
@@ -167,6 +195,8 @@ class DocumentPage(QWidget):
             self.load(doc_id)
         else:
             self._set_new(template)
+            if entry is not None:
+                self._set_entry(entry)
         self._wire_dirty()
 
     # ---- building helpers ------------------------------------------------------------
@@ -245,6 +275,81 @@ class DocumentPage(QWidget):
         self._apply_mode(read_only=False, status="new")
         QTimer.singleShot(0, self.memo.setFocus)
 
+    def _set_entry(self, entry: TemplateData) -> None:
+        """Prefill from an entry template; amounts come from the operation amount."""
+        self.memo.setText(entry.memo or entry.name)
+        rows = [
+            PostingRow(
+                ln.debit_account_id,
+                list(ln.debit_subconto),
+                ln.credit_account_id,
+                list(ln.credit_subconto),
+                None,
+                ln.memo,
+                ln.formula,
+            )
+            for ln in entry.lines
+        ]
+        self.model.beginResetModel()
+        self.model.rows = rows or [PostingRow()]
+        self.model.endResetModel()
+        self.dirty = True
+        asks = formula.uses_amount([ln.formula for ln in entry.lines])
+        self.amount_caption.setVisible(asks)
+        self.amount.setVisible(asks)
+        self._update_total()
+        QTimer.singleShot(0, (self.amount if asks else self.table).setFocus)
+        if not asks:
+            QTimer.singleShot(0, self._focus_grid)
+
+    def _amount_edited(self, text: str) -> None:
+        self.error.hide()
+        try:
+            total = to_minor(text) if text.strip() else None
+        except ValueError as e:
+            self.show_error(str(e))
+            return
+        problem = self.model.recalculate(total)
+        if problem:
+            self.show_error(problem)
+
+    def save_as_template(self) -> None:
+        """Make an entry template of these lines: an amount equal to the first line's
+        becomes S, others stay as numbers — formulas can be refined in the template."""
+        self.table.setFocus()  # commits an open cell editor
+        name, ok = QInputDialog.getText(
+            self, tr("Новый шаблон"), tr("Название шаблона:"), text=self.memo.text().strip()
+        )
+        if not ok or not name.strip():
+            return
+        rows = [r for r in self.model.rows if not r.is_empty()]
+        first = next((r.amount for r in rows if r.amount), None)
+        lines = [
+            TemplateLine(
+                r.debit,
+                r.credit,
+                r.formula
+                or (
+                    "S"
+                    if r.amount and r.amount == first
+                    else (format_minor(r.amount).replace(" ", "") if r.amount else "")
+                ),
+                r.debit_sc,
+                r.credit_sc,
+                r.memo,
+            )
+            for r in rows
+        ]
+        try:
+            template_id = self.s.ledger.save_template(
+                self.s.company_id, name, lines, memo=self.memo.text()
+            )
+        except LedgerError as e:
+            self.show_error(str(e))
+            return
+        self.s.notify(tr("Шаблон «{name}» сохранён", name=name.strip()))
+        self.template_saved.emit(template_id)
+
     def load(self, doc_id: int) -> None:
         self.doc = load_document(self.s.conn, self.s.company_id, doc_id)
         d = self.doc
@@ -293,6 +398,8 @@ class DocumentPage(QWidget):
         )
         self.btn_reverse.setVisible(can_reverse)
         self.btn_copy.setVisible(self.doc is not None)
+        if read_only:
+            self.amount.setEnabled(False)
         self.hint.setVisible(not read_only)
         self._update_total()
 

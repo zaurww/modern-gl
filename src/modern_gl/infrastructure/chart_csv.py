@@ -18,16 +18,18 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from modern_gl.application.ledger import Ledger
+from modern_gl.application.ledger import Ledger, TemplateLine
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import language, tr
 from modern_gl.infrastructure.db import transaction
 
 COLUMNS = ("code", "name", "parent", "group", "subconto")
 SUBCONTO_COLUMNS = ("code", "name")
+ENTRY_COLUMNS = ("template", "debit", "credit", "formula", "memo")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 LEGACY_CLASS = {"A": "asset", "P": "liability"}
 # Each template exists per language: chart_<name>_<lang>.csv, chart_<name>_subconto_<lang>.csv
+# and, optionally, ready entry templates (типовые операции): entries_<name>_<lang>.csv
 TEMPLATES = ("classic", "1c77")
 DEFAULT_TEMPLATE = "classic"
 
@@ -50,7 +52,8 @@ def apply_chart_template(
 
     "classic" is the short pre-2000 chart (46 sales, 80 profit and loss, ~37 accounts);
     "1c77" is the full 1C 7.7 chart on the 2000 plan (90 sales, subaccounts like 60.1).
-    Names come in the given language (default: the interface language).
+    Names come in the given language (default: the interface language). Ready entry
+    templates for the chart are added too, if it has them.
     """
     if name not in TEMPLATES:
         raise ValidationError(
@@ -61,7 +64,34 @@ def apply_chart_template(
         kinds_file = TEMPLATES_DIR / f"chart_{name}_subconto_{lang}.csv"
         for row in _read_rows(kinds_file, SUBCONTO_COLUMNS, ";"):
             ledger.add_subconto_kind(company_id, row["code"].strip(), row["name"].strip())
-        return import_chart_csv(ledger, company_id, TEMPLATES_DIR / f"chart_{name}_{lang}.csv")
+        count = import_chart_csv(ledger, company_id, TEMPLATES_DIR / f"chart_{name}_{lang}.csv")
+        entries = TEMPLATES_DIR / f"entries_{name}_{lang}.csv"
+        if entries.exists():
+            import_entry_templates(ledger, company_id, entries)
+        return count
+
+
+def import_entry_templates(ledger: Ledger, company_id: int, path: str | Path) -> int:
+    """Entry templates from CSV, one row per line: template;debit;credit;formula;memo.
+    Lines of a template are consecutive rows with the same template name."""
+    grouped: dict[str, list[TemplateLine]] = {}
+    for row in _read_rows(path, ENTRY_COLUMNS, ";"):
+
+        def account(code: str) -> int | None:
+            return ledger.account_id(company_id, code.strip()) if code.strip() else None
+
+        grouped.setdefault(row["template"].strip(), []).append(
+            TemplateLine(
+                account(row["debit"] or ""),
+                account(row["credit"] or ""),
+                (row["formula"] or "").strip(),
+                memo=(row["memo"] or "").strip(),
+            )
+        )
+    with transaction(ledger.conn):
+        for name, lines in grouped.items():
+            ledger.save_template(company_id, name, lines, memo=name)
+    return len(grouped)
 
 
 def import_chart_csv(

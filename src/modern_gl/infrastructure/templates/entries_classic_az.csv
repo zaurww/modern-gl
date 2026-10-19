@@ -1,0 +1,19 @@
+template;debit;credit;formula;memo
+Satış ƏDV ilə;62;46;S;Gəlir
+Satış ƏDV ilə;46;68.2;S*18/118;ƏDV 18%
+Alıcıdan ödəniş;51;62;S;
+Malların alışı ƏDV ilə;41;60;S-L2;Mallar
+Malların alışı ƏDV ilə;19;60;S*18/118;ƏDV 18%
+Xidmətlərin alışı ƏDV ilə;26;60;S-L2;Xidmətlər
+Xidmətlərin alışı ƏDV ilə;19;60;S*18/118;ƏDV 18%
+ƏDV əvəzləşdirilməsi;68.2;19;S;
+Malsatana ödəniş;60;51;S;
+Satılmış malların maya dəyəri;46;41;S;
+Əmək haqqının hesablanması;26;70;S;
+Gəlir vergisinin tutulması;70;68.1;S;
+Əmək haqqının ödənilməsi;70;51;S;
+Təhtəlhesab verilməsi;71;50;S;
+Avans hesabatı;26;71;S;
+Bankdan kassaya nağd pul;50;51;S;
+Bank komissiyası;26;51;S;
+Satışdan maliyyə nəticəsi;46;80;S;
