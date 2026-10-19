@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -19,10 +20,10 @@ from PySide6.QtGui import QPainter  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
 from modern_gl import i18n  # noqa: E402
-from modern_gl.demo_data import create_demo_company  # noqa: E402
 from modern_gl.desktop import theme  # noqa: E402
+from modern_gl.desktop.app import add_demo_company  # noqa: E402
 from modern_gl.desktop.main_window import MainWindow  # noqa: E402
-from modern_gl.infrastructure.db import connect  # noqa: E402
+from modern_gl.infrastructure.workspace import Workspace  # noqa: E402
 
 
 def main() -> None:
@@ -31,9 +32,9 @@ def main() -> None:
     i18n.set_language(sys.argv[2] if len(sys.argv) > 2 else "az")
     app = QApplication(sys.argv)
     theme.apply(app)
-    conn = connect(":memory:")
-    win = MainWindow(conn)
-    create_demo_company(win.ledger)
+    workspace = Workspace(Path(tempfile.mkdtemp()))
+    add_demo_company(workspace)
+    win = MainWindow(workspace)
     win.start()
     win.session.working_date = date(2026, 2, 28)
     win.resize(1400, 860)

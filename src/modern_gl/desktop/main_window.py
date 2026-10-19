@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import getpass
 import sqlite3
+import subprocess
+import sys
+from pathlib import Path
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -14,13 +17,17 @@ from PySide6.QtCore import (
     QSettings,
     QSize,
     Qt,
+    QUrl,
 )
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPen, QShortcut
 from PySide6.QtWidgets import (
+    QDialog,
+    QFileDialog,
     QGraphicsOpacityEffect,
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -36,14 +43,15 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import list_companies, load_document
+from modern_gl.application.queries import load_document
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, dot_icon, fonts
+from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import LANGUAGES, language, set_language, tr
-from modern_gl.infrastructure.chart_csv import apply_chart_template
+from modern_gl.infrastructure.workspace import TRASH, Workspace, open_company
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 PLACES = [  # key, title (translated on display), icon color
@@ -144,12 +152,49 @@ class Sidebar(QWidget):
         return None
 
 
+def confirm_delete(parent: QWidget, name: str) -> bool:
+    """Deleting a company is confirmed by typing its name, like on GitHub."""
+    dlg = QDialog(parent)
+    dlg.setWindowTitle(tr("Удалить компанию"))
+    lay = QVBoxLayout(dlg)
+    lay.setContentsMargins(24, 22, 24, 18)
+    lay.setSpacing(12)
+    text = QLabel(
+        tr(
+            "Компания «{name}» исчезнет из списка. Её файл будет перемещён в папку «{trash}», "
+            "откуда его можно вернуть.\n\nЧтобы подтвердить, введите название компании:",
+            name=name,
+            trash=TRASH,
+        )
+    )
+    text.setWordWrap(True)
+    lay.addWidget(text)
+    edit = QLineEdit()
+    edit.setPlaceholderText(name)
+    lay.addWidget(edit)
+    buttons = QHBoxLayout()
+    buttons.addStretch(1)
+    cancel = QPushButton(tr("Отмена"))
+    delete = QPushButton(tr("Удалить компанию"))
+    delete.setObjectName("dangerSolid")
+    delete.setEnabled(False)
+    edit.textChanged.connect(lambda s: delete.setEnabled(s.strip() == name))
+    cancel.clicked.connect(dlg.reject)
+    delete.clicked.connect(dlg.accept)
+    buttons.addWidget(cancel)
+    buttons.addWidget(delete)
+    lay.addLayout(buttons)
+    return dlg.exec() == QDialog.DialogCode.Accepted
+
+
 class MainWindow(QMainWindow):
-    def __init__(self, conn: sqlite3.Connection, settings: QSettings | None = None) -> None:
+    def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
         super().__init__()
-        self.conn = conn
+        self.workspace = workspace
         self.settings = settings
-        self.ledger = Ledger(conn, actor=getpass.getuser())
+        self.conn: sqlite3.Connection | None = None
+        self.ledger: Ledger | None = None
+        self.company_path: Path | None = None
         self.session: Session | None = None
         self.pages: dict[object, QWidget] = {}
         self.resize(1360, 820)
@@ -180,16 +225,16 @@ class MainWindow(QMainWindow):
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
 
-    # ---- companies -------------------------------------------------------------------
+    # ---- companies: one file each ----------------------------------------------------
 
     def start(self) -> bool:
         """Open the last used company, or ask to create the first one."""
-        companies = list_companies(self.conn)
+        companies = self.workspace.companies()
         if not companies:
             return self.create_company(first=True)
-        last = int(self.settings.value("company", 0)) if self.settings else 0
-        ids = [cid for cid, _ in companies]
-        self.open_company(last if last in ids else ids[0])
+        last = str(self.settings.value("company_file", "")) if self.settings else ""
+        paths = [c.path for c in companies]
+        self.open_company(next((p for p in paths if str(p) == last), paths[0]))
         return True
 
     def create_company(self, first: bool = False) -> bool:
@@ -201,33 +246,27 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(self, tr("Новая компания"), prompt)
         if not ok or not name.strip():
             return False
-        cid = self.ledger.create_company(name.strip())
-        apply_chart_template(self.ledger, cid, "1c77")
-        self.open_company(cid)
+        if not self._confirm_close_all():
+            return False
+        self.open_company(self.workspace.create(name.strip()))
         return True
 
-    def open_company(self, company_id: int) -> None:
+    def open_company(self, path: Path) -> None:
         if not self._confirm_close_all():
             return
-        name = dict(list_companies(self.conn))[company_id]
+        conn, company_id = open_company(path)
         old_date = self.session.working_date if self.session else None
+        self._close_company()
+        self.conn, self.company_path = conn, Path(path)
+        self.ledger = Ledger(conn, actor=getpass.getuser())
+        name = conn.execute("SELECT name FROM companies WHERE id = ?", (company_id,)).fetchone()[0]
         self.session = Session(
-            self.conn,
-            self.ledger,
-            company_id,
-            name,
-            Catalog(self.conn, company_id),
-            notify=self.notify,
+            conn, self.ledger, company_id, name, Catalog(conn, company_id), notify=self.notify
         )
         if old_date:
             self.session.working_date = old_date
         if self.settings:
-            self.settings.setValue("company", company_id)
-        for page in list(self.pages.values()):
-            self.stack.removeWidget(page)
-            page.deleteLater()
-        self.pages.clear()
-        self.sidebar.nav.clear()
+            self.settings.setValue("company_file", str(path))
         self.sidebar.company.setText(f"{name}   ▾")
         self.setWindowTitle(f"{name} — Modern GL")
         self.sidebar.retranslate()
@@ -236,21 +275,95 @@ class MainWindow(QMainWindow):
         self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
 
+    def _close_company(self) -> None:
+        """Drop all pages of the current company and close its file."""
+        for page in list(self.pages.values()):
+            self.stack.removeWidget(page)
+            page.deleteLater()
+        self.pages.clear()
+        self.sidebar.nav.clear()
+        if self.conn is not None:
+            self.conn.close()
+        self.conn = self.ledger = self.session = self.company_path = None
+
+    def shutdown(self) -> None:
+        self._close_company()
+
     def _company_menu(self) -> None:
         menu = QMenu(self)
-        for cid, name in list_companies(self.conn):
-            act = menu.addAction(
-                ("✓  " if self.session and cid == self.session.company_id else "    ") + name
-            )
-            act.triggered.connect(lambda _=False, c=cid: self.open_company(c))
+        for company in self.workspace.companies():
+            current = company.path == self.company_path
+            act = menu.addAction(("✓  " if current else "    ") + company.name)
+            act.triggered.connect(lambda _=False, p=company.path: self.open_company(p))
+        menu.addSeparator()
+        menu.addAction(tr("Новая компания…")).triggered.connect(lambda: self.create_company())
+        menu.addAction(tr("Добавить из файла…")).triggered.connect(self.add_company_file)
+        if self.session is not None:
+            menu.addSeparator()
+            menu.addAction(tr("Показать файл компании")).triggered.connect(self.show_company_file)
+            menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
         menu.addSeparator()
         languages = menu.addMenu(tr("Язык интерфейса"))
         for code, title in LANGUAGES.items():
             act = languages.addAction(("✓  " if code == language() else "    ") + title)
             act.triggered.connect(lambda _=False, c=code: self.set_ui_language(c))
-        menu.addAction(tr("Новая компания…")).triggered.connect(lambda: self.create_company())
         btn = self.sidebar.company
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def add_company_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("Добавить компанию из файла"),
+            "",
+            tr("Файлы компаний (*.gl *.db);;Все файлы (*)"),
+        )
+        if not path:
+            return
+        try:
+            added = self.workspace.add_file(Path(path))
+        except sqlite3.DatabaseError:
+            QMessageBox.warning(
+                self,
+                tr("Добавить из файла"),
+                tr("Это не файл компании: {file}", file=Path(path).name),
+            )
+            return
+        if added:
+            self.open_company(added[0])
+            self.notify(tr("Добавлено компаний: {n}", n=len(added)))
+
+    def show_company_file(self) -> None:
+        if self.company_path is None:
+            return
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", "/select,", str(self.company_path)])
+        else:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.company_path.parent)))
+
+    def delete_company(self) -> None:
+        if self.session is None or not confirm_delete(self, self.session.company_name):
+            return
+        if not self._confirm_close_all():
+            return
+        name, path = self.session.company_name, self.company_path
+        self._close_company()
+        self.workspace.delete(path)
+        remaining = self.workspace.companies()
+        if remaining:
+            self.open_company(remaining[0].path)
+        elif not self.create_company(first=True):
+            self._show_no_company()
+        self.notify(
+            tr("Компания «{name}» удалена (файл в папке «{trash}»)", name=name, trash=TRASH)
+        )
+
+    def _show_no_company(self) -> None:
+        self.sidebar.company.setText(tr("Нет компании") + "   ▾")
+        self.setWindowTitle("Modern GL")
+        page = EmptyState("○", tr("Нет компании"), tr("Создайте компанию в меню слева вверху."))
+        self.pages[("empty",)] = page
+        self.stack.addWidget(page)
+        self.stack.setCurrentWidget(page)
 
     # ---- pages -----------------------------------------------------------------------
 
@@ -407,7 +520,7 @@ class MainWindow(QMainWindow):
         self.show_place(("journal",))
 
     def _confirm_close(self, page) -> bool:
-        if not page.is_dirty():
+        if not getattr(page, "is_dirty", lambda: False)():  # e.g. the empty-state page
             return True
         answer = QMessageBox.question(
             self,
@@ -437,8 +550,8 @@ class MainWindow(QMainWindow):
         set_language(code)
         if self.settings:
             self.settings.setValue("language", code)
-        if self.session:
-            self.open_company(self.session.company_id)
+        if self.company_path is not None:
+            self.open_company(self.company_path)
 
     def eventFilter(self, obj, event) -> bool:
         """Click on the × of an open item in the sidebar closes it."""

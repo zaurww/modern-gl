@@ -6,12 +6,14 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCompleter, QMessageBox
 
-from modern_gl.application.ledger import PostingInput
+from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
+from modern_gl.infrastructure.db import connect
+from modern_gl.infrastructure.workspace import TRASH, Workspace
 from modern_gl.reporting.reports import trial_balance
 
 
@@ -24,15 +26,25 @@ def no_modal_dialogs(monkeypatch):
 
 
 @pytest.fixture
-def window(qtbot, conn):
+def workspace(tmp_path):
+    ws = Workspace(tmp_path / "data")
+    path = ws.new_path("ДЕМО ООО")
+    conn = connect(path)
+    create_demo_company(Ledger(conn))
+    conn.close()
+    return ws
+
+
+@pytest.fixture
+def window(qtbot, workspace):
     theme.apply(QApplication.instance())
-    win = MainWindow(conn)
+    win = MainWindow(workspace)
     qtbot.addWidget(win)
-    create_demo_company(win.ledger)
     win.start()
     win.session.working_date = date(2026, 3, 5)
     win.show()
-    return win
+    yield win
+    win.shutdown()
 
 
 def current_page(win):
@@ -407,3 +419,59 @@ def test_osv_highlights_balance_on_wrong_side(window):
     assert osv.model.data(closing_ct, Qt.ItemDataRole.ForegroundRole).name() == "#dc4446"
     assert "дебетовое" in osv.model.data(closing_ct, Qt.ItemDataRole.ToolTipRole)
     assert "50" in osv.footer.text()
+
+
+def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch):
+    monkeypatch.setattr(
+        "modern_gl.desktop.main_window.QInputDialog.getText",
+        staticmethod(lambda *a, **k: ("Yeni MMC", True)),
+    )
+    assert window.create_company()
+    assert window.session.company_name == "Yeni MMC"
+    assert window.company_path == workspace.folder / "Yeni MMC.gl"
+    assert current_page(window).model.rowCount() == 0  # new company: empty journal
+    assert [c.name for c in workspace.companies()] == ["Yeni MMC", "ДЕМО ООО"]
+    demo = next(c for c in workspace.companies() if c.name == "ДЕМО ООО")
+    window.open_company(demo.path)
+    assert current_page(window).model.rowCount() == 11
+
+
+def test_delete_company_needs_typed_name(window, workspace, monkeypatch):
+    path = window.company_path
+    monkeypatch.setattr("modern_gl.desktop.main_window.confirm_delete", lambda *a: False)
+    window.delete_company()
+    assert path.exists()  # not confirmed: nothing happens
+
+    monkeypatch.setattr("modern_gl.desktop.main_window.confirm_delete", lambda *a: True)
+    monkeypatch.setattr(
+        "modern_gl.desktop.main_window.QInputDialog.getText",
+        staticmethod(lambda *a, **k: ("", False)),  # user declines to create a new one
+    )
+    window.delete_company()
+    assert not path.exists()
+    assert len(list((workspace.folder / TRASH).glob("*.gl"))) == 1
+    assert window.session is None
+    assert window.sidebar.company.text().startswith("Нет компании")
+
+
+def test_confirm_delete_dialog_unlocks_only_on_exact_name(qtbot, monkeypatch):
+    from PySide6.QtWidgets import QDialog, QLineEdit, QPushButton
+
+    from modern_gl.desktop.main_window import confirm_delete
+
+    seen = {}
+
+    def fake_exec(dialog):
+        edit = dialog.findChild(QLineEdit)
+        button = next(
+            b for b in dialog.findChildren(QPushButton) if b.objectName() == "dangerSolid"
+        )
+        edit.setText("ДЕМО")
+        seen["partial"] = button.isEnabled()
+        edit.setText("ДЕМО ООО")
+        seen["exact"] = button.isEnabled()
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(QDialog, "exec", fake_exec)
+    assert confirm_delete(None, "ДЕМО ООО") is False
+    assert seen == {"partial": False, "exact": True}

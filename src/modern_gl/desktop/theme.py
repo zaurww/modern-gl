@@ -137,6 +137,12 @@ QPushButton#flat {{ background: transparent; border: none; color: {P.accent}; pa
 QPushButton#flat:hover {{ background: {P.accent_soft}; }}
 QPushButton#danger {{ background: transparent; border: none; color: {P.red}; padding: 6px 8px; }}
 QPushButton#danger:hover {{ background: {P.red_soft}; }}
+QPushButton#dangerSolid {{
+    background: {P.red}; color: #FFFFFF; border: 1px solid {P.red}; font-weight: 600;
+}}
+QPushButton#dangerSolid:disabled {{
+    background: {P.red_soft}; border: 1px solid {P.red_soft}; color: #FFFFFF;
+}}
 QPushButton#fab {{
     background: {P.accent}; color: #FFFFFF; border: none; border-radius: 26px;
     font-size: 22pt; padding: 0 0 4px 0;
