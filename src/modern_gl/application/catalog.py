@@ -9,6 +9,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
+from modern_gl.application.currencies import CurrencyInfo, list_currencies
 from modern_gl.i18n import fold, sort_key, tr
 
 
@@ -24,6 +25,7 @@ class AccountInfo:
     contra: bool = False
     active: bool = True
     two_sided: bool = False
+    currency: bool = False  # keeps amounts in currency too (52, settlements in USD…)
 
     @property
     def label(self) -> str:
@@ -42,6 +44,7 @@ class SubcontoInfo:
     name: str
     code: str | None
     active: bool = True
+    currency_id: int | None = None  # a USD bank account, a contract in EUR
 
     @property
     def label(self) -> str:
@@ -67,6 +70,7 @@ class Catalog:
                 bool(r["contra"]),
                 bool(r["active"]),
                 bool(r["two_sided"]),
+                bool(r["currency"]),
             )
             for r in self.conn.execute(
                 "SELECT * FROM accounts WHERE company_id = ? ORDER BY code IS NULL, code",
@@ -84,13 +88,20 @@ class Catalog:
         self._values: dict[int, SubcontoInfo] = {}
         self._by_kind: dict[int, list[SubcontoInfo]] = {k: [] for k in self.kinds}
         for r in self.conn.execute(
-            "SELECT id, kind_id, name, code, active FROM subconto_values "
+            "SELECT id, kind_id, name, code, active, currency_id FROM subconto_values "
             "WHERE company_id = ? ORDER BY name",
             (self.company_id,),
         ):
-            self._add(SubcontoInfo(r["id"], r["kind_id"], r["name"], r["code"], bool(r["active"])))
+            self._add(
+                SubcontoInfo(
+                    r["id"], r["kind_id"], r["name"], r["code"], bool(r["active"]), r["currency_id"]
+                )
+            )
         for values in self._by_kind.values():
             values.sort(key=lambda v: sort_key(v.name))
+        self.currencies: dict[int, CurrencyInfo] = {
+            c.id: c for c in list_currencies(self.conn, self.company_id)
+        }
 
     def _tree_order(self) -> None:
         """Tree order: each account followed by its subaccounts; among siblings coded
@@ -135,6 +146,32 @@ class Catalog:
 
     def value(self, value_id: int) -> SubcontoInfo:
         return self._values[value_id]
+
+    @property
+    def active_currencies(self) -> list[CurrencyInfo]:
+        return [c for c in self.currencies.values() if c.active]
+
+    @property
+    def has_currency_accounts(self) -> bool:
+        return any(a.currency for a in self.accounts.values())
+
+    def resolve_currency(self, text: str) -> CurrencyInfo:
+        """'USD', 'usd', 'USD  ABŞ dolları' or a unique fragment of a name."""
+        needle = fold(text.strip())
+        if not needle:
+            raise LookupError(tr("валюта не указана"))
+        code = needle.split()[0].upper()
+        found = [c for c in self.active_currencies if c.code == code]
+        if not found:
+            found = [c for c in self.active_currencies if needle in fold(c.label)]
+        if len(found) != 1:
+            if not found:
+                raise LookupError(tr("валюта «{text}» не найдена", text=text.strip()))
+            codes = ", ".join(c.code for c in found[:6])
+            raise LookupError(
+                tr("«{text}» подходит к нескольким валютам: {codes}", text=text, codes=codes)
+            )
+        return found[0]
 
     def used_positions(self) -> set[int]:
         """Subconto positions (1..3) used by at least one account."""

@@ -91,6 +91,8 @@ class Osv:
     total: Turnovers
     # account id -> balances split by its first subconto (only accounts that have one)
     subconto: dict[int, list[SubcontoRow]] = field(default_factory=dict)
+    # currency account id -> its balances and turnovers in each currency (in that currency)
+    currency: dict[int, list[CurrencyRow]] = field(default_factory=dict)
 
     @property
     def wrong_side(self) -> list[OsvRow]:
@@ -105,6 +107,14 @@ class SubcontoRow(Turnovers):
 
 
 @dataclass
+class CurrencyRow(Turnovers):
+    """Amounts in the currency itself (minor units), not in manat."""
+
+    currency_id: int = 0
+    code: str = ""
+
+
+@dataclass
 class CardLine:
     doc_date: str
     number: int
@@ -115,12 +125,19 @@ class CardLine:
     credit: int
     balance: int  # running net balance (Dt - Ct) after this line
     corr_id: int = 0
+    # on a currency account: the posting's currency and the amount in it on this side
+    currency: str = ""
+    currency_debit: int = 0
+    currency_credit: int = 0
 
 
 @dataclass
 class AccountCard:
     opening: int
     lines: list[CardLine] = field(default_factory=list)
+    # currency accounts: net balance (Dt - Ct) in each currency, at start and at end
+    currency_opening: dict[str, int] = field(default_factory=dict)
+    currency_closing: dict[str, int] = field(default_factory=dict)
 
     @property
     def closing(self) -> int:
@@ -288,7 +305,47 @@ def trial_balance(
 
     for top in children[None]:
         total.add(visit(top, 0))
-    return Osv(rows=rows, total=total, subconto=_name_subconto(conn, by_value))
+    return Osv(
+        rows=rows,
+        total=total,
+        subconto=_name_subconto(conn, by_value),
+        currency=_currency_turnovers(conn, params),
+    )
+
+
+def _currency_turnovers(conn: sqlite3.Connection, params: dict) -> dict[int, list[CurrencyRow]]:
+    """Turnovers of currency accounts in each currency (only sides on a currency account)."""
+    raw = conn.execute(
+        f"""
+        WITH {_DOCS_CTE},
+        moves AS (
+            SELECT docs.doc_date, p.debit_account_id AS account_id, p.currency_id,
+                   p.currency_amount AS dt, 0 AS ct
+            FROM postings p JOIN docs ON docs.id = p.document_id
+            JOIN accounts a ON a.id = p.debit_account_id
+            WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+            UNION ALL
+            SELECT docs.doc_date, p.credit_account_id, p.currency_id, 0, p.currency_amount
+            FROM postings p JOIN docs ON docs.id = p.document_id
+            JOIN accounts a ON a.id = p.credit_account_id
+            WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+        )
+        SELECT m.account_id, m.currency_id, c.code,
+               SUM(CASE WHEN doc_date <  :date_from THEN dt - ct ELSE 0 END) AS opening,
+               SUM(CASE WHEN doc_date >= :date_from THEN dt ELSE 0 END)      AS dt,
+               SUM(CASE WHEN doc_date >= :date_from THEN ct ELSE 0 END)      AS ct
+        FROM moves m JOIN currencies c ON c.id = m.currency_id
+        GROUP BY m.account_id, m.currency_id ORDER BY c.code
+        """,
+        params,
+    ).fetchall()
+    result: dict[int, list[CurrencyRow]] = defaultdict(list)
+    for r in raw:
+        row = CurrencyRow(currency_id=r["currency_id"], code=r["code"])
+        row.add(Turnovers.from_net(r["opening"], r["dt"], r["ct"]))
+        if not row.is_zero():
+            result[r["account_id"]].append(row)
+    return dict(result)
 
 
 def _name_subconto(
@@ -384,13 +441,20 @@ def account_card(
         WITH {_DOCS_CTE},
         lines AS (
             SELECT docs.doc_date, docs.number, docs.id AS document_id, docs.memo,
-                   p.line_no, 0 AS side, p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct
+                   p.line_no, 0 AS side, p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct,
+                   CASE WHEN own.currency = 1 THEN p.currency_id END AS currency_id,
+                   CASE WHEN own.currency = 1 THEN p.currency_amount ELSE 0 END AS cur_dt,
+                   0 AS cur_ct
             FROM postings p JOIN docs ON docs.id = p.document_id
+            JOIN accounts own ON own.id = p.debit_account_id
             WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
             UNION ALL
             SELECT docs.doc_date, docs.number, docs.id, docs.memo,
-                   p.line_no, 1, p.debit_account_id, 0, p.amount
+                   p.line_no, 1, p.debit_account_id, 0, p.amount,
+                   CASE WHEN own.currency = 1 THEN p.currency_id END,
+                   0, CASE WHEN own.currency = 1 THEN p.currency_amount ELSE 0 END
             FROM postings p JOIN docs ON docs.id = p.document_id
+            JOIN accounts own ON own.id = p.credit_account_id
             WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
         ),
         running AS (
@@ -399,8 +463,9 @@ def account_card(
             ) AS balance
             FROM lines
         )
-        SELECT r.*, COALESCE(a.code, a.name) AS corr_code
+        SELECT r.*, COALESCE(a.code, a.name) AS corr_code, c.code AS currency
         FROM running r JOIN accounts a ON a.id = r.corr_id
+        LEFT JOIN currencies c ON c.id = r.currency_id
         ORDER BY r.doc_date, r.number, r.line_no, r.side
         """,
         params,
@@ -408,6 +473,13 @@ def account_card(
     opening = 0
     card = AccountCard(opening=0)
     for r in raw:
+        if r["currency"]:
+            net = r["cur_dt"] - r["cur_ct"]
+            if r["doc_date"] < params["date_from"]:
+                card.currency_opening[r["currency"]] = (
+                    card.currency_opening.get(r["currency"], 0) + net
+                )
+            card.currency_closing[r["currency"]] = card.currency_closing.get(r["currency"], 0) + net
         if r["doc_date"] < params["date_from"]:
             opening = r["balance"]
             continue
@@ -422,6 +494,9 @@ def account_card(
                 debit=r["dt"],
                 credit=r["ct"],
                 balance=r["balance"],
+                currency=r["currency"] or "",
+                currency_debit=r["cur_dt"],
+                currency_credit=r["cur_ct"],
             )
         )
     card.opening = opening

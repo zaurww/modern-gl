@@ -1,6 +1,6 @@
 """Import a chart of accounts from CSV (Excel 'CSV UTF-8', ';'-separated).
 
-Columns: code;name;parent;group;subconto[;class;contra;two_sided]
+Columns: code;name;parent;group;subconto[;class;contra;two_sided;currency]
   code      - optional: an account without a code is known by its name
   parent    - parent account code, empty for top level (parents must come first)
   group     - 1 for a group (no postings allowed), empty or 0 otherwise
@@ -8,6 +8,7 @@ Columns: code;name;parent;group;subconto[;class;contra;two_sided]
   class     - optional: asset / liability / equity / revenue / expense (empty: parent's)
   contra    - optional: 1 for a contra account (e.g. accumulated depreciation)
   two_sided - optional: 1 if the balance may be on either side (settlements, taxes)
+  currency  - optional: 1 if the account keeps amounts in currency too (52, settlements in USD)
 
 A 1C-style `kind` column (A / P / AP) is also understood: AP means two-sided,
 and A / P give the class (asset / liability) when `class` is empty.
@@ -119,6 +120,9 @@ def import_chart_csv(
                     account_class=account_class,
                     contra=(row.get("contra") or "").strip() == "1",
                     two_sided=two_sided,
+                    currency=None
+                    if row.get("currency") is None
+                    else (row["currency"] or "").strip() == "1",
                 )
             except Exception as e:
                 raise ValidationError(

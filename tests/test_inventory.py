@@ -60,7 +60,7 @@ def test_inventory_migration_upgrades_v6_database(tmp_path):
 
     upgraded = connect(path)
     try:
-        assert schema_version(upgraded) == 7
+        assert schema_version(upgraded) >= 7
         tables = {
             row[0]
             for row in upgraded.execute(

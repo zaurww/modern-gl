@@ -68,6 +68,13 @@ class AccountDialog(QDialog):
             )
         )
         self.group = QCheckBox(tr("Группа (есть субсчета, проводки только на субсчета)"))
+        self.currency = QCheckBox(tr("Учёт в валюте"))
+        self.currency.setToolTip(
+            tr(
+                "В каждой проводке по счёту — валюта и сумма в ней; остатки "
+                "переоцениваются по курсу"
+            )
+        )
         self.account_class = QComboBox()
         if account is None:
             self.account_class.addItem(tr("Автоматически"), AUTO)
@@ -92,6 +99,7 @@ class AccountDialog(QDialog):
         form.addRow("", self.group)
         form.addRow(tr("Класс"), class_row)
         form.addRow("", self.two_sided)
+        form.addRow("", self.currency)
         for i, box in enumerate(self.subconto, start=1):
             form.addRow(tr("Субконто {i}", i=i), box)
         root.addLayout(form)
@@ -131,6 +139,7 @@ class AccountDialog(QDialog):
         self._select(self.parent_box, parent.id if parent else None)
         self.parent_box.setEnabled(False)  # moving accounts between groups: not yet
         self.two_sided.setChecked(a.two_sided)
+        self.currency.setChecked(a.currency)
         self.group.setChecked(a.is_group)
         self._select(self.account_class, a.account_class)
         self.contra.setChecked(a.contra)
@@ -144,6 +153,7 @@ class AccountDialog(QDialog):
         parent = cat.accounts[parent_id]
         self._select(self.parent_box, parent_id)
         self.two_sided.setChecked(parent.two_sided)
+        self.currency.setChecked(parent.currency)
         if parent.code:  # a coded parent suggests the next subaccount code: 60.1, 60.2…
             n = 1
             while f"{parent.code}.{n}" in cat.by_code:
@@ -183,6 +193,7 @@ class AccountDialog(QDialog):
                         subconto=subconto,
                         account_class=None if account_class == AUTO else account_class,
                         contra=self.contra.isChecked(),
+                        currency=self.currency.isChecked(),
                     )
                 else:
                     a = self.account
@@ -195,6 +206,7 @@ class AccountDialog(QDialog):
                         two_sided=two_sided,
                         is_group=group,
                         subconto=subconto,
+                        currency=self.currency.isChecked(),
                     )
                     if account_class != a.account_class or self.contra.isChecked() != a.contra:
                         led.set_account_class(cid, a.id, account_class, self.contra.isChecked())

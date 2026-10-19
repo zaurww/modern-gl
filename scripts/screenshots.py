@@ -150,6 +150,54 @@ def main() -> None:
     QTimer.singleShot(300, loop.quit)
     loop.exec()
     dialog.grab().save(str(out / "9_account_dialog.png"))
+    dialog.close()
+
+    # Currencies: a USD bank account, CBAR-like rates, a payment in USD, revaluation.
+    from modern_gl.application.ledger import PostingInput
+    from modern_gl.desktop.currencies_page import CurrenciesPage
+    from modern_gl.domain.currency import parse_rate
+
+    cid = session.company_id
+    usd = ledger.currency_id(cid, "USD")
+    usd_bank = ledger.add_subconto_value(cid, banks, "Kapital Bank USD")
+    ledger.set_subconto_value_currency(cid, usd_bank, usd)
+    for day, rate in (("2026-02-02", "1.7"), ("2026-02-16", "1.7025"), ("2026-02-27", "1.705")):
+        ledger.set_rate(cid, "USD", day, parse_rate(rate), source="cbar")
+    ledger.set_rate(cid, "EUR", "2026-02-27", parse_rate("1.9845"), source="cbar")
+    acc = session.catalog.by_code
+    azn_bank = next(v.id for v in session.catalog.values(banks) if v.currency_id is None)
+    ledger.post_new(
+        cid,
+        "2026-02-05",
+        [PostingInput(acc["52"].id, acc["51"].id, "850", (usd_bank,), (azn_bank,), "", usd, "500")],
+        i18n.tr("Покупка валюты"),
+    )
+    session.catalog.reload()
+    win.show_place(("currencies",))
+    currencies = cast(CurrenciesPage, win.stack.currentWidget())
+    currencies.refresh(select=usd)
+    shot("10_currencies")
+    win.new_document()
+    page = cast(DocumentPage, win.stack.currentWidget())
+    page.memo.setText(i18n.tr("Оплата поставщику"))
+    m = page.model
+    m.setData(m.index(0, 0), acc["60"].id)
+    m.setData(m.index(0, 4), acc["52"].id)
+    m.setData(m.index(0, 5), usd_bank)
+    from modern_gl.desktop.postings import CURRENCY_AMOUNT
+
+    m.setData(m.index(0, CURRENCY_AMOUNT), 30_000)
+    shot("10b_document_currency")
+    page.dirty = False
+    win.close_current()
+    ledger.revalue(cid, "2026-02-28", "80")
+    win.show_place(("osv",))
+    osv = cast(OsvPage, win.pages[("osv",)])
+    osv.in_currency.setVisible(True)
+    osv.in_currency.setChecked(True)
+    shot("10c_osv_currency")
+    win.open_report("card", acc["52"].id, osv.params)
+    shot("10d_card_currency")
 
 
 if __name__ == "__main__":

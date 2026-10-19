@@ -1,14 +1,19 @@
 """Postings grid: model, inline editors with completion, keyboard flow.
 
 Keyboard flow (1C-like): type into a cell to edit, Enter/Tab moves to the next cell
-that applies — subconto cells the chosen account doesn't have are skipped.
+that applies — subconto cells the chosen account doesn't have are skipped, and so
+are the currency cells of a line without a currency account. On a currency line the
+amount in manat follows the amount in currency at the rate (the rate of the document
+date is offered; both the rate and the manat amount can be typed over).
 Enter on the last cell of the last row starts a new row.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
+from fractions import Fraction
 from typing import cast
 
 from PySide6.QtCore import (
@@ -38,12 +43,29 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import PostingData
 from modern_gl.desktop.theme import P
 from modern_gl.domain import formula
+from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import SCALE, format_minor, to_minor
 from modern_gl.i18n import tr
 
-DT, CT, AMOUNT, MEMO = 0, 4, 8, 9
-HEADERS = ["Дебет", "Субконто", "", "", "Кредит", "Субконто", "", "", "Сумма", "Содержание"]
+DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO = 0, 4, 8, 9, 10, 11, 12
+CURRENCY_COLUMNS = (CURRENCY, CURRENCY_AMOUNT, RATE)
+HEADERS = [
+    "Дебет",
+    "Субконто",
+    "",
+    "",
+    "Кредит",
+    "Субконто",
+    "",
+    "",
+    "Валюта",
+    "В валюте",
+    "Курс",
+    "Сумма",
+    "Содержание",
+]
+NUMBER_COLUMNS = (CURRENCY_AMOUNT, RATE, AMOUNT)
 # translated at display time: tr(HEADERS[i])
 ALIGN_RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -53,9 +75,15 @@ def column_role(col: int) -> tuple[str, int | None]:
     """('debit'|'credit', None) for an account, (side, 1..3) for subconto, else field name."""
     if DT <= col < CT:
         return "debit", (col - DT) or None
-    if CT <= col < AMOUNT:
+    if CT <= col < CURRENCY:
         return "credit", (col - CT) or None
-    return ("amount", None) if col == AMOUNT else ("memo", None)
+    names = {
+        CURRENCY: "currency",
+        CURRENCY_AMOUNT: "currency_amount",
+        RATE: "rate",
+        AMOUNT: "amount",
+    }
+    return names.get(col, "memo"), None
 
 
 @dataclass
@@ -67,6 +95,10 @@ class PostingRow:
     amount: int | None = None
     memo: str = ""
     formula: str = ""  # entry templates: amount formula (S, S*18/118…), see domain.formula
+    currency_id: int | None = None
+    currency_amount: int | None = None
+    rate: Fraction | None = None  # manat per unit; the manat amount follows it
+    rate_auto: bool = True  # taken from the rates of the document date (not typed)
 
     def is_empty(self) -> bool:
         return (
@@ -79,6 +111,7 @@ class PostingRow:
 
     @classmethod
     def from_data(cls, p: PostingData, keep_sign: bool = True) -> PostingRow:
+        cur = p.currency_amount
         return cls(
             p.debit_account_id,
             list(p.debit_subconto),
@@ -86,6 +119,10 @@ class PostingRow:
             list(p.credit_subconto),
             p.amount if keep_sign else abs(p.amount),
             p.memo,
+            currency_id=p.currency_id,
+            currency_amount=cur if keep_sign or cur is None else abs(cur),
+            rate=Fraction(p.amount, cur) if cur else None,  # as it was posted
+            rate_auto=False,
         )
 
 
@@ -104,6 +141,8 @@ class PostingsModel(QAbstractTableModel):
         self.rows = rows or [PostingRow()]
         self.read_only = read_only
         self.formulas = formulas  # template editing: the amount column holds formulas
+        # currency id -> manat per unit on the document date (set by the document page)
+        self.rate_for: Callable[[int], Fraction | None] = lambda _currency_id: None
 
     # ---- Qt model API ----------------------------------------------------------------
 
@@ -119,8 +158,15 @@ class PostingsModel(QAbstractTableModel):
                 return tr(HEADERS[section]) if HEADERS[section] else ""
             return str(section + 1)
         if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
-            return ALIGN_RIGHT if section == AMOUNT else ALIGN_LEFT
+            return ALIGN_RIGHT if section in NUMBER_COLUMNS else ALIGN_LEFT
         return None
+
+    def is_currency(self, row: int) -> bool:
+        """The line hits a currency account, so it has a currency and an amount in it."""
+        r = self.rows[row]
+        return not self.formulas and any(
+            a is not None and self.catalog.accounts[a].currency for a in (r.debit, r.credit)
+        )
 
     def kind_at(self, row: int, col: int) -> int | None:
         """Subconto kind required at this cell, or None if the cell doesn't apply."""
@@ -133,6 +179,8 @@ class PostingsModel(QAbstractTableModel):
         return self.catalog.accounts[account_id].sc_kinds[pos - 1]
 
     def applies(self, row: int, col: int) -> bool:
+        if col in CURRENCY_COLUMNS:
+            return self.is_currency(row)
         side, pos = column_role(col)
         return pos is None or self.kind_at(row, col) is not None
 
@@ -159,6 +207,18 @@ class PostingsModel(QAbstractTableModel):
                 if kind is None or role != Qt.ItemDataRole.DisplayRole or self.read_only:
                     return ""
                 return self.catalog.kinds[kind]
+            if side == "currency":
+                currency = self.catalog.currencies.get(r.currency_id or 0)
+                return currency.code if currency and self.is_currency(index.row()) else ""
+            if side == "currency_amount":
+                if r.currency_amount is None or not self.is_currency(index.row()):
+                    return ""
+                text = format_minor(r.currency_amount)
+                return text if role == Qt.ItemDataRole.DisplayRole else text.replace(" ", "")
+            if side == "rate":
+                if r.rate is None or not self.is_currency(index.row()):
+                    return ""
+                return format_unit_rate(r.rate)
             if side == "amount":
                 if self.formulas:
                     return r.formula
@@ -173,15 +233,19 @@ class PostingsModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.ForegroundRole:
             if pos is not None and getattr(r, f"{side}_sc")[pos - 1] is None:
                 return QColor(P.tertiary)  # placeholder with the subconto kind name
-            if side == "amount" and r.amount is not None and r.amount < 0:
+            if side in ("amount", "currency_amount") and (
+                getattr(r, side) is not None and getattr(r, side) < 0
+            ):
                 return QColor(P.red)
+            if side == "rate":
+                return QColor(P.secondary)
         if role == Qt.ItemDataRole.FontRole and pos is not None:
             if getattr(r, f"{side}_sc")[pos - 1] is None:
                 f = QFont()
                 f.setItalic(True)
                 return f
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            return ALIGN_RIGHT if side == "amount" else ALIGN_LEFT
+            return ALIGN_RIGHT if col in NUMBER_COLUMNS else ALIGN_LEFT
         if role == Qt.ItemDataRole.ToolTipRole and side in ("debit", "credit") and pos is None:
             account_id = getattr(r, side)
             return self.catalog.accounts[account_id].label if account_id else None
@@ -202,12 +266,29 @@ class PostingsModel(QAbstractTableModel):
                         kind is None or self.catalog.value(sc[i]).kind_id != kind
                     ):
                         sc[i] = None
-                self.dataChanged.emit(
-                    self.index(index.row(), 0), self.index(index.row(), len(HEADERS) - 1)
-                )
+                self._fit_currency(index.row())
+                self._row_changed(index.row())
             else:
                 getattr(r, f"{side}_sc")[pos - 1] = value
-                self.dataChanged.emit(index, index)
+                self._fit_currency(index.row())
+                self._row_changed(index.row())
+        elif side == "currency":
+            r.currency_id = value
+            r.rate_auto = True
+            r.rate = self.rate_for(value) if value is not None else None
+            self._follow_rate(r)
+            self._row_changed(index.row())
+        elif side == "currency_amount":
+            r.currency_amount = value
+            self._follow_rate(r)
+            self._row_changed(index.row())
+        elif side == "rate":
+            r.rate = value
+            r.rate_auto = value is None
+            if value is None and r.currency_id is not None:
+                r.rate = self.rate_for(r.currency_id)
+            self._follow_rate(r)
+            self._row_changed(index.row())
         elif side == "amount" and self.formulas:
             r.formula = value
             self.dataChanged.emit(index, index)
@@ -220,6 +301,48 @@ class PostingsModel(QAbstractTableModel):
             self.dataChanged.emit(index, index)
         self.changed.emit()
         return True
+
+    # ---- currency ----------------------------------------------------------------------
+
+    def _row_changed(self, row: int) -> None:
+        self.dataChanged.emit(self.index(row, 0), self.index(row, len(HEADERS) - 1))
+
+    def _fit_currency(self, row: int) -> None:
+        """After an account or subconto changes: a line without currency accounts drops
+        its currency; a currency line takes the currency of a chosen element (a USD bank
+        account, a contract in EUR) when it has one."""
+        r = self.rows[row]
+        if not self.is_currency(row):
+            r.currency_id = r.currency_amount = r.rate = None
+            r.rate_auto = True
+            return
+        for side in ("debit", "credit"):
+            account_id = getattr(r, side)
+            if account_id is None or not self.catalog.accounts[account_id].currency:
+                continue
+            for value_id in getattr(r, f"{side}_sc"):
+                currency_id = self.catalog.value(value_id).currency_id if value_id else None
+                if currency_id is not None and currency_id != r.currency_id:
+                    r.currency_id, r.rate_auto = currency_id, True
+                    r.rate = self.rate_for(currency_id)
+                    self._follow_rate(r)
+                    return
+
+    @staticmethod
+    def _follow_rate(r: PostingRow) -> None:
+        """The manat amount = amount in currency × rate."""
+        if r.currency_amount is not None and r.rate is not None:
+            r.amount = to_base(r.currency_amount, r.rate) or None
+            r.formula = ""
+
+    def refresh_rates(self) -> None:
+        """The document date changed: lines on the offered rate take the new day's rate."""
+        for row, r in enumerate(self.rows):
+            if r.currency_id is not None and r.rate_auto:
+                r.rate = self.rate_for(r.currency_id)
+                self._follow_rate(r)
+                self._row_changed(row)
+        self.changed.emit()
 
     # ---- row operations --------------------------------------------------------------
 
@@ -243,6 +366,10 @@ class PostingsModel(QAbstractTableModel):
                 src.amount,
                 src.memo,
                 src.formula,
+                src.currency_id,
+                src.currency_amount,
+                src.rate,
+                src.rate_auto,
             ),
         )
 
@@ -288,6 +415,7 @@ class PostingsModel(QAbstractTableModel):
                 raise ValidationError(tr("строка {line}: не указан счёт кредита", line=n))
             if r.amount is None:
                 raise ValidationError(tr("строка {line}: не указана сумма", line=n))
+            currency = self.is_currency(n - 1) and r.currency_id is not None
             result.append(
                 PostingInput(
                     r.debit,
@@ -296,6 +424,8 @@ class PostingsModel(QAbstractTableModel):
                     tuple(r.debit_sc),
                     tuple(r.credit_sc),
                     r.memo.strip(),
+                    r.currency_id if currency else None,
+                    Decimal(r.currency_amount or 0).scaleb(-SCALE) if currency else None,
                 )
             )
         if not result:
@@ -383,7 +513,11 @@ class PostingsDelegate(QStyledItemDelegate):
             # A subconto cell opens with its whole list, like a 1C directory;
             # an account cell shows suggestions from the first typed character.
             attach_list(editor, items, pos is not None, self._chosen)
-        elif side == "amount":
+        elif side == "currency":
+            attach_list(
+                editor, [c.label for c in self.catalog.active_currencies], True, self._chosen
+            )
+        elif index.column() in NUMBER_COLUMNS:
             editor.setAlignment(ALIGN_RIGHT)
         # Enter forwarded by an open popup reaches the editor as returnPressed.
         editor.returnPressed.connect(lambda e=editor: self._commit_and_next(e))
@@ -409,6 +543,14 @@ class PostingsDelegate(QStyledItemDelegate):
                 if text and value is None:
                     self.unknown_value.emit(QPersistentModelIndex(index), kind, text)
                     return
+            elif side == "currency":
+                value = self.catalog.resolve_currency(text).id if text else None
+            elif side == "currency_amount":
+                value = to_minor(text) if text else None
+                if value is not None and value <= 0:
+                    raise ValueError(tr("сумма должна быть больше нуля"))
+            elif side == "rate":
+                value = unit_rate(parse_rate(text)) if text else None
             elif side == "amount" and model.formulas:
                 if text:
                     formula.parse(text)  # check now, not when the template is saved
@@ -462,8 +604,9 @@ class PostingsTable(QTableView):
         vh.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
         hh = self.horizontalHeader()
         hh.setHighlightSections(False)
-        widths = {DT: 78, 1: 160, 2: 140, 3: 120, CT: 78, 5: 160, 6: 140, 7: 120, AMOUNT: 120}
-        for col, w in widths.items():
+        self.setColumnWidth(DT, 78)
+        self.setColumnWidth(CT, 78)
+        for col, w in ((CURRENCY, 64), (CURRENCY_AMOUNT, 110), (RATE, 72), (AMOUNT, 120)):
             self.setColumnWidth(col, w)
         hh.setSectionResizeMode(MEMO, QHeaderView.ResizeMode.Stretch)
         used = model.catalog.used_positions()
@@ -471,6 +614,25 @@ class PostingsTable(QTableView):
             if pos not in used:
                 self.setColumnHidden(DT + pos, True)
                 self.setColumnHidden(CT + pos, True)
+        self._currency_shown: bool | None = None
+        self._fit_currency_columns()
+        model.changed.connect(self._fit_currency_columns)
+        model.modelReset.connect(self._fit_currency_columns)
+
+    def _fit_currency_columns(self) -> None:
+        """Currency columns appear only while a line hits a currency account; then the
+        subconto columns get narrower, so the amount and memo stay in view."""
+        m = self.model()
+        show = any(m.is_currency(r) for r in range(m.rowCount()))
+        if show == self._currency_shown:
+            return
+        self._currency_shown = show
+        for col in CURRENCY_COLUMNS:
+            self.setColumnHidden(col, not show)
+        widths = (120, 100, 90) if show else (160, 140, 120)
+        for base in (DT, CT):
+            for pos, w in enumerate(widths, start=1):
+                self.setColumnWidth(base + pos, w)
 
     def model(self) -> PostingsModel:  # typed accessor
         return cast(PostingsModel, super().model())

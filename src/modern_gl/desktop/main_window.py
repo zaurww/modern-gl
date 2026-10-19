@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import load_document, load_template
+from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
@@ -65,6 +66,7 @@ PLACES = [  # key, title (translated on display), icon color
     (("inventory",), "Склад", P.green),
     (("directories",), "Справочники", P.teal),
     (("templates",), "Шаблоны", P.amber),
+    (("currencies",), "Валюты", P.violet),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES]
 
@@ -232,6 +234,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+4", lambda: self.show_place(("directories",))),
             ("Ctrl+5", lambda: self.show_place(("templates",))),
             ("Ctrl+6", lambda: self.show_place(("inventory",))),
+            ("Ctrl+7", lambda: self.show_place(("currencies",))),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
 
@@ -390,6 +393,10 @@ class MainWindow(QMainWindow):
             return page
         if key == ("directories",):
             return DirectoriesPage(s)
+        if key == ("currencies",):
+            page = CurrenciesPage(s)
+            page.open_document.connect(self.open_document)
+            return page
         if key == ("inventory",):
             page = InventoryPage(s)
             page.open_inventory_document.connect(self.open_inventory_document)

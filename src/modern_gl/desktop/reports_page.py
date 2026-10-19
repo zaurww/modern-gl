@@ -391,6 +391,11 @@ class OsvPage(ReportPage):
         self.expand.setToolTip(tr("Показать остатки по первому субконто под каждым счётом"))
         self.expand.toggled.connect(self.refresh)
         self.header.add_action(self.expand)
+        self.in_currency = QCheckBox(tr("В валюте"))
+        self.in_currency.setToolTip(tr("Показать под валютными счетами суммы в каждой валюте"))
+        self.in_currency.toggled.connect(self.refresh)
+        self.in_currency.setVisible(session.catalog.has_currency_accounts)
+        self.header.add_action(self.in_currency)
         self._section_rows: set[int] = set()
         self.refresh()
 
@@ -408,6 +413,18 @@ class OsvPage(ReportPage):
             for s in subconto.get(r.account_id, []):
                 row = OsvRow(name="      " + s.name, depth=r.depth + 1)
                 row.add(s)
+                result.append(row)
+        return result
+
+    @staticmethod
+    def _with_currency(rows: list[OsvRow], currency) -> list[OsvRow]:
+        """Insert a row per currency (amounts in that currency) under each currency account."""
+        result = []
+        for r in rows:
+            result.append(r)
+            for c in currency.get(r.account_id, []) if r.account_id else []:
+                row = OsvRow(name=f"      {c.code}  ·  {tr('в валюте')}", depth=r.depth + 1)
+                row.add(c)
                 result.append(row)
         return result
 
@@ -463,6 +480,8 @@ class OsvPage(ReportPage):
         shown = [r for r in osv.rows if r.depth == 0] if self.top_only.isChecked() else osv.rows
         if self.expand.isChecked():
             shown = self._with_subconto(shown, osv.subconto)
+        if self.in_currency.isChecked():
+            shown = self._with_currency(shown, osv.currency)
         if self.sections.isChecked() and shown:
             shown = self._by_class(shown)
         rows = [*shown, total] if shown else []
@@ -564,14 +583,24 @@ class CardPage(AccountReportPage):
             Column(tr("Кредит"), lambda ln: ln.credit, money=True, width=130),
             Column(tr("Сальдо"), lambda ln: balance_text(ln.balance), width=150),
         ]
+        if card.currency_closing or self.account.currency:
+            columns[4:4] = [
+                Column(tr("Валюта"), lambda ln: ln.currency, width=64),
+                Column(tr("Дт в валюте"), lambda ln: ln.currency_debit, money=True, width=110),
+                Column(tr("Кт в валюте"), lambda ln: ln.currency_credit, money=True, width=110),
+            ]
         self.model.set(columns, card.lines)
-        self.footer.setText(
-            tr(
-                "Сальдо на начало: {start}      Сальдо на конец: {end}",
-                start=balance_text(card.opening),
-                end=balance_text(card.closing),
-            )
+        text = tr(
+            "Сальдо на начало: {start}      Сальдо на конец: {end}",
+            start=balance_text(card.opening),
+            end=balance_text(card.closing),
         )
+        in_currency = [
+            f"{code} {balance_text(net)}" for code, net in sorted(card.currency_closing.items())
+        ]
+        if in_currency:
+            text += "      " + tr("В валюте на конец: {amounts}", amounts=",  ".join(in_currency))
+        self.footer.setText(text)
 
     def drill(self, line) -> None:
         if line is not None:
@@ -668,7 +697,8 @@ class ChartPage(ReportPage):
         self.header.subtitle.setText(tr("{n} счетов", n=len(cat.accounts)))
 
         def subconto(a) -> str:
-            return ", ".join(cat.kinds[k] for k in a.sc_kinds if k)
+            kinds = ", ".join(cat.kinds[k] for k in a.sc_kinds if k)
+            return "  ·  ".join(t for t in (kinds, tr("в валюте") if a.currency else "") if t)
 
         def name(a) -> str:
             return a.name if a.active else f"{a.name}  ·  {tr('скрыт')}"

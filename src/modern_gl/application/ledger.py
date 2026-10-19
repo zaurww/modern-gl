@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
+from modern_gl.application.currencies import rate_on
 from modern_gl.domain import formula as formulas
 from modern_gl.domain.accounts import ACCOUNT_CLASSES
+from modern_gl.domain.currency import DEFAULT_CURRENCIES, check_code, currency_name, to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.domain.money import to_minor
@@ -40,6 +42,10 @@ class PostingInput:
     debit_subconto: Sequence[int | None] = ()
     credit_subconto: Sequence[int | None] = ()
     memo: str = ""
+    # Currency accounts (52, settlements in USD…): the currency and the amount in it.
+    # One currency per posting, for whichever of its sides keeps currency.
+    currency_id: int | None = None
+    currency_amount: str | int | Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -93,6 +99,10 @@ class Ledger:
                 "INSERT INTO layers (company_id, code, name) VALUES (?, ?, ?)",
                 [(company_id, code, tr(title)) for code, title in DEFAULT_LAYERS],
             )
+            self.conn.executemany(
+                "INSERT INTO currencies (company_id, code, name) VALUES (?, ?, ?)",
+                [(company_id, code, currency_name(code)) for code in DEFAULT_CURRENCIES],
+            )
             self._audit(
                 company_id,
                 "company",
@@ -113,6 +123,126 @@ class Ledger:
             self._audit(
                 company_id, "company", company_id, "set_closed_through", {"from": old, "to": value}
             )
+
+    # ---- currencies ------------------------------------------------------------------
+
+    def add_currency(self, company_id: int, code: str, name: str | None = None) -> int:
+        """Add a currency (USD, EUR…). The base currency (manat) is not one of them."""
+        try:
+            code = check_code(code)
+        except ValueError as e:
+            raise ValidationError(str(e)) from e
+        if code == self._company(company_id)["base_currency"]:
+            raise ValidationError(tr("{code} — основная валюта учёта", code=code))
+        name = (name or "").strip() or currency_name(code)
+        with transaction(self.conn):
+            try:
+                currency_id = self.conn.execute(
+                    "INSERT INTO currencies (company_id, code, name) VALUES (?, ?, ?)",
+                    (company_id, code, name),
+                ).lastrowid
+            except sqlite3.IntegrityError as e:
+                raise ValidationError(tr("валюта {code} уже есть", code=code)) from e
+            self._audit(company_id, "currency", currency_id, "create", {"code": code})
+        return currency_id
+
+    def currency_id(self, company_id: int, code: str) -> int:
+        return self._currency(company_id, code)["id"]
+
+    def set_currency_active(self, company_id: int, currency: int | str, active: bool) -> None:
+        with transaction(self.conn):
+            cur = self._currency(company_id, currency)
+            self.conn.execute(
+                "UPDATE currencies SET active = ? WHERE id = ?", (int(active), cur["id"])
+            )
+            self._audit(company_id, "currency", cur["id"], "show" if active else "hide", {})
+
+    def set_rate(
+        self,
+        company_id: int,
+        currency: int | str,
+        day: date | str,
+        rate: int,
+        nominal: int = 1,
+        source: str = "manual",
+    ) -> None:
+        """Set (or replace) the rate of a currency on a day: `rate` millionths of a manat
+        for `nominal` units (see domain.currency.parse_rate). Audited."""
+        if rate <= 0 or nominal <= 0:
+            raise ValidationError(tr("курс должен быть больше нуля: {value}", value=rate))
+        with transaction(self.conn):
+            cur = self._currency(company_id, currency)
+            day = iso_date(day)
+            old = self.conn.execute(
+                "SELECT rate, nominal FROM currency_rates WHERE currency_id = ? AND rate_date = ?",
+                (cur["id"], day),
+            ).fetchone()
+            self.conn.execute(
+                "INSERT INTO currency_rates (company_id, currency_id, rate_date, rate, nominal, "
+                "source) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (currency_id, rate_date) "
+                "DO UPDATE SET rate = excluded.rate, nominal = excluded.nominal, "
+                "source = excluded.source",
+                (company_id, cur["id"], day, rate, nominal, source),
+            )
+            self._audit(
+                company_id,
+                "currency",
+                cur["id"],
+                "set_rate",
+                {
+                    "date": day,
+                    "rate": rate,
+                    "nominal": nominal,
+                    "source": source,
+                    "before": dict(old) if old else None,
+                },
+            )
+
+    def delete_rate(self, company_id: int, currency: int | str, day: date | str) -> None:
+        with transaction(self.conn):
+            cur = self._currency(company_id, currency)
+            day = iso_date(day)
+            old = self.conn.execute(
+                "DELETE FROM currency_rates WHERE currency_id = ? AND rate_date = ? "
+                "RETURNING rate, nominal",
+                (cur["id"], day),
+            ).fetchone()
+            if old is None:
+                raise NotFoundError(tr("курса {code} на {date} нет", code=cur["code"], date=day))
+            self._audit(
+                company_id, "currency", cur["id"], "delete_rate", {"date": day, **dict(old)}
+            )
+
+    def import_rates(
+        self,
+        company_id: int,
+        day: date | str,
+        rates: dict[str, tuple[int, int]],
+        source: str = "cbar",
+    ) -> int:
+        """Rates {code: (rate, nominal)} of a day for the company's active currencies
+        (others are ignored). Returns how many were set."""
+        with transaction(self.conn):
+            currencies = self.conn.execute(
+                "SELECT code FROM currencies WHERE company_id = ? AND active = 1", (company_id,)
+            ).fetchall()
+            count = 0
+            for (code,) in currencies:
+                if code in rates:
+                    rate, nominal = rates[code]
+                    self.set_rate(company_id, code, day, rate, nominal, source)
+                    count += 1
+            return count
+
+    def _currency(self, company_id: int, currency: int | str) -> sqlite3.Row:
+        column = "id" if isinstance(currency, int) else "code"
+        row = self.conn.execute(
+            f"SELECT * FROM currencies WHERE company_id = ? AND {column} = ?",
+            (company_id, currency.upper() if isinstance(currency, str) else currency),
+        ).fetchone()
+        if row is None:
+            raise NotFoundError(tr("валюта {code} не найдена", code=currency))
+        return row
 
     # ---- subconto --------------------------------------------------------------------
 
@@ -195,6 +325,26 @@ class Ledger:
             )
             self._audit(company_id, "subconto_value", value_id, "show" if active else "hide", {})
 
+    def set_subconto_value_currency(
+        self, company_id: int, value_id: int, currency_id: int | None
+    ) -> None:
+        """Currency of a directory element (a USD bank account, a contract in EUR): offered
+        when the element is chosen on a currency account and checked when posting."""
+        with transaction(self.conn):
+            old = self._subconto_value(company_id, value_id)
+            if currency_id is not None:
+                self._currency(company_id, currency_id)
+            self.conn.execute(
+                "UPDATE subconto_values SET currency_id = ? WHERE id = ?", (currency_id, value_id)
+            )
+            self._audit(
+                company_id,
+                "subconto_value",
+                value_id,
+                "set_currency",
+                {"from": old["currency_id"], "to": currency_id},
+            )
+
     def _subconto_value(self, company_id: int, value_id: int) -> sqlite3.Row:
         row = self.conn.execute(
             "SELECT * FROM subconto_values WHERE company_id = ? AND id = ?", (company_id, value_id)
@@ -217,13 +367,15 @@ class Ledger:
         account_class: str | None = None,
         contra: bool = False,
         two_sided: bool | None = None,
+        currency: bool | None = None,
     ) -> int:
         """Add an account. `subconto` lists subconto kind ids for positions 1..3.
 
         The code is optional (empty: the account is known by its name). `parent` is the
         parent account's id or code. Without `account_class` the account inherits its
         parent's class (or stays unclassified). `two_sided` (balance may be on either
-        side, shown expanded per first subconto) is inherited from the parent unless given.
+        side, shown expanded per first subconto) is inherited from the parent unless given,
+        and so is `currency` (the account keeps amounts in currency too).
         """
         code = _code(code)
         name = name.strip()
@@ -250,11 +402,13 @@ class Ledger:
                 account_class = account_class or parent_row["account_class"]
                 if two_sided is None:
                     two_sided = bool(parent_row["two_sided"])
+                if currency is None:
+                    currency = bool(parent_row["currency"])
             try:
                 account_id = self.conn.execute(
                     "INSERT INTO accounts (company_id, code, name, parent_id, is_group, "
-                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, contra, two_sided) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, contra, two_sided, "
+                    "currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         company_id,
                         code,
@@ -265,6 +419,7 @@ class Ledger:
                         account_class,
                         int(contra),
                         int(bool(two_sided)),
+                        int(bool(currency)),
                     ),
                 ).lastrowid
             except sqlite3.IntegrityError as e:
@@ -278,7 +433,13 @@ class Ledger:
                 "account",
                 account_id,
                 "create",
-                {"code": code, "name": name, "class": account_class, "two_sided": bool(two_sided)},
+                {
+                    "code": code,
+                    "name": name,
+                    "class": account_class,
+                    "two_sided": bool(two_sided),
+                    "currency": bool(currency),
+                },
             )
         return account_id
 
@@ -344,13 +505,14 @@ class Ledger:
         two_sided: bool | None = None,
         is_group: bool | None = None,
         subconto: Sequence[int] | None = None,
+        currency: bool | None = None,
     ) -> None:
         """Rename / re-code / reconfigure an account (given by id or code). Audited.
 
         `new_code=""` removes the code. History is protected: an account with postings
-        cannot become a group and its subconto kinds cannot change (old postings carry
-        values of those kinds). Codes are only labels — postings reference the account
-        id, so re-coding is safe.
+        cannot become a group, and neither its subconto kinds nor its currency accounting
+        can change (old postings carry values of those kinds, or no currency). Codes are
+        only labels — postings reference the account id, so re-coding is safe.
         """
         with transaction(self.conn):
             acc = self._account(company_id, account)
@@ -359,6 +521,7 @@ class Ledger:
             name = acc["name"] if name is None else name.strip()
             two_sided = bool(acc["two_sided"]) if two_sided is None else bool(two_sided)
             group = bool(acc["is_group"]) if is_group is None else bool(is_group)
+            currency = bool(acc["currency"]) if currency is None else bool(currency)
             current_sc = [acc["sc1_kind_id"], acc["sc2_kind_id"], acc["sc3_kind_id"]]
             sc = current_sc if subconto is None else _pad(list(subconto), 0)
             if not name:
@@ -385,11 +548,18 @@ class Ledger:
                 raise ValidationError(
                     tr("счёт {code}: по счёту есть проводки, субконто менять нельзя", code=label)
                 )
+            if currency != bool(acc["currency"]) and used:
+                raise ValidationError(
+                    tr(
+                        "счёт {code}: по счёту есть проводки, валютный учёт менять нельзя",
+                        code=label,
+                    )
+                )
             try:
                 self.conn.execute(
                     "UPDATE accounts SET code = ?, name = ?, two_sided = ?, is_group = ?, "
-                    "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ? WHERE id = ?",
-                    (new_code, name, int(two_sided), int(group), *sc, acc["id"]),
+                    "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ?, currency = ? WHERE id = ?",
+                    (new_code, name, int(two_sided), int(group), *sc, int(currency), acc["id"]),
                 )
             except sqlite3.IntegrityError as e:
                 raise ValidationError(tr("счёт {code} уже есть", code=new_code)) from e
@@ -405,6 +575,7 @@ class Ledger:
                         "two_sided": bool(acc["two_sided"]),
                         "group": bool(acc["is_group"]),
                         "subconto": current_sc,
+                        "currency": bool(acc["currency"]),
                     },
                     "after": {
                         "code": new_code,
@@ -412,6 +583,7 @@ class Ledger:
                         "two_sided": two_sided,
                         "group": group,
                         "subconto": sc,
+                        "currency": currency,
                     },
                 },
             )
@@ -703,15 +875,109 @@ class Ledger:
             self.conn.execute(
                 """
                 INSERT INTO postings (company_id, document_id, line_no, debit_account_id,
-                    credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo)
+                    credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
+                    currency_id, currency_amount)
                 SELECT company_id, ?, line_no, debit_account_id, credit_account_id, -amount,
-                    dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo
+                    dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
+                    currency_id, -currency_amount
                 FROM postings WHERE document_id = ? ORDER BY line_no
                 """,
                 (new_id, doc_id),
             )
             self._post(company_id, new_id)
         return new_id
+
+    def revalue(
+        self,
+        company_id: int,
+        day: date | str,
+        gain_account: int | str,
+        loss_account: int | str | None = None,
+        memo: str | None = None,
+    ) -> int | None:
+        """Переоценка валютных остатков on `day` (common layer).
+
+        Every balance of a currency account — per subconto values and currency — is
+        brought to its currency balance at the rate of the day. A gain is credited to
+        `gain_account`, a loss debited to `loss_account` (the same account by default).
+        Returns the posted document, or None when everything is already at the rate.
+        """
+        day = iso_date(day)
+        with transaction(self.conn):
+            gain = self._account(company_id, gain_account)
+            loss = self._account(company_id, loss_account or gain_account)
+            for acc in (gain, loss):
+                if acc["currency"]:
+                    raise ValidationError(
+                        tr(
+                            "счёт {code}: курсовые разницы относят на счёт без валютного учёта",
+                            code=_label(acc),
+                        )
+                    )
+            postings = []
+            for b in self._currency_balances(company_id, day):
+                rate = rate_on(self.conn, company_id, b["currency_id"], day)
+                if rate is None:
+                    raise ValidationError(
+                        tr("нет курса {code} на {date}", code=b["code"], date=day)
+                    )
+                diff = to_base(b["currency_balance"], rate.per_unit) - b["balance"]
+                if diff == 0:
+                    continue
+                sc = (b["sc1"], b["sc2"], b["sc3"])
+                if diff > 0:
+                    dt, ct, dt_sc, ct_sc = b["account_id"], gain["id"], sc, ()
+                else:
+                    dt, ct, dt_sc, ct_sc = loss["id"], b["account_id"], (), sc
+                postings.append(
+                    PostingInput(
+                        dt,
+                        ct,
+                        Decimal(abs(diff)).scaleb(-2),
+                        dt_sc,
+                        ct_sc,
+                        tr("Курсовая разница {code}", code=b["code"]),
+                        currency_id=b["currency_id"],
+                        currency_amount=0,
+                    )
+                )
+            if not postings:
+                return None
+            shown = ".".join(reversed(day.split("-")))
+            text = memo or tr("Переоценка валютных остатков на {date}", date=shown)
+            return self.post_new(company_id, day, postings, text)
+
+    def _currency_balances(self, company_id: int, day: str) -> list[sqlite3.Row]:
+        """Balances of currency accounts on `day` (common layer), in manat and in currency,
+        per account, subconto values and currency."""
+        return self.conn.execute(
+            """
+            WITH docs AS (
+                SELECT d.id FROM documents d JOIN layers l ON l.id = d.layer_id
+                WHERE d.company_id = :company_id AND d.status = 'posted'
+                  AND d.doc_date <= :day AND l.code = 'common'
+            ),
+            moves AS (
+                SELECT p.debit_account_id AS account_id, p.dt_sc1 AS sc1, p.dt_sc2 AS sc2,
+                       p.dt_sc3 AS sc3, p.currency_id, p.amount, p.currency_amount
+                FROM postings p JOIN docs ON docs.id = p.document_id
+                JOIN accounts a ON a.id = p.debit_account_id
+                WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+                UNION ALL
+                SELECT p.credit_account_id, p.ct_sc1, p.ct_sc2, p.ct_sc3, p.currency_id,
+                       -p.amount, -p.currency_amount
+                FROM postings p JOIN docs ON docs.id = p.document_id
+                JOIN accounts a ON a.id = p.credit_account_id
+                WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+            )
+            SELECT m.account_id, m.sc1, m.sc2, m.sc3, m.currency_id, c.code,
+                   SUM(m.amount) AS balance, SUM(m.currency_amount) AS currency_balance
+            FROM moves m JOIN currencies c ON c.id = m.currency_id
+            GROUP BY m.account_id, m.sc1, m.sc2, m.sc3, m.currency_id
+            ORDER BY m.account_id, c.code, m.sc1, m.sc2, m.sc3
+            """,
+            {"company_id": company_id, "day": day},
+        ).fetchall()
 
     # ---- internals (must run inside a transaction) -----------------------------------
 
@@ -753,6 +1019,16 @@ class Ledger:
                 raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
             if amount == 0:
                 raise ValidationError(tr("строка {line}: нулевая сумма", line=line_no))
+            currency_amount = None
+            if p.currency_id is not None:
+                try:
+                    currency_amount = to_minor(
+                        p.currency_amount if p.currency_amount is not None else 0
+                    )
+                except (TypeError, ValueError) as e:
+                    raise ValidationError(
+                        tr("строка {line}: {error}", line=line_no, error=e)
+                    ) from e
             rows.append(
                 (
                     company_id,
@@ -764,18 +1040,21 @@ class Ledger:
                     *_pad(p.debit_subconto, line_no),
                     *_pad(p.credit_subconto, line_no),
                     p.memo,
+                    p.currency_id,
+                    currency_amount,
                 )
             )
         try:
             self.conn.executemany(
                 "INSERT INTO postings (company_id, document_id, line_no, debit_account_id, "
-                "credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo, "
+                "currency_id, currency_amount) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
             )
         except sqlite3.IntegrityError as e:
             raise ValidationError(
-                tr("счёт или субконто не существует или принадлежит другой компании")
+                tr("счёт, субконто или валюта не существует или принадлежит другой компании")
             ) from e
 
     def _post(self, company_id: int, doc_id: int) -> None:
@@ -838,8 +1117,15 @@ class Ledger:
         )
 
         is_reversal = doc["reversal_of"] is not None
+        currencies = {
+            r["id"]: r["code"]
+            for r in self.conn.execute(
+                "SELECT id, code FROM currencies WHERE company_id = ?", (company_id,)
+            )
+        }
         for p in postings:
             line = p["line_no"]
+            self._validate_currency(p, accounts, values, currencies)
             if is_reversal and p["amount"] >= 0:
                 raise ValidationError(
                     tr("строка {line}: сумма сторно должна быть отрицательной", line=line)
@@ -879,6 +1165,57 @@ class Ledger:
                         raise ValidationError(
                             tr("{label}: субконто {i} не того вида", label=label, i=i)
                         )
+
+    @staticmethod
+    def _validate_currency(
+        p: sqlite3.Row,
+        accounts: dict[int, sqlite3.Row],
+        values: dict[int, sqlite3.Row],
+        currencies: dict[int, str],
+    ) -> None:
+        """A side on a currency account needs the posting's currency; a posting without
+        currency accounts has no currency. Elements with a currency (a USD bank account)
+        accept only that currency."""
+        line = p["line_no"]
+        currency_sides = [
+            (side, prefix)
+            for side, prefix in SIDES
+            if accounts[p[f"{side}_account_id"]]["currency"]
+        ]
+        if not currency_sides:
+            if p["currency_id"] is not None:
+                raise ValidationError(
+                    tr("строка {line}: валюта указана, но счета без валютного учёта", line=line)
+                )
+            return
+        for side, prefix in currency_sides:
+            label = tr(
+                "строка {line}, {side} {code}",
+                line=line,
+                side=tr("Дт" if side == "debit" else "Кт"),
+                code=_label(accounts[p[f"{side}_account_id"]]),
+            )
+            if p["currency_id"] is None:
+                raise ValidationError(tr("{label}: не указана валюта", label=label))
+            for i in range(1, MAX_SUBCONTO + 1):
+                value = values.get(p[f"{prefix}_sc{i}"])
+                if value is not None and value["currency_id"] not in (None, p["currency_id"]):
+                    raise ValidationError(
+                        tr(
+                            "{label}: «{name}» в валюте {expected}, а проводка в {actual}",
+                            label=label,
+                            name=value["name"],
+                            expected=currencies.get(value["currency_id"], "?"),
+                            actual=currencies[p["currency_id"]],
+                        )
+                    )
+        if p["currency_amount"] * p["amount"] < 0:
+            raise ValidationError(
+                tr(
+                    "строка {line}: сумма в валюте и сумма в манатах разных знаков",
+                    line=line,
+                )
+            )
 
     def _require_draft(self, doc: sqlite3.Row) -> None:
         if doc["status"] != "draft":

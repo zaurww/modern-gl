@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from fractions import Fraction
 
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger import TemplateLine
 from modern_gl.application.queries import DocumentData, TemplateData, load_document
 from modern_gl.desktop.postings import (
@@ -120,6 +122,7 @@ class DocumentPage(QWidget):
         root.addLayout(meta)
 
         self.model = PostingsModel(session.catalog)
+        self.model.rate_for = self._rate_for
         self.delegate = PostingsDelegate(session.catalog, self)
         self.table = PostingsTable(self.model, self.delegate)
         root.addWidget(self.table, 1)
@@ -233,6 +236,7 @@ class DocumentPage(QWidget):
         self.model.changed.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
+        self.date.dateChanged.connect(self._date_changed)
         self.layer.currentIndexChanged.connect(self._changed)
 
     # ---- state -----------------------------------------------------------------------
@@ -257,6 +261,28 @@ class DocumentPage(QWidget):
         if not self.dirty and not self.model.read_only:
             self.dirty = True
             self.title_changed.emit()
+
+    def _rate_for(self, currency_id: int) -> Fraction | None:
+        """Manat per unit of a currency on the document date; tells when there is none."""
+        day = self.date.date().toPython()
+        rate = rate_on(self.s.conn, self.s.company_id, currency_id, day)
+        if rate is None:
+            code = self.s.catalog.currencies[currency_id].code
+            self.show_error(
+                tr(
+                    "Нет курса {code} на {date}: введите курс в строке или загрузите курсы "
+                    "в разделе «Валюты»",
+                    code=code,
+                    date=ru_date(day.isoformat()),
+                )
+            )
+            return None
+        return rate.per_unit
+
+    def _date_changed(self, *_) -> None:
+        if not self.model.read_only:
+            self.error.hide()
+            self.model.refresh_rates()
 
     def _update_total(self) -> None:
         self.total.setText(money(self.model.total(), blank_zero=False))

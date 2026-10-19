@@ -28,6 +28,8 @@ COMPANY_TABLES = (
     "documents",
     "accounts",
     "subconto_values",
+    "currency_rates",
+    "currencies",
     "subconto_kinds",
     "layers",
 )
@@ -128,8 +130,12 @@ class Workspace:
             dst.execute("BEGIN")
             for trigger, _ in triggers:
                 dst.execute(f'DROP TRIGGER "{trigger}"')
+            existing = {
+                r[0] for r in dst.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            }
             for table in COMPANY_TABLES:
-                dst.execute(f"DELETE FROM {table} WHERE company_id IS NOT ?", (company_id,))
+                if table in existing:  # an older file may not have the newer tables yet
+                    dst.execute(f"DELETE FROM {table} WHERE company_id IS NOT ?", (company_id,))
             dst.execute("DELETE FROM companies WHERE id != ?", (company_id,))
             for _, sql in triggers:
                 dst.execute(sql)

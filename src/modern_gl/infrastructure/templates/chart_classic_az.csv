@@ -1,38 +1,38 @@
-code;name;parent;group;class;contra;two_sided;subconto
-01;Əsas vəsaitlər;;;asset;;;fixed_asset
-02;Əsas vəsaitlərin köhnəlməsi;;;asset;1;;fixed_asset
-04;Qeyri-maddi aktivlər;;;asset;;;intangible
-05;Qeyri-maddi aktivlərin köhnəlməsi;;;asset;1;;intangible
-08;Əsaslı vəsait qoyuluşları;;;asset;;;fixed_asset
-10;Materiallar;;;asset;;;item,warehouse
-19;Alınmış sərvətlər üzrə ƏDV;;;asset;;;counterparty
-20;Əsas istehsalat;;;asset;;;cost_item
-26;Ümumtəsərrüfat xərcləri;;;expense;;;cost_item
-31;Gələcək dövrlərin xərcləri;;;asset;;;
-40;Hazır məhsul;;;asset;;;item,warehouse
-41;Mallar;;;asset;;;item,warehouse
-44;Tədavül xərcləri;;;expense;;;cost_item
-46;Məhsulun (işlərin, xidmətlərin) satışı;;;revenue;;1;
-47;Əsas vəsaitlərin satışı və digər silinməsi;;;revenue;;1;fixed_asset
-48;Digər aktivlərin satışı;;;revenue;;1;
-50;Kassa;;;asset;;;
-51;Hesablaşma hesabı;;;asset;;;bank_account
-52;Valyuta hesabı;;;asset;;;bank_account
-60;Malsatan və podratçılarla hesablaşmalar;;;liability;;1;counterparty,contract
-61;Verilmiş avanslar üzrə hesablaşmalar;;;asset;;1;counterparty,contract
-62;Alıcı və sifarişçilərlə hesablaşmalar;;;asset;;1;counterparty,contract
-64;Alınmış avanslar üzrə hesablaşmalar;;;liability;;1;counterparty,contract
-68;Büdcə ilə hesablaşmalar;;1;liability;;1;
-68.1;Gəlir vergisi;68;;liability;;1;
-68.2;Əlavə dəyər vergisi;68;;liability;;1;
-68.3;Mənfəət vergisi;68;;liability;;1;
-68.9;Digər vergi və rüsumlar;68;;liability;;1;
-69;Sosial sığorta üzrə hesablaşmalar;;;liability;;1;
-70;Əməyin ödənişi üzrə işçilərlə hesablaşmalar;;;liability;;1;employee
-71;Təhtəlhesab şəxslərlə hesablaşmalar;;;asset;;1;employee
-75;Təsisçilərlə hesablaşmalar;;;liability;;1;counterparty
-76;Müxtəlif debitor və kreditorlarla hesablaşmalar;;;liability;;1;counterparty,contract
-80;Mənfəət və zərərlər;;;equity;;1;
-85;Nizamnamə kapitalı;;;equity;;;counterparty
-88;Bölüşdürülməmiş mənfəət (ödənilməmiş zərər);;;equity;;1;
-90;Bankların qısamüddətli kreditləri;;;liability;;;counterparty,contract
+code;name;parent;group;class;contra;two_sided;subconto;currency
+01;Əsas vəsaitlər;;;asset;;;fixed_asset;
+02;Əsas vəsaitlərin köhnəlməsi;;;asset;1;;fixed_asset;
+04;Qeyri-maddi aktivlər;;;asset;;;intangible;
+05;Qeyri-maddi aktivlərin köhnəlməsi;;;asset;1;;intangible;
+08;Əsaslı vəsait qoyuluşları;;;asset;;;fixed_asset;
+10;Materiallar;;;asset;;;item,warehouse;
+19;Alınmış sərvətlər üzrə ƏDV;;;asset;;;counterparty;
+20;Əsas istehsalat;;;asset;;;cost_item;
+26;Ümumtəsərrüfat xərcləri;;;expense;;;cost_item;
+31;Gələcək dövrlərin xərcləri;;;asset;;;;
+40;Hazır məhsul;;;asset;;;item,warehouse;
+41;Mallar;;;asset;;;item,warehouse;
+44;Tədavül xərcləri;;;expense;;;cost_item;
+46;Məhsulun (işlərin, xidmətlərin) satışı;;;revenue;;1;;
+47;Əsas vəsaitlərin satışı və digər silinməsi;;;revenue;;1;fixed_asset;
+48;Digər aktivlərin satışı;;;revenue;;1;;
+50;Kassa;;;asset;;;;
+51;Hesablaşma hesabı;;;asset;;;bank_account;
+52;Valyuta hesabı;;;asset;;;bank_account;1
+60;Malsatan və podratçılarla hesablaşmalar;;;liability;;1;counterparty,contract;
+61;Verilmiş avanslar üzrə hesablaşmalar;;;asset;;1;counterparty,contract;
+62;Alıcı və sifarişçilərlə hesablaşmalar;;;asset;;1;counterparty,contract;
+64;Alınmış avanslar üzrə hesablaşmalar;;;liability;;1;counterparty,contract;
+68;Büdcə ilə hesablaşmalar;;1;liability;;1;;
+68.1;Gəlir vergisi;68;;liability;;1;;
+68.2;Əlavə dəyər vergisi;68;;liability;;1;;
+68.3;Mənfəət vergisi;68;;liability;;1;;
+68.9;Digər vergi və rüsumlar;68;;liability;;1;;
+69;Sosial sığorta üzrə hesablaşmalar;;;liability;;1;;
+70;Əməyin ödənişi üzrə işçilərlə hesablaşmalar;;;liability;;1;employee;
+71;Təhtəlhesab şəxslərlə hesablaşmalar;;;asset;;1;employee;
+75;Təsisçilərlə hesablaşmalar;;;liability;;1;counterparty;
+76;Müxtəlif debitor və kreditorlarla hesablaşmalar;;;liability;;1;counterparty,contract;
+80;Mənfəət və zərərlər;;;equity;;1;;
+85;Nizamnamə kapitalı;;;equity;;;counterparty;
+88;Bölüşdürülməmiş mənfəət (ödənilməmiş zərər);;;equity;;1;;
+90;Bankların qısamüddətli kreditləri;;;liability;;;counterparty,contract;

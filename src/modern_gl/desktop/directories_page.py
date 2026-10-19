@@ -162,13 +162,21 @@ class DirectoriesPage(QWidget):
                 tr("Наименование"), lambda v: v.name if v.active else f"{v.name}  ·  {tr('скрыт')}"
             ),
         ]
+        if any(a.currency for a in accounts):
+            columns.append(Column(tr("Валюта"), self._currency_code, width=120))
         self.model.set(columns, values, muted=lambda v: not v.active)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        if len(columns) > 1:
+            self.table.setColumnWidth(1, 120)
         self.stack.setCurrentWidget(self.table if values else self.empty)
         if select_value is not None:
             row = next((i for i, v in enumerate(values) if v.id == select_value), None)
             if row is not None:
                 self.table.setCurrentIndex(self.model.index(row, 0))
+
+    def _currency_code(self, value: SubcontoInfo) -> str:
+        currency = self.s.catalog.currencies.get(value.currency_id or 0)
+        return currency.code if currency else ""
 
     def _value_at(self, index) -> SubcontoInfo | None:
         return index.data(Qt.ItemDataRole.UserRole) if index.isValid() else None
@@ -229,6 +237,28 @@ class DirectoriesPage(QWidget):
             value.id,
         )
 
+    def choose_currency(self, value: SubcontoInfo) -> None:
+        """A USD bank account, a contract in EUR: the line takes this currency."""
+        currencies = self.s.catalog.active_currencies
+        items = [tr("— без валюты")] + [c.label for c in currencies]
+        current = next((i + 1 for i, c in enumerate(currencies) if c.id == value.currency_id), 0)
+        choice, ok = QInputDialog.getItem(
+            self, tr("Валюта"), tr("Валюта «{name}»:", name=value.name), items, current, False
+        )
+        if not ok:
+            return
+        index = items.index(choice)
+        currency = currencies[index - 1] if index else None
+        self._apply(
+            lambda: self.s.ledger.set_subconto_value_currency(
+                self.s.company_id, value.id, currency.id if currency else None
+            ),
+            tr("«{name}»: валюта {code}", name=value.name, code=currency.code)
+            if currency
+            else tr("«{name}»: без валюты", name=value.name),
+            value.id,
+        )
+
     def add_kind(self) -> None:
         name = self._ask(tr("Новый справочник"), tr("Название справочника (например, «Проекты»):"))
         if not name:
@@ -249,13 +279,16 @@ class DirectoriesPage(QWidget):
         if value is None:
             return
         menu = QMenu(self)
-        for text, fn in (
+        actions = [
             (tr("Переименовать…"), lambda: self.rename_value(value)),
             (
                 tr("Показать") if not value.active else tr("Скрыть"),
                 lambda: self.toggle_value(value),
             ),
-        ):
+        ]
+        if any(a.currency for a in self.s.catalog.accounts_using(value.kind_id)):
+            actions.append((tr("Валюта…"), lambda: self.choose_currency(value)))
+        for text, fn in actions:
             act = QAction(text, menu)
             act.triggered.connect(fn)
             menu.addAction(act)

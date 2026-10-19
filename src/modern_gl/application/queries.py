@@ -41,6 +41,8 @@ class PostingData:
     debit_subconto: tuple[int | None, int | None, int | None]
     credit_subconto: tuple[int | None, int | None, int | None]
     memo: str
+    currency_id: int | None = None
+    currency_amount: int | None = None
 
 
 @dataclass
@@ -115,6 +117,8 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
                 (p["dt_sc1"], p["dt_sc2"], p["dt_sc3"]),
                 (p["ct_sc1"], p["ct_sc2"], p["ct_sc3"]),
                 p["memo"],
+                p["currency_id"],
+                p["currency_amount"],
             )
         )
     return doc
