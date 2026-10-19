@@ -25,6 +25,7 @@ from modern_gl.desktop import theme  # noqa: E402
 from modern_gl.desktop.app import add_demo_company  # noqa: E402
 from modern_gl.desktop.directories_page import DirectoriesPage  # noqa: E402
 from modern_gl.desktop.document_page import DocumentPage  # noqa: E402
+from modern_gl.desktop.inventory_page import InventoryPage  # noqa: E402
 from modern_gl.desktop.journal_page import JournalPage  # noqa: E402
 from modern_gl.desktop.main_window import MainWindow  # noqa: E402
 from modern_gl.desktop.reports_page import OsvPage  # noqa: E402
@@ -113,8 +114,12 @@ def main() -> None:
     session.catalog.reload()
     directories.refresh(select_kind=banks)
     shot("8b_directories")
+    win.show_place(("inventory",))
+    inventory = cast(InventoryPage, win.stack.currentWidget())
+    inventory.refresh()
+    shot("8c_inventory")
     win.show_place(("templates",))
-    shot("8c_templates")
+    shot("8d_templates")
     from modern_gl.application.queries import list_templates
 
     sale = list_templates(session.conn, session.company_id)[0]
@@ -122,14 +127,14 @@ def main() -> None:
         (t for t in list_templates(session.conn, session.company_id) if len(t.lines) == 2), sale
     )
     win.open_template(sale.id)
-    shot("8d_template_editor")
+    shot("8e_template_editor")
     win.close_current()
     win.show_place(("templates",))
     win.new_document(entry=sale)
     page = cast(DocumentPage, win.stack.currentWidget())
     page.amount.setText("1180")
     page.amount.textEdited.emit("1180")
-    shot("8e_document_from_template")
+    shot("8f_document_from_template")
     from modern_gl.desktop.account_dialog import AccountDialog
 
     dialog = AccountDialog(session, session.catalog.by_code["02"], parent=win)

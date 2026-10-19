@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from modern_gl.application.inventory import Inventory, IssueLine, ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.chart_csv import apply_chart_template
@@ -25,6 +26,17 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
     rent = value("cost_item", tr("Аренда офиса"))
     employee = value("employee", tr("Мамедов Р."))
 
+    inventory = Inventory(ledger.conn, actor=ledger.actor)
+    package = inventory.add_unit(cid, "уп.", tr("Упаковка"), precision=0)
+    paper_item = inventory.add_item(
+        cid,
+        tr("Бумага офисная А4"),
+        package,
+        ledger.account_id(cid, "10"),
+        subconto_value_id=paper,
+    )
+    main_warehouse = inventory.add_warehouse(cid, tr("Основной склад"), subconto_value_id=store)
+
     def p(dt, ct, amount, dt_sc=(), ct_sc=(), memo=""):
         return PostingInput(
             ledger.account_id(cid, dt), ledger.account_id(cid, ct), amount, dt_sc, ct_sc, memo
@@ -37,17 +49,21 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
         [p("51", "85", "10000", [bank], [founder])],
         tr("Взнос в уставный капитал"),
     )
-    post(
+    inventory.post_receipt(
         cid,
         "2026-01-10",
-        [p("10", "60", "1200", [paper, store], [alfa, c1])],
+        [ReceiptLine(paper_item, main_warehouse, "120", "1200")],
+        ledger.account_id(cid, "60"),
+        [alfa, c1],
         tr("Поступление материалов"),
     )
     post(cid, "2026-01-15", [p("60", "51", "1000", [alfa, c1], [bank])], tr("Оплата поставщику"))
-    post(
+    inventory.post_receipt(
         cid,
         "2026-02-03",
-        [p("10", "60", "500", [paper, store], [beta, c2])],
+        [ReceiptLine(paper_item, main_warehouse, "50", "500")],
+        ledger.account_id(cid, "60"),
+        [beta, c2],
         tr("Поступление материалов"),
     )
     post(cid, "2026-02-04", [p("50", "51", "2000", [], [bank])], tr("Снятие наличных в кассу"))
@@ -62,10 +78,18 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
         ],
         tr("Авансовый отчёт"),
     )
-    post(
+    inventory.post_issue(
         cid,
         "2026-02-20",
-        [p("26", "10", "300", [materials], [paper, store])],
+        [
+            IssueLine(
+                paper_item,
+                main_warehouse,
+                "30",
+                ledger.account_id(cid, "26"),
+                [materials],
+            )
+        ],
         tr("Списание материалов"),
     )
     post(

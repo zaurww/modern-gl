@@ -574,6 +574,7 @@ class Ledger:
         """
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
+            self._require_not_inventory_document(doc_id)
             if doc["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
             if doc["reversal_of"] is not None:
@@ -594,6 +595,7 @@ class Ledger:
         """
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
+            self._require_not_inventory_document(doc_id)
             if doc["status"] == "posted":
                 self._require_changeable(company_id, doc)
             snapshot = self._snapshot(doc)
@@ -627,6 +629,19 @@ class Ledger:
                     "документ №{n} сторнирован документом №{m}: сначала удалите сторно",
                     n=doc["number"],
                     m=storno["number"],
+                )
+            )
+
+    def _require_not_inventory_document(self, doc_id: int) -> None:
+        linked = self.conn.execute(
+            "SELECT number FROM inventory_documents WHERE gl_document_id = ?", (doc_id,)
+        ).fetchone()
+        if linked is not None:
+            raise ValidationError(
+                tr(
+                    "бухгалтерский документ создан складским документом №{n}; "
+                    "исправьте его через склад",
+                    n=linked["number"],
                 )
             )
 
@@ -669,6 +684,7 @@ class Ledger:
         """Red storno: a new posted document with the same postings and negated amounts."""
         with transaction(self.conn):
             orig = self._document(company_id, doc_id)
+            self._require_not_inventory_document(doc_id)
             if orig["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=orig["number"]))
             if orig["reversal_of"] is not None:

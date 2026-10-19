@@ -46,6 +46,7 @@ from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import load_document, load_template
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
@@ -60,6 +61,7 @@ PLACES = [  # key, title (translated on display), icon color
     (("journal",), "Журнал", P.accent),
     (("osv",), "ОСВ", P.green),
     (("chart",), "План счетов", P.violet),
+    (("inventory",), "Склад", P.green),
     (("directories",), "Справочники", P.teal),
     (("templates",), "Шаблоны", P.amber),
 ]
@@ -228,6 +230,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+3", lambda: self.show_place(("chart",))),
             ("Ctrl+4", lambda: self.show_place(("directories",))),
             ("Ctrl+5", lambda: self.show_place(("templates",))),
+            ("Ctrl+6", lambda: self.show_place(("inventory",))),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
 
@@ -386,6 +389,10 @@ class MainWindow(QMainWindow):
             return page
         if key == ("directories",):
             return DirectoriesPage(s)
+        if key == ("inventory",):
+            page = InventoryPage(s)
+            page.open_document.connect(self.open_document)
+            return page
         if key == ("templates",):
             page = TemplatesPage(s)
             page.use_template.connect(
@@ -428,6 +435,8 @@ class MainWindow(QMainWindow):
             self.sidebar.nav.setCurrentItem(item)
             self.sidebar.nav.blockSignals(False)
         if isinstance(page, JournalPage):
+            page.refresh()
+        if isinstance(page, InventoryPage):
             page.refresh()
         if hasattr(page, "focus_table"):
             page.focus_table()
