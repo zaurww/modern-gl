@@ -560,3 +560,21 @@ def test_new_user_directory(window, monkeypatch):
     assert len(window.session.catalog.kinds) == before + 1
     assert page.kind_title.text() == "Проекты"
     assert "не используется" in page.used_in.text()
+
+
+@pytest.mark.parametrize("key", [Qt.Key.Key_Return, Qt.Key.Key_Tab])
+def test_pick_from_open_list_with_arrows(window, qtbot, key):
+    """Regression: arrows then Enter/Tab must take the highlighted item, not the empty text."""
+    window.new_document()
+    page = current_page(window)
+    cat = window.session.catalog
+    page.model.setData(page.model.index(0, CT), cat.by_code["60.1"].id)
+    editor, completer = open_cell_editor(page, 0, CT + 1)
+    popup = completer.popup()
+    assert popup.isVisible() and editor.text() == ""
+    qtbot.keyClick(popup, Qt.Key.Key_Down)
+    qtbot.keyClick(popup, Qt.Key.Key_Down)
+    picked = popup.currentIndex().data()
+    qtbot.keyClick(popup, key)
+    assert page.model.data(page.model.index(0, CT + 1)) == picked == "Бета Сервис"
+    assert page.table.currentIndex().column() == CT + 2  # moved on to the contract

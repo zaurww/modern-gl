@@ -14,6 +14,7 @@ from PySide6.QtCore import (
     QAbstractTableModel,
     QEvent,
     QModelIndex,
+    QObject,
     QPersistentModelIndex,
     QStringListModel,
     Qt,
@@ -260,6 +261,26 @@ class PostingsModel(QAbstractTableModel):
         return result
 
 
+class _PickWithKeys(QObject):
+    """On the open list, Enter or Tab takes the highlighted item."""
+
+    KEYS = (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab)
+
+    def __init__(self, popup, choose) -> None:
+        super().__init__(popup)
+        self.choose = choose
+        popup.installEventFilter(self)  # installed after QCompleter's, so it runs first
+
+    def eventFilter(self, popup, event) -> bool:
+        if event.type() == QEvent.Type.KeyPress and event.key() in self.KEYS:
+            index = popup.currentIndex()
+            if popup.isVisible() and index.isValid():
+                popup.hide()
+                self.choose(index.data())
+                return True
+        return False
+
+
 class PostingsDelegate(QStyledItemDelegate):
     """Line editors with completion for accounts and subconto; Enter = next cell."""
 
@@ -319,7 +340,10 @@ class PostingsDelegate(QStyledItemDelegate):
             self._commit_and_next(editor)
 
         editor.textEdited.connect(refresh)
-        completer.activated.connect(chosen)
+        completer.activated[str].connect(chosen)  # mouse click on an item
+        # Enter / Tab on a highlighted item: Qt would hand the key to the editor *before*
+        # reporting the choice, so the editor would commit what was typed (often nothing).
+        _PickWithKeys(popup, lambda text: chosen(text))
         QTimer.singleShot(0, lambda: refresh(editor.text()))
 
     def setEditorData(self, editor, index):
