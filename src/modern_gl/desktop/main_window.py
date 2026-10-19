@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import load_document
+from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
@@ -58,6 +59,7 @@ PLACES = [  # key, title (translated on display), icon color
     (("journal",), "Журнал", P.accent),
     (("osv",), "ОСВ", P.green),
     (("chart",), "План счетов", P.violet),
+    (("directories",), "Справочники", P.teal),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES]
 
@@ -222,6 +224,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+1", lambda: self.show_place(("journal",))),
             ("Ctrl+2", lambda: self.show_place(("osv",))),
             ("Ctrl+3", lambda: self.show_place(("chart",))),
+            ("Ctrl+4", lambda: self.show_place(("directories",))),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
 
@@ -378,6 +381,8 @@ class MainWindow(QMainWindow):
                 lambda doc_id: self.new_document(load_document(s.conn, s.company_id, doc_id))
             )
             return page
+        if key == ("directories",):
+            return DirectoriesPage(s)
         if key == ("osv",):
             page = OsvPage(s)
         else:

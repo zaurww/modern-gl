@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 
 from modern_gl.application.ledger import Ledger
+from modern_gl.i18n import sort_key
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 
@@ -70,7 +71,7 @@ class Workspace:
                 result.append(CompanyFile(path, company_name(path)))
             except sqlite3.DatabaseError:
                 continue  # not a company file (or damaged): never fail the whole list
-        return sorted(result, key=lambda c: c.name.casefold())
+        return sorted(result, key=lambda c: sort_key(c.name))
 
     def create(self, name: str, chart: str | None = "1c77") -> Path:
         """New company file with the chart template (in the interface language)."""

@@ -49,3 +49,14 @@ _FOLD = str.maketrans(
 def fold(text: str) -> str:
     """Search form: case-insensitive, and 'işçi' == 'isci' for keyboards without AZ letters."""
     return text.replace("İ", "i").replace("I", "i").casefold().translate(_FOLD)
+
+
+AZ_ALPHABET = "abcçdeəfgğhxıijkqlmnoöprsştuüvyz"
+_AZ_ORDER = {ch: i for i, ch in enumerate(AZ_ALPHABET)}
+
+
+def sort_key(text: str) -> tuple[int, ...]:
+    """Alphabetical order that knows Azerbaijani letters (Ə after E, Ş after S, İ / I…).
+    Other characters (digits, Cyrillic) keep their natural order after/among them."""
+    lowered = text.replace("I", "ı").replace("İ", "i").lower()
+    return tuple(_AZ_ORDER[ch] if ch in _AZ_ORDER else 100 + ord(ch) for ch in lowered)

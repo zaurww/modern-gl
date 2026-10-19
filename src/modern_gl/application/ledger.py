@@ -93,8 +93,20 @@ class Ledger:
 
     # ---- subconto --------------------------------------------------------------------
 
-    def add_subconto_kind(self, company_id: int, code: str, name: str) -> int:
+    def add_subconto_kind(self, company_id: int, code: str | None, name: str) -> int:
+        """Add a directory. Without a code (user-made directories) one is generated."""
         with transaction(self.conn):
+            if code is None:
+                taken = {
+                    r["code"]
+                    for r in self.conn.execute(
+                        "SELECT code FROM subconto_kinds WHERE company_id = ?", (company_id,)
+                    )
+                }
+                n = 1
+                while f"custom_{n}" in taken:
+                    n += 1
+                code = f"custom_{n}"
             kind_id = self.conn.execute(
                 "INSERT INTO subconto_kinds (company_id, code, name) VALUES (?, ?, ?)",
                 (company_id, code, name),
@@ -128,6 +140,45 @@ class Ledger:
                 company_id, "subconto_value", value_id, "create", {"kind_id": kind_id, "name": name}
             )
         return value_id
+
+    def update_subconto_value(
+        self, company_id: int, value_id: int, name: str, code: str | None = None
+    ) -> None:
+        """Rename a directory element. Postings reference it by id, so history follows."""
+        name = name.strip()
+        if not name:
+            raise ValidationError(tr("название не может быть пустым"))
+        with transaction(self.conn):
+            old = self._subconto_value(company_id, value_id)
+            try:
+                self.conn.execute(
+                    "UPDATE subconto_values SET name = ?, code = ? WHERE id = ?",
+                    (name, code, value_id),
+                )
+            except sqlite3.IntegrityError as e:
+                raise ValidationError(
+                    tr("не удалось добавить субконто {name}: {error}", name=name, error=e)
+                ) from e
+            self._audit(
+                company_id, "subconto_value", value_id, "rename", {"from": old["name"], "to": name}
+            )
+
+    def set_subconto_value_active(self, company_id: int, value_id: int, active: bool) -> None:
+        """Hide an element from entry lists (history and reports keep it), or show it again."""
+        with transaction(self.conn):
+            self._subconto_value(company_id, value_id)
+            self.conn.execute(
+                "UPDATE subconto_values SET active = ? WHERE id = ?", (int(active), value_id)
+            )
+            self._audit(company_id, "subconto_value", value_id, "show" if active else "hide", {})
+
+    def _subconto_value(self, company_id: int, value_id: int) -> sqlite3.Row:
+        row = self.conn.execute(
+            "SELECT * FROM subconto_values WHERE company_id = ? AND id = ?", (company_id, value_id)
+        ).fetchone()
+        if row is None:
+            raise NotFoundError(tr("элемент справочника не найден"))
+        return row
 
     # ---- chart of accounts -----------------------------------------------------------
 

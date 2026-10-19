@@ -9,7 +9,7 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass
 
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import fold, sort_key, tr
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,7 @@ class SubcontoInfo:
     kind_id: int
     name: str
     code: str | None
+    active: bool = True
 
     @property
     def label(self) -> str:
@@ -77,11 +78,13 @@ class Catalog:
         self._values: dict[int, SubcontoInfo] = {}
         self._by_kind: dict[int, list[SubcontoInfo]] = {k: [] for k in self.kinds}
         for r in self.conn.execute(
-            "SELECT id, kind_id, name, code FROM subconto_values "
-            "WHERE company_id = ? AND active = 1 ORDER BY name",
+            "SELECT id, kind_id, name, code, active FROM subconto_values "
+            "WHERE company_id = ? ORDER BY name",
             (self.company_id,),
         ):
-            self._add(SubcontoInfo(r["id"], r["kind_id"], r["name"], r["code"]))
+            self._add(SubcontoInfo(r["id"], r["kind_id"], r["name"], r["code"], bool(r["active"])))
+        for values in self._by_kind.values():
+            values.sort(key=lambda v: sort_key(v.name))
 
     def _add(self, value: SubcontoInfo) -> None:
         self._values[value.id] = value
@@ -90,7 +93,7 @@ class Catalog:
     def add_value(self, value_id: int, kind_id: int, name: str, code: str | None = None) -> None:
         """Register a value just created through the Ledger, without a full reload."""
         self._add(SubcontoInfo(value_id, kind_id, name, code))
-        self._by_kind[kind_id].sort(key=lambda v: v.name.casefold())
+        self._by_kind[kind_id].sort(key=lambda v: sort_key(v.name))
 
     @property
     def leaf_accounts(self) -> list[AccountInfo]:
@@ -98,7 +101,15 @@ class Catalog:
         return [a for a in self.accounts.values() if not a.is_group and a.active]
 
     def values(self, kind_id: int) -> list[SubcontoInfo]:
-        return self._by_kind.get(kind_id, [])
+        """Values offered for entry (hidden ones are not)."""
+        return [v for v in self._by_kind.get(kind_id, []) if v.active]
+
+    def all_values(self, kind_id: int) -> list[SubcontoInfo]:
+        """Every value of a directory, hidden ones included."""
+        return list(self._by_kind.get(kind_id, []))
+
+    def accounts_using(self, kind_id: int) -> list[AccountInfo]:
+        return [a for a in self.accounts.values() if kind_id in a.sc_kinds]
 
     def value(self, value_id: int) -> SubcontoInfo:
         return self._values[value_id]

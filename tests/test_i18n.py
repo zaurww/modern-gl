@@ -77,3 +77,19 @@ def test_search_ranks_word_starts_first():
     assert search(labels, "icar") == ["Ofis icarəsi", "İcarə haqqı"]
     assert search(labels, "ic")[0] == "Ofis icarəsi"
     assert search(labels, "") == labels
+
+
+def test_azerbaijani_alphabetical_order():
+    from modern_gl.i18n import sort_key
+
+    words = ["Əsas vəsaitlər", "Anbarlar", "Şirkət", "Sabah", "İşçilər", "Ilıq", "Ekran", "Zavod"]
+    assert sorted(words, key=sort_key) == [
+        "Anbarlar",
+        "Ekran",
+        "Əsas vəsaitlər",
+        "Ilıq",
+        "İşçilər",
+        "Sabah",
+        "Şirkət",
+        "Zavod",
+    ]

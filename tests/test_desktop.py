@@ -507,3 +507,56 @@ def test_unpost_from_page_makes_it_editable(window):
     assert not page.model.read_only
     assert page.status.text() == "Черновик"
     assert window.pages[("journal",)].model.docs[1].status == "draft"
+
+
+def test_add_two_banks_in_directories(window, monkeypatch):
+    window.show_place(("directories",))
+    page = current_page(window)
+    cat = window.session.catalog
+    banks = cat.by_code["51"].sc_kinds[0]
+    row = next(
+        i
+        for i in range(page.kinds.count())
+        if page.kinds.item(i).data(Qt.ItemDataRole.UserRole) == banks
+    )
+    page.kinds.setCurrentRow(row)
+    assert "51" in page.used_in.text()
+
+    answers = iter([("Kapital Bank", True), ("ABB", True)])
+    monkeypatch.setattr(
+        "modern_gl.desktop.directories_page.QInputDialog.getText",
+        staticmethod(lambda *a, **k: next(answers)),
+    )
+    page.add_value()
+    page.add_value()
+    names = [v.name for v in window.session.catalog.values(banks)]
+    assert {"Kapital Bank", "ABB"} <= set(names)
+
+    # rename keeps history: postings reference the element by id
+    abb = next(v for v in window.session.catalog.values(banks) if v.name == "ABB")
+    monkeypatch.setattr(
+        "modern_gl.desktop.directories_page.QInputDialog.getText",
+        staticmethod(lambda *a, **k: ("ABB (AZN)", True)),
+    )
+    page.rename_value(abb)
+    assert window.session.catalog.value(abb.id).name == "ABB (AZN)"
+
+    # hidden: not offered for entry any more, still known by id
+    page.toggle_value(window.session.catalog.value(abb.id))
+    assert "ABB (AZN)" not in [v.name for v in window.session.catalog.values(banks)]
+    assert window.session.catalog.value(abb.id).name == "ABB (AZN)"
+    assert window.session.catalog.resolve_value(banks, "ABB") is None
+
+
+def test_new_user_directory(window, monkeypatch):
+    window.show_place(("directories",))
+    page = current_page(window)
+    monkeypatch.setattr(
+        "modern_gl.desktop.directories_page.QInputDialog.getText",
+        staticmethod(lambda *a, **k: ("Проекты", True)),
+    )
+    before = len(window.session.catalog.kinds)
+    page.add_kind()
+    assert len(window.session.catalog.kinds) == before + 1
+    assert page.kind_title.text() == "Проекты"
+    assert "не используется" in page.used_in.text()

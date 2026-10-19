@@ -98,6 +98,14 @@ def main() -> None:
     shot("7_card")
     win.show_place(("chart",))
     shot("8_chart")
+    win.show_place(("directories",))
+    directories = win.stack.currentWidget()
+    banks = win.session.catalog.by_code["51"].sc_kinds[0]
+    for name in ("Kapital Bank", "ABB"):
+        win.ledger.add_subconto_value(win.session.company_id, banks, name)
+    win.session.catalog.reload()
+    directories.refresh(select_kind=banks)
+    shot("8b_directories")
     from modern_gl.desktop.account_dialog import AccountDialog
 
     dialog = AccountDialog(win.session, win.session.catalog.by_code["02"], parent=win)
