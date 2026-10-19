@@ -18,6 +18,7 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
+from modern_gl.desktop.reports_page import SectionRow
 from modern_gl.infrastructure.db import connect
 from modern_gl.infrastructure.workspace import TRASH, Workspace
 from modern_gl.reporting.reports import trial_balance
@@ -145,7 +146,7 @@ def test_post_from_form_updates_journal_and_reports(window):
     assert page.save(post=True)
     assert page.status.text() == "Проведён"
     assert page.model.read_only
-    assert window.sidebar.find(("doc", page.doc_id)).text() == "Документ №14"
+    assert window.sidebar.item_for(("doc", page.doc_id)).text() == "Документ №14"
 
     journal = window.pages[("journal",)]
     assert journal.model.docs[-1].memo == "Пополнение кассы"
@@ -291,12 +292,12 @@ def test_close_cross_in_sidebar(window, qtbot):
     window.new_document()
     page = current_page(window)
     nav = window.sidebar.nav
-    item = window.sidebar.find(page.key)
+    item = window.sidebar.item_for(page.key)
     cross = NavDelegate.close_rect(nav.visualItemRect(item)).center()
     qtbot.mouseClick(nav.viewport(), Qt.MouseButton.LeftButton, pos=cross)
-    assert window.sidebar.find(page.key) is None
+    assert window.sidebar.item_for(page.key) is None
     assert current_page(window).title() == "Журнал"
-    places = [window.sidebar.find(k) for k in PLACE_KEYS]
+    places = [window.sidebar.item_for(k) for k in PLACE_KEYS]
     assert all(places)  # places can't be closed
 
 
@@ -304,7 +305,7 @@ def test_switch_language_rebuilds_interface(window):
     window.set_ui_language("az")
     try:
         assert current_page(window).title() == "Jurnal"
-        assert window.sidebar.find(("osv",)).text() == "Dövriyyə-qalıq"
+        assert window.sidebar.item_for(("osv",)).text() == "Dövriyyə-qalıq"
         assert window.sidebar.hint.text().startswith("Ctrl+N  yeni sənəd")
     finally:
         window.set_ui_language("ru")
@@ -318,7 +319,7 @@ def test_osv_sections_by_class(window):
     osv.date_to.setDate(date(2026, 2, 28))
     osv.sections.setChecked(True)
     rows = osv.model.rows
-    headers = [r for r in rows if id(r) in osv._section_rows]
+    headers = [r for r in rows if isinstance(r, SectionRow)]
     assert [h.name for h in headers] == ["Активы", "Обязательства", "Капитал", "Доходы", "Расходы"]
     total = rows[-1]
     assert sum(h.closing_dt for h in headers) == total.closing_dt
@@ -344,7 +345,7 @@ def test_open_reports_are_translated_in_sidebar(window):
         osv = window.pages.get(("osv",)) or (window.show_place(("osv",)) or current_page(window))
         bank = window.session.catalog.by_code["51"].id
         window.open_report("card", bank, osv.params)
-        assert window.sidebar.find(("card", bank)).text() == "Hesab kartı 51"
+        assert window.sidebar.item_for(("card", bank)).text() == "Hesab kartı 51"
         assert current_page(window).header.title.text() == "Hesab kartı 51"
     finally:
         window.set_ui_language("ru")
@@ -498,7 +499,7 @@ def test_delete_mistaken_storno_from_its_page(window, monkeypatch):
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
     )
     storno_page.delete()
-    assert window.sidebar.find(storno_page.key) is None
+    assert window.sidebar.item_for(storno_page.key) is None
     window.open_document(original.id)
     page = current_page(window)
     page.load(original.id)

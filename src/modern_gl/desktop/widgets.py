@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import cast
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QIcon
@@ -43,6 +44,11 @@ def balance_text(net: int) -> str:
 
 def to_qdate(d: date) -> QDate:
     return QDate(d.year, d.month, d.day)
+
+
+def edited_date(edit: QDateEdit) -> date:
+    """The date in a date editor (PySide types QDate.toPython() as object)."""
+    return cast(date, edit.date().toPython())
 
 
 def date_edit(value: date, parent: QWidget | None = None) -> QDateEdit:
@@ -102,12 +108,12 @@ class PageHeader(QWidget):
         text.addWidget(self.title)
         text.addWidget(self.subtitle)
         outer.addLayout(text, 1)
-        self.actions = QHBoxLayout()
-        self.actions.setSpacing(6)
-        outer.addLayout(self.actions)
+        self.action_row = QHBoxLayout()
+        self.action_row.setSpacing(6)
+        outer.addLayout(self.action_row)
 
     def add_action(self, widget: QWidget) -> QWidget:
-        self.actions.addWidget(widget, 0, Qt.AlignmentFlag.AlignBottom)
+        self.action_row.addWidget(widget, 0, Qt.AlignmentFlag.AlignBottom)
         return widget
 
 
@@ -152,7 +158,7 @@ def ask_date(parent: QWidget, title: str, prompt: str, default: date) -> date | 
     lay.addWidget(buttons)
     if dlg.exec() != QDialog.DialogCode.Accepted:
         return None
-    return edit.date().toPython()
+    return edited_date(edit)
 
 
 # Account classes (level 1 of statement classification): order, name, color.
@@ -163,7 +169,7 @@ ACCOUNT_CLASSES = [
     ("revenue", "Доходы", P.green),
     ("expense", "Расходы", P.red),
 ]
-CLASS_ORDER = {code: i for i, (code, _, _) in enumerate(ACCOUNT_CLASSES)}
+CLASS_ORDER: dict[str | None, int] = {code: i for i, (code, _, _) in enumerate(ACCOUNT_CLASSES)}
 _CLASS_ICONS: dict[str | None, QIcon] = {}
 
 
@@ -174,6 +180,6 @@ def class_name(account_class: str | None) -> str:
 
 def class_icon(account_class: str | None) -> QIcon:
     if account_class not in _CLASS_ICONS:
-        colors = {code: color for code, _, color in ACCOUNT_CLASSES}
+        colors: dict[str | None, str] = {code: color for code, _, color in ACCOUNT_CLASSES}
         _CLASS_ICONS[account_class] = dot_icon(colors.get(account_class, P.hairline), 10)
     return _CLASS_ICONS[account_class]

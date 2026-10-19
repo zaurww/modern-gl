@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
+from modern_gl.application.common import insert
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
@@ -25,10 +26,11 @@ class SubcontoCommands(LedgerBase):
                 while f"custom_{n}" in taken:
                     n += 1
                 code = f"custom_{n}"
-            kind_id = self.conn.execute(
+            kind_id = insert(
+                self.conn,
                 "INSERT INTO subconto_kinds (company_id, code, name) VALUES (?, ?, ?)",
                 (company_id, code, name),
-            ).lastrowid
+            )
             self._audit(company_id, "subconto_kind", kind_id, "create", {"code": code})
         return kind_id
 
@@ -45,11 +47,12 @@ class SubcontoCommands(LedgerBase):
     ) -> int:
         with transaction(self.conn):
             try:
-                value_id = self.conn.execute(
+                value_id = insert(
+                    self.conn,
                     "INSERT INTO subconto_values (company_id, kind_id, code, name) "
                     "VALUES (?, ?, ?, ?)",
                     (company_id, kind_id, code, name),
-                ).lastrowid
+                )
             except sqlite3.IntegrityError as e:
                 raise ValidationError(
                     tr("не удалось добавить субконто {name}: {error}", name=name, error=e)

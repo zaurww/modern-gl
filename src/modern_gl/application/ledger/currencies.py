@@ -5,6 +5,7 @@ from __future__ import annotations
 import sqlite3
 from datetime import date
 
+from modern_gl.application.common import insert
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.currency import check_code, currency_name
 from modern_gl.domain.dates import iso_date
@@ -25,10 +26,11 @@ class CurrencyCommands(LedgerBase):
         name = (name or "").strip() or currency_name(code)
         with transaction(self.conn):
             try:
-                currency_id = self.conn.execute(
+                currency_id = insert(
+                    self.conn,
                     "INSERT INTO currencies (company_id, code, name) VALUES (?, ?, ?)",
                     (company_id, code, name),
-                ).lastrowid
+                )
             except sqlite3.IntegrityError as e:
                 raise ValidationError(tr("валюта {code} уже есть", code=code)) from e
             self._audit(company_id, "currency", currency_id, "create", {"code": code})

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import insert, pad_subconto
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.application.ledger.inputs import TemplateLine
 from modern_gl.domain import formula as formulas
@@ -32,10 +32,11 @@ class TemplateCommands(LedgerBase):
         formulas.check([ln.formula for ln in lines])
         with transaction(self.conn):
             if template_id is None:
-                template_id = self.conn.execute(
+                template_id = insert(
+                    self.conn,
                     "INSERT INTO entry_templates (company_id, name, memo) VALUES (?, ?, ?)",
                     (company_id, name, memo.strip()),
-                ).lastrowid
+                )
                 action = "create"
             else:
                 found = self.conn.execute(

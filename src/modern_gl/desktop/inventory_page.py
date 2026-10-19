@@ -36,7 +36,15 @@ from modern_gl.application.inventory import (
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, date_edit, money, ru_date
+from modern_gl.desktop.widgets import (
+    EmptyState,
+    PageHeader,
+    button,
+    date_edit,
+    edited_date,
+    money,
+    ru_date,
+)
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -263,7 +271,7 @@ class OperationDialog(QDialog):
 
     def _post(self) -> None:
         company_id = self.s.company_id
-        doc_date: date = self.when.date().toPython()
+        doc_date: date = edited_date(self.when)
         memo = self.memo.text().strip()
         if self.operation == "landed_cost":
             receipt_line_ids = [

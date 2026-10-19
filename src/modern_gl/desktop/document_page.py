@@ -48,6 +48,7 @@ from modern_gl.desktop.widgets import (
     ask_date,
     button,
     date_edit,
+    edited_date,
     money,
     ru_date,
     to_qdate,
@@ -294,7 +295,7 @@ class DocumentPage(QWidget):
 
     def _rate_for(self, currency_id: int) -> Fraction | None:
         """Manat per unit of a currency on the document date; tells when there is none."""
-        day = self.date.date().toPython()
+        day = edited_date(self.date)
         rate = rate_on(self.s.conn, self.s.company_id, currency_id, day)
         if rate is None:
             code = self.s.catalog.currencies[currency_id].code
@@ -470,7 +471,7 @@ class DocumentPage(QWidget):
             return False
         self.table.setFocus()  # commits an open cell editor
         self.error.hide()
-        doc_date = self.date.date().toPython()
+        doc_date = edited_date(self.date)
         memo = self.memo.text().strip() or next(  # no title: the first posting's memo
             (r.memo.strip() for r in self.model.rows if r.memo.strip()), ""
         )
@@ -494,6 +495,7 @@ class DocumentPage(QWidget):
             return False
         self.s.working_date = doc_date
         self.load(doc_id)
+        assert self.doc is not None  # load() has just read it
         self.s.notify(
             tr("Документ №{n} проведён" if post else "Документ №{n} сохранён", n=self.doc.number)
         )

@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from modern_gl.application import quick_entry
+from modern_gl.application.common import pad_subconto
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import (
@@ -174,8 +175,8 @@ class QuickEntryBar(QWidget):
                 ln.debit,  # type: ignore[arg-type]
                 ln.credit,  # type: ignore[arg-type]
                 ln.amount,  # type: ignore[arg-type]
-                tuple(ln.debit_sc),
-                tuple(ln.credit_sc),
+                pad_subconto(ln.debit_sc),
+                pad_subconto(ln.credit_sc),
                 ln.memo,
                 ln.currency_id,
                 ln.currency_amount,

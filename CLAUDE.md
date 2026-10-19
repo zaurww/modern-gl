@@ -7,6 +7,7 @@
 ## Команды
 - Тесты: `uv run pytest -q`
 - Линтер: `uv run ruff check . && uv run ruff format --check .`
+- Типы: `uv run pyright` (тот же движок, что Pylance; должно быть 0 ошибок)
 - Программа: `uv run modern-gl` — компании это файлы `*.gl` в «Документы\Modern GL» (`--data <папка>` — другая папка, запоминается); `--demo` добавляет демо-компанию в пустую папку
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка>` — после любых изменений UI смотреть их
 - Демо в консоли: `uv run python scripts/demo.py`

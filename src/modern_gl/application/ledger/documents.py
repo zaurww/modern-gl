@@ -9,7 +9,7 @@ from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 
-from modern_gl.application.common import MAX_SUBCONTO, now, pad_subconto
+from modern_gl.application.common import MAX_SUBCONTO, insert, now, pad_subconto
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.inputs import SIDES, ImportedDocument, ImportOutcome, PostingInput
@@ -370,7 +370,8 @@ class DocumentCommands(SubcontoCommands):
             "UPDATE companies SET last_number = last_number + 1 WHERE id = ? RETURNING last_number",
             (company_id,),
         ).fetchone()[0]
-        return self.conn.execute(
+        return insert(
+            self.conn,
             "INSERT INTO documents (company_id, number, doc_date, memo, status, layer_id, "
             "reversal_of, created_at) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)",
             (
@@ -382,7 +383,7 @@ class DocumentCommands(SubcontoCommands):
                 reversal_of,
                 now(),
             ),
-        ).lastrowid
+        )
 
     def _insert_postings(
         self, company_id: int, doc_id: int, postings: Sequence[PostingInput]

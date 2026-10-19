@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from modern_gl.application.common import company_row, now, pad_subconto, write_audit
+from modern_gl.application.common import company_row, insert, now, pad_subconto, write_audit
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
@@ -164,11 +164,12 @@ class Inventory:
         with transaction(self.conn):
             self._company(company_id)
             try:
-                unit_id = self.conn.execute(
+                unit_id = insert(
+                    self.conn,
                     "INSERT INTO inventory_units (company_id, code, name, precision) "
                     "VALUES (?, ?, ?, ?)",
                     (company_id, code, name, precision),
-                ).lastrowid
+                )
             except sqlite3.IntegrityError as exc:
                 raise ValidationError(tr("единица с таким кодом уже существует")) from exc
             self._audit(company_id, "inventory_unit", unit_id, "create", {"code": code})
@@ -201,12 +202,13 @@ class Inventory:
                 if value["kind_id"] != item_kind:
                     raise ValidationError(tr("элемент относится не к справочнику товаров"))
             try:
-                item_id = self.conn.execute(
+                item_id = insert(
+                    self.conn,
                     "INSERT INTO inventory_items "
                     "(company_id, subconto_value_id, unit_id, inventory_account_id) "
                     "VALUES (?, ?, ?, ?)",
                     (company_id, subconto_value_id, unit_id, inventory_account_id),
-                ).lastrowid
+                )
             except sqlite3.IntegrityError as exc:
                 raise ValidationError(tr("этот товар уже подключён к складскому учёту")) from exc
             self._audit(
@@ -241,10 +243,11 @@ class Inventory:
                 if value["kind_id"] != warehouse_kind:
                     raise ValidationError(tr("элемент относится не к справочнику складов"))
             try:
-                warehouse_id = self.conn.execute(
+                warehouse_id = insert(
+                    self.conn,
                     "INSERT INTO warehouses (company_id, subconto_value_id) VALUES (?, ?)",
                     (company_id, subconto_value_id),
-                ).lastrowid
+                )
             except sqlite3.IntegrityError as exc:
                 raise ValidationError(tr("этот склад уже подключён к складскому учёту")) from exc
             self._audit(
@@ -265,10 +268,11 @@ class Inventory:
         with transaction(self.conn):
             self._company(company_id)
             try:
-                type_id = self.conn.execute(
+                type_id = insert(
+                    self.conn,
                     "INSERT INTO landed_cost_types (company_id, code, name) VALUES (?, ?, ?)",
                     (company_id, code, name),
-                ).lastrowid
+                )
             except sqlite3.IntegrityError as exc:
                 raise ValidationError(tr("такой вид дополнительных расходов уже есть")) from exc
             self._audit(
@@ -632,7 +636,7 @@ class Inventory:
             postings: list[PostingInput] = []
             for line_no, source in enumerate(lines, 1):
                 item = self._item(company_id, source.item_id)
-                warehouse = self._warehouse(company_id, source.warehouse_id)
+                warehouse = self._line_warehouse(company_id, source.warehouse_id, line_no)
                 quantity = self._quantity(item, source.quantity, line_no)
                 amount = self._positive_amount(source.amount, line_no)
                 line_credit_account = source.credit_account_id or credit_account_id
@@ -694,8 +698,11 @@ class Inventory:
             postings: list[PostingInput] = []
             for line_no, source in enumerate(lines, 1):
                 item = self._item(company_id, source.item_id)
-                warehouse = self._warehouse(company_id, source.warehouse_id)
+                warehouse = self._line_warehouse(company_id, source.warehouse_id, line_no)
                 quantity = self._quantity(item, source.quantity, line_no)
+                expense_account_id = source.expense_account_id
+                if expense_account_id is None:
+                    raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
                 balance_qty, balance_amount = self._balance(
                     company_id, item["id"], warehouse["id"], inv_id
                 )
@@ -717,7 +724,7 @@ class Inventory:
                     amount,
                     0,
                     amount,
-                    source.expense_account_id,
+                    expense_account_id,
                     expense_sc,
                     None,
                     source.memo,
@@ -736,7 +743,7 @@ class Inventory:
                 )
                 postings.append(
                     PostingInput(
-                        source.expense_account_id,
+                        expense_account_id,
                         item["inventory_account_id"],
                         _money(amount),
                         source.expense_subconto,
@@ -764,7 +771,11 @@ class Inventory:
                 if source.from_warehouse_id == source.to_warehouse_id:
                     raise ValidationError(tr("склад отправитель и получатель совпадают"))
                 item = self._item(company_id, source.item_id)
-                from_warehouse = self._warehouse(company_id, source.from_warehouse_id)
+                from_warehouse = self._line_warehouse(company_id, source.from_warehouse_id, line_no)
+                if source.to_warehouse_id is None:
+                    raise ValidationError(
+                        tr("строка {line}: не указан склад-получатель", line=line_no)
+                    )
                 to_warehouse = self._warehouse(company_id, source.to_warehouse_id)
                 quantity = self._quantity(item, source.quantity, line_no)
                 balance_qty, balance_amount = self._balance(
@@ -1278,12 +1289,13 @@ class Inventory:
             "WHERE id = ? RETURNING last_inventory_number",
             (company_id,),
         ).fetchone()[0]
-        return self.conn.execute(
+        return insert(
+            self.conn,
             "INSERT INTO inventory_documents "
             "(company_id, number, doc_date, doc_type, memo, status, landed_cost_type_id, "
             "created_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)",
             (company_id, number, value_date, doc_type, memo, cost_type_id, now()),
-        ).lastrowid
+        )
 
     def _insert_line(
         self,
@@ -1303,7 +1315,8 @@ class Inventory:
         memo: str,
     ) -> int:
         sc = pad_subconto(offset_subconto)
-        return self.conn.execute(
+        return insert(
+            self.conn,
             "INSERT INTO inventory_lines (company_id, document_id, line_no, item_id, "
             "warehouse_id, to_warehouse_id, quantity, amount, inventory_amount, "
             "expense_amount, offset_account_id, offset_sc1, offset_sc2, offset_sc3, "
@@ -1325,7 +1338,7 @@ class Inventory:
                 source_receipt_line_id,
                 memo,
             ),
-        ).lastrowid
+        )
 
     def _insert_movement(
         self,
@@ -1539,7 +1552,9 @@ class Inventory:
             result.append(row["code"] if row else None)
         return tuple(result)  # type: ignore[return-value]
 
-    def _quantity(self, item: sqlite3.Row, value: str | int | Decimal, line_no: int) -> int:
+    def _quantity(self, item: sqlite3.Row, value: str | int | Decimal | None, line_no: int) -> int:
+        if value is None or _blank(value):
+            raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
         try:
             quantity = to_quantity(value)
         except (TypeError, ValueError) as exc:
@@ -1556,7 +1571,11 @@ class Inventory:
         return quantity
 
     @staticmethod
-    def _positive_amount(value: str | int | Decimal, line_no: int) -> int:
+    def _positive_amount(value: str | int | Decimal | None, line_no: int) -> int:
+        if value is None or _blank(value):
+            if line_no:
+                raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
+            raise ValidationError(tr("сумма должна быть положительной"))
         try:
             amount = to_minor(value)
         except (TypeError, ValueError) as exc:
@@ -1636,6 +1655,13 @@ class Inventory:
         if not row["active"]:
             raise ValidationError(tr("склад скрыт"))
         return row
+
+    def _line_warehouse(
+        self, company_id: int, warehouse_id: int | None, line_no: int
+    ) -> sqlite3.Row:
+        if warehouse_id is None:
+            raise ValidationError(tr("строка {line}: не указан склад", line=line_no))
+        return self._warehouse(company_id, warehouse_id)
 
     def _cost_type(self, company_id: int, type_id: int) -> sqlite3.Row:
         row = self.conn.execute(

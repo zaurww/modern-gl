@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import (
     QAbstractTableModel,
     QModelIndex,
+    QPersistentModelIndex,
     QSortFilterProxyModel,
     Qt,
     Signal,
@@ -46,13 +47,13 @@ class JournalModel(QAbstractTableModel):
         self.docs = docs
         self.endResetModel()
 
-    def rowCount(self, parent=QModelIndex()) -> int:  # noqa: B008
-        return 0 if parent.isValid() else len(self.docs)
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
+        return 0 if parent is not None and parent.isValid() else len(self.docs)
 
-    def columnCount(self, parent=QModelIndex()) -> int:  # noqa: B008
-        return 0 if parent.isValid() else len(COLUMNS)
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
+        return 0 if parent is not None and parent.isValid() else len(COLUMNS)
 
-    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+    def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if orientation != Qt.Orientation.Horizontal:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
@@ -61,7 +62,7 @@ class JournalModel(QAbstractTableModel):
             return RIGHT if section in (NUMBER, TOTAL) else LEFT
         return None
 
-    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+    def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
         d = self.docs[index.row()]
         col = index.column()
         if role == Qt.ItemDataRole.DisplayRole:

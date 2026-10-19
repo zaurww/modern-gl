@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import insert, pad_subconto
 from modern_gl.application.ledger.base import LedgerBase, account_label, clean_code
 from modern_gl.domain.accounts import ACCOUNT_CLASSES
 from modern_gl.domain.errors import ValidationError
@@ -64,7 +64,8 @@ class ChartCommands(LedgerBase):
                 if currency is None:
                     currency = bool(parent_row["currency"])
             try:
-                account_id = self.conn.execute(
+                account_id = insert(
+                    self.conn,
                     "INSERT INTO accounts (company_id, code, name, parent_id, is_group, "
                     "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, contra, two_sided, "
                     "currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -80,7 +81,7 @@ class ChartCommands(LedgerBase):
                         int(bool(two_sided)),
                         int(bool(currency)),
                     ),
-                ).lastrowid
+                )
             except sqlite3.IntegrityError as e:
                 if "UNIQUE" in str(e):
                     raise ValidationError(tr("счёт {code} уже есть", code=label)) from e

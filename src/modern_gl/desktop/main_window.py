@@ -8,6 +8,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol, TypeVar, runtime_checkable
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -72,6 +73,21 @@ PLACES = [  # key, title (translated on display), icon color
     (("currencies",), "Валюты", P.violet),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES]
+
+
+PageT = TypeVar("PageT", bound=QWidget)
+
+
+@runtime_checkable
+class TitledPage(Protocol):
+    """A page shown as an item in the sidebar's "Open" section."""
+
+    def title(self) -> str: ...
+
+
+@runtime_checkable
+class FocusablePage(Protocol):
+    def focus_table(self) -> None: ...
 
 
 def doc_glyph() -> str:
@@ -157,7 +173,7 @@ class Sidebar(QWidget):
         self.nav.addItem(item)
         return item
 
-    def find(self, key) -> QListWidgetItem | None:
+    def item_for(self, key) -> QListWidgetItem | None:
         for i in range(self.nav.count()):
             if self.nav.item(i).data(KEY_ROLE) == key:
                 return self.nav.item(i)
@@ -241,6 +257,13 @@ class MainWindow(QMainWindow):
             ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
+
+    @property
+    def open_session(self) -> Session:
+        """The open company. Pages exist only while one is open."""
+        if self.session is None:
+            raise RuntimeError("no company is open")
+        return self.session
 
     # ---- companies: one file each ----------------------------------------------------
 
@@ -442,6 +465,8 @@ class MainWindow(QMainWindow):
         if not self._confirm_close_all():
             return
         name, path = self.session.company_name, self.company_path
+        if path is None:
+            return
         self._close_company()
         self.workspace.delete(path)
         remaining = self.workspace.companies()
@@ -464,7 +489,7 @@ class MainWindow(QMainWindow):
     # ---- pages -----------------------------------------------------------------------
 
     def _make_place(self, key) -> QWidget:
-        s = self.session
+        s = self.open_session
         if key == ("journal",):
             page = JournalPage(s)
             page.open_document.connect(self.open_document)
@@ -504,21 +529,25 @@ class MainWindow(QMainWindow):
     def show_import(self) -> None:
         key = ImportPage.key
         if key not in self.pages:
-            page = ImportPage(self.session)
+            page = ImportPage(self.open_session)
             page.imported.connect(self._imported)
             self._add_page(key, page, open_item=True)
         self._activate(key)
 
     def _imported(self, ids: list) -> None:
         self.show_place(("journal",))
-        self.pages[("journal",)].refresh(select_id=ids[-1])
+        journal = self._page(("journal",), JournalPage)
+        if journal is not None:
+            journal.refresh(select_id=ids[-1])
 
     def quick_entry(self) -> None:
         """Ctrl+L anywhere: the journal with the cursor in the quick entry line."""
         if self.session is None:
             return
         self.show_place(("journal",))
-        self.pages[("journal",)].focus_quick_entry()
+        journal = self._page(("journal",), JournalPage)
+        if journal is not None:
+            journal.focus_quick_entry()
 
     def _wire_report(self, page) -> None:
         page.open_document.connect(self.open_document)
@@ -534,15 +563,16 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(page)
         if open_item:
             color = {"doc": P.amber, "new": P.accent, "template": P.amber}.get(key[0], P.teal)
-            glyph = {"doc": doc_glyph(), "new": "+"}.get(key[0], page.title()[:1])
-            self.sidebar.add_item(key, page.title(), color, glyph)
+            title = page.title() if isinstance(page, TitledPage) else ""
+            glyph = {"doc": doc_glyph(), "new": "+"}.get(key[0], title[:1])
+            self.sidebar.add_item(key, title, color, glyph)
 
     def _activate(self, key) -> None:
         page = self.pages[key]
         if self.stack.currentWidget() is not page:
             self.stack.setCurrentWidget(page)
             self._fade_in(page)
-        item = self.sidebar.find(key)
+        item = self.sidebar.item_for(key)
         if item is not None and self.sidebar.nav.currentItem() is not item:
             self.sidebar.nav.blockSignals(True)
             self.sidebar.nav.setCurrentItem(item)
@@ -551,7 +581,7 @@ class MainWindow(QMainWindow):
             page.refresh()
         if isinstance(page, InventoryPage):
             page.refresh()
-        if hasattr(page, "focus_table"):
+        if isinstance(page, FocusablePage):
             page.focus_table()
 
     def _fade_in(self, page: QWidget) -> None:
@@ -562,7 +592,8 @@ class MainWindow(QMainWindow):
         anim.setStartValue(0.0)
         anim.setEndValue(1.0)
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.finished.connect(lambda: page.setGraphicsEffect(None))
+        # None removes the effect; the PySide6 stubs do not allow it
+        anim.finished.connect(lambda: page.setGraphicsEffect(None))  # pyright: ignore[reportArgumentType]
         anim.start()
 
     def _on_nav(self, current: QListWidgetItem | None, _previous) -> None:
@@ -588,13 +619,13 @@ class MainWindow(QMainWindow):
     def open_document(self, doc_id: int) -> None:
         key = ("doc", doc_id)
         if key not in self.pages:
-            page = DocumentPage(self.session, doc_id=doc_id)
+            page = DocumentPage(self.open_session, doc_id=doc_id)
             self._wire_document(page)
             self._add_page(key, page, open_item=True)
         self._activate(key)
 
     def new_document(self, template=None, entry=None) -> None:
-        page = DocumentPage(self.session, template=template, entry=entry)
+        page = DocumentPage(self.open_session, template=template, entry=entry)
         self._wire_document(page)
         self._add_page(page.key, page, open_item=True)
         self._activate(page.key)
@@ -611,13 +642,13 @@ class MainWindow(QMainWindow):
     def open_inventory_document(self, document_id: int) -> None:
         key = ("inventory_doc", document_id)
         if key not in self.pages:
-            page = InventoryDocumentPage(self.session, document_id=document_id)
+            page = InventoryDocumentPage(self.open_session, document_id=document_id)
             self._wire_inventory_document(page)
             self._add_page(key, page, open_item=True)
         self._activate(key)
 
     def new_inventory_document(self, doc_type: str) -> None:
-        page = InventoryDocumentPage(self.session, doc_type=doc_type)
+        page = InventoryDocumentPage(self.open_session, doc_type=doc_type)
         self._wire_inventory_document(page)
         self._add_page(page.key, page, open_item=True)
         self._activate(page.key)
@@ -632,12 +663,12 @@ class MainWindow(QMainWindow):
         old_key = self._key_of(page)
         if old_key is not None and old_key != page.key and page.doc is not None:
             self.pages[page.key] = self.pages.pop(old_key)
-            item = self.sidebar.find(old_key)
+            item = self.sidebar.item_for(old_key)
             if item is not None:
                 item.setData(KEY_ROLE, page.key)
                 item.setIcon(dot_icon(P.teal, 18, doc_glyph()))
         self._retitle(page)
-        inventory = self.pages.get(("inventory",))
+        inventory = self._page(("inventory",), InventoryPage)
         if inventory is not None:
             inventory.refresh()
 
@@ -647,7 +678,7 @@ class MainWindow(QMainWindow):
         if template_id is not None and key in self.pages:
             self._activate(key)
             return
-        page = TemplatePage(self.session, template_id)
+        page = TemplatePage(self.open_session, template_id)
         key = page.key
         page.saved.connect(lambda tid, p=page: self._template_saved(p, tid))
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
@@ -656,7 +687,7 @@ class MainWindow(QMainWindow):
         self._activate(key)
 
     def _template_saved(self, page: TemplatePage, template_id: int) -> None:
-        templates = self.pages.get(("templates",))
+        templates = self._page(("templates",), TemplatesPage)
         if templates is not None:
             templates.refresh(select_id=template_id)
         self.close_page(self._key_of(page), ask=False)
@@ -667,29 +698,34 @@ class MainWindow(QMainWindow):
         if old_key is not None and old_key != page.key and page.doc is not None:
             # A new document got its number: re-key it in place.
             self.pages[page.key] = self.pages.pop(old_key)
-            item = self.sidebar.find(old_key)
+            item = self.sidebar.item_for(old_key)
             if item is not None:
                 item.setData(KEY_ROLE, page.key)
                 item.setIcon(dot_icon(P.amber, 18, doc_glyph()))
         self._retitle(page)
-        journal = self.pages.get(("journal",))
+        journal = self._page(("journal",), JournalPage)
         if journal is not None:
             journal.refresh(select_id=page.doc_id)
 
     def _retitle(self, page: QWidget) -> None:
         key = self._key_of(page)
-        item = self.sidebar.find(key) if key is not None else None
-        if item is not None:
+        item = self.sidebar.item_for(key) if key is not None else None
+        if item is not None and isinstance(page, TitledPage):
             item.setText(page.title())
 
-    def _key_of(self, page: QWidget):
+    def _page(self, key, kind: type[PageT]) -> PageT | None:
+        """The open page under `key` if it is of this kind."""
+        page = self.pages.get(key)
+        return page if isinstance(page, kind) else None
+
+    def _key_of(self, page: QWidget | None):
         return next((k for k, p in self.pages.items() if p is page), None)
 
     def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
         key = (kind, account_id)
         if key in self.pages:
             self.close_page(key, ask=False)
-        page = REPORTS[kind](self.session, account_id, params)
+        page = REPORTS[kind](self.open_session, account_id, params)
         self._wire_report(page)
         self._add_page(key, page, open_item=True)
         self._activate(key)
@@ -705,7 +741,7 @@ class MainWindow(QMainWindow):
             return
         if ask and not self._confirm_close(page):
             return
-        item = self.sidebar.find(key)
+        item = self.sidebar.item_for(key)
         if item is not None:
             self.sidebar.nav.takeItem(self.sidebar.nav.row(item))
         del self.pages[key]
@@ -756,7 +792,7 @@ class MainWindow(QMainWindow):
             pos = event.position().toPoint()
             item = self.sidebar.nav.itemAt(pos)
             key = item.data(KEY_ROLE) if item else None
-            if NavDelegate.closable(key):
+            if item is not None and NavDelegate.closable(key):
                 rect = NavDelegate.close_rect(self.sidebar.nav.visualItemRect(item))
                 if rect.adjusted(-4, -4, 4, 4).contains(pos):
                     if event.type() == QEvent.Type.MouseButtonRelease:

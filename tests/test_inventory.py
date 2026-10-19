@@ -878,3 +878,25 @@ def test_receipt_lines_and_document_list(inventory_demo, conn):
         "posted",
         10_000,
     )
+
+
+def test_posting_incomplete_lines_names_the_missing_field(inventory_demo):
+    demo = inventory_demo
+    inv, cid = demo.inventory, demo.company_id
+    with pytest.raises(ValidationError, match="строка 1: не указан склад$"):
+        inv.post_receipt(
+            cid, "2026-01-10", [ReceiptLine(demo.item, None, "1", "10")], demo.payable_account
+        )
+    with pytest.raises(ValidationError, match="строка 1: не указано количество"):
+        inv.post_receipt(
+            cid, "2026-01-10", [ReceiptLine(demo.item, demo.main, None, "10")], demo.payable_account
+        )
+    with pytest.raises(ValidationError, match="строка 1: не указана сумма"):
+        inv.post_receipt(
+            cid, "2026-01-10", [ReceiptLine(demo.item, demo.main, "1", "")], demo.payable_account
+        )
+    receipt(demo)
+    with pytest.raises(ValidationError, match="строка 1: не указан счёт"):
+        inv.post_issue(cid, "2026-01-11", [IssueLine(demo.item, demo.main, "1", None)])
+    with pytest.raises(ValidationError, match="строка 1: не указан склад-получатель"):
+        inv.post_transfer(cid, "2026-01-11", [TransferLine(demo.item, demo.main, None, "1")])

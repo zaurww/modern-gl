@@ -11,6 +11,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pyright>=1.1.400",
     "pytest-qt>=4.5.0",
     "ruff>=0.6",
 ]
@@ -25,6 +26,13 @@ packages = ["src/modern_gl"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
 
 [tool.ruff]
 line-length = 100

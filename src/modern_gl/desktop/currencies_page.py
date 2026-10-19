@@ -37,7 +37,14 @@ from modern_gl.application.currencies import CurrencyInfo, Rate, latest_rates, l
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, date_edit, ru_date
+from modern_gl.desktop.widgets import (
+    EmptyState,
+    PageHeader,
+    button,
+    date_edit,
+    edited_date,
+    ru_date,
+)
 from modern_gl.domain.currency import KNOWN, currency_name, format_rate, parse_rate
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -184,7 +191,8 @@ class CurrenciesPage(QWidget):
 
     def refresh(self, select: int | None = None) -> None:
         cat = self.s.catalog
-        current = select or (self.currency().id if self.currency() else None)
+        shown = self.currency()
+        current = select or (shown.id if shown else None)
         latest = latest_rates(self.s.conn, self.s.company_id)
         self.currencies.blockSignals(True)
         self.currencies.clear()
@@ -334,7 +342,7 @@ class CurrenciesPage(QWidget):
                 self.s.ledger.set_rate(
                     self.s.company_id,
                     c.id,
-                    day.date().toPython(),
+                    edited_date(day),
                     parse_rate(value.text()),
                     nominal.value(),
                 )
@@ -389,7 +397,7 @@ class CurrenciesPage(QWidget):
         _buttons(dlg, lay)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        self.load_rates(start.date().toPython(), end.date().toPython())
+        self.load_rates(edited_date(start), edited_date(end))
 
     def load_rates(self, first: date, last: date) -> int:
         """Load CBAR rates for every day of the period; returns the days loaded."""
@@ -453,7 +461,7 @@ class CurrenciesPage(QWidget):
         _buttons(dlg, lay)
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        self.run_revaluation(day.date().toPython(), gain.currentData(), loss.currentData())
+        self.run_revaluation(edited_date(day), gain.currentData(), loss.currentData())
 
     def run_revaluation(self, day: date, gain_id: int, loss_id: int) -> int | None:
         try:

@@ -238,13 +238,13 @@ class PostingsModel(QAbstractTableModel):
 
     # ---- Qt model API ----------------------------------------------------------------
 
-    def rowCount(self, parent=QModelIndex()) -> int:  # noqa: B008
-        return 0 if parent.isValid() else len(self.rows)
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
+        return 0 if parent is not None and parent.isValid() else len(self.rows)
 
-    def columnCount(self, parent=QModelIndex()) -> int:  # noqa: B008
-        return 0 if parent.isValid() else len(HEADERS)
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
+        return 0 if parent is not None and parent.isValid() else len(HEADERS)
 
-    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+    def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
                 return tr(HEADERS[section]) if HEADERS[section] else ""
@@ -284,7 +284,7 @@ class PostingsModel(QAbstractTableModel):
             flags |= Qt.ItemFlag.ItemIsEditable
         return flags
 
-    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+    def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
         row, col = index.row(), index.column()
         if role in (Qt.ItemDataRole.DisplayRole, Qt.ItemDataRole.EditRole):
             return self._text(row, col, display=role == Qt.ItemDataRole.DisplayRole)
@@ -350,7 +350,7 @@ class PostingsModel(QAbstractTableModel):
             return QColor(P.secondary)
         return None
 
-    def setData(self, index, value, role=Qt.ItemDataRole.EditRole) -> bool:
+    def setData(self, index, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
         if self.read_only or role != Qt.ItemDataRole.EditRole:
             return False
         row, col = index.row(), index.column()
@@ -736,11 +736,17 @@ class PostingsDelegate(QStyledItemDelegate):
     def _subconto_items(self, model, row: int, col: int) -> list[str]:
         """The directory with the elements recently used on this account first."""
         kind = model.kind_at(row, col)
+        if kind is None:
+            return []
         side, pos = column_role(col)
         values = self.catalog.values(kind)
         account = getattr(model.rows[row], side)
         active = {v.id for v in values}
-        recent = [v for v in self.hints.recent(account, pos) if v in active] if account else []
+        recent = (
+            [v for v in self.hints.recent(account, pos) if v in active]
+            if account and pos is not None
+            else []
+        )
         rest = [v for v in values if v.id not in set(recent)]
         return [self.catalog.value(v).label for v in recent] + [v.label for v in rest]
 

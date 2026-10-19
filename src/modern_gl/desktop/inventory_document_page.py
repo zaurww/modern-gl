@@ -45,7 +45,7 @@ from modern_gl.desktop.inventory_page import ItemDialog
 from modern_gl.desktop.postings import attach_list
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import Chip, button, date_edit, money, to_qdate
+from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, money, to_qdate
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
@@ -224,13 +224,13 @@ class InventoryLinesModel(QAbstractTableModel):
         # Subconto (counterparty, contract) stay empty: a guessed value would post silently.
         return InventoryGridRow(offset_account_id=account.id)
 
-    def rowCount(self, parent=QModelIndex()) -> int:  # noqa: B008
-        return 0 if parent.isValid() else len(self.rows)
+    def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
+        return 0 if parent is not None and parent.isValid() else len(self.rows)
 
-    def columnCount(self, parent=QModelIndex()) -> int:  # noqa: B008
-        return 0 if parent.isValid() else len(self.columns)
+    def columnCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
+        return 0 if parent is not None and parent.isValid() else len(self.columns)
 
-    def headerData(self, section, orientation, role=Qt.ItemDataRole.DisplayRole):
+    def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
                 return tr(HEADERS[self.columns[section]])
@@ -272,7 +272,7 @@ class InventoryLinesModel(QAbstractTableModel):
             return None
         return round_ratio(row.amount * QUANTITY_FACTOR, row.quantity)
 
-    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+    def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
         row = self.rows[index.row()]
         key = self.key(index)
         if role == Qt.ItemDataRole.EditRole:
@@ -325,7 +325,8 @@ class InventoryLinesModel(QAbstractTableModel):
             value = self._price(row) if key == PRICE else row.amount
             return "" if value is None else money(value)
         if key == ACCOUNT:
-            account = self.s.catalog.accounts.get(row.offset_account_id)
+            account_id = row.offset_account_id
+            account = self.s.catalog.accounts.get(account_id) if account_id is not None else None
             return account.label if account else ""
         if key in {SC1, SC2, SC3}:
             value_id = row.offset_subconto[int(key[-1]) - 1]
@@ -335,7 +336,7 @@ class InventoryLinesModel(QAbstractTableModel):
             return self.s.catalog.kinds[kind_id] if kind_id else ""
         return row.memo
 
-    def setData(self, index, value, role=Qt.ItemDataRole.EditRole) -> bool:
+    def setData(self, index, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
         if self.read_only or role != Qt.ItemDataRole.EditRole:
             return False
         row = self.rows[index.row()]
@@ -517,7 +518,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         editor.setText(value or "")
         editor.selectAll()
 
-    def setModelData(self, editor, model: InventoryLinesModel, index):
+    def setModelData(self, editor, model, index):
+        model = cast(InventoryLinesModel, model)
         key = model.key(index)
         text = editor.text().strip()
         try:
@@ -525,6 +527,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                 value = model.s.catalog.resolve_account(text).id if text else None
             elif key in {SC1, SC2, SC3}:
                 kind_id = model.kind_at(index.row(), key)
+                if kind_id is None:  # the account has no subconto at this position
+                    return
                 value = model.s.catalog.resolve_value(kind_id, text) if text else None
                 if text and value is None:
                     self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
@@ -962,8 +966,9 @@ class InventoryDocumentPage(QWidget):
         except (LedgerError, ValueError, TypeError) as exc:
             self.show_error(str(exc))
             return False
-        self.s.working_date = self.date.date().toPython()
+        self.s.working_date = edited_date(self.date)
         self.load(document_id)
+        assert self.doc is not None  # load() has just read it
         self.s.notify(
             tr(
                 "Складской документ №{n} проведён" if post else "Складской документ №{n} сохранён",
@@ -975,7 +980,7 @@ class InventoryDocumentPage(QWidget):
 
     def _save_draft(self, inputs) -> int:
         company_id = self.s.company_id
-        document_date = self.date.date().toPython()
+        document_date = edited_date(self.date)
         memo = self.memo.text().strip()
         if self.doc_type in {"opening", "receipt"}:
             first = inputs[0]

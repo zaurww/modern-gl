@@ -169,25 +169,24 @@ class _Parser:
         self, n: int, index: int, line: QuickLine, side: str, acc: AccountInfo, text: str
     ) -> None:
         pieces = [p.strip() for p in text.split(",") if p.strip()]
-        positions = [i for i, kind in enumerate(acc.sc_kinds) if kind is not None]
-        if len(pieces) > len(positions):
+        slots = [(i, kind) for i, kind in enumerate(acc.sc_kinds) if kind is not None]
+        if len(pieces) > len(slots):
             raise ValidationError(
                 tr(
                     "строка {n}: у счёта {code} субконто {k}, а указано {m}: {text}",
                     n=n,
                     code=acc.short,
-                    k=len(positions),
+                    k=len(slots),
                     m=len(pieces),
                     text=text,
                 )
             )
         values = getattr(line, f"{side}_sc")
-        for pos, piece in zip(positions, pieces, strict=False):
-            values[pos] = self._value(n, index, side, pos, acc.sc_kinds[pos], piece)
-        for pos in positions[len(pieces) :]:
+        for (pos, kind), piece in zip(slots, pieces, strict=False):
+            values[pos] = self._value(n, index, side, pos, kind, piece)
+        for _, kind in slots[len(pieces) :]:
             self.entry.missing.append(
-                f"{tr('Дт' if side == 'debit' else 'Кт')} {acc.short}: "
-                f"{self.cat.kinds[acc.sc_kinds[pos]]}"
+                f"{tr('Дт' if side == 'debit' else 'Кт')} {acc.short}: {self.cat.kinds[kind]}"
             )
 
     def _value(self, n: int, index: int, side: str, pos: int, kind: int, piece: str):

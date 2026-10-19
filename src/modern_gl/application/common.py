@@ -32,6 +32,14 @@ def pad_subconto(values: Sequence[int | None], line_no: int | None = None) -> Su
     return first, second, third
 
 
+def insert(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) -> int:
+    """Run an INSERT and return the id of the new row."""
+    row_id = conn.execute(sql, params).lastrowid
+    if row_id is None:  # only when the statement inserted nothing
+        raise RuntimeError(f"no row inserted: {sql}")
+    return row_id
+
+
 def company_row(conn: sqlite3.Connection, company_id: int) -> sqlite3.Row:
     row = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
     if row is None:
