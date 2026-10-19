@@ -72,6 +72,11 @@ def main() -> None:
         print(out / f"{name}.png")
 
     shot("1_journal")
+    journal = cast(JournalPage, win.pages[("journal",)])
+    journal.quick.edit.setText("71 " + i18n.tr("Мамедов Р.").split()[0][:5] + " / 50 120 Avans")
+    journal.focus_quick_entry()
+    shot("1b_quick_entry")
+    journal.quick.edit.clear()
     docs = cast(JournalPage, win.pages[("journal",)]).model.docs
     win.open_document(next(d.id for d in docs if len(d.memo) and d.lines == 2))
     shot("2_document_posted")

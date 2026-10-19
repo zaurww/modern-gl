@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.queries import DocumentSummary, list_documents
+from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money, ru_date
@@ -102,6 +103,7 @@ class JournalPage(QWidget):
     new_document = Signal()
     copy_document = Signal(int)
     deleted = Signal(int)
+    prefill_document = Signal(object)  # DocumentData typed in the quick entry line
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -118,6 +120,10 @@ class JournalPage(QWidget):
         self.search.setClearButtonEnabled(True)
         self.header.add_action(self.search)
         root.addWidget(self.header)
+        self.quick = QuickEntryBar(session)
+        self.quick.posted.connect(lambda doc_id: self.refresh(select_id=doc_id))
+        self.quick.open_form.connect(self.prefill_document.emit)
+        root.addWidget(self.quick)
 
         self.model = JournalModel(dict(session.layers))
         self.proxy = QSortFilterProxyModel(self)
@@ -158,15 +164,20 @@ class JournalPage(QWidget):
 
         for keys, fn in (
             ("Ins", self.new_document.emit),
+            ("F5", self.refresh),
+            ("Ctrl+F", self.search.setFocus),  # Ctrl+L (quick entry): the main window's
+        ):
+            sc = QShortcut(QKeySequence(keys), self)
+            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            sc.activated.connect(fn)
+        for keys, fn in (  # only on the list: in the text fields these keys type
             ("Return", self._open_current),
             ("Enter", self._open_current),
             ("F9", self._copy_current),
             ("Del", self._delete_current),
-            ("F5", self.refresh),
-            ("Ctrl+F", self.search.setFocus),
         ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            sc = QShortcut(QKeySequence(keys), self.table)
+            sc.setContext(Qt.ShortcutContext.WidgetShortcut)
             sc.activated.connect(fn)
         self.refresh()
 
@@ -195,6 +206,10 @@ class JournalPage(QWidget):
 
     def focus_table(self) -> None:
         self.table.setFocus()
+
+    def focus_quick_entry(self) -> None:
+        self.quick.edit.setFocus()
+        self.quick.edit.selectAll()
 
     def _current_id(self) -> int | None:
         idx = self.table.currentIndex()

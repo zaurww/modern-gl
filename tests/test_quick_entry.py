@@ -1,0 +1,219 @@
+"""Quick entry: a document typed as one line of text."""
+
+from __future__ import annotations
+
+from datetime import date
+from fractions import Fraction
+
+import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
+
+from modern_gl.application.catalog import Catalog
+from modern_gl.application.ledger import Ledger
+from modern_gl.application.queries import list_templates, load_document
+from modern_gl.application.quick_entry import describe, parse
+from modern_gl.desktop import theme
+from modern_gl.desktop.quick_entry_bar import QuickEntryBar
+from modern_gl.desktop.session import Session
+from modern_gl.domain.currency import parse_rate
+from modern_gl.domain.errors import ValidationError
+from modern_gl.infrastructure.chart_csv import apply_chart_template
+from modern_gl.infrastructure.db import connect
+
+TODAY = date(2026, 3, 5)
+
+
+@pytest.fixture
+def books():
+    conn = connect(":memory:")
+    ledger = Ledger(conn, actor="test")
+    cid = ledger.create_company("Firma")
+    apply_chart_template(ledger, cid, "classic", "ru")
+    values = {}
+    for kind, name in (
+        ("counterparty", "Альфа Трейд"),
+        ("counterparty", "Бета Сервис"),
+        ("contract", "Договор №1"),
+        ("cost_item", "Аренда офиса"),
+        ("bank_account", "Kapital Bank"),
+        ("bank_account", "Kapital Bank USD"),
+    ):
+        values[name] = ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, kind), name)
+    usd = ledger.currency_id(cid, "USD")
+    ledger.set_subconto_value_currency(cid, values["Kapital Bank USD"], usd)
+    ledger.set_rate(cid, "USD", "2026-03-01", parse_rate("1.7"))
+    yield conn, ledger, cid, Catalog(conn, cid), values
+    conn.close()
+
+
+def rate(_currency, _day):
+    return Fraction(17, 10)
+
+
+def test_posting_with_subconto_amount_and_memo(books):
+    conn, _, cid, cat, v = books
+    entry = parse("26 аренда / 60 альфа, договор 400 Аренда за март", cat, today=TODAY)
+    [ln] = entry.lines
+    assert (ln.debit, ln.credit, ln.amount, ln.memo) == (
+        cat.by_code["26"].id,
+        cat.by_code["60"].id,
+        40_000,
+        "Аренда за март",
+    )
+    assert ln.debit_sc[0] == v["Аренда офиса"]
+    assert ln.credit_sc[:2] == [v["Альфа Трейд"], v["Договор №1"]]
+    assert entry.memo == "Аренда за март" and entry.doc_date is None and not entry.missing
+    text = describe(entry, cat)
+    assert "26 · Аренда офиса" in text and "60 · Альфа Трейд, Договор №1" in text
+    assert "400.00" in text
+
+
+def test_date_several_postings_and_missing_subconto(books):
+    _, _, _, cat, _ = books
+    entry = parse("05.03 50 / 51 kapital bank 2000 В кассу; 71 / 50 1234,50", cat, today=TODAY)
+    assert entry.doc_date == date(2026, 3, 5)
+    assert [ln.amount for ln in entry.lines] == [200_000, 123_450]
+    assert entry.missing == ["Дт 71: Сотрудники"]  # employee not given yet
+    assert parse("1.2.25 50 / 80 1", cat, today=TODAY).doc_date == date(2025, 2, 1)
+
+
+def test_errors_say_what_to_do(books):
+    _, _, _, cat, _ = books
+    for text, message in (
+        ("26 60 400", "разделяются «/»"),
+        ("26 аренда / 60 альфа", "не указана сумма"),
+        ("999 / 50 10", "999"),
+        ("26 реклама / 50 10", r"напишите \+реклама"),
+        ("50 / 80 x, y 10", "субконто 0"),
+    ):
+        with pytest.raises(ValidationError, match=message):
+            parse(text, cat, today=TODAY)
+
+
+def test_new_element_with_plus(books):
+    _, _, _, cat, _ = books
+    entry = parse("26 +Реклама / 50 10", cat, today=TODAY)
+    [new] = entry.new_values
+    assert new.name == "Реклама" and new.cells == [(0, "debit", 0)]
+    assert "+Реклама" in describe(entry, cat)
+
+
+def test_currency_line_is_in_currency(books):
+    _, _, _, cat, v = books
+    entry = parse(
+        "52 kapital bank usd / 51 kapital bank 1000 Покупка валюты", cat, rate_for=rate, today=TODAY
+    )
+    [ln] = entry.lines
+    usd = cat.value(v["Kapital Bank USD"]).currency_id
+    assert (ln.currency_id, ln.currency_amount, ln.amount) == (usd, 100_000, 170_000)
+    assert "1 000.00 USD × 1.7000 = 1 700.00" in describe(entry, cat)
+    with pytest.raises(ValidationError, match="нет курса"):
+        parse("52 kapital bank usd / 51 kapital bank 1000", cat, today=TODAY)
+    with pytest.raises(ValidationError, match="без валютного учёта"):
+        parse("50 / 80 10 usd", cat, rate_for=rate, today=TODAY)
+
+
+def test_template_with_amount_and_subconto(books):
+    conn, _, cid, cat, v = books
+    templates = list_templates(conn, cid)
+    entry = parse("#реализация 1180 бета, договор", cat, templates, today=TODAY)
+    assert [ln.amount for ln in entry.lines] == [118_000, 18_000]  # 1180 × 18/118 = 180
+    assert entry.lines[0].debit_sc[:2] == [v["Бета Сервис"], v["Договор №1"]]
+    assert entry.memo == "Реализация с НДС"
+    # 1180 with 18% VAT inside: 180 VAT, 1000 goods; supplier filled on every line
+    entry = parse("#покупка тов 1180 альфа, договор", cat, templates, today=TODAY)
+    assert [ln.amount for ln in entry.lines] == [100_000, 18_000]
+    assert entry.lines[1].debit_sc[0] == v["Альфа Трейд"]  # 19 by counterparty
+    assert all(ln.credit_sc[:2] == [v["Альфа Трейд"], v["Договор №1"]] for ln in entry.lines)
+    assert any("41" in m for m in entry.missing)  # item and warehouse: in the form
+    with pytest.raises(ValidationError, match="нескольким шаблонам"):
+        parse("#покупка 10", cat, templates, today=TODAY)
+
+
+@pytest.fixture
+def bar(qtbot, books):
+    theme.apply(QApplication.instance())
+    conn, ledger, cid, cat, _ = books
+    messages: list[str] = []
+    s = Session(conn, ledger, cid, "Firma", cat, notify=messages.append)
+    s.working_date = TODAY
+    widget = QuickEntryBar(s)
+    qtbot.addWidget(widget)
+    return widget
+
+
+def test_enter_posts_and_clears(bar, qtbot):
+    bar.edit.setText("26 аренда / 60 альфа, договор 400 Аренда за март")
+    assert "Аренда офиса" in bar.preview.text()
+    posted = []
+    bar.posted.connect(posted.append)
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return)
+    doc = load_document(bar.s.conn, bar.s.company_id, posted[0])
+    assert (doc.status, doc.doc_date, doc.memo) == ("posted", "2026-03-05", "Аренда за март")
+    assert bar.edit.text() == ""
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Up)  # the last line comes back
+    assert bar.edit.text().startswith("26 аренда")
+
+
+def test_shift_enter_saves_a_draft_and_plus_adds_elements(bar, qtbot):
+    bar.edit.setText("26 +Реклама / 50 15")
+    posted = []
+    bar.posted.connect(posted.append)
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+    doc = load_document(bar.s.conn, bar.s.company_id, posted[0])
+    assert doc.status == "draft"
+    assert bar.s.catalog.value(doc.postings[0].debit_subconto[0]).name == "Реклама"
+
+
+def test_problem_is_shown_and_nothing_is_saved(bar, qtbot):
+    bar.edit.setText("71 / 50 100")  # 71 needs an employee
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return)
+    assert "не заполнено" in bar.preview.text()
+    assert bar.edit.text() == "71 / 50 100"  # kept to fix
+    assert bar.preview.objectName() == "error"
+
+
+def test_ctrl_enter_opens_the_form(bar, qtbot):
+    bar.edit.setText("71 / 50 100 Под отчёт")
+    forms = []
+    bar.open_form.connect(forms.append)
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    [doc] = forms
+    assert doc.memo == "Под отчёт" and doc.postings[0].amount == 10_000
+
+
+def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
+    qtbot, tmp_path, monkeypatch
+):
+    from PySide6.QtWidgets import QMessageBox
+
+    from modern_gl.demo_data import create_demo_company
+    from modern_gl.desktop.main_window import MainWindow
+    from modern_gl.infrastructure.workspace import Workspace
+
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
+    )
+    ws = Workspace(tmp_path / "data")
+    path = ws.new_path("Demo")
+    c = connect(path)
+    create_demo_company(Ledger(c))
+    c.close()
+    theme.apply(QApplication.instance())
+    win = MainWindow(ws)
+    qtbot.addWidget(win)
+    win.start()
+    win.session.working_date = TODAY
+    win.show()
+    win.activateWindow()
+    qtbot.waitUntil(win.isActiveWindow)
+    journal = win.pages[("journal",)]
+    before = journal.model.rowCount()
+    qtbot.keyClick(win, Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier)
+    assert QApplication.focusWidget() is journal.quick.edit
+    journal.quick.edit.setText("50 / 80 10 Тест")
+    qtbot.keyClick(journal.quick.edit, Qt.Key.Key_Return)
+    assert journal.model.rowCount() == before + 1
+    assert win.stack.currentWidget() is journal  # no document page was opened
+    win.shutdown()

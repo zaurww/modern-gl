@@ -190,11 +190,11 @@ class PostingRow:
             list(p.debit_subconto),
             p.credit_account_id,
             list(p.credit_subconto),
-            p.amount if keep_sign else abs(p.amount),
+            p.amount if keep_sign or p.amount is None else abs(p.amount),
             p.memo,
             currency_id=p.currency_id,
             currency_amount=cur if keep_sign or cur is None else abs(cur),
-            rate=Fraction(p.amount, cur) if cur else None,  # as it was posted
+            rate=Fraction(p.amount, cur) if cur and p.amount else None,  # as it was posted
             rate_auto=False,
         )
 

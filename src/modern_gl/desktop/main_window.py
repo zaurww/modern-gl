@@ -237,6 +237,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+5", lambda: self.show_place(("templates",))),
             ("Ctrl+6", lambda: self.show_place(("inventory",))),
             ("Ctrl+7", lambda: self.show_place(("currencies",))),
+            ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
 
@@ -471,6 +472,7 @@ class MainWindow(QMainWindow):
             page.copy_document.connect(
                 lambda doc_id: self.new_document(load_document(s.conn, s.company_id, doc_id))
             )
+            page.prefill_document.connect(self.new_document)
             return page
         if key == ("directories",):
             return DirectoriesPage(s)
@@ -496,6 +498,13 @@ class MainWindow(QMainWindow):
             page = ChartPage(s)
         self._wire_report(page)
         return page
+
+    def quick_entry(self) -> None:
+        """Ctrl+L anywhere: the journal with the cursor in the quick entry line."""
+        if self.session is None:
+            return
+        self.show_place(("journal",))
+        self.pages[("journal",)].focus_quick_entry()
 
     def _wire_report(self, page) -> None:
         page.open_document.connect(self.open_document)
