@@ -3,8 +3,14 @@
 from datetime import date
 
 import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QCompleter, QMessageBox
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import (
+    QApplication,
+    QCompleter,
+    QInputDialog,
+    QMessageBox,
+    QPushButton,
+)
 
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.demo_data import create_demo_company
@@ -547,6 +553,31 @@ def test_add_two_banks_in_directories(window, monkeypatch):
     assert "ABB (AZN)" not in [v.name for v in window.session.catalog.values(banks)]
     assert window.session.catalog.value(abb.id).name == "ABB (AZN)"
     assert window.session.catalog.resolve_value(banks, "ABB") is None
+
+
+def test_add_directory_value_through_button_and_dialog(window, qtbot):
+    """Regression: the visible button and its real input dialog add an item."""
+    window.show_place(("directories",))
+    page = current_page(window)
+    kind_id = window.session.ledger.add_subconto_kind(window.session.company_id, None, "Проекты")
+    window.session.catalog.reload()
+    page.refresh(select_kind=kind_id)
+    assert page.kind_id() == kind_id
+    before = {v.id for v in window.session.catalog.all_values(kind_id)}
+
+    def accept_dialog():
+        dialog = next(w for w in QApplication.topLevelWidgets() if isinstance(w, QInputDialog))
+        dialog.setTextValue("Новый элемент")
+        dialog.accept()
+
+    add = next(b for b in page.findChildren(QPushButton) if b.text() == "+ Новый элемент")
+    QTimer.singleShot(0, accept_dialog)
+    qtbot.mouseClick(add, Qt.MouseButton.LeftButton)
+
+    values = window.session.catalog.all_values(kind_id)
+    created = [v for v in values if v.id not in before]
+    assert [v.name for v in created] == ["Новый элемент"]
+    assert page.model.rowCount() == len(values)
 
 
 def test_new_user_directory(window, monkeypatch):
