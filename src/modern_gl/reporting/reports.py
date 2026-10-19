@@ -85,6 +85,8 @@ class OsvRow(Turnovers):
 class Osv:
     rows: list[OsvRow]
     total: Turnovers
+    # account id -> balances split by its first subconto (only accounts that have one)
+    subconto: dict[int, list[SubcontoRow]] = field(default_factory=dict)
 
 
 @dataclass
@@ -215,6 +217,7 @@ def trial_balance(
         per_account[r["account_id"]].append(r)
 
     values: dict[int, Turnovers] = {}
+    by_value: dict[int, list[tuple[int | None, Turnovers]]] = {}
     for account_id, parts in per_account.items():
         acc = accounts[account_id]
         if acc["kind"] == "AP" and acc["sc1_kind_id"] is not None:
@@ -228,6 +231,11 @@ def trial_balance(
                 sum(p["ct"] for p in parts),
             )
         values[account_id] = t
+        if acc["sc1_kind_id"] is not None:
+            by_value[account_id] = [
+                (part["sc"], Turnovers.from_net(part["opening"], part["dt"], part["ct"]))
+                for part in parts
+            ]
 
     children: dict[int | None, list[int]] = defaultdict(list)
     for a in accounts.values():  # already ordered by code
@@ -258,7 +266,30 @@ def trial_balance(
 
     for top in children[None]:
         total.add(visit(top, 0))
-    return Osv(rows=rows, total=total)
+    return Osv(rows=rows, total=total, subconto=_name_subconto(conn, by_value))
+
+
+def _name_subconto(
+    conn: sqlite3.Connection, by_value: dict[int, list[tuple[int | None, Turnovers]]]
+) -> dict[int, list[SubcontoRow]]:
+    ids = {v for parts in by_value.values() for v, _ in parts if v is not None}
+    names = {
+        r["id"]: r["name"]
+        for r in conn.execute(
+            "SELECT id, name FROM subconto_values WHERE id IN (SELECT value FROM json_each(?))",
+            (json.dumps(sorted(ids)),),
+        )
+    }
+    result = {}
+    for account_id, parts in by_value.items():
+        rows = []
+        for value_id, turnovers in parts:
+            row = SubcontoRow(value_id=value_id, name=names.get(value_id, "—"))
+            row.add(turnovers)
+            if not row.is_zero():
+                rows.append(row)
+        result[account_id] = sorted(rows, key=lambda r: r.name.casefold())
+    return result
 
 
 def subconto_balance(

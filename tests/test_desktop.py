@@ -328,3 +328,58 @@ def test_open_reports_are_translated_in_sidebar(window):
         assert current_page(window).header.title.text() == "Hesab kartı 51"
     finally:
         window.set_ui_language("ru")
+
+
+def test_osv_expanded_by_subconto(window):
+    window.show_place(("osv",))
+    osv = current_page(window)
+    osv.date_from.setDate(date(2026, 2, 1))
+    osv.date_to.setDate(date(2026, 2, 28))
+    osv.expand.setChecked(True)
+    rows = osv.model.rows
+    i = next(i for i, r in enumerate(rows) if r.code == "60.1")
+    under = [r.name.strip() for r in rows[i + 1 : i + 3]]
+    assert under == ["Альфа Трейд", "Бета Сервис"]
+    assert sum(r.closing_ct for r in rows[i + 1 : i + 3]) == rows[i].closing_ct
+    assert rows[-1].closing_dt == rows[-1].closing_ct  # totals unchanged
+
+
+def test_account_dialog_adds_subaccount_and_renames(window, monkeypatch):
+    from modern_gl.desktop.account_dialog import AccountDialog
+
+    window.show_place(("chart",))
+    chart = current_page(window)
+    cat = window.session.catalog
+
+    def run(dialog_setup):
+        def fake_exec(self):
+            dialog_setup(self)
+            self.save()
+            return self.result()
+
+        monkeypatch.setattr(AccountDialog, "exec", fake_exec)
+
+    # 52 has no postings in the demo: its first subaccount turns it into a group
+    def add_bank(d):
+        assert d.code.text() == "52.1"
+        d.name.setText("Kapital Bank USD")
+
+    run(add_bank)
+    chart.edit_account(None, "52")
+    assert cat.by_code["52"].is_group
+    assert cat.by_code["52.1"].parent_id == cat.by_code["52"].id
+    assert cat.by_code["52.1"].account_class == "asset"  # inherited
+
+    def rename(d):
+        d.name.setText("Kassa (AZN)")
+
+    run(rename)
+    chart.edit_account(cat.by_code["50"])
+    assert window.session.catalog.by_code["50"].name == "Kassa (AZN)"
+
+    def bad(d):
+        d.group.setChecked(True)  # 51 has postings
+
+    run(bad)
+    chart.edit_account(cat.by_code["51"])
+    assert not cat.by_code["51"].is_group

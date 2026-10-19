@@ -103,3 +103,53 @@ def test_migration_classifies_existing_template_companies(tmp_path):
     assert c["60.1"] == ("liability", 0)
     assert c["777"] == (None, 0)  # not a template code: left for the user
     conn.close()
+
+
+def test_update_account_protects_history(demo, conn):
+    led, cid = demo.ledger, demo.company_id
+    led.update_account(cid, "221", new_code="221.01", name="Основной банк")
+    row = conn.execute(
+        "SELECT code, name FROM accounts WHERE id = ?", (demo.acc["221"],)
+    ).fetchone()
+    assert tuple(row) == ("221.01", "Основной банк")  # postings follow: they reference the id
+    with pytest.raises(ValidationError, match="не может стать группой"):
+        led.update_account(cid, "201", is_group=True)  # 201 has postings
+    with pytest.raises(ValidationError, match="субконто менять нельзя"):
+        led.update_account(cid, "531", subconto=[])
+    with pytest.raises(ValidationError, match="уже есть"):
+        led.update_account(cid, "201", new_code="301")
+    with pytest.raises(ValidationError, match="у группы есть субсчета"):
+        led.update_account(cid, "22", is_group=False)
+    led.add_account(cid, "55", "Спецсчёт", kind="A")  # no postings yet: free to reshape
+    led.update_account(cid, "55", is_group=True)
+    led.add_account(cid, "55.1", "Аккредитив", kind="A", parent_code="55")
+
+
+def test_hidden_account_keeps_history_but_takes_no_new_postings(demo, conn):
+    from modern_gl.application.catalog import Catalog
+    from modern_gl.reporting.reports import trial_balance
+
+    led, cid = demo.ledger, demo.company_id
+    led.set_account_active(cid, "721", False)
+    cat = Catalog(conn, cid)
+    assert "721" not in [a.code for a in cat.leaf_accounts]
+    with pytest.raises(LookupError, match="скрыт"):
+        cat.resolve_account("721")
+    with pytest.raises(ValidationError, match="не активен"):
+        led.post_new(cid, "2026-03-01", [demo.p("721", "221", "1")])
+    rows = {r.code for r in trial_balance(conn, cid, "2026-02-01", "2026-02-28").rows}
+    assert "721" in rows  # history still reported
+    led.set_account_active(cid, "721", True)
+    led.post_new(cid, "2026-03-01", [demo.p("721", "221", "1")])
+
+
+def test_trial_balance_split_by_first_subconto(demo, conn):
+    from modern_gl.reporting.reports import trial_balance
+
+    osv = trial_balance(conn, demo.company_id, "2026-02-01", "2026-02-28")
+    split = osv.subconto[demo.acc["531"]]
+    assert [(s.name, s.closing_ct) for s in split] == [
+        ("Поставщик A", 20000),
+        ("Поставщик B", 50000),
+    ]
+    assert demo.acc["201"] not in osv.subconto  # no subconto on that account

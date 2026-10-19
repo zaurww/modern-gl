@@ -87,6 +87,9 @@ def main() -> None:
     win.pages[("osv",)].sections.setChecked(True)
     shot("5c_osv_sections")
     win.pages[("osv",)].sections.setChecked(False)
+    win.pages[("osv",)].expand.setChecked(True)
+    shot("5d_osv_expanded")
+    win.pages[("osv",)].expand.setChecked(False)
     osv = win.pages[("osv",)]
     win.open_report("subconto", "60.1", osv.params)
     shot("6_subconto")
@@ -94,6 +97,14 @@ def main() -> None:
     shot("7_card")
     win.show_place(("chart",))
     shot("8_chart")
+    from modern_gl.desktop.account_dialog import AccountDialog
+
+    dialog = AccountDialog(win.session, win.session.catalog.by_code["02"], parent=win)
+    dialog.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    dialog.grab().save(str(out / "9_account_dialog.png"))
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ class AccountInfo:
     sc_kinds: tuple[int | None, int | None, int | None]
     account_class: str | None = None
     contra: bool = False
+    active: bool = True
 
     @property
     def label(self) -> str:
@@ -59,9 +60,10 @@ class Catalog:
                 (r["sc1_kind_id"], r["sc2_kind_id"], r["sc3_kind_id"]),
                 r["account_class"],
                 bool(r["contra"]),
+                bool(r["active"]),
             )
             for r in self.conn.execute(
-                "SELECT * FROM accounts WHERE company_id = ? AND active = 1 ORDER BY code",
+                "SELECT * FROM accounts WHERE company_id = ? ORDER BY code",
                 (self.company_id,),
             )
         }
@@ -92,7 +94,8 @@ class Catalog:
 
     @property
     def leaf_accounts(self) -> list[AccountInfo]:
-        return [a for a in self.accounts.values() if not a.is_group]
+        """Accounts that can be posted to (hidden accounts are not offered)."""
+        return [a for a in self.accounts.values() if not a.is_group and a.active]
 
     def values(self, kind_id: int) -> list[SubcontoInfo]:
         return self._by_kind.get(kind_id, [])
@@ -124,6 +127,8 @@ class Catalog:
                     tr("«{text}» подходит к нескольким счетам: {codes}", text=text, codes=codes)
                 )
             found = matches[0]
+        if not found.active:
+            raise LookupError(tr("счёт {code} скрыт", code=found.code))
         if found.is_group:
             subs = ", ".join(a.code for a in self.accounts.values() if a.parent_id == found.id)
             raise LookupError(

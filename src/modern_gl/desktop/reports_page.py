@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.desktop.account_dialog import AccountDialog
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
@@ -369,11 +370,29 @@ class OsvPage(ReportPage):
         self.sections.setToolTip(tr("Сгруппировать счета по классам с подытогами"))
         self.sections.toggled.connect(self.refresh)
         self.header.add_action(self.sections)
+        self.expand = QCheckBox(tr("Развернуть по субконто"))
+        self.expand.setToolTip(tr("Показать остатки по первому субконто под каждым счётом"))
+        self.expand.toggled.connect(self.refresh)
+        self.header.add_action(self.expand)
         self._section_rows: set[int] = set()
         self.refresh()
 
     def title(self) -> str:
         return tr("ОСВ")
+
+    @staticmethod
+    def _with_subconto(rows: list[OsvRow], subconto) -> list[OsvRow]:
+        """Insert a row per subconto value (bank, counterparty…) under each account."""
+        result = []
+        for r in rows:
+            result.append(r)
+            if r.is_group:
+                continue
+            for s in subconto.get(r.account_id, []):
+                row = OsvRow(name="      " + s.name, depth=r.depth + 1)
+                row.add(s)
+                result.append(row)
+        return result
 
     def _by_class(self, rows: list[OsvRow]) -> list[OsvRow]:
         """Reorder top-level accounts (with their subaccounts) under class headers."""
@@ -422,6 +441,8 @@ class OsvPage(ReportPage):
             *turnover_columns(),
         ]
         shown = [r for r in osv.rows if r.depth == 0] if self.top_only.isChecked() else osv.rows
+        if self.expand.isChecked():
+            shown = self._with_subconto(shown, osv.subconto)
         if self.sections.isChecked() and shown:
             shown = self._by_class(shown)
         rows = [*shown, total] if shown else []
@@ -582,7 +603,16 @@ class ChartPage(ReportPage):
 
     def __init__(self, session: Session) -> None:
         super().__init__(session, tr("План счетов"))
-        self.header.subtitle.setText(tr("{n} счетов", n=len(session.catalog.accounts)))
+        add = button(tr("+ Новый счёт"), "flat", "Ins")
+        add.clicked.connect(lambda: self.edit_account(None))
+        self.header.add_action(add)
+        for keys, fn in (
+            ("Ins", lambda: self.edit_account(None)),
+            ("F2", lambda: self.edit_account(self._current())),
+        ):
+            sc = QShortcut(QKeySequence(keys), self)
+            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            sc.activated.connect(fn)
         self.refresh()
 
     def title(self) -> str:
@@ -590,35 +620,77 @@ class ChartPage(ReportPage):
 
     def build(self) -> None:
         cat = self.s.catalog
+        self.header.subtitle.setText(tr("{n} счетов", n=len(cat.accounts)))
 
         def subconto(a) -> str:
             return ", ".join(cat.kinds[k] for k in a.sc_kinds if k)
 
+        def name(a) -> str:
+            return a.name if a.active else f"{a.name}  ·  {tr('скрыт')}"
+
         columns = [
             Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, width=110),
-            Column(tr("Наименование"), lambda a: a.name),
+            Column(tr("Наименование"), name),
             Column(tr("Вид"), lambda a: tr(self.KIND[a.kind]), width=150),
             Column(
                 tr("Класс"), self._class_text, width=190, icon=lambda a: class_icon(a.account_class)
             ),
             Column(tr("Субконто"), subconto, width=280),
         ]
-        self.model.set(columns, list(cat.accounts.values()), emphasis=lambda a: a.is_group)
-        self.footer.setText(tr("Двойной щелчок — карточка счёта за текущий месяц"))
+        self.model.set(
+            columns,
+            list(cat.accounts.values()),
+            emphasis=lambda a: a.is_group,
+            muted=lambda a: not a.active,
+        )
+        self.footer.setText(
+            tr("Ins — новый счёт   ·   F2 — изменить   ·   двойной щелчок — карточка счёта")
+        )
 
     def drill(self, acc) -> None:
         if acc is not None:
             self.open_report.emit("card", acc.code, month_of(self.s.working_date))
+
+    def _current(self):
+        idx = self.table.currentIndex()
+        return idx.data(Qt.ItemDataRole.UserRole) if idx.isValid() else None
 
     @staticmethod
     def _class_text(acc) -> str:
         text = class_name(acc.account_class)
         return f"{text} · {tr('контрсчёт')}" if acc.contra else text
 
+    def edit_account(self, acc, parent_code: str | None = None) -> None:
+        dialog = AccountDialog(self.s, acc, parent_code, self)
+        if dialog.exec():
+            self._after_change(
+                dialog.saved_code, tr("Счёт {code} сохранён", code=dialog.saved_code)
+            )
+
+    def toggle_hidden(self, acc) -> None:
+        self.s.ledger.set_account_active(self.s.company_id, acc.code, not acc.active)
+        message = "Счёт {code} снова виден" if not acc.active else "Счёт {code} скрыт"
+        self._after_change(acc.code, tr(message, code=acc.code))
+
+    def _after_change(self, code: str, message: str) -> None:
+        self.s.catalog.reload()
+        self.refresh()
+        row = next((i for i, a in enumerate(self.model.rows) if a.code == code), None)
+        if row is not None:
+            self.table.setCurrentIndex(self.model.index(row, 0))
+            self.table.scrollTo(self.model.index(row, 0))
+        self.s.notify(message)
+
     def menu_actions(self, acc):
         if acc is None:
             return []
-        return self._account_actions(acc.code) + self._class_actions(acc.code)
+        edit = [
+            (tr("Изменить…"), lambda: self.edit_account(acc)),
+            (tr("Добавить субсчёт…"), lambda: self.edit_account(None, acc.code)),
+            (tr("Показать") if not acc.active else tr("Скрыть"), lambda: self.toggle_hidden(acc)),
+            None,
+        ]
+        return edit + self._account_actions(acc.code) + self._class_actions(acc.code)
 
 
 REPORTS: dict[str, type[AccountReportPage]] = {

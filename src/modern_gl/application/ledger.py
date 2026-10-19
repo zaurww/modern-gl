@@ -252,6 +252,117 @@ class Ledger:
                 },
             )
 
+    def update_account(
+        self,
+        company_id: int,
+        code: str,
+        *,
+        new_code: str | None = None,
+        name: str | None = None,
+        kind: str | None = None,
+        is_group: bool | None = None,
+        subconto: Sequence[int] | None = None,
+    ) -> None:
+        """Rename / re-code / reconfigure an account. Audited.
+
+        History is protected: an account with postings cannot become a group and its
+        subconto kinds cannot change (old postings carry values of those kinds).
+        Codes are only labels — postings reference the account id, so re-coding is safe.
+        """
+        with transaction(self.conn):
+            acc = self._account_by_code(company_id, code)
+            new_code = code if new_code is None else new_code.strip()
+            name = acc["name"] if name is None else name.strip()
+            kind = acc["kind"] if kind is None else kind
+            group = bool(acc["is_group"]) if is_group is None else bool(is_group)
+            current_sc = [acc["sc1_kind_id"], acc["sc2_kind_id"], acc["sc3_kind_id"]]
+            sc = current_sc if subconto is None else _pad(list(subconto), 0)
+            if not new_code:
+                raise ValidationError(tr("код счёта не может быть пустым"))
+            if not name:
+                raise ValidationError(tr("название счёта не может быть пустым"))
+            if kind not in ACCOUNT_KINDS:
+                raise ValidationError(
+                    tr(
+                        "счёт {code}: вид должен быть одним из {kinds}",
+                        code=code,
+                        kinds=ACCOUNT_KINDS,
+                    )
+                )
+            used = self._has_postings(acc["id"])
+            if group != bool(acc["is_group"]):
+                if group and used:
+                    raise ValidationError(
+                        tr(
+                            "счёт {code}: по счёту есть проводки, он не может стать группой",
+                            code=code,
+                        )
+                    )
+                if (
+                    not group
+                    and self.conn.execute(
+                        "SELECT 1 FROM accounts WHERE parent_id = ?", (acc["id"],)
+                    ).fetchone()
+                ):
+                    raise ValidationError(tr("счёт {code}: у группы есть субсчета", code=code))
+            if group:
+                sc = [None, None, None]
+            if sc != current_sc and used:
+                raise ValidationError(
+                    tr("счёт {code}: по счёту есть проводки, субконто менять нельзя", code=code)
+                )
+            try:
+                self.conn.execute(
+                    "UPDATE accounts SET code = ?, name = ?, kind = ?, is_group = ?, "
+                    "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ? WHERE id = ?",
+                    (new_code, name, kind, int(group), *sc, acc["id"]),
+                )
+            except sqlite3.IntegrityError as e:
+                raise ValidationError(tr("счёт {code} уже есть", code=new_code)) from e
+            self._audit(
+                company_id,
+                "account",
+                acc["id"],
+                "update",
+                {
+                    "before": {
+                        "code": code,
+                        "name": acc["name"],
+                        "kind": acc["kind"],
+                        "group": bool(acc["is_group"]),
+                        "subconto": current_sc,
+                    },
+                    "after": {
+                        "code": new_code,
+                        "name": name,
+                        "kind": kind,
+                        "group": group,
+                        "subconto": sc,
+                    },
+                },
+            )
+
+    def set_account_active(self, company_id: int, code: str, active: bool) -> None:
+        """Hide an account from entry (history and reports stay intact), or show it again."""
+        with transaction(self.conn):
+            acc = self._account_by_code(company_id, code)
+            self.conn.execute(
+                "UPDATE accounts SET active = ? WHERE id = ?", (int(active), acc["id"])
+            )
+            self._audit(
+                company_id, "account", acc["id"], "show" if active else "hide", {"code": code}
+            )
+
+    def _has_postings(self, account_id: int) -> bool:
+        return (
+            self.conn.execute(
+                "SELECT 1 FROM postings "
+                "WHERE debit_account_id = ? OR credit_account_id = ? LIMIT 1",
+                (account_id, account_id),
+            ).fetchone()
+            is not None
+        )
+
     @staticmethod
     def _check_class(code: str, account_class: str | None) -> None:
         if account_class is not None and account_class not in ACCOUNT_CLASSES:
