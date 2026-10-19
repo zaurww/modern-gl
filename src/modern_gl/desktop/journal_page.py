@@ -104,6 +104,7 @@ class JournalPage(QWidget):
     copy_document = Signal(int)
     deleted = Signal(int)
     prefill_document = Signal(object)  # DocumentData typed in the quick entry line
+    import_requested = Signal()
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -118,6 +119,9 @@ class JournalPage(QWidget):
         self.search.setObjectName("search")
         self.search.setPlaceholderText(tr("Поиск по содержанию или номеру   Ctrl+F"))
         self.search.setClearButtonEnabled(True)
+        import_button = button(tr("Импорт из Excel…"), "flat", tr("Много документов из таблицы"))
+        import_button.clicked.connect(self.import_requested.emit)
+        self.header.add_action(import_button)
         self.header.add_action(self.search)
         root.addWidget(self.header)
         self.quick = QuickEntryBar(session)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
@@ -18,7 +18,12 @@ from modern_gl.domain import formula as formulas
 from modern_gl.domain.accounts import ACCOUNT_CLASSES
 from modern_gl.domain.currency import DEFAULT_CURRENCIES, check_code, currency_name, to_base
 from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
+from modern_gl.domain.errors import (
+    LedgerError,
+    NotFoundError,
+    PeriodClosedError,
+    ValidationError,
+)
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
@@ -58,6 +63,24 @@ class TemplateLine:
     debit_subconto: Sequence[int | None] = ()
     credit_subconto: Sequence[int | None] = ()
     memo: str = ""
+
+
+@dataclass(frozen=True)
+class ImportedDocument:
+    doc_date: date | str
+    postings: Sequence[PostingInput]
+    memo: str = ""
+    layer: str = "common"
+
+
+@dataclass
+class ImportOutcome:
+    ids: list[int] = field(default_factory=list)  # created documents (empty if discarded)
+    errors: list[tuple[int, str]] = field(default_factory=list)  # (document index, message)
+
+
+class _Discard(Exception):
+    """Rolls back an import that had problems or was only a check."""
 
 
 def _now() -> str:
@@ -886,6 +909,57 @@ class Ledger:
             )
             self._post(company_id, new_id)
         return new_id
+
+    def import_documents(
+        self,
+        company_id: int,
+        documents: Sequence[ImportedDocument],
+        new_values: Sequence[tuple[int, str]] = (),
+        post: bool = True,
+        check_only: bool = False,
+    ) -> ImportOutcome:
+        """Create many documents at once (import from Excel): all or nothing.
+
+        `new_values` are (kind id, name) directory elements to add first; a posting refers
+        to the i-th of them by the subconto id -(i + 1). Every document is checked on its
+        own (a savepoint each), so all problems are reported, not only the first. With any
+        problem, or with `check_only`, nothing is kept.
+        """
+        outcome = ImportOutcome()
+        try:
+            with transaction(self.conn):
+                created = [
+                    self.add_subconto_value(company_id, kind_id, name)
+                    for kind_id, name in new_values
+                ]
+
+                def real(values: Sequence[int | None]) -> tuple[int | None, ...]:
+                    return tuple(created[-v - 1] if v is not None and v < 0 else v for v in values)
+
+                for index, doc in enumerate(documents):
+                    postings = [
+                        replace(
+                            p,
+                            debit_subconto=real(p.debit_subconto),
+                            credit_subconto=real(p.credit_subconto),
+                        )
+                        for p in doc.postings
+                    ]
+                    self.conn.execute("SAVEPOINT import_document")
+                    try:
+                        create = self.post_new if post else self.create_draft
+                        outcome.ids.append(
+                            create(company_id, doc.doc_date, postings, doc.memo, doc.layer)
+                        )
+                    except LedgerError as e:
+                        self.conn.execute("ROLLBACK TO import_document")
+                        outcome.errors.append((index, str(e)))
+                    self.conn.execute("RELEASE import_document")
+                if outcome.errors or check_only:
+                    raise _Discard
+        except _Discard:
+            outcome.ids = []
+        return outcome
 
     def revalue(
         self,

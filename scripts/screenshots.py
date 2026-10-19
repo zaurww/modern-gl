@@ -77,6 +77,24 @@ def main() -> None:
     journal.focus_quick_entry()
     shot("1b_quick_entry")
     journal.quick.edit.clear()
+    win.show_import()
+    importer = win.pages[("import",)]
+    alfa = i18n.tr("Альфа Трейд").split()[0]
+    contract = i18n.tr("Договор поставки №1")
+    bank = i18n.tr("Основной расчётный счёт")
+    importer.paste(
+        "\n".join(
+            [
+                "Tarix\tSənəd\tDebet\tSubkonto\tKredit\tSubkonto\tSubkonto\tMəbləğ\tMəzmun",
+                f"02.03.2026\t1\t26\t{i18n.tr('Аренда офиса')}\t60\t{alfa}\t{contract}\t400\tMart",
+                f"03.03.2026\t2\t60\t{alfa}\t51\t{bank}\t\t400\tÖdəniş",
+                "04.03.2026\t3\t50\t\t51\t\t\t1 000,00\tKassaya",
+                "05.03.2026\t4\t71\t\t50\t\t\t150\tAvans",
+            ]
+        )
+    )
+    shot("1c_import")
+    win.close_page(("import",), ask=False)
     docs = cast(JournalPage, win.pages[("journal",)]).model.docs
     win.open_document(next(d.id for d in docs if len(d.memo) and d.lines == 2))
     shot("2_document_posted")

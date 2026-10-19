@@ -133,6 +133,9 @@ QPushButton#primary {{
     background: {P.accent}; color: #FFFFFF; border: 1px solid {P.accent}; font-weight: 600;
 }}
 QPushButton#primary:hover {{ background: {P.accent_hover}; }}
+QPushButton#primary:disabled {{
+    background: {P.accent_soft}; border-color: {P.accent_soft}; color: #FFFFFF;
+}}
 QPushButton#flat {{ background: transparent; border: none; color: {P.accent}; padding: 6px 8px; }}
 QPushButton#flat:hover {{ background: {P.accent_soft}; }}
 QPushButton#danger {{ background: transparent; border: none; color: {P.red}; padding: 6px 8px; }}

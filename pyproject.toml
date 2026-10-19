@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Keyboard-first double-entry general ledger (1C 7.7 style postings, parallel books)"
 requires-python = ">=3.12"
 dependencies = [
+    "openpyxl>=3.1",
     "pyside6>=6.8",
 ]
 

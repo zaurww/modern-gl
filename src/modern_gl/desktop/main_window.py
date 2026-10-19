@@ -48,6 +48,7 @@ from modern_gl.application.queries import load_document, load_template
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.import_page import ImportPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
@@ -473,6 +474,7 @@ class MainWindow(QMainWindow):
                 lambda doc_id: self.new_document(load_document(s.conn, s.company_id, doc_id))
             )
             page.prefill_document.connect(self.new_document)
+            page.import_requested.connect(self.show_import)
             return page
         if key == ("directories",):
             return DirectoriesPage(s)
@@ -498,6 +500,18 @@ class MainWindow(QMainWindow):
             page = ChartPage(s)
         self._wire_report(page)
         return page
+
+    def show_import(self) -> None:
+        key = ImportPage.key
+        if key not in self.pages:
+            page = ImportPage(self.session)
+            page.imported.connect(self._imported)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def _imported(self, ids: list) -> None:
+        self.show_place(("journal",))
+        self.pages[("journal",)].refresh(select_id=ids[-1])
 
     def quick_entry(self) -> None:
         """Ctrl+L anywhere: the journal with the cursor in the quick entry line."""
