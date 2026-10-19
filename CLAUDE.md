@@ -2,7 +2,7 @@
 
 Бухгалтерская программа (главная книга) в стиле 1С 7.7: проводки Дт/Кт с субконто, несколько компаний, параллельные книги (общая / МСФО / налог). Пользователь общается по-русски.
 
-Читать перед изменениями: `docs/DECISIONS.md` (имеет приоритет над `SPEC.md` и `ARCHITECTURE.md`).
+Начало сессии: прочитать `docs/STATUS.md` (что сделано, что дальше) и `docs/DECISIONS.md` (имеет приоритет над `SPEC.md` и `ARCHITECTURE.md`). В конце сессии — обновить `docs/STATUS.md`.
 
 ## Команды
 - Тесты: `uv run pytest -q`
@@ -15,7 +15,8 @@
 - `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt.
 - `src/modern_gl/application/ledger.py` — все операции записи и правила учёта.
 - `src/modern_gl/reporting/reports.py` — ОСВ, ОСВ по субконто, карточка, анализ счёта (агрегация в SQL).
-- `src/modern_gl/infrastructure` — SQLite, миграции (`migrations/NNNN_*.sql`), импорт CSV.
+- `src/modern_gl/infrastructure` — SQLite, миграции (`migrations/NNNN_*.sql`), импорт CSV, `workspace.py` (файл на компанию).
+- `src/modern_gl/desktop` — интерфейс: `main_window` (боковая панель), `document_page`, `postings` (таблица ввода), `journal_page`, `reports_page` (ОСВ, карточка, план счетов), `directories_page`, `account_dialog`, `theme` (все цвета и шрифты), `i18n_az.py` (переводы).
 
 ## Правила
 - Деньги — только `int` в копейках; никаких `float`.
