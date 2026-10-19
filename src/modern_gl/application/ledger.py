@@ -398,10 +398,86 @@ class Ledger:
 
     def delete_draft(self, company_id: int, doc_id: int) -> None:
         with transaction(self.conn):
+            self._require_draft(self._document(company_id, doc_id))
+            self.delete_document(company_id, doc_id)
+
+    def unpost(self, company_id: int, doc_id: int) -> None:
+        """Turn a posted document back into an editable draft (open period only).
+
+        The audit trail keeps the full posted content. A red-storno document cannot be
+        unposted — delete it instead; a reversed document needs its storno deleted first.
+        """
+        with transaction(self.conn):
             doc = self._document(company_id, doc_id)
-            self._require_draft(doc)
+            if doc["status"] != "posted":
+                raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
+            if doc["reversal_of"] is not None:
+                raise ValidationError(
+                    tr("сторно №{n} нельзя распровести, его можно только удалить", n=doc["number"])
+                )
+            self._require_changeable(company_id, doc)
+            snapshot = self._snapshot(doc)
+            self.conn.execute(
+                "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc_id,)
+            )
+            self._audit(company_id, "document", doc_id, "unpost", snapshot)
+
+    def delete_document(self, company_id: int, doc_id: int) -> None:
+        """Delete a draft, or a posted document in an open period. Audited with its content.
+
+        Deleting a storno brings the reversed document back to normal.
+        """
+        with transaction(self.conn):
+            doc = self._document(company_id, doc_id)
+            if doc["status"] == "posted":
+                self._require_changeable(company_id, doc)
+            snapshot = self._snapshot(doc)
+            if doc["status"] == "posted":  # immutability triggers allow only this path
+                self.conn.execute(
+                    "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?",
+                    (doc_id,),
+                )
             self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
-            self._audit(company_id, "document", doc_id, "delete_draft", {"number": doc["number"]})
+            self._audit(company_id, "document", doc_id, "delete", snapshot)
+
+    def _require_changeable(self, company_id: int, doc: sqlite3.Row) -> None:
+        closed = self._company(company_id)["closed_through"]
+        if closed is not None and doc["doc_date"] <= closed:
+            raise PeriodClosedError(
+                tr(
+                    "документ №{number} от {date}: период закрыт по {closed}",
+                    number=doc["number"],
+                    date=doc["doc_date"],
+                    closed=closed,
+                )
+                + ". "
+                + tr("Исправьте его сторно в открытом периоде.")
+            )
+        storno = self.conn.execute(
+            "SELECT number FROM documents WHERE reversal_of = ?", (doc["id"],)
+        ).fetchone()
+        if storno is not None:
+            raise ValidationError(
+                tr(
+                    "документ №{n} сторнирован документом №{m}: сначала удалите сторно",
+                    n=doc["number"],
+                    m=storno["number"],
+                )
+            )
+
+    def _snapshot(self, doc: sqlite3.Row) -> dict:
+        """Everything needed to see later what a removed / unposted document contained."""
+        postings = [
+            {k: p[k] for k in p.keys() if k not in ("id", "company_id", "document_id")}
+            for p in self.conn.execute(
+                "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
+            )
+        ]
+        header = {
+            k: doc[k]
+            for k in ("number", "doc_date", "memo", "status", "layer", "reversal_of", "posted_at")
+        }
+        return {**header, "postings": postings}
 
     def post(self, company_id: int, doc_id: int) -> None:
         with transaction(self.conn):
@@ -467,8 +543,8 @@ class Ledger:
         reversal_of: int | None = None,
     ) -> int:
         self._company(company_id)
-        number = self.conn.execute(
-            "SELECT COALESCE(MAX(number), 0) + 1 FROM documents WHERE company_id = ?",
+        number = self.conn.execute(  # a counter, so numbers are never reused after deletion
+            "UPDATE companies SET last_number = last_number + 1 WHERE id = ? RETURNING last_number",
             (company_id,),
         ).fetchone()[0]
         return self.conn.execute(

@@ -475,3 +475,35 @@ def test_confirm_delete_dialog_unlocks_only_on_exact_name(qtbot, monkeypatch):
     monkeypatch.setattr(QDialog, "exec", fake_exec)
     assert confirm_delete(None, "ДЕМО ООО") is False
     assert seen == {"partial": False, "exact": True}
+
+
+def test_delete_mistaken_storno_from_its_page(window, monkeypatch):
+    journal = window.pages[("journal",)]
+    original = journal.model.docs[0]
+    window.open_document(original.id)
+    monkeypatch.setattr(
+        "modern_gl.desktop.document_page.ask_date", lambda *a, **k: date(2026, 3, 5)
+    )
+    current_page(window).reverse()
+    storno_page = current_page(window)
+    assert storno_page.btn_delete.isVisible() and not storno_page.btn_unpost.isVisible()
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+    )
+    storno_page.delete()
+    assert window.sidebar.find(storno_page.key) is None
+    window.open_document(original.id)
+    page = current_page(window)
+    page.load(original.id)
+    assert page.status.text() == "Проведён"  # no longer "Сторнирован"
+
+
+def test_unpost_from_page_makes_it_editable(window):
+    doc = window.pages[("journal",)].model.docs[1]
+    window.open_document(doc.id)
+    page = current_page(window)
+    assert page.model.read_only
+    page.unpost()
+    assert not page.model.read_only
+    assert page.status.text() == "Черновик"
+    assert window.pages[("journal",)].model.docs[1].status == "draft"

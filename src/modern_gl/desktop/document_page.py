@@ -122,11 +122,15 @@ class DocumentPage(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.btn_delete = button(tr("Удалить черновик"), "danger")
+        self.btn_delete = button(tr("Удалить"), "danger")
         self.btn_reverse = button(tr("Сторно…"), "danger", tr("Создать документ красного сторно"))
+        self.btn_unpost = button(
+            tr("Отменить проведение"), "flat", tr("Вернуть в черновик, чтобы исправить")
+        )
         self.btn_copy = button(tr("Копировать"), "flat", tr("Новый документ на основе этого"))
         actions.addWidget(self.btn_delete)
         actions.addWidget(self.btn_reverse)
+        actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_copy)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
@@ -140,6 +144,7 @@ class DocumentPage(QWidget):
         self.btn_post.clicked.connect(lambda: self.save(post=True))
         self.btn_delete.clicked.connect(self.delete)
         self.btn_reverse.clicked.connect(self.reverse)
+        self.btn_unpost.clicked.connect(self.unpost)
         self.btn_copy.clicked.connect(lambda: self.copy_requested.emit(self._as_template()))
         self.delegate.error.connect(self.show_error)
         self.delegate.unknown_value.connect(self._offer_new_value)
@@ -259,7 +264,10 @@ class DocumentPage(QWidget):
         self.memo.setReadOnly(read_only)
         self.btn_save.setVisible(not read_only)
         self.btn_post.setVisible(not read_only)
-        self.btn_delete.setVisible(status == "draft")
+        self.btn_delete.setVisible(self.doc is not None)
+        self.btn_unpost.setVisible(
+            read_only and self.doc is not None and self.doc.reversal_of is None
+        )
         can_reverse = (
             read_only
             and self.doc is not None
@@ -311,18 +319,44 @@ class DocumentPage(QWidget):
         return True
 
     def delete(self) -> None:
-        if self.doc is None or self.doc.status != "draft":
+        if self.doc is None:
             return
-        answer = QMessageBox.question(
-            self, tr("Удалить черновик"), tr("Удалить черновик №{n}?", n=self.doc.number)
+        n = self.doc.number
+        question = (
+            tr("Удалить черновик №{n}?", n=n)
+            if self.doc.status == "draft"
+            else tr(
+                "Удалить проведённый документ №{n}? Его проводки исчезнут из отчётов, "
+                "а полная копия останется в журнале действий.",
+                n=n,
+            )
         )
-        if answer != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
             return
-        self.s.ledger.delete_draft(self.s.company_id, self.doc.id)
-        self.s.notify(tr("Черновик №{n} удалён", n=self.doc.number))
+        reversed_id = self.doc.reversal_of
+        try:
+            self.s.ledger.delete_document(self.s.company_id, self.doc.id)
+        except LedgerError as e:
+            self.show_error(str(e))
+            return
+        self.s.notify(tr("Документ №{n} удалён", n=n))
         self.dirty = False
-        self.saved.emit(self.doc.id)
+        self.saved.emit(reversed_id or self.doc.id)  # a deleted storno revives the original
         self.close_requested.emit()
+
+    def unpost(self) -> None:
+        if self.doc is None:
+            return
+        try:
+            self.s.ledger.unpost(self.s.company_id, self.doc.id)
+        except LedgerError as e:
+            self.show_error(str(e))
+            return
+        self.load(self.doc.id)
+        self.s.notify(
+            tr("Проведение документа №{n} отменено — можно исправлять", n=self.doc.number)
+        )
+        self.saved.emit(self.doc.id)
 
     def reverse(self) -> None:
         if self.doc is None:

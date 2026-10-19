@@ -373,6 +373,7 @@ class MainWindow(QMainWindow):
             page = JournalPage(s)
             page.open_document.connect(self.open_document)
             page.new_document.connect(self.new_document)
+            page.deleted.connect(lambda doc_id: self.close_page(("doc", doc_id), ask=False))
             page.copy_document.connect(
                 lambda doc_id: self.new_document(load_document(s.conn, s.company_id, doc_id))
             )

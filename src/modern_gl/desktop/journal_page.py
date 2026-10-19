@@ -25,6 +25,7 @@ from modern_gl.application.queries import DocumentSummary, list_documents
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money, ru_date
+from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
 COLUMNS = ["Дата", "№", "Содержание", "Книга", "Сумма", ""]
@@ -100,6 +101,7 @@ class JournalPage(QWidget):
     open_document = Signal(int)
     new_document = Signal()
     copy_document = Signal(int)
+    deleted = Signal(int)
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -211,13 +213,22 @@ class JournalPage(QWidget):
         doc = next((d for d in self.model.docs if d.id == doc_id), None)
         if doc is None:
             return
-        if doc.status != "draft":
-            self.s.notify(tr("Проведённый документ не удаляется — используйте сторно"))
-            return
-        answer = QMessageBox.question(
-            self, tr("Удалить черновик"), tr("Удалить черновик №{n}?", n=doc.number)
+        question = (
+            tr("Удалить черновик №{n}?", n=doc.number)
+            if doc.status == "draft"
+            else tr(
+                "Удалить проведённый документ №{n}? Его проводки исчезнут из отчётов, "
+                "а полная копия останется в журнале действий.",
+                n=doc.number,
+            )
         )
-        if answer == QMessageBox.StandardButton.Yes:
-            self.s.ledger.delete_draft(self.s.company_id, doc.id)
-            self.s.notify(tr("Черновик №{n} удалён", n=doc.number))
-            self.refresh()
+        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.s.ledger.delete_document(self.s.company_id, doc.id)
+        except LedgerError as e:
+            QMessageBox.warning(self, tr("Удалить"), str(e))
+            return
+        self.s.notify(tr("Документ №{n} удалён", n=doc.number))
+        self.deleted.emit(doc.id)
+        self.refresh()
