@@ -163,7 +163,11 @@ AZ: dict[str, str] = {
     "в документе нет проводок": "sənəddə yazılış yoxdur",
     "сумма должна быть больше нуля": "məbləğ sıfırdan böyük olmalıdır",
     # ---- document --------------------------------------------------------------------------
-    "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   Del — удалить строку": "Enter — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   Del — sətri sil",
+    "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
+        "Enter — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
+        "Del — sətri sil   ·   Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
+    ),
     "Дата": "Tarix",
     "Книга": "Kitab",
     "Итого": "Cəmi",

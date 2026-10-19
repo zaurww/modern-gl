@@ -579,3 +579,22 @@ def test_pick_from_open_list_with_arrows(window, qtbot, key):
     qtbot.keyClick(popup, key)
     assert page.model.data(page.model.index(0, CT + 1)) == picked == "Бета Сервис"
     assert page.table.currentIndex().column() == CT + 2  # moved on to the contract
+
+
+def test_f9_copies_row_and_ctrl_s_saves_while_a_cell_is_edited(window, qtbot):
+    window.new_document()
+    page = current_page(window)
+    type_into_cell(qtbot, page, 0, DT, "50")
+    editor = QApplication.focusWidget()  # 1C-style entry: the next cell is already open
+    editor.setText("51")
+    qtbot.keyClick(editor, Qt.Key.Key_F9)  # what was typed is kept, then the row copied
+    assert page.model.rowCount() == 2
+    bank = window.session.catalog.by_code["51"].id
+    assert page.model.rows[0].credit == page.model.rows[1].credit == bank
+
+    for row in page.model.rows:
+        row.amount = 10000
+    page.table.edit(page.model.index(1, MEMO))
+    qtbot.keyClick(QApplication.focusWidget(), Qt.Key.Key_S, Qt.KeyboardModifier.ControlModifier)
+    assert page.doc is not None, page.error.text()  # saved as a draft
+    assert page.status.text() == "Черновик"

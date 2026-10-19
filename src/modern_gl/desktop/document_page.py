@@ -7,6 +7,9 @@ from datetime import date
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QAbstractItemDelegate,
+    QAbstractItemView,
+    QApplication,
     QComboBox,
     QHBoxLayout,
     QLabel,
@@ -41,7 +44,8 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 HINT = (
-    "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   Del — удалить строку"
+    "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
 )
 
 
@@ -153,8 +157,10 @@ class DocumentPage(QWidget):
         self._shortcut("Ctrl+S", lambda: self.save(post=False))
         self._shortcut("Ctrl+Return", lambda: self.save(post=True))
         self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
-        self._grid_shortcut("Ins", self._insert_row)
-        self._grid_shortcut("F9", self._duplicate_row)
+        # Ins and F9 also work while a cell is being edited (in 1C-style entry an editor
+        # is almost always open); Del inside an editor deletes text, so it does not.
+        self._grid_shortcut("Ins", self._insert_row, while_editing=True)
+        self._grid_shortcut("F9", self._duplicate_row, while_editing=True)
         self._grid_shortcut("Del", self._remove_row)
 
         if doc_id is not None:
@@ -177,10 +183,21 @@ class DocumentPage(QWidget):
         sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
         sc.activated.connect(fn)
 
-    def _grid_shortcut(self, keys: str, fn) -> None:
+    def _grid_shortcut(self, keys: str, fn, while_editing: bool = False) -> None:
         sc = QShortcut(QKeySequence(keys), self.table)
-        sc.setContext(Qt.ShortcutContext.WidgetShortcut)
+        sc.setContext(
+            Qt.ShortcutContext.WidgetWithChildrenShortcut
+            if while_editing
+            else Qt.ShortcutContext.WidgetShortcut
+        )
         sc.activated.connect(fn)
+
+    def _finish_editing(self) -> None:
+        """Commit and close an open cell editor, so a row action sees what was typed."""
+        editor = QApplication.focusWidget()
+        if self.table.state() == QAbstractItemView.State.EditingState and editor is not None:
+            self.table.commitData(editor)
+            self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
 
     def _wire_dirty(self) -> None:
         self.model.changed.connect(self._changed)
@@ -392,6 +409,7 @@ class DocumentPage(QWidget):
     def _insert_row(self) -> None:
         if self.model.read_only:
             return
+        self._finish_editing()
         cur = self.table.currentIndex()
         row = self.model.insert_row(cur.row() + 1 if cur.isValid() else None)
         idx = self.model.index(row, DT)
@@ -402,6 +420,7 @@ class DocumentPage(QWidget):
         cur = self.table.currentIndex()
         if self.model.read_only or not cur.isValid():
             return
+        self._finish_editing()
         row = self.model.duplicate_row(cur.row())
         self.table.setCurrentIndex(self.model.index(row, cur.column()))
 
