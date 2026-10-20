@@ -9,6 +9,12 @@ Sale of 1 000 USD for 1 695.00 AZN on 02.03, the bank takes a fee of 2.00 USD:
 Purchase of 1 000 USD for 1 705.00 AZN: Dt 57 / Ct 51 1 705.00, Dt 52 / Ct 57 1 700.00,
   loss 5.00.
 500 EUR -> 546 USD: 925.00 (500 × 1.85) against 928.20 (546 × 1.70): gain 3.20 (Dt 57 / Ct 91.1).
+
+Fees are lines, each from any money account in its currency:
+  the same exchange with 5.00 AZN taken from 51 and 1.00 USD from the USD account credited:
+    Dt 91.2 / Ct 51 5.00;  Dt 91.2 / Ct 52 [USD] 1.70 (1.00 USD × 1.70)
+  a purchase credited on 03.03 with 1.00 USD taken there: the fee goes with the credit, at
+  the rate of 03.03 — Dt 91.2 / Ct 52 [USD] 1.71; the credit itself stays at 02.03's 1 700.00.
 """
 
 from __future__ import annotations
@@ -18,6 +24,7 @@ from dataclasses import replace
 import pytest
 
 from modern_gl.application.conversions import (
+    ConversionFee,
     ConversionInput,
     ConversionSide,
     bank_rate,
@@ -81,7 +88,7 @@ def sale(f, **changes) -> ConversionInput:
         doc_date="2026-03-02",
         source=ConversionSide(f["acc"]["52"], 100_000, (f["usd_bank"],), f["usd"], "REF-1"),
         target=ConversionSide(f["acc"]["51"], 169_500, (f["azn_bank"],), None, "REF-2"),
-        fee_amount=200,
+        fees=(ConversionFee(f["acc"]["52"], 200, (f["usd_bank"],), f["usd"]),),
         memo="Продажа USD",
     )
     return replace(data, **changes)
@@ -160,7 +167,7 @@ def test_purchase_and_cross_currency(ledger, conn, firm):
 
 def test_credit_on_a_later_day_waits_on_transit(ledger, conn, firm):
     cid, acc = firm["cid"], firm["acc"]
-    data = sale(firm, target_date="2026-03-03", fee_amount=0)
+    data = sale(firm, target_date="2026-03-03", fees=())
     conversion_id = ledger.save_conversion(cid, data, post=True)
     conversion = load_conversion(conn, cid, conversion_id)
     assert conversion.credit_document_id is not None
@@ -263,3 +270,85 @@ def test_transit_account_is_found_by_its_type(ledger, conn, firm):
     ledger.set_account_type(cid, acc["57"], "transit")
     assert ledger.account_role(cid, FX_TRANSIT) == acc["57"]
     ledger.save_conversion(cid, sale(firm), post=True)
+
+
+def test_fees_from_any_account_in_its_currency(ledger, conn, firm):
+    cid, acc = firm["cid"], firm["acc"]
+    cross = ConversionInput(
+        doc_date="2026-03-02",
+        source=ConversionSide(acc["52"], 50_000, (firm["eur_bank"],), firm["eur"]),
+        target=ConversionSide(acc["52"], 54_600, (firm["usd_bank"],), firm["usd"]),
+        fees=(
+            ConversionFee(acc["51"], 500, (firm["azn_bank"],)),
+            ConversionFee(acc["52"], 100, (firm["usd_bank"],), firm["usd"]),
+        ),
+    )
+    assert calculate(conn, cid, cross).fee_values == (500, 170)
+    conversion_id = ledger.save_conversion(cid, cross, post=True)
+    doc = load_conversion(conn, cid, conversion_id)
+    assert doc.fees == tuple(replace(f, subconto=(*f.subconto, None, None)) for f in cross.fees)
+    assert postings(conn, cid, doc.document_id) == [
+        (acc["57"], acc["52"], 92_500, 50_000),
+        (acc["57"], acc["91.1"], 320, None),
+        (acc["91.2"], acc["51"], 500, None),
+        (acc["52"], acc["57"], 92_820, 54_600),
+        (acc["91.2"], acc["52"], 170, 100),
+    ]
+
+
+def test_fee_taken_on_a_later_credit_goes_with_it(ledger, conn, firm):
+    cid, acc = firm["cid"], firm["acc"]
+    purchase = ConversionInput(
+        doc_date="2026-03-02",
+        source=ConversionSide(acc["51"], 170_500, (firm["azn_bank"],)),
+        target=ConversionSide(acc["52"], 100_000, (firm["usd_bank"],), firm["usd"]),
+        target_date="2026-03-03",
+        fees=(ConversionFee(acc["52"], 100, (firm["usd_bank"],), firm["usd"]),),
+    )
+    doc = load_conversion(conn, cid, ledger.save_conversion(cid, purchase, post=True))
+    assert postings(conn, cid, doc.document_id) == [
+        (acc["57"], acc["51"], 170_500, None),
+        (acc["91.2"], acc["57"], 500, None),
+    ]
+    assert doc.credit_document_id is not None
+    assert postings(conn, cid, doc.credit_document_id) == [
+        (acc["52"], acc["57"], 170_000, 100_000),
+        (acc["91.2"], acc["52"], 171, 100),
+    ]
+
+
+def test_migration_keeps_the_fee_of_older_files(tmp_path, monkeypatch):
+    """A conversion saved before fees became lines keeps its fee as the first line."""
+    from modern_gl.application.ledger import Ledger
+    from modern_gl.infrastructure import db
+
+    older = tmp_path / "migrations"
+    older.mkdir()
+    for path in sorted(db.MIGRATIONS_DIR.glob("*.sql")):
+        if int(path.name[:4]) <= 19:
+            (older / path.name).write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    full = db.MIGRATIONS_DIR
+    monkeypatch.setattr(db, "MIGRATIONS_DIR", older)
+    file = tmp_path / "old.gl"
+    conn = db.connect(file)
+    ledger = Ledger(conn)
+    cid = ledger.create_company("Старая")
+    azn = ledger.add_account(cid, "51", "Расчётный счёт", account_class="asset")
+    usd_account = ledger.add_account(cid, "52", "Валютный", account_class="asset", currency=True)
+    usd = ledger.currency_id(cid, "USD")
+    doc = ledger.create_draft(cid, "2026-03-02", [])
+    conn.execute(
+        "INSERT INTO currency_conversions (company_id, document_id, from_account_id, "
+        "from_currency_id, from_amount, to_account_id, to_amount, fee_amount, fee_side) "
+        "VALUES (?, ?, ?, ?, 100000, ?, 169500, 340, 'to')",
+        (cid, doc, usd_account, usd, azn),
+    )
+    conn.close()
+
+    monkeypatch.setattr(db, "MIGRATIONS_DIR", full)
+    conn = db.connect(file)
+    conversion_id = conn.execute("SELECT id FROM currency_conversions").fetchone()[0]
+    loaded = load_conversion(conn, cid, conversion_id)
+    assert loaded.fees == (ConversionFee(azn, 340, (None, None, None)),)
+    assert loaded.source is not None and loaded.source.amount == 100_000
+    conn.close()

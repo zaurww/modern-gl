@@ -3,6 +3,7 @@ the other — and under them the Central Bank's rate, the bank's rate and the di
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date
 from fractions import Fraction
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import AccountInfo
 from modern_gl.application.conversions import (
     Conversion,
+    ConversionFee,
     ConversionInput,
     ConversionSide,
     bank_rate,
@@ -74,6 +76,164 @@ def money_accounts(session: Session) -> list[AccountInfo]:
 
 def amount_text(minor: int) -> str:
     return format_minor(minor) if minor else ""
+
+
+def fit_currency(
+    box: QComboBox,
+    session: Session,
+    account: AccountInfo | None,
+    subconto: Sequence[int | None],
+    preferred: int | None = None,
+) -> None:
+    """The currency follows the account: a manat account is in manat, a USD bank
+    account in USD; a currency account without one lets the user choose."""
+    chosen = box.currentData() if preferred is None else preferred
+    box.clear()
+    if account is None or not account.currency:
+        box.addItem(BASE, None)
+        box.setEnabled(False)
+        return
+    catalog = session.catalog
+    fixed = next(
+        (
+            catalog.value(v).currency_id
+            for v in subconto
+            if v is not None and catalog.value(v).currency_id is not None
+        ),
+        None,
+    )
+    if fixed is not None:
+        box.addItem(catalog.currencies[fixed].code, fixed)
+        box.setEnabled(False)
+        return
+    if account.currency == CURRENCY_OPTIONAL:
+        box.addItem(BASE, None)
+    for c in catalog.active_currencies:
+        box.addItem(c.code, c.id)
+    box.setEnabled(True)
+    box.setCurrentIndex(max(box.findData(chosen), 0))
+
+
+def money_places(session: Session) -> list[tuple[str, tuple[int, tuple[int | None, ...]]]]:
+    """Where a fee can be taken from: every bank account (an element of the account's first
+    directory: "Kapital Bank USD · 52") and every money account without one."""
+    catalog = session.catalog
+    places = []
+    for account in money_accounts(session):
+        kind = account.sc_kinds[0]
+        if kind is None:
+            places.append((account.label, (account.id, ())))
+            continue
+        places.extend(
+            (f"{value.name}  ·  {account.short}", (account.id, (value.id,)))
+            for value in catalog.values(kind)
+        )
+    return places
+
+
+class FeeRow(QWidget):
+    """One bank fee: how much, from which money account (in its currency), to which expense."""
+
+    changed = Signal()
+    removed = Signal(object)
+
+    def __init__(self, session: Session) -> None:
+        super().__init__()
+        self.s = session
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(10)
+        self.amount = QLineEdit()
+        self.amount.setFixedWidth(110)
+        self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.amount.setPlaceholderText("0.00")
+        lay.addWidget(self.amount)
+        self.currency = QComboBox()
+        lay.addWidget(self.currency)
+        taken = QLabel(tr("удержана с"))
+        taken.setObjectName("secondary")
+        lay.addWidget(taken)
+        self.place = QComboBox()
+        for label, data in money_places(session):
+            self.place.addItem(label, data)
+        lay.addWidget(self.place, 2)
+        to = QLabel(tr("на счёт"))
+        to.setObjectName("secondary")
+        lay.addWidget(to)
+        self.expense = QComboBox()
+        self.expense.addItem(tr("по настройкам"), None)
+        for account in session.catalog.leaf_accounts:
+            self.expense.addItem(account.label, account.id)
+        lay.addWidget(self.expense, 1)
+        self.remove = button("×", "flat", tr("Убрать комиссию"))
+        self.remove.setFixedWidth(32)
+        lay.addWidget(self.remove)
+
+        self.amount.textEdited.connect(lambda _: self.changed.emit())
+        self.currency.activated.connect(lambda _: self.changed.emit())
+        self.place.activated.connect(self._place_changed)
+        self.expense.activated.connect(lambda _: self.changed.emit())
+        self.remove.clicked.connect(lambda: self.removed.emit(self))
+        self._place_changed()
+
+    def _where(self) -> tuple[int, tuple[int | None, ...]] | None:
+        return self.place.currentData()
+
+    def _place_changed(self, *_) -> None:
+        self._fit_currency()
+        self.changed.emit()
+
+    def _fit_currency(self) -> None:
+        where = self._where()
+        account = self.s.catalog.accounts.get(where[0]) if where else None
+        fit_currency(self.currency, self.s, account, where[1] if where else ())
+
+    def set_place(self, account_id: int, subconto: Sequence[int | None]) -> None:
+        data = (account_id, tuple(v for v in subconto if v is not None)[:1])
+        i = next((i for i in range(self.place.count()) if self.place.itemData(i) == data), -1)
+        if i < 0:  # an account or element no longer offered
+            account = self.s.catalog.accounts[account_id]
+            name = " / ".join(self.s.catalog.value(v).name for v in data[1])
+            self.place.addItem(f"{name}  ·  {account.short}" if name else account.label, data)
+            i = self.place.count() - 1
+        self.place.setCurrentIndex(i)
+        self._place_changed()
+
+    def value(self) -> ConversionFee | None:
+        """None while the amount is empty: a line just added and not filled in."""
+        text = self.amount.text().strip()
+        where = self._where()
+        if not text or where is None:
+            return None
+        return ConversionFee(
+            where[0],
+            to_minor(text),
+            where[1],
+            self.currency.currentData(),
+            self.expense.currentData(),
+        )
+
+    def set_value(self, fee: ConversionFee) -> None:
+        self.set_place(fee.account_id, fee.subconto)
+        fit_currency(
+            self.currency,
+            self.s,
+            self.s.catalog.accounts.get(fee.account_id),
+            fee.subconto,
+            fee.currency_id,
+        )
+        self.amount.setText(amount_text(fee.amount))
+        self.expense.setCurrentIndex(max(self.expense.findData(fee.expense_account_id), 0))
+
+    def set_read_only(self, read_only: bool) -> None:
+        self.amount.setReadOnly(read_only)
+        for w in (self.place, self.expense):
+            w.setEnabled(not read_only)
+        self.remove.setVisible(not read_only)
+        if read_only:
+            self.currency.setEnabled(False)
+        else:  # only a currency the account leaves open can be chosen
+            self._fit_currency()
 
 
 class SidePanel(QFrame):
@@ -178,34 +338,7 @@ class SidePanel(QFrame):
         self.changed.emit()
 
     def _fit_currency(self) -> None:
-        """The currency follows the account: a manat account is in manat, a USD bank
-        account in USD; a currency account without one lets the user choose."""
-        chosen = self.currency.currentData()
-        self.currency.clear()
-        account = self.account_info
-        base = BASE
-        if account is None or not account.currency:
-            self.currency.addItem(base, None)
-            self.currency.setEnabled(False)
-            return
-        fixed = next(
-            (
-                self.s.catalog.value(v).currency_id
-                for v in self.subconto()
-                if v is not None and self.s.catalog.value(v).currency_id is not None
-            ),
-            None,
-        )
-        if fixed is not None:
-            self.currency.addItem(self.s.catalog.currencies[fixed].code, fixed)
-            self.currency.setEnabled(False)
-            return
-        if account.currency == CURRENCY_OPTIONAL:
-            self.currency.addItem(base, None)
-        for c in self.s.catalog.active_currencies:
-            self.currency.addItem(c.code, c.id)
-        self.currency.setEnabled(True)
-        self.currency.setCurrentIndex(max(self.currency.findData(chosen), 0))
+        fit_currency(self.currency, self.s, self.account_info, self.subconto())
 
     def subconto(self) -> tuple[int | None, ...]:
         return tuple(box.currentData() for box in self.sc)
@@ -411,30 +544,20 @@ class ConversionPage(QWidget):
         sides.addWidget(self.target, 1)
         root.addLayout(sides)
 
-        fee = QHBoxLayout()
-        fee.setSpacing(10)
-        fee_caption = QLabel(tr("Комиссия банка"))
-        fee_caption.setObjectName("secondary")
-        fee.addWidget(fee_caption)
-        self.fee = QLineEdit()
-        self.fee.setFixedWidth(110)
-        self.fee.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.fee.setPlaceholderText("0.00")
-        fee.addWidget(self.fee)
-        self.fee_side = QComboBox()
-        self.fee_side.addItem(tr("со счёта списания"), "from")
-        self.fee_side.addItem(tr("со счёта зачисления"), "to")
-        fee.addWidget(self.fee_side)
-        fee_to = QLabel(tr("на счёт"))
-        fee_to.setObjectName("secondary")
-        fee.addWidget(fee_to)
-        self.fee_account = QComboBox()
-        self.fee_account.addItem(tr("по настройкам"), None)
-        for account in session.catalog.leaf_accounts:
-            self.fee_account.addItem(account.label, account.id)
-        fee.addWidget(self.fee_account)
-        fee.addStretch(1)
-        root.addLayout(fee)
+        # bank fees: any number, each from any money account in its own currency
+        fees_head = QHBoxLayout()
+        fees_caption = QLabel(tr("Комиссии банка"))
+        fees_caption.setObjectName("secondary")
+        fees_head.addWidget(fees_caption)
+        self.btn_add_fee = button(tr("+ Комиссия"), "flat", tr("Комиссия, которую удержал банк"))
+        self.btn_add_fee.clicked.connect(lambda: self.add_fee(focus=True))
+        fees_head.addWidget(self.btn_add_fee)
+        fees_head.addStretch(1)
+        root.addLayout(fees_head)
+        self.fee_rows: list[FeeRow] = []
+        self.fees_box = QVBoxLayout()
+        self.fees_box.setSpacing(8)
+        root.addLayout(self.fees_box)
 
         summary = QFrame()
         summary.setObjectName("card")
@@ -444,7 +567,7 @@ class ConversionPage(QWidget):
         self.cbar = Stat(tr("Курс ЦБА"))
         self.bank = Stat(tr("Курс банка"))
         self.difference = Stat(tr("Курсовая разница"))
-        self.fee_value = Stat(tr("Комиссия, {code}", code=BASE))
+        self.fee_value = Stat(tr("Комиссии, {code}", code=BASE))
         for stat in (self.cbar, self.bank, self.difference, self.fee_value):
             stats.addWidget(stat)
         stats.addStretch(1)
@@ -487,9 +610,6 @@ class ConversionPage(QWidget):
             panel.changed.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._date_changed)
-        self.fee.textEdited.connect(self._changed)
-        self.fee_side.activated.connect(self._changed)
-        self.fee_account.activated.connect(self._changed)
 
         if conversion_id is not None:
             self.load(conversion_id)
@@ -562,16 +682,18 @@ class ConversionPage(QWidget):
         self.source.set_value(d.source)
         self.target.set_value(d.target)
         self.target.date.setDate(to_qdate(date.fromisoformat(d.target_date or d.doc_date)))
-        self.fee.setText(amount_text(d.fee_amount))
-        self.fee_side.setCurrentIndex(max(self.fee_side.findData(d.fee_side), 0))
-        self.fee_account.setCurrentIndex(max(self.fee_account.findData(d.fee_account_id), 0))
+        for row in list(self.fee_rows):
+            self._remove_fee(row)
+        for fee in d.fees:
+            self.add_fee().set_value(fee)
 
     def _apply_mode(self) -> None:
         ro = self.read_only
-        for w in (self.date, self.fee_side, self.fee_account):
-            w.setEnabled(not ro)
-        for edit in (self.memo, self.fee):
-            edit.setReadOnly(ro)
+        self.date.setEnabled(not ro)
+        self.memo.setReadOnly(ro)
+        self.btn_add_fee.setVisible(not ro)
+        for row in self.fee_rows:
+            row.set_read_only(ro)
         self.source.set_read_only(ro)
         self.target.set_read_only(ro)
         self.btn_delete.setVisible(self.doc is not None and not ro)
@@ -613,11 +735,29 @@ class ConversionPage(QWidget):
             source,
             target,
             data.target_date,
-            data.fee_amount,
-            data.fee_side,
-            data.fee_account_id,
+            data.fees,
             data.memo,
         )
+
+    def add_fee(self, focus: bool = False) -> FeeRow:
+        """A new fee line; it is taken from the account sold from, until changed."""
+        row = FeeRow(self.s)
+        source = self.source.value()
+        if source is not None:
+            row.set_place(source.account_id, source.subconto)
+        row.changed.connect(self._changed)
+        row.removed.connect(self._remove_fee)
+        self.fee_rows.append(row)
+        self.fees_box.addWidget(row)
+        if focus:
+            row.amount.setFocus()
+        return row
+
+    def _remove_fee(self, row: FeeRow) -> None:
+        self.fee_rows.remove(row)
+        self.fees_box.removeWidget(row)
+        row.deleteLater()
+        self._changed()
 
     def _changed(self, *_) -> None:
         if self._loading:
@@ -641,7 +781,6 @@ class ConversionPage(QWidget):
     def collect(self) -> ConversionInput:
         doc_date = edited_date(self.date).isoformat()
         target_date = edited_date(self.target.date).isoformat()
-        fee = self.fee.text().strip()
         source, target = self.source.value(), self.target.value()
         memo = self.memo.text().strip()
         if not memo and source is not None and target is not None:
@@ -655,9 +794,7 @@ class ConversionPage(QWidget):
             source=source,
             target=target,
             target_date=None if target_date == doc_date else target_date,
-            fee_amount=to_minor(fee) if fee else 0,
-            fee_side=self.fee_side.currentData(),
-            fee_account_id=self.fee_account.currentData(),
+            fees=tuple(f for row in self.fee_rows if (f := row.value()) is not None),
             memo=memo,
         )
 
@@ -686,8 +823,8 @@ class ConversionPage(QWidget):
             self.difference.set(tr("{amount} убыток", amount=format_minor(diff)), P.red)
         else:
             self.difference.set(tr("{amount} доход", amount=format_minor(-diff)), P.green)
-        self.fee_value.caption.setText(tr("Комиссия, {code}", code=base))
-        self.fee_value.set(format_minor(calc.fee_value) if calc.fee_value else NONE)
+        self.fee_value.caption.setText(tr("Комиссии, {code}", code=base))
+        self.fee_value.set(format_minor(calc.fee_total) if calc.fee_total else NONE)
         self._update_rate_note(data)
 
     def _cbar_rate(self, data: ConversionInput, rates) -> Fraction | None:

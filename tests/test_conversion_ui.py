@@ -72,7 +72,7 @@ def fill_sale(page: ConversionPage) -> None:
     type_text(page.source.amount, "1000")
     choose(page.target.sc[0], "Kapital Bank AZN")
     type_text(page.target.amount, "1695")
-    type_text(page.fee, "2")
+    type_text(page.add_fee().amount, "2")  # taken from the account sold from
 
 
 def test_new_conversion_shows_rates_and_difference(qtbot, session):
@@ -173,3 +173,24 @@ def test_missing_account_is_asked_for_and_the_conversion_posts(qtbot, session, m
     assert page.save(post=True)
     assert page.doc is not None and page.doc.status == "posted"
     assert len(asked) == 1
+
+
+def test_several_fees_from_different_accounts(qtbot, session):
+    """2.00 USD from the USD account (3.40) and 1.50 AZN from the manat one: 4.90 AZN."""
+    page = ConversionPage(session)
+    qtbot.addWidget(page)
+    fill_sale(page)
+    second = page.add_fee()
+    choose(second.place, "Kapital Bank AZN  ·  51")
+    assert second.currency.currentText() == "AZN" and not second.currency.isEnabled()
+    type_text(second.amount, "1.50")
+    assert page.fee_value.value.text() == "4.90"
+    assert page.save(post=True)
+    assert page.doc is not None and len(page.doc.fees) == 2
+    assert [f.amount for f in page.doc.fees] == [200, 150]
+
+    # a fee removed leaves the other one
+    page.fee_rows[0].remove.click()
+    assert page.fee_value.value.text() == "1.50"
+    assert page.save(post=True)
+    assert page.doc is not None and [f.amount for f in page.doc.fees] == [150]

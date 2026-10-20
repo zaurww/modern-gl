@@ -3,8 +3,10 @@
 Dt 57 / Ct the account debited — at the Central Bank's rate of the debit date;
 Dt the account credited / Ct 57 — at the same date's rate (manat: the amount itself);
 what is left on 57 is the exchange difference: Dt 91.2 / Ct 57 (loss) or Dt 57 / Ct 91.1
-(gain); the bank fee: Dt 91.2 / Ct the bank account it is taken from. A credit made on a
-later day is a second GL document of that day; until then the money sits on 57.
+(gain); each bank fee: Dt 91.2 / Ct the money account it is taken from (either side or
+another one, in its currency). A credit made on a later day is a second GL document of
+that day; until then the money sits on 57. A fee taken from the account credited goes
+with the credit, at the rate of its day.
 """
 
 from __future__ import annotations
@@ -15,10 +17,10 @@ from decimal import Decimal
 
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.conversions import (
-    FEE_SIDES,
     ConversionInput,
     ConversionSide,
     calculate,
+    fee_on_credit,
     same_day,
 )
 from modern_gl.application.ledger.base import account_label
@@ -127,10 +129,6 @@ class ConversionCommands(ChartCommands, DocumentCommands):
 
     def _check_input(self, company_id: int, data: ConversionInput) -> None:
         iso_date(data.doc_date)
-        if data.fee_side not in FEE_SIDES:
-            raise ValidationError(tr("неизвестная сторона комиссии: {side}", side=data.fee_side))
-        if data.fee_amount < 0:
-            raise ValidationError(tr("комиссия не может быть отрицательной"))
         if data.target_date is not None and iso_date(data.target_date) < iso_date(data.doc_date):
             raise ValidationError(tr("дата зачисления раньше даты списания"))
         for side in (data.source, data.target):
@@ -142,8 +140,15 @@ class ConversionCommands(ChartCommands, DocumentCommands):
             pad_subconto(side.subconto)
             if side.currency_id is not None:
                 self._currency(company_id, side.currency_id)
-        if data.fee_account_id is not None:
-            self._account(company_id, data.fee_account_id)
+        for fee in data.fees:
+            if fee.amount <= 0:
+                raise ValidationError(tr("комиссия должна быть больше нуля"))
+            self._account(company_id, fee.account_id)
+            pad_subconto(fee.subconto)
+            if fee.currency_id is not None:
+                self._currency(company_id, fee.currency_id)
+            if fee.expense_account_id is not None:
+                self._account(company_id, fee.expense_account_id)
 
     def _store(self, company_id: int, conversion_id: int, data: ConversionInput) -> None:
         def side(s: ConversionSide | None) -> tuple:
@@ -163,19 +168,31 @@ class ConversionCommands(ChartCommands, DocumentCommands):
             "from_account_id = ?, from_sc1 = ?, from_sc2 = ?, from_sc3 = ?, "
             "from_currency_id = ?, from_amount = ?, from_reference = ?, "
             "to_account_id = ?, to_sc1 = ?, to_sc2 = ?, to_sc3 = ?, "
-            "to_currency_id = ?, to_amount = ?, to_reference = ?, to_date = ?, "
-            "fee_amount = ?, fee_side = ?, fee_account_id = ? "
+            "to_currency_id = ?, to_amount = ?, to_reference = ?, to_date = ? "
             "WHERE company_id = ? AND id = ?",
-            (
-                *side(data.source),
-                *side(data.target),
-                target_date,
-                data.fee_amount,
-                data.fee_side,
-                data.fee_account_id,
-                company_id,
-                conversion_id,
-            ),
+            (*side(data.source), *side(data.target), target_date, company_id, conversion_id),
+        )
+        self.conn.execute(
+            "DELETE FROM conversion_fees WHERE company_id = ? AND conversion_id = ?",
+            (company_id, conversion_id),
+        )
+        self.conn.executemany(
+            "INSERT INTO conversion_fees (company_id, conversion_id, line_no, account_id, "
+            "sc1, sc2, sc3, currency_id, amount, expense_account_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    company_id,
+                    conversion_id,
+                    line_no,
+                    fee.account_id,
+                    *pad_subconto(fee.subconto),
+                    fee.currency_id,
+                    fee.amount,
+                    fee.expense_account_id,
+                )
+                for line_no, fee in enumerate(data.fees, start=1)
+            ],
         )
 
     def _post_conversion(self, company_id: int, conversion_id: int, data: ConversionInput) -> None:
@@ -267,10 +284,9 @@ class ConversionCommands(ChartCommands, DocumentCommands):
             debit_sc=(),
             credit_sc=(),
             text: str = memo,
-            side: ConversionSide | None = None,
-            currency_amount: int | None = None,
+            currency_id: int | None = None,
+            currency_amount: int = 0,
         ) -> PostingInput:
-            in_currency = side is not None and side.currency_id is not None
             return PostingInput(
                 debit,
                 credit,
@@ -278,10 +294,8 @@ class ConversionCommands(ChartCommands, DocumentCommands):
                 debit_sc,
                 credit_sc,
                 text,
-                side.currency_id if in_currency and side else None,
-                Decimal(currency_amount).scaleb(-2)
-                if in_currency and currency_amount is not None
-                else None,
+                currency_id,
+                None if currency_id is None else Decimal(currency_amount).scaleb(-2),
             )
 
         debit_lines = [
@@ -291,7 +305,7 @@ class ConversionCommands(ChartCommands, DocumentCommands):
                 calc.source_value,
                 (),
                 source.subconto,
-                side=source,
+                currency_id=source.currency_id,
                 currency_amount=source.amount,
             )
         ]
@@ -317,31 +331,29 @@ class ConversionCommands(ChartCommands, DocumentCommands):
                 calc.target_value,
                 target.subconto,
                 (),
-                side=target,
+                currency_id=target.currency_id,
                 currency_amount=target.amount,
             )
         ]
-        if data.fee_amount:
-            if data.fee_account_id is not None:
-                fee_account = self._account(company_id, data.fee_account_id)
+        text = tr(BANK_FEE_ITEM)
+        for fee, value in zip(data.fees, calc.fee_values, strict=True):
+            if fee.expense_account_id is not None:
+                expense = self._account(company_id, fee.expense_account_id)
             else:
-                fee_account = self._role_account(
+                expense = self._role_account(
                     company_id, BANK_FEE, tr("Не указан счёт комиссии банка")
                 )
-            text = tr(BANK_FEE_ITEM)
-            sc = self._item_subconto(company_id, fee_account, text)
-            payer = source if data.fee_side == "from" else target
-            fee = line(
-                fee_account["id"],
-                payer.account_id,
-                calc.fee_value,
-                sc,
-                payer.subconto,
+            posting = line(
+                expense["id"],
+                fee.account_id,
+                value or 0,
+                self._item_subconto(company_id, expense, text),
+                fee.subconto,
                 text,
-                side=payer,
-                currency_amount=data.fee_amount,
+                currency_id=fee.currency_id,
+                currency_amount=fee.amount,
             )
-            (debit_lines if data.fee_side == "from" else credit_lines).append(fee)
+            (credit_lines if fee_on_credit(data, fee) else debit_lines).append(posting)
         return debit_lines, credit_lines
 
     def _role_account(self, company_id: int, role: str, missing: str) -> sqlite3.Row:
