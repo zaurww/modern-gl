@@ -109,7 +109,7 @@ class PageHeader(QWidget):
         text.addWidget(self.subtitle)
         outer.addLayout(text, 1)
         self.action_row = QHBoxLayout()
-        self.action_row.setSpacing(6)
+        self.action_row.setSpacing(14)
         outer.addLayout(self.action_row)
 
     def add_action(self, widget: QWidget) -> QWidget:

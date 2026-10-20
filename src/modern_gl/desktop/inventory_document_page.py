@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -83,11 +84,11 @@ HEADERS = {
     UNIT: "Ед.",
     PRICE: "Цена",
     AMOUNT: "Сумма",
-    ACCOUNT: "Счёт расчётов / затрат",
+    ACCOUNT: "Корр. счёт",  # the header stays short; its tooltip says more
     SC1: "Субконто",
     SC2: "",
     SC3: "",
-    MEMO: "Комментарий строки",
+    MEMO: "Комментарий",
 }
 
 DOCUMENT_TYPES = {
@@ -246,6 +247,17 @@ class InventoryLinesModel(QAbstractTableModel):
             if orientation == Qt.Orientation.Horizontal:
                 return tr(HEADERS[self.columns[section]])
             return str(section + 1)
+        if (
+            role == Qt.ItemDataRole.ToolTipRole
+            and orientation == Qt.Orientation.Horizontal
+            and self.columns[section] == ACCOUNT
+        ):
+            return tr("Счёт расчётов / затрат")
+        if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
+            numbers = self.columns[section] in {QUANTITY, PRICE, AMOUNT}  # like their cells
+            return (
+                Qt.AlignmentFlag.AlignRight if numbers else Qt.AlignmentFlag.AlignLeft
+            ) | Qt.AlignmentFlag.AlignVCenter
         return None
 
     def key(self, index: QModelIndex) -> str:
@@ -594,23 +606,29 @@ class InventoryLinesTable(QTableView):
 
     def configure_columns(self) -> None:
         model = self.model()
+        # Fits an ordinary window without a horizontal scroll bar: the item name takes
+        # what is left; subconto positions no account uses are not shown.
         widths = {
-            ITEM: 210,
-            WAREHOUSE: 150,
-            TO_WAREHOUSE: 160,
-            QUANTITY: 110,
-            UNIT: 65,
-            PRICE: 110,
-            AMOUNT: 120,
-            ACCOUNT: 190,
-            SC1: 150,
-            SC2: 140,
-            SC3: 130,
+            WAREHOUSE: 110,
+            TO_WAREHOUSE: 110,
+            QUANTITY: 100,
+            UNIT: 64,
+            PRICE: 84,
+            AMOUNT: 96,
+            ACCOUNT: 130,
+            SC1: 100,
+            SC2: 100,
+            SC3: 100,
         }
+        used = model.s.catalog.used_positions()
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
         for column, key in enumerate(model.columns):
-            if key in widths:
-                self.setColumnWidth(column, widths[key])
-        self.horizontalHeader().setStretchLastSection(True)
+            self.setColumnWidth(column, widths.get(key, 120))
+            if key in {SC1, SC2, SC3}:
+                self.setColumnHidden(column, int(key[-1]) not in used)
+            if key == ITEM:
+                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
 
     def model(self) -> InventoryLinesModel:
         return cast(InventoryLinesModel, super().model())

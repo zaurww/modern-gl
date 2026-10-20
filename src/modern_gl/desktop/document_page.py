@@ -177,6 +177,9 @@ class DocumentPage(QWidget):
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window
+        keep = self.hint.sizePolicy()
+        keep.setRetainSizeWhenHidden(True)  # a posted document: "Итого" stays by the total
+        self.hint.setSizePolicy(keep)
         bottom.addWidget(self.hint, 1)
         total_caption = QLabel(tr("Итого"))
         total_caption.setObjectName("secondary")

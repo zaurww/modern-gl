@@ -88,10 +88,11 @@ class Catalog:
         self._tree_order()
         self.by_code = {a.code: a for a in self.accounts.values() if a.code}
         kinds = self.conn.execute(
-            "SELECT id, name, owner_kind_id FROM subconto_kinds WHERE company_id = ?",
+            "SELECT id, code, name, owner_kind_id FROM subconto_kinds WHERE company_id = ?",
             (self.company_id,),
         ).fetchall()
         self.kinds: dict[int, str] = {r["id"]: r["name"] for r in kinds}
+        self.kind_codes: dict[int, str] = {r["id"]: r["code"] for r in kinds}
         # contracts -> counterparties: elements of a kind belong to elements of another
         self.owner_kinds: dict[int, int] = {
             r["id"]: r["owner_kind_id"] for r in kinds if r["owner_kind_id"] is not None
@@ -165,6 +166,13 @@ class Catalog:
             for v in self._by_kind.get(kind_id, [])
             if v.active and (owner is None or v.owner_id in (None, owner))
         ]
+
+    def owner_title(self, kind_id: int) -> str:
+        """What one owner is called: "Контрагент" (a directory is named in plural)."""
+        owner = self.owner_kinds[kind_id]
+        return (
+            tr("Контрагент") if self.kind_codes.get(owner) == "counterparty" else self.kinds[owner]
+        )
 
     def owner_slot(self, account: AccountInfo, pos: int) -> int | None:
         """Position (0..2) on the account of the owner of position `pos`: where the

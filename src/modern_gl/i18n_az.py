@@ -655,4 +655,14 @@ AZ: dict[str, str] = {
     "у элементов этого справочника не бывает владельца": "bu soraqçanın elementlərinin sahibi olmur",
     "владелец должен быть из справочника «{kind}»": "sahib «{kind}» soraqçasından olmalıdır",
     "«{name}» уже есть в проводках с «{other}»": "«{name}» artıq «{other}» ilə yazılışlarda var",
+    "Контрагент": "Kontragent",
+    # Qt's standard buttons (desktop/qt_texts.py)
+    "ОК": "OK",
+    "Да": "Bəli",
+    "Нет": "Xeyr",
+    "Не сохранять": "Saxlama",
+    "Применить": "Tətbiq et",
+    "Изменить": "Dəyiş",
+    "С валютой строка сама берёт её, и проводка проверяется по ней.": "Valyuta varsa, sətir onu özü götürür və yazılış ona görə yoxlanılır.",
+    "Ins — новый элемент   ·   F2 или двойной щелчок — изменить": "Ins — yeni element   ·   F2 və ya iki dəfə klik — dəyiş",
 }

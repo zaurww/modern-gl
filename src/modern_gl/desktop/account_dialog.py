@@ -46,7 +46,7 @@ class AccountDialog(QDialog):
         self.account = account
         cat = session.catalog
         self.setWindowTitle(tr("Счёт {code}", code=account.short) if account else tr("Новый счёт"))
-        self.setMinimumWidth(520)
+        self.setMinimumWidth(560)
 
         root = QVBoxLayout(self)
         root.setContentsMargins(28, 24, 28, 20)

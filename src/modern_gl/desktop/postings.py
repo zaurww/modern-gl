@@ -978,8 +978,7 @@ class PostingsTable(QTableView):
         model.modelReset.connect(self._fit_currency_columns)
 
     def _fit_currency_columns(self) -> None:
-        """Currency columns appear only while a line hits a currency account; then the
-        subconto columns get narrower, so the amount and memo stay in view."""
+        """Currency columns appear only while a line is in a currency."""
         m = self.model()
         show = any(m.in_currency(r) for r in range(m.rowCount()))
         if show == self._currency_shown:
@@ -987,10 +986,36 @@ class PostingsTable(QTableView):
         self._currency_shown = show
         for col in CURRENCY_COLUMNS:
             self.setColumnHidden(col, not show)
-        widths = (120, 100, 90) if show else (160, 140, 120)
-        for base in (DT, CT):
-            for pos, w in enumerate(widths, start=1):
-                self.setColumnWidth(base + pos, w)
+        self._fit_subconto_widths()
+
+    MEMO_MIN = 200  # the memo keeps room to be read
+    SUBCONTO_WIDTH = (100, 180)  # each subconto column, narrowest and widest
+
+    def _fit_subconto_widths(self) -> None:
+        """Subconto columns share what the window leaves after the fixed columns and the
+        memo: a wide window shows whole names, a narrow one keeps the memo in view."""
+        subconto = [
+            base + pos
+            for base in (DT, CT)
+            for pos in (1, 2, 3)
+            if not self.isColumnHidden(base + pos)
+        ]
+        if not subconto:
+            return
+        fixed = sum(
+            self.columnWidth(c)
+            for c in range(len(HEADERS))
+            if c not in subconto and c != MEMO and not self.isColumnHidden(c)
+        )
+        free = self.viewport().width() - self.verticalHeader().width() - fixed - self.MEMO_MIN
+        low, high = self.SUBCONTO_WIDTH
+        width = max(low, min(high, free // len(subconto)))
+        for col in subconto:
+            self.setColumnWidth(col, width)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_subconto_widths()
 
     def model(self) -> PostingsModel:  # typed accessor
         return cast(PostingsModel, super().model())

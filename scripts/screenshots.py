@@ -21,7 +21,7 @@ from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication
 
 from modern_gl import i18n
-from modern_gl.desktop import theme
+from modern_gl.desktop import qt_texts, theme
 from modern_gl.desktop.app import add_demo_company
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
@@ -39,6 +39,7 @@ def main() -> None:
     i18n.set_language(sys.argv[2] if len(sys.argv) > 2 else "az")
     app = QApplication(sys.argv)
     theme.apply(app)
+    qt_texts.install(app)
     workspace = Workspace(Path(tempfile.mkdtemp()))
     add_demo_company(workspace)
     win = MainWindow(workspace)
@@ -145,6 +146,28 @@ def main() -> None:
     shot("8b_directories")
     directories.refresh(select_kind=session.catalog.by_code["60"].sc_kinds[1])
     shot("8b2_contracts")
+    from modern_gl.desktop.directories_page import ValueDialog
+
+    contracts = session.catalog.by_code["60"].sc_kinds[1]
+    alfa_id = next(v.id for v in session.catalog.values(session.catalog.owner_kinds[contracts]))
+    value_dialog = ValueDialog(
+        session, contracts, i18n.tr("Новый элемент"), "Faktura 15", alfa_id, win
+    )
+    value_dialog.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    value_dialog.grab().save(str(out / "8b3_contract_dialog.png"))
+    value_dialog.close()
+    bank_dialog = ValueDialog(
+        session, banks, i18n.tr("Новый элемент"), "Kapital Bank USD", None, win
+    )
+    bank_dialog.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    bank_dialog.grab().save(str(out / "8b4_bank_dialog.png"))
+    bank_dialog.close()
     win.show_place(("inventory",))
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()

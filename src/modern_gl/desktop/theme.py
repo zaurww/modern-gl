@@ -189,7 +189,7 @@ QTableView QLineEdit {{
 QHeaderView {{ background: {P.surface}; border: none; }}
 QHeaderView::section {{
     background: {P.surface}; color: {P.tertiary}; border: none;
-    border-bottom: 1px solid {P.hairline}; padding: 6px 8px;
+    border-bottom: 1px solid {P.hairline}; padding: 6px 11px;  /* = cell padding + text margin */
 }}
 QHeaderView::section:vertical {{
     color: {P.tertiary}; border: none; border-bottom: 1px solid {P.hairline}; padding: 0 6px;

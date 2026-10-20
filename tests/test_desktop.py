@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QCompleter,
+    QDialog,
     QInputDialog,
     QMessageBox,
     QPushButton,
@@ -532,22 +533,36 @@ def test_add_two_banks_in_directories(window, monkeypatch):
     page.kinds.setCurrentRow(row)
     assert "51" in page.used_in.text()
 
-    answers = iter([("Kapital Bank", True), ("ABB", True)])
-    monkeypatch.setattr(
-        "modern_gl.desktop.directories_page.QInputDialog.getText",
-        staticmethod(lambda *a, **k: next(answers)),
+    # banks are used on 52 (in currency): the dialog asks for a currency too
+    from modern_gl.desktop.directories_page import ValueDialog
+
+    answers = iter([("Kapital Bank USD", "USD"), ("ABB", None), ("ABB (AZN)", None)])
+
+    def fill(dialog: ValueDialog) -> int:
+        name, code = next(answers)
+        dialog.name.setText(name)
+        assert dialog.currency is not None
+        dialog.currency.setCurrentIndex(
+            next(
+                i for i in range(dialog.currency.count()) if dialog.currency.itemText(i)[:3] == code
+            )
+            if code
+            else 0
+        )
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ValueDialog, "exec", fill)
+    page.add_value()
+    page.add_value()
+    cat = window.session.catalog
+    names = {v.name: v.currency_id for v in cat.values(banks)}
+    assert names["Kapital Bank USD"] == window.session.ledger.currency_id(
+        window.session.company_id, "USD"
     )
-    page.add_value()
-    page.add_value()
-    names = [v.name for v in window.session.catalog.values(banks)]
-    assert {"Kapital Bank", "ABB"} <= set(names)
+    assert names["ABB"] is None
 
     # rename keeps history: postings reference the element by id
     abb = next(v for v in window.session.catalog.values(banks) if v.name == "ABB")
-    monkeypatch.setattr(
-        "modern_gl.desktop.directories_page.QInputDialog.getText",
-        staticmethod(lambda *a, **k: ("ABB (AZN)", True)),
-    )
     page.rename_value(abb)
     assert window.session.catalog.value(abb.id).name == "ABB (AZN)"
 

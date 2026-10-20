@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
     QDialog,
-    QDialogButtonBox,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -46,7 +45,9 @@ KIND_ROLE = Qt.ItemDataRole.UserRole
 
 
 class ValueDialog(QDialog):
-    """Name of an element and, for a contract, the counterparty it belongs to."""
+    """Name of an element and what else it has: for a contract, the counterparty it
+    belongs to; for an element of a currency account (a bank account on 52, a foreign
+    supplier on 60), its currency."""
 
     def __init__(
         self,
@@ -56,6 +57,7 @@ class ValueDialog(QDialog):
         name: str = "",
         owner_id: int | None = None,
         parent: QWidget | None = None,
+        currency_id: int | None = None,
     ) -> None:
         super().__init__(parent)
         cat = session.catalog
@@ -72,40 +74,71 @@ class ValueDialog(QDialog):
         form.setVerticalSpacing(10)
         self.name = QLineEdit(name)
         form.addRow(tr("Наименование"), self.name)
-        owner_kind = cat.owner_kinds[kind_id]
-        self.owner = QComboBox()
-        self.owner.setEditable(True)  # type to find among hundreds of counterparties
-        self.owner.addItem(tr("— общий для всех"), None)
-        for v in cat.values(owner_kind):
-            self.owner.addItem(v.name, v.id)
-        completer = QCompleter([self.owner.itemText(i) for i in range(self.owner.count())], self)
-        self.owner.setCompleter(completer)
+        notes = []
+        self.owner: QComboBox | None = None
+        if kind_id in cat.owner_kinds:
+            self.owner = self._owner_box(session, kind_id, owner_id)
+            form.addRow(cat.owner_title(kind_id), self.owner)
+            notes.append(
+                tr("Договор предлагается только вместе со своим контрагентом. Общий — с любым.")
+            )
+        self.currency: QComboBox | None = None
+        if has_currency(session, kind_id):
+            self.currency = QComboBox()
+            self.currency.addItem(tr("— без валюты"), None)
+            for c in cat.active_currencies:
+                self.currency.addItem(c.label, c.id)
+            self.currency.setCurrentIndex(max(self.currency.findData(currency_id), 0))
+            form.addRow(tr("Валюта"), self.currency)
+            notes.append(tr("С валютой строка сама берёт её, и проводка проверяется по ней."))
+        lay.addLayout(form)
+        for text in notes:
+            note = QLabel(text)
+            note.setObjectName("secondary")
+            note.setWordWrap(True)
+            lay.addWidget(note)
+        buttons = QHBoxLayout()  # like the account dialog: quiet Cancel, blue Save
+        buttons.addStretch(1)
+        cancel = button(tr("Отмена"))
+        save = button(tr("Сохранить"), "primary")
+        save.setDefault(True)
+        cancel.clicked.connect(self.reject)
+        save.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(save)
+        lay.addLayout(buttons)
+        self.name.setFocus()
+
+    def _owner_box(self, session: Session, kind_id: int, owner_id: int | None) -> QComboBox:
+        cat = session.catalog
+        box = QComboBox()
+        box.setEditable(True)  # type to find among hundreds of counterparties
+        box.addItem(tr("— общий для всех"), None)
+        for v in cat.values(cat.owner_kinds[kind_id]):
+            box.addItem(v.name, v.id)
+        completer = QCompleter([box.itemText(i) for i in range(box.count())], self)
+        box.setCompleter(completer)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
         completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        index = self.owner.findData(owner_id)
-        self.owner.setCurrentIndex(max(index, 0))
-        form.addRow(cat.kinds[owner_kind], self.owner)
-        lay.addLayout(form)
-        note = QLabel(
-            tr("Договор предлагается только вместе со своим контрагентом. Общий — с любым.")
-        )
-        note.setObjectName("secondary")
-        note.setWordWrap(True)
-        lay.addWidget(note)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        lay.addWidget(buttons)
-        self.name.setFocus()
+        box.setCurrentIndex(max(box.findData(owner_id), 0))
+        return box
 
     def owner_id(self) -> int | None:
         """The chosen counterparty; text that names none of them means common."""
+        if self.owner is None:
+            return None
         text = self.owner.currentText().strip()
         index = self.owner.findText(text, Qt.MatchFlag.MatchFixedString)
         return self.owner.itemData(index) if index > 0 else None
+
+    def currency_id(self) -> int | None:
+        return self.currency.currentData() if self.currency is not None else None
+
+
+def has_currency(session: Session, kind_id: int) -> bool:
+    """Elements of the directory may have a currency: it is used on a currency account."""
+    return any(a.currency for a in session.catalog.accounts_using(kind_id))
 
 
 class DirectoriesPage(QWidget):
@@ -168,7 +201,7 @@ class DirectoriesPage(QWidget):
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
         right.addLayout(self.stack, 1)
-        hint = QLabel(tr("Ins — новый элемент   ·   F2 или двойной щелчок — переименовать"))
+        hint = QLabel(tr("Ins — новый элемент   ·   F2 или двойной щелчок — изменить"))
         hint.setObjectName("tertiary")
         hint.setFont(fonts().small)
         right.addWidget(hint)
@@ -238,7 +271,7 @@ class DirectoriesPage(QWidget):
         widths = []
         owner_kind = cat.owner_kinds.get(kind_id)
         if owner_kind is not None:  # contracts: whose each one is, grouped by counterparty
-            columns.append(Column(cat.kinds[owner_kind], self._owner_name, width=260))
+            columns.append(Column(cat.owner_title(kind_id), self._owner_name, width=260))
             widths.append(260)
             values.sort(key=lambda v: (v.owner_id is not None, sort_key(self._owner_name(v))))
         if any(a.currency for a in accounts):
@@ -289,8 +322,8 @@ class DirectoriesPage(QWidget):
         if kind_id is None:
             return
         kind = self.s.catalog.kinds[kind_id]
-        if kind_id in self.s.catalog.owner_kinds:
-            self._add_owned(kind_id, owner_id)
+        if self._detailed(kind_id):
+            self._add_detailed(kind_id, owner_id)
             return
         name = self._ask(tr("Новый элемент"), tr("Название (справочник «{kind}»):", kind=kind))
         if name:
@@ -299,46 +332,60 @@ class DirectoriesPage(QWidget):
                 tr("Добавлено в «{kind}»: {text}", kind=kind, text=name),
             )
 
-    def _add_owned(self, kind_id: int, owner_id: int | None) -> None:
-        """A contract: its name and its counterparty in one dialog."""
+    def _detailed(self, kind_id: int) -> bool:
+        """Elements with more than a name: a contract's counterparty, a currency."""
+        return kind_id in self.s.catalog.owner_kinds or has_currency(self.s, kind_id)
+
+    def _add_detailed(self, kind_id: int, owner_id: int | None) -> None:
         kind = self.s.catalog.kinds[kind_id]
         dlg = ValueDialog(self.s, kind_id, tr("Новый элемент"), owner_id=owner_id, parent=self)
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
             return
-        name, owner = dlg.name.text().strip(), dlg.owner_id()
+        name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
         if kind_id != self.kind_id():
             self.refresh(select_kind=kind_id)
-        self._apply(
-            lambda: self.s.ledger.add_subconto_value(
-                self.s.company_id, kind_id, name, owner_id=owner
-            ),
-            tr("Добавлено в «{kind}»: {text}", kind=kind, text=name),
-        )
 
-    def _edit_owned(self, value: SubcontoInfo) -> None:
+        def add() -> int:
+            cid = self.s.company_id
+            with transaction(self.s.conn):
+                value_id = self.s.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner)
+                if currency is not None:
+                    self.s.ledger.set_subconto_value_currency(cid, value_id, currency)
+            return value_id
+
+        self._apply(add, tr("Добавлено в «{kind}»: {text}", kind=kind, text=name))
+
+    def _edit_detailed(self, value: SubcontoInfo) -> None:
         dlg = ValueDialog(
-            self.s, value.kind_id, tr("Переименовать"), value.name, value.owner_id, self
+            self.s,
+            value.kind_id,
+            tr("Изменить"),
+            value.name,
+            value.owner_id,
+            self,
+            value.currency_id,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
             return
-        name, owner = dlg.name.text().strip(), dlg.owner_id()
+        name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
 
         def save() -> None:
+            cid = self.s.company_id
             with transaction(self.s.conn):
                 if name != value.name:
-                    self.s.ledger.update_subconto_value(
-                        self.s.company_id, value.id, name, value.code
-                    )
-                if owner != value.owner_id:
-                    self.s.ledger.set_subconto_value_owner(self.s.company_id, value.id, owner)
+                    self.s.ledger.update_subconto_value(cid, value.id, name, value.code)
+                if dlg.owner is not None and owner != value.owner_id:
+                    self.s.ledger.set_subconto_value_owner(cid, value.id, owner)
+                if dlg.currency is not None and currency != value.currency_id:
+                    self.s.ledger.set_subconto_value_currency(cid, value.id, currency)
 
         self._apply(save, tr("Сохранено: {text}", text=name), value.id)
 
     def rename_value(self, value: SubcontoInfo | None) -> None:
         if value is None:
             return
-        if value.kind_id in self.s.catalog.owner_kinds:
-            self._edit_owned(value)
+        if self._detailed(value.kind_id):
+            self._edit_detailed(value)
             return
         name = self._ask(tr("Переименовать"), tr("Новое название:"), value.name)
         if name and name != value.name:
