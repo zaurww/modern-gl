@@ -31,6 +31,7 @@ from PySide6.QtGui import (
     QShortcut,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFileDialog,
     QGraphicsOpacityEffect,
@@ -54,7 +55,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_name, load_document, load_template
-from modern_gl.desktop import icons
+from modern_gl.desktop import icons, theme
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
@@ -334,11 +335,15 @@ class MainWindow(QMainWindow):
 
     def _close_company(self) -> None:
         """Drop all pages of the current company and close its file."""
+        # quietly: clearing moves the current item, and that would open a page again
+        # with this company, whose file is closed right below
+        self.sidebar.nav.blockSignals(True)
+        self.sidebar.nav.clear()
+        self.sidebar.nav.blockSignals(False)
         for page in list(self.pages.values()):
             self.stack.removeWidget(page)
             page.deleteLater()
         self.pages.clear()
-        self.sidebar.nav.clear()
         if self.conn is not None:
             try:
                 if self.company_path is not None:
@@ -373,6 +378,10 @@ class MainWindow(QMainWindow):
         for code, title in LANGUAGES.items():
             act = languages.addAction(("✓  " if code == language() else "    ") + title)
             act.triggered.connect(lambda _=False, c=code: self.set_ui_language(c))
+        looks = menu.addMenu(tr("Оформление"))
+        for name, (title, _) in theme.THEMES.items():
+            act = looks.addAction(("✓  " if name == theme.current_theme() else "    ") + tr(title))
+            act.triggered.connect(lambda _=False, n=name: self.set_ui_theme(n))
         btn = self.sidebar.company
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
@@ -788,6 +797,19 @@ class MainWindow(QMainWindow):
         set_language(code)
         if self.settings:
             self.settings.setValue("language", code)
+        if self.company_path is not None:
+            self.open_company(self.company_path)
+
+    def set_ui_theme(self, name: str) -> None:
+        """Another look at once: the pages are built again in its colors."""
+        if name == theme.current_theme() or not self._confirm_close_all():
+            return
+        theme.set_theme(name)
+        if self.settings:
+            self.settings.setValue("theme", name)
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            theme.apply(app)
         if self.company_path is not None:
             self.open_company(self.company_path)
 

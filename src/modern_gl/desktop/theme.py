@@ -2,23 +2,24 @@
 
 All colors and fonts live here as tokens; widgets never hardcode them.
 
-Two looks share every token but the canvas (MODERN_GL_STYLE, for comparing them):
-"things" — one white plane; "craft" — a soft grey canvas with white rounded sheets
-for tables and lists.
+Themes (THEMES) change some colors of the one palette; the user picks one in the
+company menu. A new theme is one more entry there.
 """
 
 from __future__ import annotations
 
-import os
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap
 from PySide6.QtWidgets import QApplication
 
 
-@dataclass(frozen=True)
+@dataclass
 class Palette:
+    """One object for the whole program: set_theme() changes it in place, so modules
+    that imported P see the new colors."""
+
     window: str = "#FFFFFF"
     sidebar: str = "#F5F6F8"
     surface: str = "#FFFFFF"
@@ -48,20 +49,41 @@ class Palette:
     sheet_padding: str = "0"  # a sheet keeps its rows off its rounded edge
 
 
-STYLE = os.environ.get("MODERN_GL_STYLE", "things")
+# name -> (title in the menu, the colors that differ from Palette)
+THEMES: dict[str, tuple[str, dict[str, str]]] = {
+    "things": ("Things — один белый лист", {}),
+    "craft": (
+        "Craft — серый фон, белые листы",
+        {
+            "window": "#F6F7F9",
+            "canvas": "#F6F7F9",
+            "sidebar": "#EEF0F3",
+            "sidebar_selection": "#E1E4EA",
+            "field": "#FFFFFF",
+            "field_hover": "#FFFFFF",
+            "sheet_border": "#E6E8EC",
+            "sheet_padding": "0 6px",
+        },
+    ),
+}
+DEFAULT_THEME = "things"
 P = Palette()
-if STYLE == "craft":
-    P = replace(
-        P,
-        window="#F6F7F9",
-        canvas="#F6F7F9",
-        sidebar="#EEF0F3",
-        sidebar_selection="#E1E4EA",
-        field="#FFFFFF",
-        field_hover="#FFFFFF",
-        sheet_border="#E6E8EC",
-        sheet_padding="0 6px",
-    )
+_current = DEFAULT_THEME
+
+
+def set_theme(name: str) -> str:
+    """Switch the palette to a theme (an unknown name: the default); returns its name.
+    The look changes once apply() runs and the pages are built again."""
+    global _current
+    _current = name if name in THEMES else DEFAULT_THEME
+    base, changes = Palette(), THEMES[_current][1]
+    for f in fields(Palette):
+        setattr(P, f.name, changes.get(f.name, getattr(base, f.name)))
+    return _current
+
+
+def current_theme() -> str:
+    return _current
 
 
 def _family(*candidates: str) -> str:
@@ -128,7 +150,8 @@ def dot_icon(color: str, size: int = 18, glyph: str = "") -> QIcon:
     return icon
 
 
-STYLESHEET = f"""
+def stylesheet() -> str:
+    return f"""
 * {{ outline: 0; }}
 QMainWindow, QWidget#page {{ background: {P.canvas}; }}
 QToolTip {{
@@ -280,4 +303,4 @@ def apply(app: QApplication) -> None:
     pal.setColor(QPalette.ColorRole.HighlightedText, QColor(P.text))
     pal.setColor(QPalette.ColorRole.PlaceholderText, QColor(P.tertiary))
     app.setPalette(pal)
-    app.setStyleSheet(STYLESHEET)
+    app.setStyleSheet(stylesheet())

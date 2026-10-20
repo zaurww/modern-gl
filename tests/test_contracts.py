@@ -201,6 +201,8 @@ def test_new_element_is_offered_right_in_the_line(firm):
     assert suggestions(cat, "50 / 51 +Kap") == ["+Kap "]
     assert suggestions(cat, "50 / 51 +") == []
     assert suggestions(cat, "50 / 51 Kapital 100") == []  # the amount, not a name
+    assert suggestions(cat, "51 +Pasha / 60 +ARİF 5000 test") == []  # the same after "+"
+    assert suggestions(cat, "51 +Pasha / 60 ARİF 5000") == []
     entry = parse("50 / 51 +Kapital 100", cat)
     assert entry.new_values[0].name == "Kapital"
 

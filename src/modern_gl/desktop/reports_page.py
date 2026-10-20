@@ -10,8 +10,15 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelIndex, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QKeySequence, QShortcut
+from PySide6.QtCore import (
+    QAbstractTableModel,
+    QEvent,
+    QModelIndex,
+    QPersistentModelIndex,
+    Qt,
+    Signal,
+)
+from PySide6.QtGui import QAction, QColor, QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -126,6 +133,7 @@ class ReportModel(QAbstractTableModel):
         super().__init__()
         self.columns: list[Column] = []
         self.rows: list[Any] = []
+        self.two_lines = False
         self.emphasis: Callable[[Any], bool] = lambda r: False
         self.muted: Callable[[Any], bool] = lambda r: False
 
@@ -143,11 +151,18 @@ class ReportModel(QAbstractTableModel):
     def columnCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         return 0 if parent is not None and parent.isValid() else len(self.columns)
 
+    def title(self, section: int, two_lines: bool | None = None) -> str:
+        """A narrow window puts the amounts' headers in two lines: "İlkin qalıq / Dt"."""
+        title = self.columns[section].title
+        if self.columns[section].money and (self.two_lines if two_lines is None else two_lines):
+            return "\n".join(title.rsplit(" ", 1))
+        return title
+
     def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if orientation != Qt.Orientation.Horizontal:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
-            return self.columns[section].title
+            return self.title(section)
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return RIGHT if self.columns[section].money or self.columns[section].right else LEFT
         return None
@@ -177,6 +192,9 @@ class ReportModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.UserRole:
             return row
         return None
+
+
+NAME_MIN = 180  # px an account name keeps before the amounts give up width
 
 
 class ReportPage(QWidget):
@@ -239,6 +257,10 @@ class ReportPage(QWidget):
         self.table.doubleClicked.connect(lambda idx: self.drill(idx.data(Qt.ItemDataRole.UserRole)))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._context_menu)
+        # a narrow window: amounts give up some width
+        self._viewport = self.table.viewport()
+        self._viewport.installEventFilter(self)
+        self._floors: dict[int, int] = {}
 
         self.empty = EmptyState("○", tr("Нет данных"), tr("За выбранный период движений не было."))
         self.stack = QStackedLayout()
@@ -302,6 +324,49 @@ class ReportPage(QWidget):
                 self.table.setColumnWidth(i, col.width)
             else:
                 hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
+        self._floors = {
+            i: self._content_width(i) for i, col in enumerate(self.model.columns) if col.money
+        }
+        self._fit_columns()
+
+    def _content_width(self, column: int) -> int:
+        """The widest amount of a column (bold totals included) or line of its header
+        put in two lines."""
+        bold = self.table.font()
+        bold.setBold(True)
+        metrics = QFontMetrics(bold)
+        lines = self.model.title(column, two_lines=True).split("\n")
+        widest = max(metrics.horizontalAdvance(line) for line in lines)
+        for r in range(min(self.model.rowCount(), 2000)):
+            text = self.model.data(self.model.index(r, column), Qt.ItemDataRole.DisplayRole)
+            widest = max(widest, metrics.horizontalAdvance(str(text or "")))
+        return widest + 28  # the cell padding of the theme
+
+    def _fit_columns(self) -> None:
+        """Amounts are 120 px wide while the window allows; in a narrow one they shrink
+        to their widest number, so the names keep at least NAME_MIN px."""
+        if not self._floors:
+            return
+        columns = self.model.columns
+        fixed = sum(c.width for i, c in enumerate(columns) if c.width and i not in self._floors)
+        names = sum(1 for c in columns if not c.width)
+        spare = self.table.viewport().width() - fixed - NAME_MIN * names
+        each = spare // len(self._floors)
+        metrics = QFontMetrics(self.table.horizontalHeader().font())
+        two_lines = False
+        for i, floor in self._floors.items():
+            width = max(floor, min(columns[i].width, each))
+            self.table.setColumnWidth(i, width)
+            title = metrics.horizontalAdvance(self.model.title(i, False))
+            two_lines |= width < columns[i].width and title + 24 > width
+        if two_lines != self.model.two_lines:
+            self.model.two_lines = two_lines
+            self.model.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(columns) - 1)
+
+    def eventFilter(self, watched, event) -> bool:
+        if watched is self._viewport and event.type() == QEvent.Type.Resize:
+            self._fit_columns()
+        return super().eventFilter(watched, event)
 
     def _drill_current(self) -> None:
         idx = self.table.currentIndex()

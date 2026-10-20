@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QDialog, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
@@ -900,3 +900,85 @@ def test_posting_incomplete_lines_names_the_missing_field(inventory_demo):
         inv.post_issue(cid, "2026-01-11", [IssueLine(demo.item, demo.main, "1", None)])
     with pytest.raises(ValidationError, match="строка 1: не указан склад-получатель"):
         inv.post_transfer(cid, "2026-01-11", [TransferLine(demo.item, demo.main, None, "1")])
+
+
+@pytest.fixture
+def receipt_page(inventory_demo, conn, qtbot):
+    demo = inventory_demo
+    session = Session(
+        conn,
+        demo.inventory.ledger,
+        demo.company_id,
+        "Склад",
+        Catalog(conn, demo.company_id),
+        working_date=date(2026, 1, 10),
+    )
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    return page
+
+
+def test_excel_lines_paste_into_a_receipt_by_header(inventory_demo, receipt_page):
+    """Columns in any order; a price is multiplied by the quantity, a sum is taken as is."""
+    demo, model = inventory_demo, receipt_page.model
+    receipt_page.paste(
+        "Склад\tТовар\tКол-во\tЕд.\tЦена\tСумма\tСубконто\n"
+        "Основной\tТовар A\t2\tшт\t1 000,50\t\tПоставщик\n"
+        "Резервный\tB\t3,5\tшт\t\t1 500,00\tПоставщик\n"
+    )
+    assert receipt_page.error.isHidden()
+    first, second = model.rows[:2]
+    assert (first.item_id, first.warehouse_id) == (demo.item, demo.main)
+    assert first.quantity == 2 * QUANTITY_FACTOR
+    assert first.amount == 200_100  # 2 × 1 000.50
+    assert (second.item_id, second.warehouse_id) == (demo.other_item, demo.reserve)
+    assert second.quantity == 3_500_000
+    assert second.amount == 150_000
+    assert first.offset_subconto[0] == second.offset_subconto[0] == demo.supplier
+    assert len(model.to_inputs()) == 2  # complete: can be posted
+
+
+def test_excel_paste_without_header_follows_the_table(inventory_demo, receipt_page):
+    model = receipt_page.model
+    receipt_page.paste("Товар A\tОсновной\t2\tшт\t\t300")  # the unit column is skipped
+    row = model.rows[0]
+    assert (row.item_id, row.warehouse_id) == (inventory_demo.item, inventory_demo.main)
+    assert (row.quantity, row.amount) == (2 * QUANTITY_FACTOR, 30_000)
+
+
+def test_excel_paste_adds_new_items_warehouses_and_subconto(
+    inventory_demo, receipt_page, monkeypatch
+):
+    from modern_gl.desktop.inventory_document_page import NewNamesDialog
+
+    monkeypatch.setattr(NewNamesDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    s, model = receipt_page.s, receipt_page.model
+    receipt_page.paste(
+        "Товар\tСклад\tКоличество\tЕд.\tСумма\tСубконто\n"
+        "Товар C\tНовый склад\t5\tкг\t500\tНовый поставщик\n"
+        "Товар C\tНовый склад\t1\tкг\t100\tНовый поставщик\n"
+    )
+    assert receipt_page.error.isHidden()
+    items = {c.label: c for c in item_choices(s.conn, s.company_id)}
+    assert items["Товар C"].unit == "кг"  # the pasted unit, made new
+    first, second = model.rows[:2]
+    assert first.item_id == second.item_id == items["Товар C"].id  # added once
+    assert first.warehouse_id == second.warehouse_id is not None
+    assert first.offset_subconto[0] == second.offset_subconto[0] is not None
+    assert s.catalog.value(first.offset_subconto[0]).name == "Новый поставщик"
+    assert first.amount == 50_000
+
+
+def test_inventory_lines_copy_for_excel_and_back(inventory_demo, receipt_page, qtbot):
+    receipt_page.paste("Товар\tСклад\tКоличество\tСумма\nТовар A\tОсновной\t2\t300\n")
+    text = receipt_page.model.copy_text(receipt_page._shown)
+    other = InventoryDocumentPage(receipt_page.s, doc_type="receipt")
+    qtbot.addWidget(other)
+    other.paste(text)
+    pasted, original = other.model.rows[0], receipt_page.model.rows[0]
+    assert (pasted.item_id, pasted.warehouse_id, pasted.quantity, pasted.amount) == (
+        original.item_id,
+        original.warehouse_id,
+        original.quantity,
+        original.amount,
+    )

@@ -200,7 +200,7 @@ def test_osv_and_card_show_amounts_in_currency(session, qtbot):
 
     card = CardPage(session, acc52, params)
     qtbot.addWidget(card)
-    headers = [card.model.headerData(i, Qt.Orientation.Horizontal) for i in range(7)]
+    headers = [card.model.columns[i].title for i in range(7)]
     assert headers[4:7] == ["Валюта", "Дт в валюте", "Кт в валюте"]
     assert card.model.index(0, 5).data() == "100.00"
     assert "USD 100.00 Дт" in card.footer.text()

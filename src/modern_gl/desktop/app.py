@@ -41,9 +41,10 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Modern GL")
     app.setOrganizationName("ModernGL")
+    settings = QSettings()
+    theme.set_theme(str(settings.value("theme", theme.DEFAULT_THEME)))
     theme.apply(app)
     qt_texts.install(app)
-    settings = QSettings()
     lang = str(settings.value("language", i18n.DEFAULT))
     i18n.set_language(lang if lang in i18n.LANGUAGES else i18n.DEFAULT)
 

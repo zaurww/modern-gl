@@ -538,17 +538,17 @@ def _suggest_subconto(
     last = n == len(slots) - 1
     tail = " " if credit and last else (" / " if last else ", ")
     offered = catalog.values(kind, owner)
+    name = typed.strip()
+    # on the Kt side the amount and the memo may follow any subconto: "Бета 400 Услуги"
+    amount_typed = credit and any(_number(w) for w in name.split()[1:])
     if typed.startswith(NEW):  # "+Name": only the new element, once the name is typed
-        if not typed[1:].strip():
+        if not name[1:].strip() or amount_typed:
             return Suggestions(start)
-        return Suggestions(start, _new_value(catalog.kinds[kind], typed[1:], tail), True)
+        return Suggestions(start, _new_value(catalog.kinds[kind], name[1:], tail), True)
     first = [v for v in recent(account.id, pos + 1) if v in {o.id for o in offered}]
     ordered = [catalog.value(v) for v in first] + [v for v in offered if v.id not in first]
     items = [Suggestion(v.name, v.name + tail) for v in ordered]
     found = _filter(items, typed, start)
-    name = typed.strip()
-    # after the last Kt subconto come the amount and the memo: "Бета 400 Услуги" is no name
-    amount_typed = credit and last and any(_number(w) for w in name.split()[1:])
     known = any(fold(v.name) == fold(name) for v in offered)
     if (name or not offered) and not known and not amount_typed:
         found.items += _new_value(catalog.kinds[kind], name, tail)

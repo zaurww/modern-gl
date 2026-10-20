@@ -20,7 +20,10 @@ from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
     QApplication,
+    QComboBox,
     QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -43,7 +46,7 @@ from modern_gl.application.inventory import (
     to_quantity,
 )
 from modern_gl.desktop.inventory_page import ItemDialog
-from modern_gl.desktop.postings import attach_list
+from modern_gl.desktop.postings import attach_list, plain_number
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, money, to_qdate
@@ -51,7 +54,15 @@ from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
 from modern_gl.i18n import fold, tr
-from modern_gl.reporting.inventory import Choice, ItemChoice, item_choices, warehouse_choices
+from modern_gl.i18n_az import AZ
+from modern_gl.reporting.inventory import (
+    Choice,
+    ItemChoice,
+    item_choices,
+    stock_account_choices,
+    unit_choices,
+    warehouse_choices,
+)
 
 ITEM = "item"
 WAREHOUSE = "warehouse"
@@ -101,8 +112,64 @@ DOCUMENT_TYPES = {
 
 HINT = (
     "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
+    "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   Ctrl+S — сохранить   ·   "
+    "Ctrl+Enter — провести"
 )
+
+
+def _names(*sources: str) -> set[str]:
+    """A header in Russian and in Azerbaijani, folded for matching."""
+    return {fold(name) for src in sources for name in (src, AZ.get(src, src))}
+
+
+# Excel header -> column; "Субконто" columns go in a row after the account
+PASTE_HEADERS = [
+    (_names("Товар", "Наименование", "Номенклатура", "Mal", "Malın adı", "Ad"), ITEM),
+    (_names("Склад", "Anbar"), WAREHOUSE),
+    (_names("Склад-получатель"), TO_WAREHOUSE),
+    (_names("Количество", "Кол-во", "Miqdar"), QUANTITY),
+    (_names("Ед.", "Ед", "Единица", "Единица измерения", "Vahid", "Ölçü vahidi"), UNIT),
+    (_names("Цена", "Qiymət"), PRICE),
+    (_names("Сумма", "Məbləğ"), AMOUNT),
+    (_names("Корр. счёт", "Счёт", "Hesab"), ACCOUNT),
+    (_names("Комментарий", "Содержание", "Şərh", "Məzmun"), MEMO),
+]
+SUBCONTO_HEADERS = _names("Субконто", "Subkonto")
+# accounts before their subconto, the quantity before a price, a pasted amount over a price
+PASTE_ORDER = [ITEM, WAREHOUSE, TO_WAREHOUSE, QUANTITY, ACCOUNT, SC1, SC2, SC3, PRICE, AMOUNT]
+
+
+class UnknownName(LookupError):
+    """A pasted name that is not in its list yet: an item, a warehouse or a subconto."""
+
+    def __init__(self, key: str, text: str, kind_id: int | None = None) -> None:
+        super().__init__(text)
+        self.key, self.text, self.kind_id = key, text, kind_id
+
+
+@dataclass
+class InventoryPaste:
+    rows: int = 0
+    errors: list[str] = field(default_factory=list)
+    # row, column key, name, subconto kind (None for an item or a warehouse)
+    unknown: list[tuple[int, str, str, int | None]] = field(default_factory=list)
+    units: dict[str, str] = field(default_factory=dict)  # a new item -> its pasted unit
+
+
+def paste_columns(cells: list[str], columns: list[str]) -> list[str | None] | None:
+    """The columns of a header line, or None if the line is not a header."""
+    result: list[str | None] = []
+    position = 0
+    for cell in cells:
+        words = fold(cell.strip()).split()
+        name = " ".join(words)
+        key = next((k for names, k in PASTE_HEADERS if name in names), None)
+        if key is None and words and words[0] in SUBCONTO_HEADERS:
+            digits = [int(w) for w in words if w.isdigit()]
+            position = digits[0] if digits else position + 1
+            key = f"sc{position}" if 1 <= position <= 3 else None
+        result.append(key if key in columns else None)
+    return result if sum(k is not None for k in result) >= 2 else None
 
 
 @dataclass
@@ -394,6 +461,128 @@ class InventoryLinesModel(QAbstractTableModel):
             ):
                 row.offset_subconto[position] = None
 
+    # ---- Excel ---------------------------------------------------------------------
+
+    def parse(self, row_index: int, key: str, text: str):
+        """The value of a cell from pasted text. Raises UnknownName for a new name."""
+        text = text.strip()
+        if key in {ITEM, WAREHOUSE, TO_WAREHOUSE}:
+            value = _resolve_choice(self.choices(row_index, key), text)
+            if value is None:
+                raise UnknownName(key, text)
+            return value
+        if key == ACCOUNT:
+            return self.s.catalog.resolve_account(text).id
+        if key in {SC1, SC2, SC3}:
+            kind_id = self.kind_at(row_index, key)
+            if kind_id is None:
+                raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
+            value = self.s.catalog.resolve_value(kind_id, text, self.owner_at(row_index, key))
+            if value is None:
+                raise UnknownName(key, text, kind_id)
+            return value
+        if key == QUANTITY:
+            value = to_quantity(plain_number(text))
+        elif key in {PRICE, AMOUNT}:
+            value = to_minor(plain_number(text))
+        else:
+            return text
+        if value <= 0:
+            raise ValueError(tr("должно быть больше нуля: {text}", text=text))
+        return value
+
+    def paste(self, text: str, start_row: int, start_column: int, shown) -> InventoryPaste:
+        """Lines copied from Excel become lines of the document: by the header line if
+        there is one (Товар, Количество, Цена, Сумма… in any order), else in the order
+        of the table from the current column. `shown(column)` tells if it is visible.
+        One line goes into the current row; more fill it if empty, then new rows."""
+        lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+        while lines and not lines[-1].strip():
+            lines.pop()
+        cells = [line.split("\t") for line in lines]
+        result = InventoryPaste()
+        if not cells or self.read_only:
+            return result
+        mapping = paste_columns(cells[0], self.columns)
+        if mapping is not None:
+            cells = cells[1:]
+        target = start_row
+        for n, line in enumerate(cells, start=1):
+            if not any(cell.strip() for cell in line):
+                continue
+            needs_row = target >= len(self.rows) or not self.rows[target].is_empty()
+            if (len(cells) > 1 or target >= len(self.rows)) and needs_row:
+                self.insert_row(target)
+            keys = mapping or self._columns_in_order(target, start_column, shown)
+            pasted = {
+                key: cell.strip()
+                for key, cell in zip(keys, line, strict=False)
+                if key is not None and cell.strip()
+            }
+            extra = [cell.strip() for cell in line[len(keys) :] if cell.strip()]
+            if extra:
+                result.errors.append(tr("строка {n}: лишнее значение «{text}»", n=n, text=extra[0]))
+            self._paste_line(target, pasted, n, result)
+            result.rows += 1
+            target += 1
+        self.changed.emit()
+        return result
+
+    def _columns_in_order(self, row_index: int, start: int, shown) -> list[str]:
+        """Without a header the cells follow the visible columns of the table
+        (subconto only as far as the line's account has them)."""
+        return [
+            key
+            for column, key in enumerate(self.columns)
+            if column >= start
+            and shown(column)
+            and (self.editable(key) or key == UNIT)
+            and self.applies(row_index, key)
+        ]
+
+    def _paste_line(self, row_index: int, pasted: dict[str, str], n: int, result) -> None:
+        for key in PASTE_ORDER:
+            if key not in pasted or not self.editable(key):
+                continue
+            if key == PRICE and AMOUNT in pasted:
+                continue  # the amount is exact; a price is rounded
+            try:
+                value = self.parse(row_index, key, pasted[key])
+                self.setData(self.index(row_index, self.columns.index(key)), value)
+            except UnknownName as e:
+                result.unknown.append((row_index, key, e.text, e.kind_id))
+                if key == ITEM and UNIT in pasted:
+                    result.units[e.text] = pasted[UNIT]
+            except (LookupError, ValueError, TypeError, LedgerError) as e:
+                result.errors.append(tr("строка {n}: {error}", n=n, error=str(e).strip("'\"")))
+        if MEMO in pasted and self.editable(MEMO):
+            self.setData(self.index(row_index, self.columns.index(MEMO)), pasted[MEMO])
+        row = self.rows[row_index]
+        if row.warehouse_id is None and len(self.warehouses) == 1:  # the only one there is
+            row.warehouse_id = next(iter(self.warehouses))
+
+    def copy_text(self, shown) -> str:
+        """The lines as tab-separated text with a header, for Excel."""
+        columns = [c for c in range(len(self.columns)) if shown(c)]
+
+        def title(key: str) -> str:
+            return f"{tr('Субконто')} {key[-1]}" if key in {SC1, SC2, SC3} else tr(HEADERS[key])
+
+        lines = ["\t".join(title(self.columns[c]) for c in columns)]
+        for r, row in enumerate(self.rows):
+            if row.is_empty():
+                continue
+            values = []
+            for c in columns:
+                key = self.columns[c]
+                if key in LIST_KEYS:
+                    filled = self._edit_value(r, key) is not None
+                    values.append(self._display_text(r, key) if filled else "")
+                else:
+                    values.append(str(self._edit_value(r, key) or ""))
+            lines.append("\t".join(values))
+        return "\n".join(lines) + "\n"
+
     def insert_row(self, at: int | None = None, row: InventoryGridRow | None = None) -> int:
         at = len(self.rows) if at is None else at
         self.beginInsertRows(QModelIndex(), at, at)
@@ -675,6 +864,38 @@ class InventoryLinesTable(QTableView):
         super().keyPressEvent(event)
 
 
+class NewNamesDialog(QDialog):
+    """Names pasted from Excel that are not in the lists yet: add them all at once.
+    New items need a unit (pick one or type a new one) and a stock account."""
+
+    def __init__(self, session: Session, listing: str, items: bool, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("Новые элементы справочников"))
+        self.setMinimumWidth(440)
+        form = QFormLayout(self)
+        text = QLabel(tr("Этих элементов нет в справочниках. Добавить?\n\n{names}", names=listing))
+        text.setWordWrap(True)
+        form.addRow(text)
+        self.unit = QComboBox()
+        self.unit.setEditable(True)
+        for unit in unit_choices(session.conn, session.company_id):
+            self.unit.addItem(unit.label, unit.id)
+        if not self.unit.count():
+            self.unit.setEditText(tr("шт"))
+        self.account = QComboBox()
+        for account in stock_account_choices(session.conn, session.company_id):
+            self.account.addItem(account.label, account.id)
+        if items:
+            form.addRow(tr("Единица новых товаров"), self.unit)
+            form.addRow(tr("Счёт запасов"), self.account)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+
 class InventoryDocumentPage(QWidget):
     saved = Signal(int)
     close_requested = Signal()
@@ -786,6 +1007,8 @@ class InventoryDocumentPage(QWidget):
         self._grid_shortcut("Ins", self._insert_row, while_editing=True)
         self._grid_shortcut("F9", self._duplicate_row, while_editing=True)
         self._grid_shortcut("Del", self._remove_row)
+        self._grid_shortcut("Ctrl+V", self.paste)  # inside a cell editor: its own paste
+        self._grid_shortcut("Ctrl+C", self.copy)
 
         if document_id is None:
             self._set_new()
@@ -855,6 +1078,102 @@ class InventoryDocumentPage(QWidget):
         if self.table.state() == QAbstractItemView.State.EditingState and editor is not None:
             self.table.commitData(editor)
             self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
+
+    # ---- clipboard -----------------------------------------------------------------
+
+    def _shown(self, column: int) -> bool:
+        return not self.table.isColumnHidden(column)
+
+    def paste(self, text: str | None = None) -> None:
+        """Lines copied from Excel become lines of the document."""
+        if self.model.read_only or self.doc_type == "landed_cost":
+            return
+        text = QApplication.clipboard().text() if text is None else text
+        if not text.strip():
+            return
+        self.error.hide()
+        current = self.table.currentIndex()
+        row, column = (current.row(), current.column()) if current.isValid() else (0, 0)
+        result = self.model.paste(text, row, column, self._shown)
+        problems = list(result.errors)
+        if result.unknown:
+            try:
+                added = self._add_unknown(result)
+            except (LedgerError, LookupError) as exc:
+                added, problems = False, [*problems, str(exc)]
+            if not added:
+                problems += [
+                    tr("нет в справочнике: {text}", text=text) for _, _, text, _ in result.unknown
+                ]
+        if problems:
+            more = len(problems) - 6
+            self.show_error(
+                "\n".join(problems[:6]) + (f"\n{tr('и ещё {n}', n=more)}" if more > 0 else "")
+            )
+        self.s.notify(tr("Вставлено строк: {n}", n=result.rows))
+
+    def _add_unknown(self, result: InventoryPaste) -> bool:
+        """Add the new items, warehouses and subconto in one go and put them in place."""
+        names: dict[tuple[str, int | None, str], None] = {}
+        for _, key, text, kind_id in result.unknown:
+            group = ITEM if key == ITEM else WAREHOUSE if kind_id is None else "sc"
+            names[(group, kind_id, text)] = None
+        titles = {ITEM: tr("Товар"), WAREHOUSE: tr("Склад")}
+        listing = "\n".join(
+            f"{titles[group] if kind_id is None else self.s.catalog.kinds[kind_id]}: {text}"
+            for group, kind_id, text in list(names)[:12]
+        )
+        items = any(group == ITEM for group, _, _ in names)
+        dialog = NewNamesDialog(self.s, listing, items, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        if items and dialog.account.currentData() is None:
+            raise LookupError(tr("В плане счетов нет счёта с субконто Товар и Склад"))
+        units: dict[str, int] = {}
+        created: dict[tuple, int] = {}
+        cid = self.s.company_id
+        for row, key, text, kind_id in result.unknown:
+            if key == ITEM:
+                if (ITEM, text) not in created:
+                    unit = self._unit(result.units.get(text) or dialog.unit.currentText(), units)
+                    account = int(dialog.account.currentData())
+                    created[(ITEM, text)] = self.inventory.add_item(cid, text, unit, account)
+                value = created[(ITEM, text)]
+            elif kind_id is None:  # a warehouse
+                if (WAREHOUSE, text) not in created:
+                    created[(WAREHOUSE, text)] = self.inventory.add_warehouse(cid, text)
+                value = created[(WAREHOUSE, text)]
+            else:  # a contract belongs to the counterparty its line has by then
+                owner = self.model.owner_at(row, key)
+                if (kind_id, text, owner) not in created:
+                    value_id = self.s.ledger.add_subconto_value(cid, kind_id, text, owner_id=owner)
+                    self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
+                    created[(kind_id, text, owner)] = value_id
+                value = created[(kind_id, text, owner)]
+            self.s.catalog.reload()
+            self.model.refresh_choices()
+            self.model.setData(self.model.index(row, self.model.columns.index(key)), value)
+        return True
+
+    def _unit(self, text: str, made: dict[str, int]) -> int:
+        """A unit by its code or name; a new one if there is none."""
+        text = text.strip()
+        choices = [(c.id, c.label) for c in unit_choices(self.s.conn, self.s.company_id)]
+        try:
+            found = _resolve_choice(choices, text) if text else None
+        except LookupError:
+            found = None
+        if found is None:
+            if not text:
+                raise LookupError(tr("Заполните название и единицу"))
+            if fold(text) not in made:
+                made[fold(text)] = self.inventory.add_unit(self.s.company_id, text, text)
+            found = made[fold(text)]
+        return found
+
+    def copy(self) -> None:
+        QApplication.clipboard().setText(self.model.copy_text(self._shown))
+        self.s.notify(tr("Строки скопированы — их можно вставить в Excel"))
 
     def _connect_delegate(self) -> None:
         self.delegate.error.connect(self.show_error)

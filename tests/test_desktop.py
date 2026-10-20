@@ -19,7 +19,7 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
-from modern_gl.desktop.reports_page import SectionRow
+from modern_gl.desktop.reports_page import OsvPage, SectionRow
 from modern_gl.infrastructure.db import connect
 from modern_gl.infrastructure.workspace import TRASH, Workspace
 from modern_gl.reporting.reports import trial_balance
@@ -443,6 +443,10 @@ def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch)
     demo = next(c for c in workspace.companies() if c.name == "ДЕМО ООО")
     window.open_company(demo.path)
     assert current_page(window).model.rowCount() == 13
+    # no page is left over from the company that was closed (its file is closed too)
+    assert all(getattr(p, "s", window.session) is window.session for p in window.pages.values())
+    window.show_place(("osv",))
+    assert current_page(window).model.rowCount() > 0
 
 
 def test_delete_company_needs_typed_name(window, workspace, monkeypatch):
@@ -706,3 +710,33 @@ def test_make_template_from_document_and_edit_formula(window, monkeypatch):
     assert templates.title() == "Шаблоны"
     saved = next(t for t in templates.model.rows if t.name == "Kassaya mədaxil")
     assert [ln.formula for ln in saved.lines] == ["S", "S*3/100"]
+
+
+def test_osv_fits_a_narrow_window(window, qtbot):
+    """Amounts give up width so the names stay readable; headers go in two lines."""
+    page = OsvPage(window.session)
+    qtbot.addWidget(page)
+    page.resize(1600, 700)
+    page.show()
+    qtbot.waitUntil(lambda: page.table.viewport().width() > 1400)
+    assert not page.model.two_lines
+    page.table.setMaximumWidth(900)  # the table of a narrow window
+    qtbot.waitUntil(lambda: page.model.two_lines)
+    table = page.table
+    names = next(i for i, c in enumerate(page.model.columns) if not c.width)
+    assert table.columnWidth(names) >= 150
+    assert table.horizontalHeader().length() <= table.viewport().width()
+
+
+def test_theme_switches_at_once_and_keeps_the_company(window):
+    from modern_gl.desktop import theme
+
+    try:
+        window.set_ui_theme("craft")
+        assert theme.current_theme() == "craft"
+        assert theme.P.canvas == theme.THEMES["craft"][1]["canvas"]
+        assert window.session.company_name == "ДЕМО ООО"  # the same company, pages anew
+        assert current_page(window).model.rowCount() == 13
+    finally:
+        theme.set_theme(theme.DEFAULT_THEME)
+    assert theme.P.canvas == "#FFFFFF"

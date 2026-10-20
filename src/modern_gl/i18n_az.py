@@ -170,9 +170,11 @@ AZ: dict[str, str] = {
         "Ctrl+S — saxla   ·   Ctrl+Enter — keçir   ·   Ctrl+Shift+Enter — keçir və yenisi"
     ),
     "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
+    "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   Ctrl+S — сохранить   ·   "
+    "Ctrl+Enter — провести": (
         "Enter / Tab — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
-        "Del — sətri sil   ·   Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
+        "Del — sətri sil   ·   Ctrl+V — Excel-dən yapışdır   ·   Ctrl+S — saxla   ·   "
+        "Ctrl+Enter — keçir"
     ),
     "Дата": "Tarix",
     "Книга": "Kitab",
@@ -669,4 +671,12 @@ AZ: dict[str, str] = {
     "+ Добавить «{name}» в «{kind}»": "+ «{kind}»: «{name}» əlavə et",
     "Ещё": "Daha çox",
     "Действия с документом": "Sənədlə əməliyyatlar",
+    "Строки скопированы — их можно вставить в Excel": "Sətirlər kopyalandı — onları Excel-ə yapışdırmaq olar",
+    "должно быть больше нуля: {text}": "sıfırdan böyük olmalıdır: {text}",
+    "шт": "ədəd",
+    "Единица новых товаров": "Yeni malların ölçü vahidi",
+    "нет в справочнике: {text}": "soraqçada yoxdur: {text}",
+    "Оформление": "Görünüş",
+    "Things — один белый лист": "Things — bir ağ vərəq",
+    "Craft — серый фон, белые листы": "Craft — boz fon, ağ vərəqlər",
 }
