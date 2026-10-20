@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QColor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -36,7 +36,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.currencies import CurrencyInfo, Rate, latest_rates, list_rates
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
@@ -206,7 +206,7 @@ class CurrenciesPage(QWidget):
             item.setData(CURRENCY_ROLE, c.id)
             item.setSizeHint(QSize(0, 34))
             if not c.active:
-                item.setForeground(Qt.GlobalColor.gray)
+                item.setForeground(QColor(P.tertiary))
             self.currencies.addItem(item)
             if c.id == current:
                 self.currencies.setCurrentItem(item)

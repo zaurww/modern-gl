@@ -94,12 +94,13 @@ def more_button(items: Callable[[], list[MenuItem]], tooltip: str = "") -> QPush
 class Chip(QLabel):
     """Rounded status label: draft / posted / storno."""
 
+    # palette names, read when shown: themes change the colors
     TONES: ClassVar[dict[str, tuple[str, str]]] = {
-        "neutral": (P.secondary, P.subtle),
-        "green": (P.green, P.green_soft),
-        "amber": (P.amber, P.amber_soft),
-        "red": (P.red, P.red_soft),
-        "blue": (P.accent, P.accent_soft),
+        "neutral": ("secondary", "subtle"),
+        "green": ("green", "green_soft"),
+        "amber": ("amber", "amber_soft"),
+        "red": ("red", "red_soft"),
+        "blue": ("accent", "accent_soft"),
     }
 
     def __init__(self, text: str = "", tone: str = "neutral") -> None:
@@ -108,7 +109,7 @@ class Chip(QLabel):
         self.set(text, tone)
 
     def set(self, text: str, tone: str) -> None:
-        fg, bg = self.TONES[tone]
+        fg, bg = (getattr(P, name) for name in self.TONES[tone])
         self.setText(text)
         self.setStyleSheet(
             f"color: {fg}; background: {bg}; border-radius: 10px; padding: 3px 10px;"
@@ -206,16 +207,16 @@ def ask_date(parent: QWidget, title: str, prompt: str, default: date) -> date | 
     return edited_date(edit)
 
 
-# Account classes (level 1 of statement classification): order, name, color.
+# Account classes (level 1 of statement classification): order, name, color (a palette name).
 ACCOUNT_CLASSES = [
-    ("asset", "Активы", P.accent),
-    ("liability", "Обязательства", P.amber),
-    ("equity", "Капитал", P.violet),
-    ("revenue", "Доходы", P.green),
-    ("expense", "Расходы", P.red),
+    ("asset", "Активы", "accent"),
+    ("liability", "Обязательства", "amber"),
+    ("equity", "Капитал", "violet"),
+    ("revenue", "Доходы", "green"),
+    ("expense", "Расходы", "red"),
 ]
 CLASS_ORDER: dict[str | None, int] = {code: i for i, (code, _, _) in enumerate(ACCOUNT_CLASSES)}
-_CLASS_ICONS: dict[str | None, QIcon] = {}
+_CLASS_ICONS: dict[str, QIcon] = {}
 
 
 def class_name(account_class: str | None) -> str:
@@ -240,7 +241,8 @@ def type_choices() -> list[tuple[str | None, str | None, str]]:
 
 
 def class_icon(account_class: str | None) -> QIcon:
-    if account_class not in _CLASS_ICONS:
-        colors: dict[str | None, str] = {code: color for code, _, color in ACCOUNT_CLASSES}
-        _CLASS_ICONS[account_class] = dot_icon(colors.get(account_class, P.hairline), 10)
-    return _CLASS_ICONS[account_class]
+    colors: dict[str | None, str] = {code: color for code, _, color in ACCOUNT_CLASSES}
+    color = getattr(P, colors.get(account_class, "hairline"))
+    if color not in _CLASS_ICONS:
+        _CLASS_ICONS[color] = dot_icon(color, 10)
+    return _CLASS_ICONS[color]
