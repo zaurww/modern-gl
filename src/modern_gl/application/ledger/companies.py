@@ -9,6 +9,7 @@ from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.application.ledger.inputs import DEFAULT_LAYERS
 from modern_gl.domain.currency import DEFAULT_CURRENCIES, currency_name
 from modern_gl.domain.dates import iso_date
+from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
@@ -37,6 +38,18 @@ class CompanyCommands(LedgerBase):
                 {"name": name, "base_currency": base_currency},
             )
         return company_id
+
+    def rename_company(self, company_id: int, name: str) -> None:
+        """A new name for the company (e.g. after «Save as»). Audited."""
+        name = name.strip()
+        if not name:
+            raise ValidationError(tr("Название компании не может быть пустым"))
+        with transaction(self.conn):
+            old = self._company(company_id)["name"]
+            if old == name:
+                return
+            self.conn.execute("UPDATE companies SET name = ? WHERE id = ?", (name, company_id))
+            self._audit(company_id, "company", company_id, "rename", {"from": old, "to": name})
 
     def set_closed_through(self, company_id: int, through: date | str | None) -> None:
         """Close the period up to `through` inclusive; None reopens everything. Audited."""

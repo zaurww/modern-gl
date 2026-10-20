@@ -2,12 +2,15 @@
 
 A company is the unit you hand over: give a colleague its file and they add it to
 their folder. Deleting moves the file to a "Silinmiş" subfolder instead of erasing it.
+A company saved elsewhere («Save as») is remembered by its path and listed too.
 """
 
 from __future__ import annotations
 
 import re
+import shutil
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -65,31 +68,86 @@ def open_company(path: Path) -> tuple[sqlite3.Connection, int]:
 
 
 class Workspace:
-    def __init__(self, folder: Path) -> None:
+    def __init__(self, folder: Path, files: Iterable[Path | str] = ()) -> None:
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
+        # company files kept outside the folder; the caller stores this list
+        self.files: list[Path] = []
+        for file in files:
+            self.remember(Path(file))
 
     def companies(self) -> list[CompanyFile]:
         result = []
-        for path in self.folder.glob(f"*{SUFFIX}"):
+        # a remembered file that is missing (a flash drive not plugged in) is just skipped
+        outside = [f for f in self.files if f.is_file()]
+        seen: set[Path] = set()
+        for path in [*self.folder.glob(f"*{SUFFIX}"), *outside]:
+            if path.resolve() in seen:  # the folder may have changed since it was remembered
+                continue
+            seen.add(path.resolve())
             try:
                 result.append(CompanyFile(path, company_name(path)))
             except sqlite3.DatabaseError:
                 continue  # not a company file (or damaged): never fail the whole list
         return sorted(result, key=lambda c: sort_key(c.name))
 
-    def create(self, name: str, chart: str | None = DEFAULT_TEMPLATE) -> Path:
-        """New company file with the chart template (in the interface language)."""
-        path = self._free_path(name)
-        conn = connect(path)
+    def create(
+        self, name: str, chart: str | None = DEFAULT_TEMPLATE, path: Path | None = None
+    ) -> Path:
+        """New company file with the chart template (in the interface language); in the
+        folder unless `path` is given (then it is remembered). The file is built aside and
+        put in place only when complete, so a failure leaves nothing half-made."""
+        path = self._free_path(name) if path is None else Path(path)
+        partial = path.with_name(path.name + ".part")
+        for leftover in (partial, *_sidecars(partial)):
+            leftover.unlink(missing_ok=True)
         try:
-            ledger = Ledger(conn)
-            company_id = ledger.create_company(name)
-            if chart:
-                apply_chart_template(ledger, company_id, chart)
-        finally:
-            conn.close()
+            conn = connect(partial)
+            try:
+                ledger = Ledger(conn)
+                company_id = ledger.create_company(name)
+                if chart:
+                    apply_chart_template(ledger, company_id, chart)
+                conn.execute("PRAGMA journal_mode = DELETE")  # a single self-contained file
+            finally:
+                conn.close()
+            for side in _sidecars(path):  # leftovers of a file being replaced are not ours
+                side.unlink(missing_ok=True)
+            partial.replace(path)
+        except BaseException:
+            for leftover in (partial, *_sidecars(partial)):
+                leftover.unlink(missing_ok=True)
+            raise
+        self.remember(path)
         return path
+
+    def remember(self, path: Path) -> None:
+        """Keep listing a company file that lies outside the folder."""
+        path = Path(path).absolute()
+        if path.parent.resolve() != self.folder.resolve() and not any(
+            _same(path, f) for f in self.files
+        ):
+            self.files.append(path)
+
+    def forget(self, path: Path) -> None:
+        self.files = [f for f in self.files if not _same(f, Path(path))]
+
+    def save_as(self, conn: sqlite3.Connection, current: Path, target: Path, name: str) -> Path:
+        """Copy the open company to `target` under a new company name; the current file
+        stays as it was. Afterwards the company is worked on in `target`."""
+        target = Path(target)
+        if _same(target, Path(current)):
+            raise backup.BackupError(tr("Выберите другой файл: этот уже открыт"))
+        for side in _sidecars(target):  # leftovers of the file being replaced are not ours
+            side.unlink(missing_ok=True)
+        backup.copy_to(conn, target)
+        copy, company_id = open_company(target)
+        try:
+            Ledger(copy).rename_company(company_id, name)
+        finally:
+            copy.close()
+        self.remember(target)
+        return target
 
     # ---- backups ---------------------------------------------------------------------
 
@@ -126,22 +184,28 @@ class Workspace:
         trash.mkdir(exist_ok=True)
         stamp = datetime.now().strftime("%Y-%m-%d %H-%M-%S")
         target = trash / f"{path.stem} ({stamp}){SUFFIX}"
-        path.replace(target)
+        shutil.move(path, target)  # a file saved elsewhere may be on another drive
         for extra in ("-wal", "-shm"):  # leftovers of an unclean shutdown travel along
             side = path.with_name(path.name + extra)
             if side.exists():
-                side.replace(target.with_name(target.name + extra))
+                shutil.move(side, target.with_name(target.name + extra))
+        self.forget(path)
         return target
 
     def add_file(self, source: Path) -> list[Path]:
-        """Copy a company file into the folder. An old shared file holding several
-        companies is split: each company gets its own file. Source is left untouched."""
-        src = sqlite3.connect(f"file:{Path(source).as_posix()}?mode=ro", uri=True)
+        """Add a company file where it lies: it is remembered and opened in place. An old
+        shared file holding several companies is split into the folder, one file per
+        company, and is itself left untouched."""
+        source = Path(source).absolute()
+        src = sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)
         try:
             companies = src.execute("SELECT id, name FROM companies ORDER BY id").fetchall()
         finally:
             src.close()
-        return [self._extract(Path(source), cid, name) for cid, name in companies]
+        if len(companies) == 1:
+            self.remember(source)
+            return [source]
+        return [self._extract(source, cid, name) for cid, name in companies]
 
     # ---- internals -------------------------------------------------------------------
 
@@ -177,19 +241,28 @@ class Workspace:
         connect(target).close()  # bring an older file up to the current schema
         return target
 
-    def new_path(self, name: str) -> Path:
+    def new_path(self, name: str, folder: Path | None = None) -> Path:
         """A not-yet-existing file path for a company with this name."""
-        return self._free_path(name)
+        return self._free_path(name, folder)
 
-    def _free_path(self, name: str) -> Path:
+    def _free_path(self, name: str, folder: Path | None = None) -> Path:
+        folder = self.folder if folder is None else Path(folder)
         stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", name)
         stem = re.sub(r"\s+", " ", stem).strip(" .") or "company"
-        path = self.folder / f"{stem}{SUFFIX}"
+        path = folder / f"{stem}{SUFFIX}"
         n = 2
         while path.exists():
-            path = self.folder / f"{stem} ({n}){SUFFIX}"
+            path = folder / f"{stem} ({n}){SUFFIX}"
             n += 1
         return path
+
+
+def _sidecars(path: Path) -> tuple[Path, Path]:
+    return path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")
+
+
+def _same(a: Path, b: Path) -> bool:
+    return a.resolve() == b.resolve()
 
 
 def _file_version(path: Path) -> int:

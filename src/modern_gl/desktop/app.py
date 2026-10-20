@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import cast
 
 from PySide6.QtCore import QSettings, QStandardPaths
 from PySide6.QtWidgets import QApplication
@@ -52,7 +53,8 @@ def main() -> int:
     if "--data" in args and args.index("--data") + 1 < len(args):
         settings.setValue("data_dir", args[args.index("--data") + 1])
     folder = Path(str(settings.value("data_dir", "") or default_folder()))
-    workspace = Workspace(folder)
+    files = cast(list[str], settings.value("company_files", [], type=list))
+    workspace = Workspace(folder, files)
     if "--demo" in args and not workspace.companies():
         add_demo_company(workspace)
 

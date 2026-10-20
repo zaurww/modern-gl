@@ -85,9 +85,10 @@ from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.widgets import EmptyState
+from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import LANGUAGES, language, set_language, tr
 from modern_gl.infrastructure import backup
-from modern_gl.infrastructure.workspace import TRASH, Workspace
+from modern_gl.infrastructure.workspace import SUFFIX, TRASH, Workspace
 from modern_gl.reporting.inventory import inventory_document_of
 from modern_gl.reporting.trade import PURCHASE, SALE
 
@@ -335,10 +336,36 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(self, tr("Новая компания"), prompt)
         if not ok or not name.strip():
             return False
+        target = self._ask_file(tr("Где сохранить файл компании"), name.strip())
+        if target is None:
+            return False
+        if self.company_path is not None and target.resolve() == self.company_path.resolve():
+            QMessageBox.warning(
+                self, tr("Новая компания"), tr("Выберите другой файл: этот уже открыт")
+            )
+            return False
         if not self._confirm_close_all():
             return False
-        self.open_company(self.workspace.create(name.strip()))
+        try:
+            path = self.workspace.create(name.strip(), path=target)
+        except (LedgerError, OSError, sqlite3.Error) as e:
+            QMessageBox.warning(self, tr("Новая компания"), str(e))
+            return False
+        self._store_files()
+        self.open_company(path)
         return True
+
+    def _ask_file(self, title: str, name: str, folder: Path | None = None) -> Path | None:
+        """The standard «Save as» window, offering «<name>.gl» (in the data folder unless
+        another is given); None if cancelled."""
+        suggested = self.workspace.new_path(name, folder)
+        target, _ = QFileDialog.getSaveFileName(
+            self, title, str(suggested), tr("Файлы компаний (*.gl)")
+        )
+        if not target:
+            return None
+        path = Path(target)
+        return path if path.suffix.lower() == SUFFIX else path.with_name(path.name + SUFFIX)
 
     def open_company(self, path: Path) -> None:
         if not self._confirm_close_all():
@@ -408,6 +435,7 @@ class MainWindow(QMainWindow):
         if self.session is not None:
             menu.addSeparator()
             menu.addAction(tr("Показать файл компании")).triggered.connect(self.show_company_file)
+            menu.addAction(tr("Сохранить как…")).triggered.connect(self.save_as)
             menu.addAction(tr("Сохранить копию…")).triggered.connect(self.save_copy)
             menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
             menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
@@ -441,9 +469,46 @@ class MainWindow(QMainWindow):
                 tr("Это не файл компании: {file}", file=Path(path).name),
             )
             return
+        self._store_files()
         if added:
             self.open_company(added[0])
             self.notify(tr("Добавлено компаний: {n}", n=len(added)))
+
+    def save_as(self) -> None:
+        """Go on with the company in another file (and under another name if wanted);
+        the current file stays as it was."""
+        if self.session is None or self.company_path is None:
+            return
+        name, ok = QInputDialog.getText(
+            self, tr("Сохранить как"), tr("Название компании:"), text=self.session.company_name
+        )
+        if not ok or not name.strip():
+            return
+        target = self._ask_file(
+            tr("Сохранить компанию как"), name.strip(), self.company_path.parent
+        )
+        if target is not None:
+            self.save_as_to(target, name.strip())
+
+    def save_as_to(self, target: Path, name: str) -> bool:
+        if self.conn is None or self.company_path is None or not self._confirm_close_all():
+            return False
+        if target.suffix.lower() != SUFFIX:
+            target = target.with_name(target.name + SUFFIX)
+        try:
+            self.workspace.save_as(self.conn, self.company_path, target, name)
+        except (LedgerError, OSError, sqlite3.Error) as e:
+            QMessageBox.warning(self, tr("Сохранить как"), str(e))
+            return False
+        self._store_files()
+        self.open_company(target)
+        self.notify(tr("Компания сохранена в файл {file}", file=target))
+        return True
+
+    def _store_files(self) -> None:
+        """Company files outside the folder are remembered between runs."""
+        if self.settings:
+            self.settings.setValue("company_files", [str(f) for f in self.workspace.files])
 
     # ---- backups ---------------------------------------------------------------------
 
@@ -529,6 +594,7 @@ class MainWindow(QMainWindow):
             return
         self._close_company()
         self.workspace.delete(path)
+        self._store_files()
         remaining = self.workspace.companies()
         if remaining:
             self.open_company(remaining[0].path)
