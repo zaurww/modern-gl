@@ -39,7 +39,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 51;Hesablaşma hesabları;;;asset;;;bank_account;
 52;Valyuta hesabları;;;asset;;;bank_account;1
 55;Banklarda xüsusi hesablar;;;asset;;;bank_account;
-57;Yolda olan köçürmələr;;;asset;;;;
+57;Yolda olan köçürmələr;;;asset;;;;;fx_transit
 58;Maliyyə qoyuluşları;;;asset;;;counterparty;
 59;Maliyyə qoyuluşlarının dəyərsizləşməsinə görə ehtiyatlar;;;asset;1;;;
 60;Malsatan və podratçılarla hesablaşmalar;;1;liability;;1;;
@@ -83,8 +83,8 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 90.3;Əlavə dəyər vergisi;90;;revenue;1;;;
 90.9;Satışdan mənfəət / zərər;90;;equity;;1;;
 91;Digər gəlir və xərclər;;1;revenue;;1;;
-91.1;Digər gəlirlər;91;;revenue;;;other_income;
-91.2;Digər xərclər;91;;expense;;;other_income;
+91.1;Digər gəlirlər;91;;revenue;;;other_income;;fx_gain
+91.2;Digər xərclər;91;;expense;;;other_income;;fx_loss,bank_fee
 91.9;Digər gəlir və xərclərin qalığı;91;;equity;;1;;
 94;Qıtlıqlar və sərvətlərin korlanmasından itkilər;;;asset;;;;
 96;Gələcək xərclər üzrə ehtiyatlar;;;liability;;;;

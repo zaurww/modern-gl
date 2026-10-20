@@ -139,9 +139,9 @@ def import_chart_csv(
                     if row.get("currency") is None
                     else int((row["currency"] or "").strip() or 0),
                 )
-                role = (row.get("role") or "").strip()
-                if role:
-                    ledger.set_account_role(company_id, role, account_id)
+                for role in (row.get("role") or "").split(","):  # "fx_loss,bank_fee"
+                    if role.strip():
+                        ledger.set_account_role(company_id, role.strip(), account_id)
             except Exception as e:
                 raise ValidationError(
                     tr(

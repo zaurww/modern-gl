@@ -61,6 +61,7 @@ class DocumentData:
     # made by a warehouse document (id, number): it is corrected there, not here
     inventory_document_id: int | None = None
     inventory_number: int | None = None
+    conversion_id: int | None = None  # made by a currency conversion: corrected there
     postings: list[PostingData] = field(default_factory=list)
 
     @property
@@ -73,6 +74,7 @@ class DocumentData:
             and self.reversal_of is None
             and self.reversed_by is None
             and self.inventory_document_id is None
+            and self.conversion_id is None
         )
 
 
@@ -124,7 +126,9 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
         SELECT d.id, d.number, d.doc_date, d.memo, l.code AS layer, d.status, d.reversal_of,
                (SELECT r.id FROM documents r WHERE r.reversal_of = d.id) AS reversed_by,
                COALESCE(c.closed_through >= d.doc_date, 0) AS closed,
-               i.id AS inventory_document_id, i.number AS inventory_number
+               i.id AS inventory_document_id, i.number AS inventory_number,
+               (SELECT v.id FROM currency_conversions v
+                WHERE v.document_id = d.id OR v.credit_document_id = d.id) AS conversion_id
         FROM documents d
         JOIN layers l ON l.id = d.layer_id
         JOIN companies c ON c.id = d.company_id

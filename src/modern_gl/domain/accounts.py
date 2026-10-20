@@ -7,9 +7,19 @@ DEBIT_NORMAL = {"asset", "expense"}  # liability, equity, revenue: credit-normal
 # Accounts that automatic postings use, chosen per company (table account_roles)
 INPUT_VAT = "input_vat"  # ƏDV к возмещению: a warehouse receipt debits it
 OPENING_BALANCE = "opening_balance"  # technical counter-account for opening balances
-ACCOUNT_ROLES = (INPUT_VAT, OPENING_BALANCE)
+# Currency conversion (D37): money in transit (57), the exchange difference, the bank fee
+FX_TRANSIT = "fx_transit"
+FX_GAIN = "fx_gain"
+FX_LOSS = "fx_loss"
+BANK_FEE = "bank_fee"
+ACCOUNT_ROLES = (INPUT_VAT, OPENING_BALANCE, FX_TRANSIT, FX_GAIN, FX_LOSS, BANK_FEE)
 # Without an account chosen for a role, the only account of this type plays it (D35).
-ROLE_TYPES = {INPUT_VAT: "input_vat"}
+ROLE_TYPES = {
+    INPUT_VAT: "input_vat",
+    FX_GAIN: "other_income",
+    FX_LOSS: "other_expense",
+    BANK_FEE: "other_expense",
+}
 
 # Account types: what an account means, whatever its code (D35). The list is fixed by the
 # program so that reports and automatic postings understand any company's chart; the

@@ -55,6 +55,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.conversions import conversion_of_document, load_conversion
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import (
@@ -64,6 +65,7 @@ from modern_gl.application.queries import (
     load_template,
 )
 from modern_gl.desktop import icons, theme
+from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
@@ -100,6 +102,7 @@ PLACE_KEYS = [key for key, _, _ in PLACES]
 # open pages: a quiet grey icon of what they are (a new document is the blue plus)
 OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
 OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
+OPEN_ICONS |= {"conversion": "currencies", "new_conversion": "currencies"}
 
 
 def open_icon(key) -> QIcon:
@@ -537,12 +540,13 @@ class MainWindow(QMainWindow):
             page.copy_document.connect(self.copy_document)
             page.prefill_document.connect(self.new_document)
             page.import_requested.connect(self.show_import)
+            page.new_conversion.connect(self.new_conversion)
             return page
         if key == ("directories",):
             return DirectoriesPage(s)
         if key == ("opening",):
             page = OpeningBalancesPage(s)
-            page.saved.connect(self._opening_saved)
+            page.saved.connect(self._postings_changed)
             return page
         if key == ("currencies",):
             page = CurrenciesPage(s)
@@ -682,6 +686,10 @@ class MainWindow(QMainWindow):
         if is_opening_document(s.conn, s.company_id, doc_id):
             self.show_place(("opening",))
             return
+        conversion = conversion_of_document(s.conn, s.company_id, doc_id)
+        if conversion is not None:
+            self.open_conversion(conversion)
+            return
         self.show_document(doc_id)
 
     def copy_document(self, doc_id: int) -> None:
@@ -691,9 +699,14 @@ class MainWindow(QMainWindow):
             self.show_place(("opening",))
             self.notify(tr("Начальные остатки вводятся один раз"))
             return
+        conversion = conversion_of_document(s.conn, s.company_id, doc_id)
+        if conversion is not None:
+            data = load_conversion(s.conn, s.company_id, conversion)
+            self.new_conversion(ConversionPage.copy_of(data))
+            return
         self.new_document(load_document(s.conn, s.company_id, doc_id))
 
-    def _opening_saved(self, doc_id: int) -> None:
+    def _postings_changed(self, doc_id: int) -> None:
         journal = self._page(("journal",), JournalPage)
         if journal is not None:
             journal.refresh(select_id=doc_id)
@@ -726,6 +739,38 @@ class MainWindow(QMainWindow):
         page.template_saved.connect(self.open_template)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
         page.title_changed.connect(lambda p=page: self._retitle(p))
+
+    def open_conversion(self, conversion_id: int) -> None:
+        key = ("conversion", conversion_id)
+        if key not in self.pages:
+            page = ConversionPage(self.open_session, conversion_id)
+            self._wire_conversion(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def new_conversion(self, prefill=None) -> None:
+        page = ConversionPage(self.open_session, prefill=prefill)
+        self._wire_conversion(page)
+        self._add_page(page.key, page, open_item=True)
+        self._activate(page.key)
+
+    def _wire_conversion(self, page: ConversionPage) -> None:
+        page.saved.connect(lambda doc_id, p=page: self._conversion_saved(p, doc_id))
+        page.open_gl_document.connect(self.show_document)
+        page.copy_requested.connect(self.new_conversion)
+        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
+        page.title_changed.connect(lambda p=page: self._retitle(p))
+
+    def _conversion_saved(self, page: ConversionPage, doc_id: int) -> None:
+        old_key = self._key_of(page)
+        if old_key is not None and old_key != page.key and page.doc is not None:
+            self.pages[page.key] = self.pages.pop(old_key)
+            item = self.sidebar.item_for(old_key)
+            if item is not None:
+                item.setData(KEY_ROLE, page.key)
+                item.setIcon(open_icon(page.key))
+        self._retitle(page)
+        self._postings_changed(doc_id)
 
     def open_inventory_document(self, document_id: int) -> None:
         key = ("inventory_doc", document_id)

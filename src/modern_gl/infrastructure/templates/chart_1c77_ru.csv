@@ -39,7 +39,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 51;Расчётные счета;;;asset;;;bank_account;
 52;Валютные счета;;;asset;;;bank_account;1
 55;Специальные счета в банках;;;asset;;;bank_account;
-57;Переводы в пути;;;asset;;;;
+57;Переводы в пути;;;asset;;;;;fx_transit
 58;Финансовые вложения;;;asset;;;counterparty;
 59;Резервы под обесценение финансовых вложений;;;asset;1;;;
 60;Расчёты с поставщиками и подрядчиками;;1;liability;;1;;
@@ -83,8 +83,8 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 90.3;Налог на добавленную стоимость;90;;revenue;1;;;
 90.9;Прибыль / убыток от продаж;90;;equity;;1;;
 91;Прочие доходы и расходы;;1;revenue;;1;;
-91.1;Прочие доходы;91;;revenue;;;other_income;
-91.2;Прочие расходы;91;;expense;;;other_income;
+91.1;Прочие доходы;91;;revenue;;;other_income;;fx_gain
+91.2;Прочие расходы;91;;expense;;;other_income;;fx_loss,bank_fee
 91.9;Сальдо прочих доходов и расходов;91;;equity;;1;;
 94;Недостачи и потери от порчи ценностей;;;asset;;;;
 96;Резервы предстоящих расходов;;;liability;;;;
