@@ -1008,4 +1008,12 @@ AZ: dict[str, str] = {
     "Добавлено контрагентов: {n}": "Əlavə edilən kontragent: {n}",
     "Название на портале": "Portaldakı ad",
     "Название в программе": "Proqramdakı ad",
+    "Применить названия": "Adları tətbiq et",
+    "Отмеченные — переименовать в программе; у всех запомнить новое название портала": "Qeyd olunanların proqramdakı adını dəyiş; hamısı üçün portaldakı yeni adı yadda saxla",
+    "Название изменилось: {n}": "Adı dəyişib: {n}",
+    "Переименовано контрагентов: {n}": "Adı dəyişən kontragent: {n}",
+    "Было на портале": "Portalda əvvəl",
+    "Стало на портале": "Portalda indi",
+    "Сейчас в программе": "Proqramda indi",
+    "Новое название в программе": "Proqramda yeni ad",
 }
