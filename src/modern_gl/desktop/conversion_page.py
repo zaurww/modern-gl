@@ -34,6 +34,7 @@ from modern_gl.application.conversions import (
     load_conversion,
 )
 from modern_gl.application.currencies import rate_on
+from modern_gl.application.ledger.conversion import MissingAccountRole
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -297,7 +298,7 @@ class ConversionAccountsDialog(QDialog):
         (BANK_FEE, "Комиссия банка"),
     )
 
-    def __init__(self, session: Session, parent=None) -> None:
+    def __init__(self, session: Session, parent=None, missing: str | None = None) -> None:
         super().__init__(parent)
         self.s = session
         self.setWindowTitle(tr("Счета конвертации"))
@@ -323,6 +324,8 @@ class ConversionAccountsDialog(QDialog):
             form.addRow(tr(caption), box)
             self.boxes[role] = box
         lay.addLayout(form)
+        if missing in self.boxes:  # opened because this account is not chosen yet
+            self.boxes[missing].setFocus()
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
@@ -583,9 +586,12 @@ class ConversionPage(QWidget):
             items.append((tr("Копировать"), self._copy))
         return items
 
-    def edit_accounts(self) -> None:
-        if ConversionAccountsDialog(self.s, self).exec() == QDialog.DialogCode.Accepted:
-            self.error.hide()
+    def edit_accounts(self, missing: str | None = None) -> bool:
+        dialog = ConversionAccountsDialog(self.s, self, missing)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        self.error.hide()
+        return True
 
     def _copy(self) -> None:
         try:
@@ -751,6 +757,13 @@ class ConversionPage(QWidget):
             conversion_id = self.s.ledger.save_conversion(
                 self.s.company_id, data, self.doc.id if self.doc else None, post=post
             )
+        except MissingAccountRole as e:
+            # a chart without the accounts: choose them now and post again
+            chosen = self.edit_accounts(missing=e.role)
+            if chosen and self.s.ledger.account_role(self.s.company_id, e.role) is not None:
+                return self.save(post)
+            self.show_error(str(e))
+            return False
         except (LedgerError, ValueError) as e:
             self.show_error(str(e))
             return False

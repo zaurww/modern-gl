@@ -35,6 +35,14 @@ EXCHANGE_DIFFERENCE = "Курсовая разница при конвертац
 BANK_FEE_ITEM = "Комиссия банка"
 
 
+class MissingAccountRole(ValidationError):
+    """No account for a role of conversions: the form asks for it on the spot."""
+
+    def __init__(self, role: str, message: str) -> None:
+        super().__init__(message)
+        self.role = role
+
+
 class ConversionCommands(ChartCommands, DocumentCommands):
     def save_conversion(
         self,
@@ -339,8 +347,8 @@ class ConversionCommands(ChartCommands, DocumentCommands):
     def _role_account(self, company_id: int, role: str, missing: str) -> sqlite3.Row:
         account_id = self.account_role(company_id, role)
         if account_id is None:
-            raise ValidationError(
-                missing + ". " + tr("Выберите его в «Счета конвертации» (меню «⋯»).")
+            raise MissingAccountRole(
+                role, missing + ". " + tr("Выберите его в «Счета конвертации» (меню «⋯»).")
             )
         return self._account(company_id, account_id)
 
