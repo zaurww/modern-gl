@@ -17,7 +17,7 @@
 - `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart`, `templates`, `documents`, `opening`); общие помощники — `application/common.py`.
 - `src/modern_gl/reporting/reports.py` — ОСВ, ОСВ по субконто, карточка, анализ счёта (агрегация в SQL).
 - `src/modern_gl/infrastructure` — SQLite, миграции (`migrations/NNNN_*.sql`), импорт CSV, `workspace.py` (файл на компанию).
-- `src/modern_gl/desktop` — интерфейс: `main_window` (боковая панель), `document_page`, `postings` (таблица ввода), `journal_page`, `trade_page` (покупки и продажи), `inventory_document_page` (форма покупки, продажи и складских документов), `reports_page` (ОСВ, карточка, план счетов), `directories_page`, `account_dialog`, `theme` (все цвета и шрифты), `i18n_az.py` (переводы).
+- `src/modern_gl/desktop` — интерфейс: `main_window` (боковая панель), `document_page`, `postings` (таблица ввода), `journal_page`, `trade_page` (покупки и продажи), `eqaime_import_page` + `portal_login` (e-qaimə с портала, клиент — `infrastructure/etaxes.py`), `inventory_document_page` (форма покупки, продажи и складских документов), `reports_page` (ОСВ, карточка, план счетов), `directories_page`, `account_dialog`, `theme` (все цвета и шрифты), `i18n_az.py` (переводы).
 
 ## Правила
 - Деньги — только `int` в копейках; никаких `float`.

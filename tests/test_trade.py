@@ -77,7 +77,7 @@ def test_trade_page_filters_searches_and_opens(shop, conn, qtbot):
         page.drill(page.model.rows[0])
     assert opened.args == [page.model.rows[0].id]
     with qtbot.waitSignal(page.new_inventory_document) as new:
-        page.header.action_row.itemAt(3).widget().click()  # «+ Продажа»
+        page.new_buttons[SALE].click()
     assert new.args == [SALE]
 
 

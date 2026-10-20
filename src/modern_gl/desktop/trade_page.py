@@ -5,8 +5,9 @@ lines with an item still move stock."""
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QComboBox, QLineEdit
+from PySide6.QtWidgets import QComboBox, QLineEdit, QPushButton
 
+from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import EmptyState, button
@@ -37,10 +38,16 @@ class TradePage(ReportPage):
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda _text: self.refresh())
         self.header.add_action(self.search)
+        self.new_buttons: dict[str, QPushButton] = {}
+        load = button(tr("E-qaimə с портала…"), "flat")
+        load.setToolTip(tr("Вход через ASAN İmza, e-qaimə за период — черновиками"))
+        load.clicked.connect(self.import_eqaime)
+        self.header.add_action(load)
         for title, doc_type, kind in (("+ Покупка", PURCHASE, "flat"), ("+ Продажа", SALE, "")):
             control = button(tr(title), kind)
             control.clicked.connect(lambda _=False, t=doc_type: self.new_inventory_document.emit(t))
             self.header.add_action(control)
+            self.new_buttons[doc_type] = control
         self.stack.removeWidget(self.empty)
         self.empty = EmptyState(
             "○",
@@ -92,6 +99,14 @@ class TradePage(ReportPage):
     @staticmethod
     def _status(r: TradeDocument) -> str:
         return tr("Проведён") if r.status == "posted" else tr("Черновик")
+
+    def import_eqaime(self) -> None:
+        dialog = EqaimeImportDialog(self.s, self)
+        if dialog.exec() and dialog.created:
+            self.refresh()
+            self.s.notify(
+                tr("Создано черновиков: {n} — проверьте и проведите", n=len(dialog.created))
+            )
 
     def drill(self, row: TradeDocument | None) -> None:
         if row is not None:
