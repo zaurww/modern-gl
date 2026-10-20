@@ -389,6 +389,13 @@ QPushButton#fab {{
     font-size: 22pt; padding: 0 0 4px 0;
 }}
 QPushButton#fab:hover {{ background: {P.accent_hover}; }}
+/* a choice of two or three: Mədaxil | Məxaric */
+QPushButton#segment {{
+    background: {P.field}; border: none; border-radius: 7px; color: {P.secondary};
+    padding: 6px 16px;
+}}
+QPushButton#segment:hover {{ background: {P.field_hover}; color: {P.text}; }}
+QPushButton#segment:checked {{ background: {P.accent_soft}; color: {P.accent}; font-weight: 600; }}
 
 /* Inputs */
 QLineEdit, QDateEdit, QComboBox {{
@@ -481,6 +488,11 @@ QFrame#card {{
 QFrame#card QLabel {{ background: transparent; border: none; }}
 QFrame#note QLabel {{ color: {P.text}; background: transparent; }}
 QFrame#note QPushButton#flat:hover {{ background: {P.selection}; }}
+/* the bank accounts beside their statement */
+QListWidget#places {{ background: transparent; border: none; outline: none; }}
+QListWidget#places::item {{ border-radius: 8px; color: {P.text}; }}
+QListWidget#places::item:hover {{ background: {P.subtle}; }}
+QListWidget#places::item:selected {{ background: {P.selection}; color: {P.text}; }}
 """
 
 

@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if sys.platform == "win32":  # the offscreen platform doesn't see system fonts by itself
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["WINDIR"], "Fonts"))
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QDate, QEventLoop, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication, QLineEdit
 
@@ -559,6 +559,24 @@ def main() -> None:
     shot("11_invoices")
     win.open_report("card", acc["62"].id, osv.params)
     shot("11b_card_invoice")
+    # The bank module (D47): bank accounts and the statement; a payment to a supplier
+    from modern_gl.desktop.bank_operation_page import BankOperationPage
+    from modern_gl.desktop.bank_page import BankPage
+
+    win.show_place(("bank",))
+    bank = cast(BankPage, win.pages[("bank",)])
+    bank.date_from.setDate(QDate(2026, 1, 1))
+    shot("12_bank")
+    bank.new_operation("out")
+    payment = cast(BankOperationPage, win.stack.currentWidget())
+    payment.counterparty_edit.setText(i18n.tr("Альфа Трейд"))
+    payment._counterparty_typed()
+    payment.line_rows[0].amount.setText("590")
+    payment.line_rows[0].invoice.setText("MT2602000777")
+    payment.add_fee()
+    payment.line_rows[1].amount.setText("1.20")
+    payment._changed()
+    shot("12b_bank_payment")
 
 
 if __name__ == "__main__":

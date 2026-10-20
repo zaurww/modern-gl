@@ -104,7 +104,6 @@ class JournalPage(QWidget):
     deleted = Signal(int)
     prefill_document = Signal(object)  # DocumentData typed in the quick entry line
     import_requested = Signal()
-    new_conversion = Signal()
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -121,11 +120,6 @@ class JournalPage(QWidget):
         self.search.setClearButtonEnabled(True)
         import_button = button(tr("Импорт из Excel…"), "flat", tr("Много документов из таблицы"))
         import_button.clicked.connect(self.import_requested.emit)
-        conversion_button = button(
-            tr("Конвертация валюты"), "flat", tr("Продажа, покупка или обмен валюты в банке")
-        )
-        conversion_button.clicked.connect(self.new_conversion.emit)
-        self.header.add_action(conversion_button)
         self.header.add_action(import_button)
         self.header.add_action(self.search)
         root.addWidget(self.header)

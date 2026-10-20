@@ -54,6 +54,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.bank import bank_operation_of_document, load_bank_operation
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.conversions import conversion_of_document, load_conversion
 from modern_gl.application.inventory import Inventory
@@ -65,6 +66,8 @@ from modern_gl.application.queries import (
     load_template,
 )
 from modern_gl.desktop import icons, theme
+from modern_gl.desktop.bank_operation_page import BankOperationPage
+from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
@@ -99,10 +102,11 @@ PLACES = [  # key, title (translated on display), icon color (a palette name: th
     (("currencies",), "Валюты", "green"),
     (("invoices",), "E-qaimələr", "accent"),
 ]
-# Modules: optional ways of working beside the journal (D30, D44, D46), in a block of their own
+# Modules: optional ways of working beside the journal (D30, D44, D46, D47), in a block of their own
 MODULES = [
     (("purchases",), "Покупки", "green"),
     (("sales",), "Продажи", "accent"),
+    (("bank",), "Банк", "teal"),
     (("inventory",), "Склад", "amber"),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES + MODULES]
@@ -110,6 +114,7 @@ PLACE_KEYS = [key for key, _, _ in PLACES + MODULES]
 OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
 OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
 OPEN_ICONS |= {"conversion": "currencies", "new_conversion": "currencies"}
+OPEN_ICONS |= {"bank_op": "bank", "new_bank_op": "bank"}
 
 
 def open_icon(key) -> QIcon:
@@ -297,6 +302,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+9", lambda: self.show_place(("opening",))),
             ("Ctrl+0", lambda: self.show_place(("purchases",))),
             ("Ctrl+-", lambda: self.show_place(("sales",))),
+            ("Ctrl+B", lambda: self.show_place(("bank",))),
             ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
@@ -552,6 +558,11 @@ class MainWindow(QMainWindow):
             page.copy_document.connect(self.copy_document)
             page.prefill_document.connect(self.new_document)
             page.import_requested.connect(self.show_import)
+            return page
+        if key == ("bank",):
+            page = BankPage(s)
+            page.open_document.connect(self.open_document)
+            page.new_bank_operation.connect(self.new_bank_operation)
             page.new_conversion.connect(self.new_conversion)
             return page
         if key == ("directories",):
@@ -658,6 +669,8 @@ class MainWindow(QMainWindow):
             page.refresh()
         if isinstance(page, OpeningBalancesPage):
             page.refresh()
+        if isinstance(page, BankPage):
+            page.refresh()
         if isinstance(page, FocusablePage):
             page.focus_table()
 
@@ -708,6 +721,10 @@ class MainWindow(QMainWindow):
         if conversion is not None:
             self.open_conversion(conversion)
             return
+        operation = bank_operation_of_document(s.conn, s.company_id, doc_id)
+        if operation is not None:
+            self.open_bank_operation(operation)
+            return
         self.show_document(doc_id)
 
     def copy_document(self, doc_id: int) -> None:
@@ -722,15 +739,20 @@ class MainWindow(QMainWindow):
             data = load_conversion(s.conn, s.company_id, conversion)
             self.new_conversion(ConversionPage.copy_of(data))
             return
+        operation = bank_operation_of_document(s.conn, s.company_id, doc_id)
+        if operation is not None:
+            data = load_bank_operation(s.conn, s.company_id, operation)
+            self.new_bank_operation(BankOperationPage.copy_of(data))
+            return
         self.new_document(load_document(s.conn, s.company_id, doc_id))
 
     def _postings_changed(self, doc_id: int) -> None:
         journal = self._page(("journal",), JournalPage)
         if journal is not None:
             journal.refresh(select_id=doc_id)
-        for key in (("osv",), ("chart",), ("invoices",)):
+        for key in (("osv",), ("chart",), ("invoices",), ("bank",)):
             page = self.pages.get(key)
-            if isinstance(page, (OsvPage, ChartPage, InvoicesPage)):
+            if isinstance(page, (OsvPage, ChartPage, InvoicesPage, BankPage)):
                 page.refresh()
 
     def show_document(self, doc_id: int) -> None:
@@ -779,7 +801,7 @@ class MainWindow(QMainWindow):
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
         page.title_changed.connect(lambda p=page: self._retitle(p))
 
-    def _conversion_saved(self, page: ConversionPage, doc_id: int) -> None:
+    def _conversion_saved(self, page: ConversionPage | BankOperationPage, doc_id: int) -> None:
         old_key = self._key_of(page)
         if old_key is not None and old_key != page.key and page.doc is not None:
             self.pages[page.key] = self.pages.pop(old_key)
@@ -789,6 +811,27 @@ class MainWindow(QMainWindow):
                 item.setIcon(open_icon(page.key))
         self._retitle(page)
         self._postings_changed(doc_id)
+
+    def open_bank_operation(self, operation_id: int) -> None:
+        key = ("bank_op", operation_id)
+        if key not in self.pages:
+            page = BankOperationPage(self.open_session, operation_id)
+            self._wire_bank_operation(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def new_bank_operation(self, prefill=None) -> None:
+        page = BankOperationPage(self.open_session, prefill=prefill)
+        self._wire_bank_operation(page)
+        self._add_page(page.key, page, open_item=True)
+        self._activate(page.key)
+
+    def _wire_bank_operation(self, page: BankOperationPage) -> None:
+        page.saved.connect(lambda doc_id, p=page: self._conversion_saved(p, doc_id))
+        page.open_gl_document.connect(self.show_document)
+        page.copy_requested.connect(self.new_bank_operation)
+        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
+        page.title_changed.connect(lambda p=page: self._retitle(p))
 
     def open_inventory_document(self, document_id: int) -> None:
         key = ("inventory_doc", document_id)
