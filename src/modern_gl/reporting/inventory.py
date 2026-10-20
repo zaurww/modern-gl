@@ -310,3 +310,14 @@ def list_inventory_documents(
         (company_id, limit),
     )
     return [InventoryDocumentSummary(**dict(r)) for r in rows]
+
+
+def inventory_document_of(
+    conn: sqlite3.Connection, company_id: int, gl_document_id: int
+) -> int | None:
+    """The warehouse document whose postings these are, if any."""
+    row = conn.execute(
+        "SELECT id FROM inventory_documents WHERE company_id = ? AND gl_document_id = ?",
+        (company_id, gl_document_id),
+    ).fetchone()
+    return row[0] if row else None

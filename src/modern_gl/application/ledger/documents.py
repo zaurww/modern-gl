@@ -87,6 +87,113 @@ class DocumentCommands(SubcontoCommands):
             )
             self._audit(company_id, "document", doc_id, "unpost", snapshot)
 
+    def repost(
+        self,
+        company_id: int,
+        doc_id: int,
+        doc_date: date | str,
+        postings: Sequence[PostingInput],
+        memo: str = "",
+        layer: str = "common",
+    ) -> None:
+        """Edit a posted document in place, as in 1C: the new content is posted atomically
+        and keeps the number; the audit trail keeps the old content."""
+        with transaction(self.conn):
+            doc = self._document(company_id, doc_id)
+            self._require_not_inventory_document(doc_id)
+            if doc["status"] != "posted":
+                raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
+            if doc["reversal_of"] is not None:
+                raise ValidationError(
+                    tr("сторно №{n} нельзя изменить, его можно только удалить", n=doc["number"])
+                )
+            self._require_changeable(company_id, doc)
+            snapshot = self._snapshot(doc)
+            self._rewrite(company_id, doc_id, doc_date, postings, memo, layer)
+            self._audit(company_id, "document", doc_id, "repost", snapshot)
+
+    def rewrite_linked(
+        self,
+        company_id: int,
+        doc_id: int,
+        doc_date: date | str,
+        postings: Sequence[PostingInput],
+        memo: str = "",
+    ) -> None:
+        """Replace the postings of a document a module (the warehouse) created, keeping its
+        number. Only the module calls this; the journal refuses to touch such documents."""
+        with transaction(self.conn):
+            doc = self._document(company_id, doc_id)
+            if doc["status"] == "posted" and self._same_content(doc, doc_date, postings, memo):
+                return  # a recalculation that changed nothing leaves no trace
+            self._require_changeable(company_id, doc)
+            snapshot = self._snapshot(doc)
+            self._rewrite(company_id, doc_id, doc_date, postings, memo, doc["layer"])
+            self._audit(company_id, "document", doc_id, "repost", snapshot)
+
+    def _same_content(
+        self,
+        doc: sqlite3.Row,
+        doc_date: date | str,
+        postings: Sequence[PostingInput],
+        memo: str,
+    ) -> bool:
+        if doc["doc_date"] != iso_date(doc_date) or doc["memo"] != memo:
+            return False
+        stored = [
+            (
+                p["debit_account_id"],
+                p["credit_account_id"],
+                p["amount"],
+                (p["dt_sc1"], p["dt_sc2"], p["dt_sc3"]),
+                (p["ct_sc1"], p["ct_sc2"], p["ct_sc3"]),
+                p["memo"],
+                p["currency_id"],
+                p["currency_amount"],
+            )
+            for p in self.conn.execute(
+                "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
+            )
+        ]
+        try:
+            wanted = [
+                (
+                    p.debit_account_id,
+                    p.credit_account_id,
+                    to_minor(p.amount),
+                    pad_subconto(p.debit_subconto),
+                    pad_subconto(p.credit_subconto),
+                    p.memo,
+                    p.currency_id,
+                    None if p.currency_id is None else to_minor(p.currency_amount or 0),
+                )
+                for p in postings
+            ]
+        except (TypeError, ValueError):
+            return False
+        return stored == wanted
+
+    def _rewrite(
+        self,
+        company_id: int,
+        doc_id: int,
+        doc_date: date | str,
+        postings: Sequence[PostingInput],
+        memo: str,
+        layer: str,
+    ) -> None:
+        # immutability triggers let a posted document change only by becoming a draft first
+        self.conn.execute(
+            "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc_id,)
+        )
+        self.conn.execute(
+            "UPDATE documents SET doc_date = ?, memo = ?, layer_id = ? WHERE id = ?",
+            (iso_date(doc_date), memo, self._layer_id(company_id, layer), doc_id),
+        )
+        self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
+        self._insert_postings(company_id, doc_id, postings)
+        self._post(company_id, doc_id)
+
     def delete_document(self, company_id: int, doc_id: int) -> None:
         """Delete a draft, or a posted document in an open period. Audited with its content.
 

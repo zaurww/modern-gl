@@ -78,6 +78,7 @@ class DocumentPage(QWidget):
     close_requested = Signal()
     title_changed = Signal()
     new_requested = Signal()  # posted with Ctrl+Shift+Enter: the next document, please
+    open_inventory_document = Signal(int)  # the warehouse document that made this one
 
     def __init__(
         self,
@@ -198,6 +199,11 @@ class DocumentPage(QWidget):
         # The rest of what can be done with the document waits in "⋯" (see menu_items).
         self.btn_more = more_button(self.menu_items, tr("Действия с документом"))
         actions.addWidget(self.btn_more)
+        # Postings made by a warehouse document are corrected there: one click away.
+        self.btn_source = button("", "flat", tr("Проводки сформированы складским документом"))
+        self.btn_source.clicked.connect(self._open_source)
+        self.btn_source.hide()
+        actions.addWidget(self.btn_source)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
@@ -458,7 +464,7 @@ class DocumentPage(QWidget):
         self.memo.setText(d.memo)
         self.date.setDate(to_qdate(date.fromisoformat(d.doc_date)))
         self._select_layer(d.layer)
-        read_only = d.status == "posted"
+        read_only = not d.editable  # a posted document is edited in place, as in 1C
         self.model.beginResetModel()
         self.model.rows = [PostingRow.from_data(p) for p in d.postings] or [PostingRow()]
         self.model.read_only = read_only
@@ -486,8 +492,13 @@ class DocumentPage(QWidget):
         for w in (self.memo, self.date, self.layer):
             w.setEnabled(not read_only)
         self.memo.setReadOnly(read_only)
-        self.btn_save.setVisible(not read_only)
+        posted = self.doc is not None and self.doc.status == "posted"
+        self.btn_save.setVisible(not read_only and not posted)  # Ctrl+S reposts it
         self.btn_post.setVisible(not read_only)
+        source = self.doc.inventory_number if self.doc else None
+        self.btn_source.setVisible(source is not None)
+        if source is not None:
+            self.btn_source.setText(tr("Складской документ №{n}", n=source))
         if read_only:
             self.amount.setEnabled(False)
         self.hint.setVisible(not read_only)
@@ -498,15 +509,25 @@ class DocumentPage(QWidget):
         doc = self.doc
         if doc is None:  # not saved yet
             return [(tr("Сделать шаблоном"), self.save_as_template)]
-        posted = self.model.read_only
+        copy = (tr("Копировать"), lambda: self.copy_requested.emit(self._as_template()))
+        if doc.inventory_number is not None:
+            return [
+                (tr("Складской документ №{n}", n=doc.inventory_number), self._open_source),
+                copy,
+            ]
+        posted = doc.status == "posted"
         items: list[MenuItem] = []
         if posted and doc.reversal_of is None:
             items.append((tr("Отменить проведение"), self.unpost))
-        items.append((tr("Копировать"), lambda: self.copy_requested.emit(self._as_template())))
+        items.append(copy)
         items.append((tr("Сделать шаблоном"), self.save_as_template))
         if posted and doc.reversal_of is None and doc.reversed_by is None:
             items += [None, (tr("Сторно…"), self.reverse)]
         return [*items, None, (tr("Удалить"), self.delete)]
+
+    def _open_source(self) -> None:
+        if self.doc is not None and self.doc.inventory_document_id is not None:
+            self.open_inventory_document.emit(self.doc.inventory_document_id)
 
     # ---- actions ---------------------------------------------------------------------
 
@@ -532,6 +553,10 @@ class DocumentPage(QWidget):
                     doc_id = led.post_new(cid, doc_date, inputs, memo, layer)
                 else:
                     doc_id = led.create_draft(cid, doc_date, inputs, memo, layer)
+            elif self.doc.status == "posted":  # edited in place: posted again at once
+                doc_id = self.doc.id
+                led.repost(cid, doc_id, doc_date, inputs, memo, layer)
+                post = True
             else:
                 doc_id = self.doc.id
                 with transaction(self.s.conn):

@@ -182,6 +182,7 @@ class InventoryGridRow:
     offset_account_id: int | None = None
     offset_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
     memo: str = ""
+    line_id: int | None = None  # the stored line; landed cost refers to it
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""
@@ -204,7 +205,7 @@ class InventoryGridRow:
             self.offset_account_id,
             list(self.offset_subconto),
             self.memo,
-        )
+        )  # a copy is a new line: no line id
 
 
 class InventoryLinesModel(QAbstractTableModel):
@@ -629,6 +630,7 @@ class InventoryLinesModel(QAbstractTableModel):
                         row.memo.strip(),
                         row.offset_account_id,
                         tuple(row.offset_subconto),
+                        row.line_id,
                     )
                 )
             elif self.doc_type == "issue":
@@ -640,6 +642,7 @@ class InventoryLinesModel(QAbstractTableModel):
                         row.offset_account_id,
                         tuple(row.offset_subconto),
                         row.memo.strip(),
+                        row.line_id,
                     )
                 )
             elif self.doc_type == "transfer":
@@ -650,6 +653,7 @@ class InventoryLinesModel(QAbstractTableModel):
                         row.to_warehouse_id,
                         quantity,
                         row.memo.strip(),
+                        row.line_id,
                     )
                 )
         return result
@@ -1268,12 +1272,12 @@ class InventoryDocumentPage(QWidget):
                 line.offset_account_id,
                 list(line.offset_subconto),
                 line.memo,
+                line.id,
             )
             for line in self.doc.lines
         ] or [InventoryGridRow()]
-        self.model = InventoryLinesModel(
-            self.s, self.doc_type, rows, read_only=self.doc.status == "posted"
-        )
+        read_only = not self.doc.editable  # a posted document is edited in place, as in 1C
+        self.model = InventoryLinesModel(self.s, self.doc_type, rows, read_only=read_only)
         self.table.setModel(self.model)
         self.table.configure_columns()
         self.delegate = InventoryLinesDelegate(self)
@@ -1284,7 +1288,7 @@ class InventoryDocumentPage(QWidget):
             self.status.set(tr("Проведён"), "green")
         else:
             self.status.set(tr("Черновик"), "amber")
-        self._apply_mode(self.doc.status == "posted")
+        self._apply_mode(read_only)
         self.dirty = False
         self.total.setText(money(self.model.total(), blank_zero=False))
         self.title_changed.emit()
@@ -1294,12 +1298,12 @@ class InventoryDocumentPage(QWidget):
         self.memo.setEnabled(not read_only)
         self.date.setEnabled(not read_only)
         self.model.read_only = read_only
-        self.btn_save.setVisible(not read_only and self.doc_type != "landed_cost")
-        self.btn_post.setVisible(not read_only and self.doc_type != "landed_cost")
+        posted = self.doc is not None and self.doc.status == "posted"
+        editable = not read_only and self.doc_type != "landed_cost"
+        self.btn_save.setVisible(editable and not posted)  # Ctrl+S reposts a posted one
+        self.btn_post.setVisible(editable)
         self.btn_delete.setVisible(self.doc is not None)
-        self.btn_unpost.setVisible(
-            read_only and self.doc is not None and self.doc_type != "landed_cost"
-        )
+        self.btn_unpost.setVisible(posted and self.doc_type != "landed_cost")
         self.btn_gl.setVisible(self.doc is not None and self.doc.gl_document_id is not None)
         self.hint.setVisible(not read_only and self.doc_type != "landed_cost")
 
@@ -1314,10 +1318,17 @@ class InventoryDocumentPage(QWidget):
         self.table.setFocus()
         self.error.hide()
         try:
-            inputs = self.model.to_inputs(complete=post)
-            document_id = self._save_draft(inputs)
-            if post:
-                self.inventory.post_document(self.s.company_id, document_id)
+            if self.doc is not None and self.doc.status == "posted":
+                # edited in place: posted again at once, later documents recalculated
+                post = True
+                inputs = self.model.to_inputs(complete=True)
+                with self.inventory.reposting(self.s.company_id, self.doc.id):
+                    document_id = self._save_draft(inputs)
+            else:
+                inputs = self.model.to_inputs(complete=post)
+                document_id = self._save_draft(inputs)
+                if post:
+                    self.inventory.post_document(self.s.company_id, document_id)
         except (LedgerError, ValueError, TypeError) as exc:
             self.show_error(str(exc))
             return False

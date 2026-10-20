@@ -55,7 +55,23 @@ class DocumentData:
     status: str
     reversal_of: int | None
     reversed_by: int | None
+    closed: bool = False  # dated in a closed period: only a storno can correct it
+    # made by a warehouse document (id, number): it is corrected there, not here
+    inventory_document_id: int | None = None
+    inventory_number: int | None = None
     postings: list[PostingData] = field(default_factory=list)
+
+    @property
+    def editable(self) -> bool:
+        """Whether the document can be changed in place (a posted one: as in 1C)."""
+        if self.status != "posted":
+            return True
+        return (
+            not self.closed
+            and self.reversal_of is None
+            and self.reversed_by is None
+            and self.inventory_document_id is None
+        )
 
 
 def list_companies(conn: sqlite3.Connection) -> list[tuple[int, str]]:
@@ -104,15 +120,20 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
     row = conn.execute(
         """
         SELECT d.id, d.number, d.doc_date, d.memo, l.code AS layer, d.status, d.reversal_of,
-               (SELECT r.id FROM documents r WHERE r.reversal_of = d.id) AS reversed_by
-        FROM documents d JOIN layers l ON l.id = d.layer_id
+               (SELECT r.id FROM documents r WHERE r.reversal_of = d.id) AS reversed_by,
+               COALESCE(c.closed_through >= d.doc_date, 0) AS closed,
+               i.id AS inventory_document_id, i.number AS inventory_number
+        FROM documents d
+        JOIN layers l ON l.id = d.layer_id
+        JOIN companies c ON c.id = d.company_id
+        LEFT JOIN inventory_documents i ON i.gl_document_id = d.id
         WHERE d.company_id = ? AND d.id = ?
         """,
         (company_id, doc_id),
     ).fetchone()
     if row is None:
         raise NotFoundError(tr("документ {id} не найден", id=doc_id))
-    doc = DocumentData(**dict(row))
+    doc = DocumentData(**{**dict(row), "closed": bool(row["closed"])})
     for p in conn.execute(
         "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc_id,)
     ):
