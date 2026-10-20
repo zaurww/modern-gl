@@ -86,6 +86,7 @@ from modern_gl.i18n import LANGUAGES, language, set_language, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.workspace import TRASH, Workspace
 from modern_gl.reporting.inventory import inventory_document_of
+from modern_gl.reporting.trade import PURCHASE, SALE
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 PLACES = [  # key, title (translated on display), icon color (a palette name: themes change it)
@@ -98,9 +99,10 @@ PLACES = [  # key, title (translated on display), icon color (a palette name: th
     (("currencies",), "Валюты", "green"),
     (("invoices",), "E-qaimələr", "accent"),
 ]
-# Modules: optional ways of working beside the journal (D30, D44), in a block of their own
+# Modules: optional ways of working beside the journal (D30, D44, D46), in a block of their own
 MODULES = [
-    (("trade",), "Покупки и продажи", "green"),
+    (("purchases",), "Покупки", "green"),
+    (("sales",), "Продажи", "accent"),
     (("inventory",), "Склад", "amber"),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES + MODULES]
@@ -293,7 +295,8 @@ class MainWindow(QMainWindow):
             ("Ctrl+7", lambda: self.show_place(("currencies",))),
             ("Ctrl+8", lambda: self.show_place(("invoices",))),
             ("Ctrl+9", lambda: self.show_place(("opening",))),
-            ("Ctrl+0", lambda: self.show_place(("trade",))),
+            ("Ctrl+0", lambda: self.show_place(("purchases",))),
+            ("Ctrl+-", lambda: self.show_place(("sales",))),
             ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
@@ -566,10 +569,11 @@ class MainWindow(QMainWindow):
             page.open_inventory_document.connect(self.open_inventory_document)
             page.new_inventory_document.connect(self.new_inventory_document)
             return page
-        if key == ("trade",):
-            page = TradePage(s)
+        if key in (("purchases",), ("sales",)):
+            page = TradePage(s, PURCHASE if key == ("purchases",) else SALE)
             page.open_inventory_document.connect(self.open_inventory_document)
             page.new_inventory_document.connect(self.new_inventory_document)
+            page.imported.connect(self._refresh_trade)
             return page
         if key == ("templates",):
             page = TemplatesPage(s)
@@ -828,9 +832,13 @@ class MainWindow(QMainWindow):
         inventory = self._page(("inventory",), InventoryPage)
         if inventory is not None:
             inventory.refresh()
-        trade = self._page(("trade",), TradePage)
-        if trade is not None:
-            trade.refresh()
+        self._refresh_trade()
+
+    def _refresh_trade(self) -> None:
+        for key in (("purchases",), ("sales",)):
+            trade = self._page(key, TradePage)
+            if trade is not None:
+                trade.refresh()
 
     def open_template(self, template_id: int | None) -> None:
         """The template editor; a saved (or deleted) template returns to the list."""

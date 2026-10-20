@@ -947,22 +947,21 @@ AZ: dict[str, str] = {
     "Ноутбук": "Noutbuk",
     "Ноутбук Dell": "Noutbuk Dell",
     "Ремонт и ноутбук": "Təmir və noutbuk",
-    # Покупки и продажи / Alış və satış (сессия 12)
-    "Покупки и продажи": "Alış və satış",
+    # Покупки / Alış и Продажи / Satış (сессия 12, D46)
+    "Покупки": "Alış",
+    "Продажи": "Satış",
     "Покупка": "Alış",
-    "Покупки": "Alışlar",
-    "Продажи": "Satışlar",
-    "Все": "Hamısı",
     "+ Покупка": "+ Alış",
     "+ Продажа": "+ Satış",
+    "Поставщик": "Malsatan",
+    "Покупатель": "Alıcı",
     "Контрагент, VÖEN или e-qaimə": "Kontragent, VÖEN və ya e-qaimə",
-    "Покупок и продаж пока нет": "Hələ alış və satış yoxdur",
-    "Покупка — товары, услуги и ОС от поставщика; продажа — товары и услуги.": (
-        "Alış — təchizatçıdan mal, xidmət və ƏV; satış — mal və xidmət."
-    ),
-    "Проведено: покупки {bought}   ·   продажи {sold}": (
-        "Keçirilib: alış {bought}   ·   satış {sold}"
-    ),
+    "Покупок пока нет": "Hələ alış yoxdur",
+    "Товары, услуги и ОС от поставщика.": "Malsatandan mal, xidmət və ƏV.",
+    "Продаж пока нет": "Hələ satış yoxdur",
+    "Товары и услуги покупателю.": "Alıcıya mal və xidmət.",
+    "Проведено покупок: {total}": "Keçirilmiş alış: {total}",
+    "Проведено продаж: {total}": "Keçirilmiş satış: {total}",
     # Импорт e-qaimə с портала (сессия 12)
     "E-qaimə с портала": "Portaldan e-qaimələr",
     "E-qaimə с портала…": "Portaldan e-qaimələr…",

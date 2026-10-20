@@ -323,7 +323,7 @@ def list_inventory_documents(
     conn: sqlite3.Connection, company_id: int, limit: int = 100
 ) -> list[InventoryDocumentSummary]:
     """The latest inventory documents with their total amount, newest first. Purchases and
-    sales without goods are left to «Покупки и продажи»."""
+    sales without goods are left to «Покупки» and «Продажи»."""
     rows = conn.execute(
         """
         SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.status,

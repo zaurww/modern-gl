@@ -1,4 +1,4 @@
-"""«Покупки и продажи / Alış və satış»: purchases and sales in one list."""
+"""«Покупки / Alış» and «Продажи / Satış»: two sections, each its own list (D46)."""
 
 from __future__ import annotations
 
@@ -56,28 +56,34 @@ def test_trade_documents_lists_purchases_and_sales(shop, conn):
     assert [r.id for r in trade_documents(conn, shop.company_id, PURCHASE)] == [purchase]
 
 
-def test_trade_page_filters_searches_and_opens(shop, conn, qtbot):
-    purchase, sale, _ = fill(shop)
+def test_purchases_and_sales_are_separate_pages(shop, conn, qtbot):
+    purchase, sale, draft = fill(shop)
     session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
-    page = TradePage(session)
-    qtbot.addWidget(page)
-    assert len(page.model.rows) == 3
-    # posted only: a purchase of 141.60, a sale of 70.80
-    assert page.footer.text() == "Проведено: покупки 141.60   ·   продажи 70.80"
+    purchases, sales = TradePage(session, PURCHASE), TradePage(session, SALE)
+    qtbot.addWidget(purchases)
+    qtbot.addWidget(sales)
+    assert purchases.key == ("purchases",) and sales.key == ("sales",)
+    assert [r.id for r in purchases.model.rows] == [purchase]
+    assert [r.id for r in sales.model.rows] == [draft, sale]
+    # posted only: the purchase 120.00 + 21.60, the sale 60.00 + 10.80 (the draft is not)
+    assert purchases.footer.text() == "Проведено покупок: 141.60"
+    assert sales.footer.text() == "Проведено продаж: 70.80"
 
-    page.kind.setCurrentIndex(page.kind.findData(PURCHASE))
-    page.refresh()
-    assert [r.id for r in page.model.rows] == [purchase]
-    page.kind.setCurrentIndex(0)
-    page.search.setText("12345")  # the customer's VÖEN
-    assert {r.id for r in page.model.rows} >= {sale}
-    assert purchase not in {r.id for r in page.model.rows}
+    sales.search.setText("12345")  # the customer's VÖEN: the sale and the draft
+    assert [r.id for r in sales.model.rows] == [draft, sale]
+    sales.search.setText("MT2601001")
+    assert [r.id for r in sales.model.rows] == [sale]
+    purchases.search.setText("12345")
+    assert purchases.model.rows == []
 
-    with qtbot.waitSignal(page.open_inventory_document) as opened:
-        page.drill(page.model.rows[0])
-    assert opened.args == [page.model.rows[0].id]
-    with qtbot.waitSignal(page.new_inventory_document) as new:
-        page.new_buttons[SALE].click()
+    with qtbot.waitSignal(sales.open_inventory_document) as opened:
+        sales.drill(sales.model.rows[0])
+    assert opened.args == [sale]
+    with qtbot.waitSignal(purchases.new_inventory_document) as new:
+        purchases.new_button.click()
+    assert new.args == [PURCHASE]
+    with qtbot.waitSignal(sales.new_inventory_document) as new:
+        sales.new_button.click()
     assert new.args == [SALE]
 
 
