@@ -1001,4 +1001,11 @@ AZ: dict[str, str] = {
     "Контрагент / строка": "Kontragent / sətir",
     "VÖEN / код": "VÖEN / kod",
     "Станет": "Nə olacaq",
+    "Добавить контрагентов": "Kontragentləri əlavə et",
+    "Только контрагенты, без документов": "Yalnız kontragentlər, sənədsiz",
+    "Название в программе можно исправить — двойной щелчок": "Proqramdakı adı düzəltmək olar — iki dəfə klik",
+    "Новые контрагенты: {n}": "Yeni kontragentlər: {n}",
+    "Добавлено контрагентов: {n}": "Əlavə edilən kontragent: {n}",
+    "Название на портале": "Portaldakı ad",
+    "Название в программе": "Proqramdakı ad",
 }
