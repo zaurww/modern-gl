@@ -495,7 +495,8 @@ def test_delete_mistaken_storno_from_its_page(window, monkeypatch):
     )
     current_page(window).reverse()
     storno_page = current_page(window)
-    assert storno_page.btn_delete.isVisible() and not storno_page.btn_unpost.isVisible()
+    actions = [item[0] for item in storno_page.menu_items() if item]
+    assert "Удалить" in actions and "Отменить проведение" not in actions
     monkeypatch.setattr(
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
     )

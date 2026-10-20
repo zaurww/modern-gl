@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date
 from typing import ClassVar, cast
 
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -65,6 +67,28 @@ def button(text: str, kind: str = "", tooltip: str = "") -> QPushButton:
     if tooltip:
         b.setToolTip(tooltip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
+    return b
+
+
+MenuItem = tuple[str, Callable[[], object]] | None  # None: a separator
+
+
+def more_button(items: Callable[[], list[MenuItem]], tooltip: str = "") -> QPushButton:
+    """ "⋯": the less frequent actions of a page in a menu, so one main action stands
+    out (as in Things). `items()` is asked each time, so the menu fits the moment."""
+    b = button("⋯", "more", tooltip or tr("Ещё"))
+
+    def show() -> None:
+        menu = QMenu(b)
+        for item in items():
+            if item is None:
+                menu.addSeparator()
+                continue
+            text, fn = item
+            menu.addAction(text).triggered.connect(lambda _=False, fn=fn: fn())
+        menu.exec(b.mapToGlobal(b.rect().bottomLeft()))
+
+    b.clicked.connect(show)
     return b
 
 

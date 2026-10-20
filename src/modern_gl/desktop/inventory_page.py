@@ -43,6 +43,7 @@ from modern_gl.desktop.widgets import (
     date_edit,
     edited_date,
     money,
+    more_button,
     ru_date,
 )
 from modern_gl.domain.errors import LedgerError
@@ -352,15 +353,18 @@ class InventoryPage(QWidget):
         root.setContentsMargins(40, 30, 40, 24)
         root.setSpacing(14)
         self.header = PageHeader(tr("Склад"), "")
-        for title, action in (
-            ("+ Единица", self.add_unit),
-            ("+ Товар", self.add_item),
-            ("+ Склад", self.add_warehouse),
-            ("+ Вид расходов", self.add_landed_cost_type),
-        ):
-            control = button(tr(title), "flat")
-            control.clicked.connect(action)
-            self.header.add_action(control)
+        add_item = button(tr("+ Товар"), "flat")
+        add_item.clicked.connect(self.add_item)
+        self.header.add_action(add_item)
+        self.header.add_action(  # what is set up once, rarely
+            more_button(
+                lambda: [
+                    (tr("+ Единица"), self.add_unit),
+                    (tr("+ Склад"), self.add_warehouse),
+                    (tr("+ Вид расходов"), self.add_landed_cost_type),
+                ]
+            )
+        )
         root.addWidget(self.header)
 
         operations = QHBoxLayout()
@@ -380,6 +384,7 @@ class InventoryPage(QWidget):
 
         self.model = ReportModel()
         self.table = QTableView()
+        self.table.setObjectName("list")
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -406,6 +411,7 @@ class InventoryPage(QWidget):
         root.addLayout(recent)
         self.documents_model = ReportModel()
         self.documents = QTableView()
+        self.documents.setObjectName("list")
         self.documents.setModel(self.documents_model)
         self.documents.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.documents.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)

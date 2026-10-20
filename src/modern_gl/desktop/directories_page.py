@@ -183,6 +183,7 @@ class DirectoriesPage(QWidget):
 
         self.model = ReportModel()
         self.table = QTableView()
+        self.table.setObjectName("list")
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
