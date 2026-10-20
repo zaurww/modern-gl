@@ -20,7 +20,7 @@ def kinds(conn, cid):
 
 
 def test_every_type_has_a_class_and_a_translation():
-    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 29
+    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 30
     assert {cls for _, cls, _ in ACCOUNT_TYPES} == {
         "asset",
         "liability",
@@ -99,6 +99,18 @@ def test_set_type_changes_class_and_follows_to_subaccounts(ledger, conn):
         "SELECT action FROM audit_events WHERE entity = 'account' ORDER BY id DESC LIMIT 1"
     ).fetchone()
     assert log["action"] == "set_type"
+
+
+def test_vat_deposit_type(ledger, conn):
+    """ƏDV depozit hesabı (D41): an asset of its own type, not a bank account."""
+    cid = ledger.create_company("Типы")
+    ledger.add_account(cid, "55", "Специальные счета", is_group=True, account_type="bank")
+    ledger.add_account(cid, "55.1", "ƏDV depozit hesabı", parent="55")
+    ledger.set_account_type(cid, "55.1", "vat_deposit")
+    k = kinds(conn, cid)
+    assert k["55.1"] == ("vat_deposit", "asset")
+    assert k["55"] == ("bank", "asset")
+    assert AZ["Депозитный счёт НДС"] == "ƏDV depozit hesabı"
 
 
 def test_changing_class_clears_a_type_of_another_class(ledger, conn):
