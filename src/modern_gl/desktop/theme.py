@@ -1,11 +1,16 @@
 """Visual language: calm, light, airy (inspired by Things), dense where it matters.
 
 All colors and fonts live here as tokens; widgets never hardcode them.
+
+Two looks share every token but the canvas (MODERN_GL_STYLE, for comparing them):
+"things" — one white plane; "craft" — a soft grey canvas with white rounded sheets
+for tables and lists.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, replace
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap
@@ -35,9 +40,28 @@ class Palette:
     red_soft: str = "#FCE9E9"
     violet: str = "#7C5CD6"
     teal: str = "#1F9BA6"
+    field: str = "#F1F3F5"  # input wells: visible on white, quiet
+    field_hover: str = "#EBEDF0"
+    header_text: str = "#8A919B"  # column captions: quiet but readable
+    canvas: str = "#FFFFFF"  # behind pages ("craft": grey under white sheets)
+    sheet_border: str = "transparent"
+    sheet_padding: str = "0"  # a sheet keeps its rows off its rounded edge
 
 
+STYLE = os.environ.get("MODERN_GL_STYLE", "things")
 P = Palette()
+if STYLE == "craft":
+    P = replace(
+        P,
+        window="#F6F7F9",
+        canvas="#F6F7F9",
+        sidebar="#EEF0F3",
+        sidebar_selection="#E1E4EA",
+        field="#FFFFFF",
+        field_hover="#FFFFFF",
+        sheet_border="#E6E8EC",
+        sheet_padding="0 6px",
+    )
 
 
 def _family(*candidates: str) -> str:
@@ -106,7 +130,7 @@ def dot_icon(color: str, size: int = 18, glyph: str = "") -> QIcon:
 
 STYLESHEET = f"""
 * {{ outline: 0; }}
-QMainWindow, QWidget#page {{ background: {P.window}; }}
+QMainWindow, QWidget#page {{ background: {P.canvas}; }}
 QToolTip {{
     background: {P.text}; color: #FFFFFF; border: none; padding: 5px 8px; border-radius: 6px;
 }}
@@ -143,6 +167,11 @@ QPushButton#primary:disabled {{
 }}
 QPushButton#flat {{ background: transparent; border: none; color: {P.accent}; padding: 6px 8px; }}
 QPushButton#flat:hover {{ background: {P.accent_soft}; }}
+QPushButton#more {{
+    background: transparent; border: none; color: {P.secondary}; padding: 2px 10px 6px 10px;
+    font-size: 14pt; border-radius: 7px;
+}}
+QPushButton#more:hover {{ background: {P.field}; color: {P.text}; }}
 QPushButton#danger {{ background: transparent; border: none; color: {P.red}; padding: 6px 8px; }}
 QPushButton#danger:hover {{ background: {P.red_soft}; }}
 QPushButton#dangerSolid {{
@@ -159,9 +188,10 @@ QPushButton#fab:hover {{ background: {P.accent_hover}; }}
 
 /* Inputs */
 QLineEdit, QDateEdit, QComboBox {{
-    background: {P.subtle}; border: 1px solid transparent; border-radius: 7px;
+    background: {P.field}; border: 1px solid {P.sheet_border}; border-radius: 7px;
     padding: 5px 8px; color: {P.text}; selection-background-color: {P.accent};
 }}
+QLineEdit:hover, QDateEdit:hover, QComboBox:hover {{ background: {P.field_hover}; }}
 QLineEdit:focus, QDateEdit:focus, QComboBox:focus {{
     background: {P.surface}; border: 1px solid {P.accent};
 }}
@@ -177,9 +207,12 @@ QComboBox QAbstractItemView {{
 
 /* Tables */
 QTableView {{
-    background: {P.surface}; border: none; gridline-color: transparent;
+    background: {P.surface}; border: 1px solid {P.sheet_border}; border-radius: 12px;
+    gridline-color: transparent; padding: {P.sheet_padding};
     selection-background-color: {P.selection}; selection-color: {P.text};
 }}
+/* lists (journal, chart, directories…): no rule under each row, air and hover instead */
+QTableView#list::item {{ border-bottom: 1px solid transparent; }}
 QTableView::item {{ border-bottom: 1px solid {P.hairline}; padding: 0 8px; }}
 QTableView::item:hover {{ background: {P.subtle}; }}
 QTableView::item:selected {{ background: {P.selection}; color: {P.text}; }}
@@ -188,7 +221,7 @@ QTableView QLineEdit {{
 }}
 QHeaderView {{ background: {P.surface}; border: none; }}
 QHeaderView::section {{
-    background: {P.surface}; color: {P.tertiary}; border: none;
+    background: {P.surface}; color: {P.header_text}; border: none;
     border-bottom: 1px solid {P.hairline}; padding: 6px 11px;  /* = cell padding + text margin */
 }}
 QHeaderView::section:vertical {{

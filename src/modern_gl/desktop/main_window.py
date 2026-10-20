@@ -21,7 +21,15 @@ from PySide6.QtCore import (
     Qt,
     QUrl,
 )
-from PySide6.QtGui import QColor, QDesktopServices, QKeySequence, QPainter, QPen, QShortcut
+from PySide6.QtGui import (
+    QColor,
+    QDesktopServices,
+    QIcon,
+    QKeySequence,
+    QPainter,
+    QPen,
+    QShortcut,
+)
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -46,6 +54,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_name, load_document, load_template
+from modern_gl.desktop import icons
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
@@ -56,7 +65,7 @@ from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
-from modern_gl.desktop.theme import P, dot_icon, fonts
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import LANGUAGES, language, set_language, tr
 from modern_gl.infrastructure import backup
@@ -67,12 +76,20 @@ PLACES = [  # key, title (translated on display), icon color
     (("journal",), "Журнал", P.accent),
     (("osv",), "ОСВ", P.green),
     (("chart",), "План счетов", P.violet),
-    (("inventory",), "Склад", P.green),
+    (("inventory",), "Склад", P.amber),
     (("directories",), "Справочники", P.teal),
     (("templates",), "Шаблоны", P.amber),
-    (("currencies",), "Валюты", P.violet),
+    (("currencies",), "Валюты", P.green),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES]
+# open pages: a quiet grey icon of what they are (a new document is the blue plus)
+OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
+OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
+
+
+def open_icon(key) -> QIcon:
+    name = OPEN_ICONS.get(key[0], "report")
+    return icons.icon(name, P.accent if name == "new" else P.secondary)
 
 
 PageT = TypeVar("PageT", bound=QWidget)
@@ -88,10 +105,6 @@ class TitledPage(Protocol):
 @runtime_checkable
 class FocusablePage(Protocol):
     def focus_table(self) -> None: ...
-
-
-def doc_glyph() -> str:
-    return tr("Документ №{n}", n="")[0]
 
 
 class NavDelegate(QStyledItemDelegate):
@@ -166,8 +179,8 @@ class Sidebar(QWidget):
         item.setData(KEY_ROLE, None)
         self.nav.addItem(item)
 
-    def add_item(self, key, text: str, color: str, glyph: str = "") -> QListWidgetItem:
-        item = QListWidgetItem(dot_icon(color, 18, glyph), text)
+    def add_item(self, key, text: str, icon: QIcon) -> QListWidgetItem:
+        item = QListWidgetItem(icon, text)
         item.setData(KEY_ROLE, key)
         item.setSizeHint(QSize(0, 34))
         self.nav.addItem(item)
@@ -315,7 +328,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{name} — Modern GL")
         self.sidebar.retranslate()
         for key, text, color in PLACES:
-            self.sidebar.add_item(key, tr(text), color, tr(text)[0])
+            self.sidebar.add_item(key, tr(text), icons.icon(key[0], color))
         self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
 
@@ -559,10 +572,8 @@ class MainWindow(QMainWindow):
         self.pages[key] = page
         self.stack.addWidget(page)
         if open_item:
-            color = {"doc": P.amber, "new": P.accent, "template": P.amber}.get(key[0], P.teal)
             title = page.title() if isinstance(page, TitledPage) else ""
-            glyph = {"doc": doc_glyph(), "new": "+"}.get(key[0], title[:1])
-            self.sidebar.add_item(key, title, color, glyph)
+            self.sidebar.add_item(key, title, open_icon(key))
 
     def _activate(self, key) -> None:
         page = self.pages[key]
@@ -663,7 +674,7 @@ class MainWindow(QMainWindow):
             item = self.sidebar.item_for(old_key)
             if item is not None:
                 item.setData(KEY_ROLE, page.key)
-                item.setIcon(dot_icon(P.teal, 18, doc_glyph()))
+                item.setIcon(open_icon(page.key))
         self._retitle(page)
         inventory = self._page(("inventory",), InventoryPage)
         if inventory is not None:
@@ -698,7 +709,7 @@ class MainWindow(QMainWindow):
             item = self.sidebar.item_for(old_key)
             if item is not None:
                 item.setData(KEY_ROLE, page.key)
-                item.setIcon(dot_icon(P.amber, 18, doc_glyph()))
+                item.setIcon(open_icon(page.key))
         self._retitle(page)
         journal = self._page(("journal",), JournalPage)
         if journal is not None:

@@ -136,6 +136,7 @@ class JournalPage(QWidget):
         self.search.textChanged.connect(self.proxy.setFilterFixedString)
 
         self.table = QTableView()
+        self.table.setObjectName("list")
         self.table.setModel(self.proxy)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)

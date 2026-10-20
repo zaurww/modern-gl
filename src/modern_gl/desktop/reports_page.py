@@ -685,6 +685,7 @@ class ChartPage(ReportPage):
 
     def __init__(self, session: Session) -> None:
         super().__init__(session, tr("План счетов"))
+        self.table.setObjectName("list")  # a list, not a report: no rules under rows
         add = button(tr("+ Новый счёт"), "flat", "Ins")
         add.clicked.connect(lambda: self.edit_account(None))
         self.header.add_action(add)

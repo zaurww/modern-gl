@@ -46,11 +46,13 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
+    MenuItem,
     ask_date,
     button,
     date_edit,
     edited_date,
     money,
+    more_button,
     ru_date,
     to_qdate,
 )
@@ -193,20 +195,9 @@ class DocumentPage(QWidget):
 
         actions = QHBoxLayout()
         actions.setSpacing(8)
-        self.btn_delete = button(tr("Удалить"), "danger")
-        self.btn_reverse = button(tr("Сторно…"), "danger", tr("Создать документ красного сторно"))
-        self.btn_unpost = button(
-            tr("Отменить проведение"), "flat", tr("Вернуть в черновик, чтобы исправить")
-        )
-        self.btn_copy = button(tr("Копировать"), "flat", tr("Новый документ на основе этого"))
-        self.btn_template = button(
-            tr("Сделать шаблоном"), "flat", tr("Сохранить проводки как шаблон операции")
-        )
-        actions.addWidget(self.btn_delete)
-        actions.addWidget(self.btn_reverse)
-        actions.addWidget(self.btn_unpost)
-        actions.addWidget(self.btn_copy)
-        actions.addWidget(self.btn_template)
+        # The rest of what can be done with the document waits in "⋯" (see menu_items).
+        self.btn_more = more_button(self.menu_items, tr("Действия с документом"))
+        actions.addWidget(self.btn_more)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
@@ -217,11 +208,6 @@ class DocumentPage(QWidget):
 
         self.btn_save.clicked.connect(lambda: self.save(post=False))
         self.btn_post.clicked.connect(lambda: self.save(post=True))
-        self.btn_delete.clicked.connect(self.delete)
-        self.btn_reverse.clicked.connect(self.reverse)
-        self.btn_unpost.clicked.connect(self.unpost)
-        self.btn_copy.clicked.connect(lambda: self.copy_requested.emit(self._as_template()))
-        self.btn_template.clicked.connect(self.save_as_template)
         self.amount.textEdited.connect(self._amount_edited)
         self.amount.returnPressed.connect(self._focus_grid)
         self.delegate.error.connect(self.show_error)
@@ -502,22 +488,25 @@ class DocumentPage(QWidget):
         self.memo.setReadOnly(read_only)
         self.btn_save.setVisible(not read_only)
         self.btn_post.setVisible(not read_only)
-        self.btn_delete.setVisible(self.doc is not None)
-        self.btn_unpost.setVisible(
-            read_only and self.doc is not None and self.doc.reversal_of is None
-        )
-        can_reverse = (
-            read_only
-            and self.doc is not None
-            and self.doc.reversal_of is None
-            and self.doc.reversed_by is None
-        )
-        self.btn_reverse.setVisible(can_reverse)
-        self.btn_copy.setVisible(self.doc is not None)
         if read_only:
             self.amount.setEnabled(False)
         self.hint.setVisible(not read_only)
         self._update_total()
+
+    def menu_items(self) -> list[MenuItem]:
+        """What "⋯" offers for the document as it is now."""
+        doc = self.doc
+        if doc is None:  # not saved yet
+            return [(tr("Сделать шаблоном"), self.save_as_template)]
+        posted = self.model.read_only
+        items: list[MenuItem] = []
+        if posted and doc.reversal_of is None:
+            items.append((tr("Отменить проведение"), self.unpost))
+        items.append((tr("Копировать"), lambda: self.copy_requested.emit(self._as_template())))
+        items.append((tr("Сделать шаблоном"), self.save_as_template))
+        if posted and doc.reversal_of is None and doc.reversed_by is None:
+            items += [None, (tr("Сторно…"), self.reverse)]
+        return [*items, None, (tr("Удалить"), self.delete)]
 
     # ---- actions ---------------------------------------------------------------------
 

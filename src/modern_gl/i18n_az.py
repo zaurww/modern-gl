@@ -667,4 +667,6 @@ AZ: dict[str, str] = {
     "Ins — новый элемент   ·   F2 или двойной щелчок — изменить": "Ins — yeni element   ·   F2 və ya iki dəfə klik — dəyiş",
     "+ Новый элемент «{kind}» — напишите название": "+ Yeni element «{kind}» — adını yazın",
     "+ Добавить «{name}» в «{kind}»": "+ «{kind}»: «{name}» əlavə et",
+    "Ещё": "Daha çox",
+    "Действия с документом": "Sənədlə əməliyyatlar",
 }

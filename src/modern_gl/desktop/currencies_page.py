@@ -43,6 +43,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    more_button,
     ru_date,
 )
 from modern_gl.domain.currency import KNOWN, currency_name, format_rate, parse_rate
@@ -94,22 +95,19 @@ class CurrenciesPage(QWidget):
         root.setSpacing(18)
 
         self.header = PageHeader(tr("Валюты"), "")
-        for text, tip, fn in (
-            (tr("+ Валюта"), tr("Добавить валюту"), self.add_currency),
-            (
-                tr("Переоценка…"),
-                tr("Пересчитать остатки валютных счетов по курсу на дату"),
-                self.revalue,
-            ),
-            (
-                tr("Курсы ЦБА…"),
-                tr("Загрузить официальные курсы Центрального банка (cbar.az)"),
-                self.load_cbar,
-            ),
-        ):
-            b = button(text, "flat", tip)
-            b.clicked.connect(fn)
-            self.header.add_action(b)
+        rates = button(
+            tr("Курсы ЦБА…"), "flat", tr("Загрузить официальные курсы Центрального банка (cbar.az)")
+        )
+        rates.clicked.connect(self.load_cbar)
+        self.header.add_action(rates)
+        self.header.add_action(
+            more_button(
+                lambda: [
+                    (tr("Добавить валюту"), self.add_currency),
+                    (tr("Переоценка…"), self.revalue),
+                ]
+            )
+        )
         root.addWidget(self.header)
 
         body = QHBoxLayout()
@@ -138,6 +136,7 @@ class CurrenciesPage(QWidget):
 
         self.model = ReportModel()
         self.table = QTableView()
+        self.table.setObjectName("list")
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
