@@ -65,6 +65,7 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.import_page import ImportPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
+from modern_gl.desktop.invoices_page import InvoicesPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.landed_cost_page import LandedCostPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
@@ -86,6 +87,7 @@ PLACES = [  # key, title (translated on display), icon color
     (("directories",), "Справочники", P.teal),
     (("templates",), "Шаблоны", P.amber),
     (("currencies",), "Валюты", P.green),
+    (("invoices",), "E-qaimələr", P.accent),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES]
 # open pages: a quiet grey icon of what they are (a new document is the blue plus)
@@ -274,6 +276,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+5", lambda: self.show_place(("templates",))),
             ("Ctrl+6", lambda: self.show_place(("inventory",))),
             ("Ctrl+7", lambda: self.show_place(("currencies",))),
+            ("Ctrl+8", lambda: self.show_place(("invoices",))),
             ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
@@ -546,6 +549,10 @@ class MainWindow(QMainWindow):
                 lambda tid: self.new_document(entry=load_template(s.conn, s.company_id, tid))
             )
             page.edit_template.connect(self.open_template)
+            return page
+        if key == ("invoices",):
+            page = InvoicesPage(s)
+            page.open_document.connect(self.open_document)
             return page
         page = OsvPage(s) if key == ("osv",) else ChartPage(s)
         self._wire_report(page)

@@ -800,4 +800,23 @@ AZ: dict[str, str] = {
     "VÖEN {tax_id} уже есть у «{name}». Всё равно сохранить?": (
         "VÖEN {tax_id} artıq «{name}» üçün var. Yenə də yadda saxlanılsın?"
     ),
+    "строка {n}: после «№» нет номера e-qaimə": "sətir {n}: «№» işarəsindən sonra e-qaimə nömrəsi yoxdur",
+    "номер e-qaimə длиннее {n} знаков: {text}": "e-qaimə nömrəsi {n} simvoldan uzundur: {text}",
+    "Только неоплаченные": "Yalnız ödənilməmişlər",
+    "Все e-qaimə с остатком на конец периода, любой даты": (
+        "Dövrün sonunda qalığı olan bütün e-qaimələr, istənilən tarixli"
+    ),
+    "Номер, контрагент или VÖEN": "Nömrə, kontragent və ya VÖEN",
+    "Нет e-qaimə": "E-qaimə yoxdur",
+    "Номер e-qaimə пишется в колонке «E-qaimə» строк по счетам 60, 62 и ƏDV.": (
+        "E-qaimə nömrəsi 60, 62 və ƏDV hesabları üzrə sətirlərin «E-qaimə» sütununda yazılır."
+    ),
+    "Один номер e-qaimə у разных контрагентов — проверьте": (
+        "Eyni e-qaimə nömrəsi müxtəlif kontragentlərdədir — yoxlayın"
+    ),
+    "Договор": "Müqavilə",
+    "не закрыто {n}": "bağlanmayıb {n}",
+    "у {n} номер с разными контрагентами": "{n} nömrə müxtəlif kontragentlərdədir",
+    "Открыть документ №{n}": "Sənəd №{n} açılsın",
+    "В валюте на конец": "Sonda valyuta ilə",
 }

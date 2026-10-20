@@ -17,6 +17,10 @@ Speed-ups: a subconto list starts with the elements recently used on that accoun
 memo cell offers the memo of the last posting with the same Dt/Kt pair (selected, so
 typing replaces it); "#" in the Dt cell picks an entry template; an amount may be typed
 as arithmetic (1180*18/118).
+
+The e-qaimə column (the number of the portal's electronic invoice) appears once a line
+is on a settlement or ƏDV account; it stays after the memo, so pasting in the order of
+keyboard entry is not shifted.
 """
 
 from __future__ import annotations
@@ -64,11 +68,12 @@ from modern_gl.domain.currency import (
     unit_rate,
 )
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import SCALE, format_minor, to_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.i18n_az import AZ
 
-DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO = 0, 4, 8, 9, 10, 11, 12
+DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO, INVOICE = 0, 4, 8, 9, 10, 11, 12, 13
 CURRENCY_COLUMNS = (CURRENCY, CURRENCY_AMOUNT, RATE)
 HEADERS = [
     "Дебет",
@@ -84,6 +89,7 @@ HEADERS = [
     "Курс",
     "Сумма",
     "Содержание",
+    "E-qaimə",
 ]
 NUMBER_COLUMNS = (CURRENCY_AMOUNT, RATE, AMOUNT)
 # translated at display time: tr(HEADERS[i])
@@ -102,6 +108,7 @@ def column_role(col: int) -> tuple[str, int | None]:
         CURRENCY_AMOUNT: "currency_amount",
         RATE: "rate",
         AMOUNT: "amount",
+        INVOICE: "invoice",
     }
     return names.get(col, "memo"), None
 
@@ -168,6 +175,7 @@ HEADER_FIELDS = [  # header names -> column (subconto headers are handled separa
     (_names("Курс"), RATE),
     (_names("Сумма"), AMOUNT),
     (_names("Содержание", "Комментарий"), MEMO),
+    (_names("E-qaimə", "E-qaime", "Е-гаимя", "Счёт-фактура", "Qaimə"), INVOICE),
 ]
 SUBCONTO_NAMES = _names("Субконто")
 
@@ -210,6 +218,7 @@ class PostingRow:
     currency_amount: int | None = None
     rate: Fraction | None = None  # manat per unit; the manat amount follows it
     rate_auto: bool = True  # taken from the rates of the document date (not typed)
+    invoice: str = ""  # e-qaimə number
 
     def is_empty(self) -> bool:
         return (
@@ -234,6 +243,7 @@ class PostingRow:
             currency_amount=cur if keep_sign or cur is None else abs(cur),
             rate=Fraction(p.amount, cur) if cur and p.amount else None,  # as it was posted
             rate_auto=False,
+            invoice=p.invoice,
         )
 
 
@@ -294,6 +304,13 @@ class PostingsModel(QAbstractTableModel):
             self.is_currency(row) and self.rows[row].currency_id is not None
         )
 
+    def takes_invoice(self, row: int) -> bool:
+        """The line is on a settlement or ƏDV account: it may name its e-qaimə."""
+        r = self.rows[row]
+        return not self.formulas and (
+            self.catalog.takes_invoice(r.debit) or self.catalog.takes_invoice(r.credit)
+        )
+
     def kind_at(self, row: int, col: int) -> int | None:
         """Subconto kind required at this cell, or None if the cell doesn't apply."""
         side, pos = column_role(col)
@@ -309,6 +326,8 @@ class PostingsModel(QAbstractTableModel):
             return self.is_currency(row)
         if col in CURRENCY_COLUMNS:
             return self.in_currency(row)
+        if col == INVOICE:
+            return self.takes_invoice(row)
         _, pos = column_role(col)
         return pos is None or self.kind_at(row, col) is not None
 
@@ -354,6 +373,8 @@ class PostingsModel(QAbstractTableModel):
             return r.formula
         if side in ("currency", "currency_amount", "rate") and not self.in_currency(row):
             return ""
+        if side == "invoice":
+            return r.invoice if self.takes_invoice(row) else ""
         if side == "currency":
             currency = self.catalog.currencies.get(r.currency_id or 0)
             return currency.code if currency else ""
@@ -401,6 +422,8 @@ class PostingsModel(QAbstractTableModel):
             self._fit_currency(row)
         elif side in ("currency", "currency_amount", "rate"):
             self._set_currency_field(r, side, value)
+        elif side == "invoice":
+            r.invoice = value or ""
         elif side == "amount":
             if self.formulas:
                 r.formula = value
@@ -413,7 +436,7 @@ class PostingsModel(QAbstractTableModel):
                 r.formula = ""  # typed by hand: no longer follows the operation amount
         else:
             r.memo = value
-        if side in ("amount", "memo"):
+        if side in ("amount", "memo", "invoice"):
             self.dataChanged.emit(index, index)
         else:
             self._row_changed(row)
@@ -506,6 +529,8 @@ class PostingsModel(QAbstractTableModel):
         Raises LookupError / ValueError (UnknownValue for a name not in a directory)."""
         text = text.strip()
         side, pos = column_role(col)
+        if side == "invoice":
+            return normalize_invoice(text) or ""
         if not text:  # text fields (memo, a template's formula) stay strings
             return "" if side == "memo" or (side == "amount" and self.formulas) else None
         if side in ("debit", "credit") and pos is None:
@@ -679,6 +704,7 @@ class PostingsModel(QAbstractTableModel):
                 src.currency_amount,
                 src.rate,
                 src.rate_auto,
+                src.invoice,
             ),
         )
 
@@ -735,6 +761,7 @@ class PostingsModel(QAbstractTableModel):
                     r.memo.strip(),
                     r.currency_id if currency else None,
                     Decimal(r.currency_amount or 0).scaleb(-SCALE) if currency else None,
+                    r.invoice if self.takes_invoice(n - 1) else "",
                 )
             )
         if not result:
@@ -1017,7 +1044,13 @@ class PostingsTable(QTableView):
         hh.setHighlightSections(False)
         self.setColumnWidth(DT, 78)
         self.setColumnWidth(CT, 78)
-        for col, w in ((CURRENCY, 64), (CURRENCY_AMOUNT, 110), (RATE, 72), (AMOUNT, 120)):
+        for col, w in (
+            (CURRENCY, 64),
+            (CURRENCY_AMOUNT, 110),
+            (RATE, 72),
+            (AMOUNT, 120),
+            (INVOICE, 150),
+        ):
             self.setColumnWidth(col, w)
         hh.setSectionResizeMode(MEMO, QHeaderView.ResizeMode.Stretch)
         used = model.catalog.used_positions()
@@ -1025,20 +1058,23 @@ class PostingsTable(QTableView):
             if pos not in used:
                 self.setColumnHidden(DT + pos, True)
                 self.setColumnHidden(CT + pos, True)
-        self._currency_shown: bool | None = None
-        self._fit_currency_columns()
-        model.changed.connect(self._fit_currency_columns)
-        model.modelReset.connect(self._fit_currency_columns)
+        self._shown: tuple[bool, bool] | None = None
+        self._fit_columns()
+        model.changed.connect(self._fit_columns)
+        model.modelReset.connect(self._fit_columns)
 
-    def _fit_currency_columns(self) -> None:
-        """Currency columns appear only while a line is in a currency."""
+    def _fit_columns(self) -> None:
+        """Currency columns appear only while a line is in a currency, the e-qaimə column
+        while a line is on a settlement or ƏDV account."""
         m = self.model()
-        show = any(m.in_currency(r) for r in range(m.rowCount()))
-        if show == self._currency_shown:
+        rows = range(m.rowCount())
+        shown = (any(m.in_currency(r) for r in rows), any(m.takes_invoice(r) for r in rows))
+        if shown == self._shown:
             return
-        self._currency_shown = show
+        self._shown = shown
         for col in CURRENCY_COLUMNS:
-            self.setColumnHidden(col, not show)
+            self.setColumnHidden(col, not shown[0])
+        self.setColumnHidden(INVOICE, not shown[1])
         self._fit_subconto_widths()
 
     MEMO_MIN = 200  # the memo keeps room to be read

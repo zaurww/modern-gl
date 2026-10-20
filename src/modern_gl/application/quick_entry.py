@@ -6,7 +6,7 @@
     #продажа 1180 бета
 
 A line is  [date]  Dt-account [subconto, subconto]  /  Kt-account [subconto…]  amount
-[currency]  [memo]. Accounts are codes (or a unique part of a name); subconto are parts
+[currency]  [№e-qaimə]  [memo]. Accounts are codes (or a unique part of a name); subconto are parts
 of names, separated by commas, in the order of the account's subconto; "+Name" adds a
 new element. The first number after the Kt account is the amount, written without spaces
 (1234,50 or 1234.50 — a space separates words); on a currency line it
@@ -33,6 +33,8 @@ from modern_gl.application.queries import TemplateData
 from modern_gl.domain import formula
 from modern_gl.domain.currency import format_unit_rate, to_base
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.invoice import MARK as INVOICE_MARK
+from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import fold, tr
 
@@ -51,6 +53,7 @@ class QuickLine:
     currency_id: int | None = None
     currency_amount: int | None = None
     rate: Fraction | None = None
+    invoice: str = ""  # «№MT2410123456» after the amount
 
 
 @dataclass
@@ -158,6 +161,11 @@ class _Parser:
         currency = None
         if rest and (found := self._currency_code(rest[0])) is not None:
             currency, rest = found, rest[1:]
+        if rest and rest[0].startswith(INVOICE_MARK):
+            line.invoice = normalize_invoice(rest[0]) or ""
+            if not line.invoice:
+                raise ValidationError(tr("строка {n}: после «№» нет номера e-qaimə", n=n))
+            rest = rest[1:]
         line.memo = " ".join(rest)
         self._amount(n, line, amount, currency, (debit, credit))
         self.entry.lines.append(line)
@@ -437,6 +445,8 @@ def describe(entry: QuickEntry, catalog: Catalog) -> str:
             f"{tr('Дт')} {side(ln.debit, ln.debit_sc, new['debit'])}   →   "
             f"{tr('Кт')} {side(ln.credit, ln.credit_sc, new['credit'])}      {amount}"
         )
+        if ln.invoice:
+            text += f"      e-qaimə {ln.invoice}"
         if ln.memo:
             text += f"      «{ln.memo}»"
         result.append(text)

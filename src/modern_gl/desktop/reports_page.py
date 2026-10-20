@@ -683,6 +683,8 @@ class CardPage(AccountReportPage):
                 Column(tr("Дт в валюте"), lambda ln: ln.currency_debit, money=True, width=110),
                 Column(tr("Кт в валюте"), lambda ln: ln.currency_credit, money=True, width=110),
             ]
+        if any(ln.invoice for ln in card.lines):
+            columns.insert(3, Column(tr("E-qaimə"), lambda ln: ln.invoice, width=150))
         self.model.set(columns, card.lines)
         text = tr(
             "Сальдо на начало: {start}      Сальдо на конец: {end}",
@@ -731,6 +733,8 @@ class SubcontoPage(AccountReportPage):
         if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN
             columns.append(Column(tr("VÖEN"), self._tax_id, width=130))
         columns += turnover_columns()
+        if any(r.currency_closing for r in rows):  # a foreign partner: USD and EUR apart
+            columns.append(Column(tr("В валюте на конец"), self._in_currency, width=200))
         self.model.set(
             columns,
             [*rows, total] if rows else [],
@@ -738,6 +742,12 @@ class SubcontoPage(AccountReportPage):
             total=lambda r: r is total,
         )
         self.footer.setText("")
+
+    @staticmethod
+    def _in_currency(row: SubcontoRow) -> str:
+        return ",  ".join(
+            f"{code} {balance_text(net)}" for code, net in sorted(row.currency_closing.items())
+        )
 
     def _tax_id(self, row: SubcontoRow) -> str:
         if row.value_id is None:

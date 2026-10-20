@@ -43,6 +43,7 @@ class PostingData:
     memo: str
     currency_id: int | None = None
     currency_amount: int | None = None
+    invoice: str = ""  # e-qaimə number
 
 
 @dataclass
@@ -147,6 +148,7 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
                 p["memo"],
                 p["currency_id"],
                 p["currency_amount"],
+                p["invoice"] or "",
             )
         )
     return doc

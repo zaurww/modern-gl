@@ -30,6 +30,7 @@ class PostingInput:
     # One currency per posting, for whichever of its sides keeps currency.
     currency_id: int | None = None
     currency_amount: str | int | Decimal | None = None
+    invoice: str = ""  # number of the e-qaimə the posting belongs to ("" = none)
 
 
 @dataclass(frozen=True)

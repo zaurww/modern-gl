@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from modern_gl.application.currencies import CurrencyInfo, list_currencies
+from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import fold, sort_key, tr
 
@@ -224,6 +225,16 @@ class Catalog:
         """The element belongs to another owner than the one chosen."""
         value = self._values[value_id]
         return owner is not None and value.owner_id not in (None, owner)
+
+    def takes_invoice(self, account_id: int | None) -> bool:
+        """A line on the account may name its e-qaimə: settlements with partners (an
+        account with the counterparty directory, or of a settlement type) and ƏDV."""
+        if account_id is None:
+            return False
+        account = self.accounts[account_id]
+        if account.account_type is not None:
+            return account.account_type in SETTLEMENT_TYPES | VAT_TYPES
+        return any(self.kind_codes.get(k or 0) == "counterparty" for k in account.sc_kinds)
 
     def has_tax_id(self, kind_id: int) -> bool:
         """Elements of the directory are counterparties: they have a VÖEN."""

@@ -43,6 +43,20 @@ ACCOUNT_TYPES = (
     ("other_expense", "expense", "Прочие расходы"),
     ("income_tax", "expense", "Налог на прибыль"),
 )
+# Lines on these accounts may name the e-qaimə they belong to: settlements with partners
+# (an account without a type counts if it has the counterparty directory) and ƏDV (a
+# sale's ƏDV line 46 / 68.2 has no partner account; 19 has one, but it is ƏDV).
+SETTLEMENT_TYPES = frozenset(
+    {
+        "receivable",
+        "payable",
+        "advance_paid",
+        "advance_received",
+        "other_receivable",
+        "other_liability",
+    }
+)
+VAT_TYPES = frozenset({"input_vat", "tax_payable"})
 TYPE_CLASS = {t: cls for t, cls, _ in ACCOUNT_TYPES}
 TYPE_NAMES = {t: name for t, _, name in ACCOUNT_TYPES}
 

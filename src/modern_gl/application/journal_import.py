@@ -26,6 +26,8 @@ from fractions import Fraction
 from modern_gl.application.catalog import AccountInfo, Catalog
 from modern_gl.application.ledger import ImportedDocument, Ledger, PostingInput
 from modern_gl.domain.currency import parse_rate, to_base, unit_rate
+from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import SCALE, to_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.i18n_az import AZ
@@ -48,6 +50,7 @@ FIELDS = {
     "currency_amount": _names("В валюте", "Сумма в валюте"),
     "rate": _names("Курс"),
     "memo": _names("Содержание", "Комментарий"),
+    "invoice": _names("E-qaimə", "E-qaime", "Qaimə", "Номер e-qaimə", "Счёт-фактура"),
 }
 SUBCONTO = _names("Субконто")
 REQUIRED = ("date", DT, CT, "amount")
@@ -70,6 +73,7 @@ class Row:
     currency: str = ""
     currency_amount: int | None = None
     memo: str = ""
+    invoice: str = ""
     errors: list[str] = field(default_factory=list)
 
 
@@ -220,6 +224,10 @@ class _Reader:
         if row.doc_date is None:
             row.errors.append(tr("дата «{text}» не понята", text=text) if text else tr("нет даты"))
         row.memo = values.get(("memo", 0), "")
+        try:
+            row.invoice = normalize_invoice(values.get(("invoice", 0), "")) or ""
+        except ValidationError as e:
+            row.errors.append(str(e))
         accounts = {}
         for side in (DT, CT):
             text = values.get((side, 0), "")
@@ -251,6 +259,7 @@ class _Reader:
             row.memo,
             currency_id,
             None if currency_amount is None else Decimal(currency_amount).scaleb(-SCALE),
+            row.invoice,
         )
 
     def _subconto(

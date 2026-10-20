@@ -260,6 +260,7 @@ class QuickEntryBar(QWidget):
                 ln.memo,
                 ln.currency_id,
                 ln.currency_amount,
+                ln.invoice,
             )
             for ln in entry.lines
         ]
@@ -296,4 +297,5 @@ class QuickEntryBar(QWidget):
             ln.memo,
             ln.currency_id,
             None if ln.currency_amount is None else Decimal(ln.currency_amount).scaleb(-SCALE),
+            ln.invoice,
         )

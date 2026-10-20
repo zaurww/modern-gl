@@ -39,9 +39,15 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
     )
     main_warehouse = inventory.add_warehouse(cid, tr("Основной склад"), subconto_value_id=store)
 
-    def p(dt, ct, amount, dt_sc=(), ct_sc=(), memo=""):
+    def p(dt, ct, amount, dt_sc=(), ct_sc=(), memo="", invoice=""):
         return PostingInput(
-            ledger.account_id(cid, dt), ledger.account_id(cid, ct), amount, dt_sc, ct_sc, memo
+            ledger.account_id(cid, dt),
+            ledger.account_id(cid, ct),
+            amount,
+            dt_sc,
+            ct_sc,
+            memo,
+            invoice=invoice,
         )
 
     post = ledger.post_new
@@ -99,12 +105,17 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
         cid,
         "2026-02-25",
         [
-            p("62", "46", "1180", [beta, c2], [], tr("Услуги оказаны")),
-            p("46", "68.2", "180", [], [], tr("НДС 18%")),
+            p("62", "46", "1180", [beta, c2], [], tr("Услуги оказаны"), "MT2602004571"),
+            p("46", "68.2", "180", [], [], tr("НДС 18%"), "MT2602004571"),
         ],
         tr("Реализация услуг"),
     )
-    post(cid, "2026-02-27", [p("51", "62", "1180", [bank], [beta, c2])], tr("Оплата от покупателя"))
+    post(
+        cid,
+        "2026-02-27",
+        [p("51", "62", "1180", [bank], [beta, c2], invoice="MT2602004571")],
+        tr("Оплата от покупателя"),
+    )
     post(
         cid,
         "2026-02-28",
@@ -113,6 +124,9 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
         layer="ifrs_adj",
     )
     ledger.create_draft(
-        cid, "2026-02-28", [p("26", "60", "400", [rent], [alfa, c1])], tr("Аренда за март")
+        cid,
+        "2026-02-28",
+        [p("26", "60", "400", [rent], [alfa, c1], invoice="MT2602009310")],
+        tr("Аренда за март"),
     )
     return cid

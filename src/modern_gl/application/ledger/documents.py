@@ -17,6 +17,7 @@ from modern_gl.application.ledger.subconto import SubcontoCommands
 from modern_gl.domain.currency import CURRENCY_OPTIONAL, to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError, NotFoundError, PeriodClosedError, ValidationError
+from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
@@ -150,6 +151,7 @@ class DocumentCommands(SubcontoCommands):
                 p["memo"],
                 p["currency_id"],
                 p["currency_amount"],
+                p["invoice"],
             )
             for p in self.conn.execute(
                 "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
@@ -166,10 +168,11 @@ class DocumentCommands(SubcontoCommands):
                     p.memo,
                     p.currency_id,
                     None if p.currency_id is None else to_minor(p.currency_amount or 0),
+                    normalize_invoice(p.invoice),
                 )
                 for p in postings
             ]
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, ValidationError):
             return False
         return stored == wanted
 
@@ -325,10 +328,10 @@ class DocumentCommands(SubcontoCommands):
                 """
                 INSERT INTO postings (company_id, document_id, line_no, debit_account_id,
                     credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, currency_amount)
+                    currency_id, currency_amount, invoice)
                 SELECT company_id, ?, line_no, debit_account_id, credit_account_id, -amount,
                     dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, -currency_amount
+                    currency_id, -currency_amount, invoice
                 FROM postings WHERE document_id = ? ORDER BY line_no
                 """,
                 (new_id, doc_id),
@@ -522,6 +525,10 @@ class DocumentCommands(SubcontoCommands):
                 raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
             if amount == 0:
                 raise ValidationError(tr("строка {line}: нулевая сумма", line=line_no))
+            try:
+                invoice = normalize_invoice(p.invoice)
+            except ValidationError as e:
+                raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
             currency_amount = None
             if p.currency_id is not None:
                 try:
@@ -545,14 +552,15 @@ class DocumentCommands(SubcontoCommands):
                     p.memo,
                     p.currency_id,
                     currency_amount,
+                    invoice,
                 )
             )
         try:
             self.conn.executemany(
                 "INSERT INTO postings (company_id, document_id, line_no, debit_account_id, "
                 "credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo, "
-                "currency_id, currency_amount) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "currency_id, currency_amount, invoice) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
             )
         except sqlite3.IntegrityError as e:

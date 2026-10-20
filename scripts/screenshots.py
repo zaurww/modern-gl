@@ -405,6 +405,10 @@ def main() -> None:
     shot("10c_osv_currency")
     win.open_report("card", acc["52"].id, osv.params)
     shot("10d_card_currency")
+    win.show_place(("invoices",))
+    shot("11_invoices")
+    win.open_report("card", acc["62"].id, osv.params)
+    shot("11b_card_invoice")
 
 
 if __name__ == "__main__":

@@ -104,6 +104,8 @@ class Osv:
 class SubcontoRow(Turnovers):
     value_id: int | None = None
     name: str = ""
+    # a currency account: net balance (Dt - Ct) at the end in each currency ("USD": …)
+    currency_closing: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass
@@ -129,6 +131,7 @@ class CardLine:
     currency: str = ""
     currency_debit: int = 0
     currency_credit: int = 0
+    invoice: str = ""  # e-qaimə number
 
 
 @dataclass
@@ -415,13 +418,47 @@ def subconto_balance(
         """,
         params,
     ).fetchall()
+    in_currency = _subconto_currency(conn, params, position)
     result = []
     for r in raw:
         row = SubcontoRow(value_id=r["sc"], name=r["name"] or "<не указано>")
         row.add(Turnovers.from_net(r["opening"], r["dt"], r["ct"]))
-        if not row.is_zero():
+        row.currency_closing = in_currency.get(r["sc"], {})
+        if not row.is_zero() or row.currency_closing:
             result.append(row)
     return result
+
+
+def _subconto_currency(
+    conn: sqlite3.Connection, params: dict, position: int
+) -> dict[int | None, dict[str, int]]:
+    """Net balance at the end in each currency, per subconto value (currency accounts:
+    a foreign partner with invoices in USD and in EUR has both)."""
+    found: dict[int | None, dict[str, int]] = defaultdict(dict)
+    for r in conn.execute(
+        f"""
+        WITH {_DOCS_CTE},
+        moves AS (
+            SELECT p.dt_sc{position} AS sc, p.currency_id, p.currency_amount AS net
+            FROM postings p JOIN docs ON docs.id = p.document_id
+            JOIN accounts own ON own.id = p.debit_account_id
+            WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
+              AND own.currency <> 0 AND p.currency_id IS NOT NULL
+            UNION ALL
+            SELECT p.ct_sc{position}, p.currency_id, -p.currency_amount
+            FROM postings p JOIN docs ON docs.id = p.document_id
+            JOIN accounts own ON own.id = p.credit_account_id
+            WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
+              AND own.currency <> 0 AND p.currency_id IS NOT NULL
+        )
+        SELECT m.sc, c.code, SUM(m.net) AS net
+        FROM moves m JOIN currencies c ON c.id = m.currency_id
+        GROUP BY m.sc, c.code HAVING SUM(m.net) <> 0
+        """,
+        params,
+    ):
+        found[r["sc"]][r["code"]] = r["net"]
+    return found
 
 
 def account_card(
@@ -447,7 +484,7 @@ def account_card(
                    p.line_no, 0 AS side, p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END AS currency_id,
                    COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0) AS cur_dt,
-                   0 AS cur_ct
+                   0 AS cur_ct, p.invoice
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.debit_account_id
             WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
@@ -455,7 +492,8 @@ def account_card(
             SELECT docs.doc_date, docs.number, docs.id, docs.memo,
                    p.line_no, 1, p.debit_account_id, 0, p.amount,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END,
-                   0, COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0)
+                   0, COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0),
+                   p.invoice
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.credit_account_id
             WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
@@ -500,6 +538,7 @@ def account_card(
                 currency=r["currency"] or "",
                 currency_debit=r["cur_dt"],
                 currency_credit=r["cur_ct"],
+                invoice=r["invoice"] or "",
             )
         )
     card.opening = opening

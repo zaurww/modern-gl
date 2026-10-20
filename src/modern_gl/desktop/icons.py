@@ -76,6 +76,18 @@ def _currencies(p: QPainter) -> None:  # two coins
     p.drawArc(QRectF(6.5, 6.5, 9, 9), -60 * 16, 210 * 16)
 
 
+def _invoices(p: QPainter) -> None:  # a receipt with a torn edge
+    path = QPainterPath(QPointF(4, 15.5))
+    path.lineTo(4, 2.5)
+    path.lineTo(14, 2.5)
+    path.lineTo(14, 15.5)
+    for x in (12.33, 10.67, 9, 7.33, 5.67, 4):
+        path.lineTo(x, 14.3 if round((14 - x) / 1.67) % 2 else 15.5)
+    p.drawPath(path)
+    p.drawLine(QPointF(6.5, 6), QPointF(11.5, 6))
+    p.drawLine(QPointF(6.5, 9), QPointF(11.5, 9))
+
+
 def _document(p: QPainter) -> None:  # a sheet with a folded corner
     path = QPainterPath(QPointF(4, 2.5))
     path.lineTo(10.5, 2.5)
@@ -119,6 +131,7 @@ GLYPHS: dict[str, Callable[[QPainter], None]] = {
     "directories": _directories,
     "templates": _templates,
     "currencies": _currencies,
+    "invoices": _invoices,
     "document": _document,
     "new": _new,
     "report": _report,
