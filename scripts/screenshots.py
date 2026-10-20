@@ -180,6 +180,29 @@ def main() -> None:
     loop.exec()
     bank_dialog.grab().save(str(out / "8b4_bank_dialog.png"))
     bank_dialog.close()
+    partners = session.catalog.owner_kinds[contracts]
+    for i, v in enumerate(session.catalog.values(partners)):  # VÖEN of the demo partners
+        ledger.set_subconto_value_tax(session.company_id, v.id, f"{1400057421 + i * 1111}")
+    acme = ledger.add_subconto_value(session.company_id, partners, "Acme Trading GmbH")
+    ledger.set_subconto_value_tax(
+        session.company_id, acme, "DE 811 234 567", nonresident=True, country="Almaniya"
+    )
+    session.catalog.reload()
+    directories.refresh(select_kind=partners)
+    shot("8b5_counterparties")
+    for name, value in (
+        ("8b6_counterparty_dialog", session.catalog.values(partners)[1]),
+        ("8b7_nonresident_dialog", session.catalog.value(acme)),
+    ):
+        dialog = ValueDialog(
+            session, partners, i18n.tr("Изменить"), value.name, None, win, None, value
+        )
+        dialog.show()
+        loop = QEventLoop()
+        QTimer.singleShot(300, loop.quit)
+        loop.exec()
+        dialog.grab().save(str(out / f"{name}.png"))
+        dialog.close()
     win.show_place(("inventory",))
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()

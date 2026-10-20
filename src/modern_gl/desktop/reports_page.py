@@ -727,7 +727,10 @@ class SubcontoPage(AccountReportPage):
             )
         kind_id = self.account.sc_kinds[0]
         kind = self.s.catalog.kinds[kind_id] if kind_id is not None else ""
-        columns = [Column(kind, lambda r: r.name), *turnover_columns()]
+        columns = [Column(kind, lambda r: r.name)]
+        if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN
+            columns.append(Column(tr("VÖEN"), self._tax_id, width=130))
+        columns += turnover_columns()
         self.model.set(
             columns,
             [*rows, total] if rows else [],
@@ -735,6 +738,11 @@ class SubcontoPage(AccountReportPage):
             total=lambda r: r is total,
         )
         self.footer.setText("")
+
+    def _tax_id(self, row: SubcontoRow) -> str:
+        if row.value_id is None:
+            return ""
+        return self.s.catalog.value(row.value_id).tax_id or ""
 
 
 class AnalysisPage(AccountReportPage):

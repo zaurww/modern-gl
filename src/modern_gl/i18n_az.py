@@ -789,4 +789,15 @@ AZ: dict[str, str] = {
     "Копировать для Excel": "Excel üçün kopyala",
     "Цена поставщика": "Malsatanın qiyməti",
     "Цена за единицу": "Vahidin qiyməti",
+    "VÖEN": "VÖEN",
+    "VÖEN — 10 цифр, а не «{text}»": "VÖEN 10 rəqəmdən ibarətdir, «{text}» deyil",
+    "Нерезидент — иностранная компания или лицо": "Qeyri-rezident — xarici şirkət və ya şəxs",
+    "Страна": "Ölkə",
+    "Налоговый номер": "Vergi nömrəsi",
+    "EIN, VAT ID, TIN… — как в документах": "EIN, VAT ID, TIN… — sənədlərdəki kimi",
+    "10 цифр": "10 rəqəm",
+    "нерезидент": "qeyri-rezident",
+    "VÖEN {tax_id} уже есть у «{name}». Всё равно сохранить?": (
+        "VÖEN {tax_id} artıq «{name}» üçün var. Yenə də yadda saxlanılsın?"
+    ),
 }

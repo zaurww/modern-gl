@@ -6,6 +6,8 @@ history and reports but are no longer offered when entering postings.
 
 Contracts belong to counterparties: their list shows whose each one is, the dialog of a
 contract asks for its counterparty, and a counterparty's menu adds a contract to it.
+A counterparty has a VÖEN; a non-resident has none, but a country and a tax number of
+its own country instead.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QCompleter,
     QDialog,
@@ -26,6 +29,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMenu,
+    QMessageBox,
     QStackedLayout,
     QTableView,
     QVBoxLayout,
@@ -46,7 +50,8 @@ KIND_ROLE = Qt.ItemDataRole.UserRole
 
 class ValueDialog(QDialog):
     """Name of an element and what else it has: for a contract, the counterparty it
-    belongs to; for an element of a currency account (a bank account on 52, a foreign
+    belongs to; for a counterparty, its VÖEN (or, for a non-resident, its country and
+    tax number); for an element of a currency account (a bank account on 52, a foreign
     supplier on 60), its currency."""
 
     def __init__(
@@ -58,6 +63,7 @@ class ValueDialog(QDialog):
         owner_id: int | None = None,
         parent: QWidget | None = None,
         currency_id: int | None = None,
+        value: SubcontoInfo | None = None,
     ) -> None:
         super().__init__(parent)
         cat = session.catalog
@@ -75,6 +81,11 @@ class ValueDialog(QDialog):
         self.name = QLineEdit(name)
         form.addRow(tr("Наименование"), self.name)
         notes = []
+        self.tax_id: QLineEdit | None = None
+        self.nonresident: QCheckBox | None = None
+        self.country: QLineEdit | None = None
+        if cat.has_tax_id(kind_id):
+            self._tax_rows(form, value)
         self.owner: QComboBox | None = None
         if kind_id in cat.owner_kinds:
             self.owner = self._owner_box(session, kind_id, owner_id)
@@ -108,6 +119,41 @@ class ValueDialog(QDialog):
         buttons.addWidget(save)
         lay.addLayout(buttons)
         self.name.setFocus()
+
+    def _tax_rows(self, form: QFormLayout, value: SubcontoInfo | None) -> None:
+        """VÖEN of a resident; country and own tax number of a non-resident."""
+        nonresident = QCheckBox(tr("Нерезидент — иностранная компания или лицо"))
+        nonresident.setChecked(bool(value and value.nonresident))
+        form.addRow("", nonresident)
+        tax_id = QLineEdit((value.tax_id if value else None) or "")
+        form.addRow(tr("VÖEN"), tax_id)
+        country = QLineEdit((value.country if value else None) or "")
+        form.addRow(tr("Страна"), country)
+        self.nonresident, self.tax_id, self.country = nonresident, tax_id, country
+
+        def switch() -> None:
+            foreign = nonresident.isChecked()
+            label = form.labelForField(tax_id)
+            if isinstance(label, QLabel):
+                label.setText(tr("Налоговый номер") if foreign else tr("VÖEN"))
+            tax_id.setPlaceholderText(
+                tr("EIN, VAT ID, TIN… — как в документах") if foreign else tr("10 цифр")
+            )
+            form.setRowVisible(country, foreign)
+
+        nonresident.toggled.connect(switch)
+        switch()
+
+    def tax(self) -> tuple[str | None, bool, str | None]:
+        """(tax number, non-resident, country) as typed; a VÖEN without spaces."""
+        if self.tax_id is None or self.nonresident is None or self.country is None:
+            return None, False, None
+        foreign = self.nonresident.isChecked()
+        text = " ".join(self.tax_id.text().split())
+        if not foreign:
+            text = text.replace(" ", "")
+        country = self.country.text().strip() if foreign else ""
+        return text or None, foreign, country or None
 
     def _owner_box(self, session: Session, kind_id: int, owner_id: int | None) -> QComboBox:
         cat = session.catalog
@@ -275,6 +321,9 @@ class DirectoriesPage(QWidget):
             columns.append(Column(cat.owner_title(kind_id), self._owner_name, width=260))
             widths.append(260)
             values.sort(key=lambda v: (v.owner_id is not None, sort_key(self._owner_name(v))))
+        if cat.has_tax_id(kind_id):
+            columns.append(Column(tr("VÖEN"), self._tax_text, width=260))
+            widths.append(260)
         if any(a.currency for a in accounts):
             columns.append(Column(tr("Валюта"), self._currency_code, width=120))
             widths.append(120)
@@ -290,6 +339,14 @@ class DirectoriesPage(QWidget):
 
     def _owner_name(self, value: SubcontoInfo) -> str:
         return self.s.catalog.value(value.owner_id).name if value.owner_id else ""
+
+    @staticmethod
+    def _tax_text(value: SubcontoInfo) -> str:
+        """A resident's VÖEN; for a non-resident, its country and own tax number."""
+        if not value.nonresident:
+            return value.tax_id or ""
+        parts = [value.country or tr("нерезидент"), value.tax_id or ""]
+        return "  ·  ".join(p for p in parts if p)
 
     def _currency_code(self, value: SubcontoInfo) -> str:
         currency = self.s.catalog.currencies.get(value.currency_id or 0)
@@ -334,8 +391,28 @@ class DirectoriesPage(QWidget):
             )
 
     def _detailed(self, kind_id: int) -> bool:
-        """Elements with more than a name: a contract's counterparty, a currency."""
-        return kind_id in self.s.catalog.owner_kinds or has_currency(self.s, kind_id)
+        """Elements with more than a name: a contract's counterparty, a VÖEN, a currency."""
+        cat = self.s.catalog
+        return (
+            kind_id in cat.owner_kinds or cat.has_tax_id(kind_id) or has_currency(self.s, kind_id)
+        )
+
+    def _tax_id_taken(
+        self, kind_id: int, tax: tuple[str | None, bool, str | None], value_id: int | None = None
+    ) -> bool:
+        """A VÖEN another counterparty already has: save anyway (a branch) or go back."""
+        tax_id, foreign, _ = tax
+        if tax_id is None or foreign:
+            return False
+        others = self.s.catalog.same_tax_id(kind_id, tax_id, value_id)
+        if not others:
+            return False
+        question = tr(
+            "VÖEN {tax_id} уже есть у «{name}». Всё равно сохранить?",
+            tax_id=tax_id,
+            name=others[0],
+        )
+        return QMessageBox.question(self, tr("VÖEN"), question) != QMessageBox.StandardButton.Yes
 
     def _add_detailed(self, kind_id: int, owner_id: int | None) -> None:
         kind = self.s.catalog.kinds[kind_id]
@@ -343,6 +420,9 @@ class DirectoriesPage(QWidget):
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
             return
         name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
+        tax = dlg.tax()
+        if self._tax_id_taken(kind_id, tax):
+            return
         if kind_id != self.kind_id():
             self.refresh(select_kind=kind_id)
 
@@ -352,6 +432,8 @@ class DirectoriesPage(QWidget):
                 value_id = self.s.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner)
                 if currency is not None:
                     self.s.ledger.set_subconto_value_currency(cid, value_id, currency)
+                if tax != (None, False, None):
+                    self.s.ledger.set_subconto_value_tax(cid, value_id, *tax)
             return value_id
 
         self._apply(add, tr("Добавлено в «{kind}»: {text}", kind=kind, text=name))
@@ -365,10 +447,17 @@ class DirectoriesPage(QWidget):
             value.owner_id,
             self,
             value.currency_id,
+            value,
         )
         if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
             return
         name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
+        tax, old_tax = dlg.tax(), (value.tax_id, value.nonresident, value.country)
+        if dlg.tax_id is not None and tax != old_tax:
+            if self._tax_id_taken(value.kind_id, tax, value.id):
+                return
+        else:
+            tax = old_tax
 
         def save() -> None:
             cid = self.s.company_id
@@ -379,6 +468,8 @@ class DirectoriesPage(QWidget):
                     self.s.ledger.set_subconto_value_owner(cid, value.id, owner)
                 if dlg.currency is not None and currency != value.currency_id:
                     self.s.ledger.set_subconto_value_currency(cid, value.id, currency)
+                if tax != old_tax:
+                    self.s.ledger.set_subconto_value_tax(cid, value.id, *tax)
 
         self._apply(save, tr("Сохранено: {text}", text=name), value.id)
 

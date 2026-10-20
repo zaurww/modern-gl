@@ -54,10 +54,14 @@ class SubcontoInfo:
     active: bool = True
     currency_id: int | None = None  # a USD bank account, a contract in EUR
     owner_id: int | None = None  # the counterparty a contract belongs to (None: common)
+    tax_id: str | None = None  # a counterparty's VÖEN, or a non-resident's own tax number
+    nonresident: bool = False
+    country: str | None = None  # of a non-resident
 
     @property
     def label(self) -> str:
-        return self.name
+        """The name, and the VÖEN after it: lists find a counterparty by either."""
+        return f"{self.name}  ·  {self.tax_id}" if self.tax_id else self.name
 
 
 class Catalog:
@@ -102,8 +106,8 @@ class Catalog:
         self._values: dict[int, SubcontoInfo] = {}
         self._by_kind: dict[int, list[SubcontoInfo]] = {k: [] for k in self.kinds}
         for r in self.conn.execute(
-            "SELECT id, kind_id, name, code, active, currency_id, owner_id FROM subconto_values "
-            "WHERE company_id = ? ORDER BY name",
+            "SELECT id, kind_id, name, code, active, currency_id, owner_id, tax_id, "
+            "nonresident, country FROM subconto_values WHERE company_id = ? ORDER BY name",
             (self.company_id,),
         ):
             self._add(
@@ -115,6 +119,9 @@ class Catalog:
                     bool(r["active"]),
                     r["currency_id"],
                     r["owner_id"],
+                    r["tax_id"],
+                    bool(r["nonresident"]),
+                    r["country"],
                 )
             )
         for values in self._by_kind.values():
@@ -218,6 +225,18 @@ class Catalog:
         value = self._values[value_id]
         return owner is not None and value.owner_id not in (None, owner)
 
+    def has_tax_id(self, kind_id: int) -> bool:
+        """Elements of the directory are counterparties: they have a VÖEN."""
+        return self.kind_codes.get(kind_id) == "counterparty"
+
+    def same_tax_id(self, kind_id: int, tax_id: str, except_id: int | None = None) -> list[str]:
+        """Names of the other elements with this VÖEN (a counterparty entered twice)."""
+        return [
+            v.name
+            for v in self._by_kind.get(kind_id, [])
+            if v.tax_id == tax_id and v.id != except_id
+        ]
+
     def all_values(self, kind_id: int) -> list[SubcontoInfo]:
         """Every value of a directory, hidden ones included."""
         return list(self._by_kind.get(kind_id, []))
@@ -294,14 +313,20 @@ class Catalog:
         its own "Фактура 15")."""
         needle = fold(text.strip())
         values = self.values(kind_id, owner)
-        exact = [v for v in values if fold(v.name) == needle or (v.code or "") == text.strip()]
+        exact = [
+            v
+            for v in values
+            if needle in (fold(v.name), fold(v.label))
+            or (v.tax_id is not None and fold(v.tax_id) == needle)
+            or (v.code or "") == text.strip()
+        ]
         if len({v.owner_id for v in exact}) > 1:  # "Фактура 15" of two counterparties
             raise LookupError(
                 tr("«{text}» есть у нескольких: сначала укажите, чей", text=text.strip())
             )
         if exact:
             return exact[0].id
-        partial = [v for v in values if needle in fold(v.name)]
+        partial = [v for v in values if needle in fold(v.label)]
         if len(partial) > 1:
             starts = [v for v in partial if fold(v.name).startswith(needle)]
             partial = starts if len(starts) == 1 else partial

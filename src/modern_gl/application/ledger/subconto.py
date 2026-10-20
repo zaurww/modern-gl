@@ -129,6 +129,42 @@ class SubcontoCommands(LedgerBase):
                 {"from": old["currency_id"], "to": currency_id},
             )
 
+    def set_subconto_value_tax(
+        self,
+        company_id: int,
+        value_id: int,
+        tax_id: str | None,
+        nonresident: bool = False,
+        country: str | None = None,
+    ) -> None:
+        """Tax details of a counterparty: a resident's VÖEN (10 digits, may be unknown),
+        or a non-resident's country and tax number of its own country (any format).
+        Another counterparty with the same VÖEN is allowed (branches): the UI warns."""
+        tax_id = " ".join((tax_id or "").split()) or None
+        country = (country or "").strip() or None
+        if not nonresident:
+            country = None
+            if tax_id is not None:
+                tax_id = tax_id.replace(" ", "")
+                if not (tax_id.isdigit() and len(tax_id) == 10):
+                    raise ValidationError(tr("VÖEN — 10 цифр, а не «{text}»", text=tax_id))
+        with transaction(self.conn):
+            old = self._subconto_value(company_id, value_id)
+            self.conn.execute(
+                "UPDATE subconto_values SET tax_id = ?, nonresident = ?, country = ? WHERE id = ?",
+                (tax_id, int(nonresident), country, value_id),
+            )
+            self._audit(
+                company_id,
+                "subconto_value",
+                value_id,
+                "set_tax",
+                {
+                    "from": [old["tax_id"], bool(old["nonresident"]), old["country"]],
+                    "to": [tax_id, nonresident, country],
+                },
+            )
+
     def set_subconto_value_owner(
         self, company_id: int, value_id: int, owner_id: int | None
     ) -> None:

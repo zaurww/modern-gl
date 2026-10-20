@@ -547,7 +547,7 @@ def _suggest_subconto(
         return Suggestions(start, _new_value(catalog.kinds[kind], name[1:], tail), True)
     first = [v for v in recent(account.id, pos + 1) if v in {o.id for o in offered}]
     ordered = [catalog.value(v) for v in first] + [v for v in offered if v.id not in first]
-    items = [Suggestion(v.name, v.name + tail) for v in ordered]
+    items = [Suggestion(v.label, v.name + tail) for v in ordered]  # found by VÖEN too
     found = _filter(items, typed, start)
     known = any(fold(v.name) == fold(name) for v in offered)
     if (name or not offered) and not known and not amount_typed:
