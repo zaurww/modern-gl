@@ -114,7 +114,7 @@ def test_group_account_is_refused_with_a_hint(window, qtbot):
     page = current_page(window)
     type_into_cell(qtbot, page, 0, DT, "68")
     assert page.model.rows[0].debit is None
-    assert "68.1, 68.2" in page.error.text()
+    assert "68 — группа: выберите субсчёт" in page.error.text()
 
 
 def test_changing_account_clears_incompatible_subconto(window):
@@ -276,6 +276,42 @@ def test_account_list_appears_while_typing(window, qtbot):
     ]
 
 
+def test_group_typed_in_full_lists_its_accounts_and_enter_takes_none(window, qtbot):
+    window.new_document()
+    page = current_page(window)
+    errors = []
+    page.delegate.error.connect(errors.append)
+    cat = window.session.catalog
+    subs = [a.label for a in cat.subaccounts(cat.by_code["68"])]
+
+    editor, completer = open_cell_editor(page, 0, DT)
+    popup = completer.popup()
+    qtbot.keyClicks(editor, "68")
+    assert completer.model().stringList() == subs
+    assert not popup.currentIndex().isValid()  # not 68.1 behind the user's back
+
+    qtbot.keyClick(popup, Qt.Key.Key_Return)  # stays in the cell, the list again
+    QApplication.processEvents()
+    assert page.model.rows[0].debit is None
+    assert QApplication.focusWidget() is editor
+    assert errors == ["68 — группа: выберите субсчёт из списка"]
+    assert popup.isVisible() and popup.currentIndex().row() == 0
+
+    qtbot.keyClick(popup, Qt.Key.Key_Down)
+    qtbot.keyClick(popup, Qt.Key.Key_Return)
+    assert page.model.rows[0].debit == cat.by_code["68.2"].id
+
+
+def test_group_found_by_code_name_or_label_only_in_full(window):
+    cat = window.session.catalog
+    group = cat.by_code["68"]
+    for text in ("68", " расчёты С БЮДЖЕТОМ ", "68  Расчёты с бюджетом"):
+        assert cat.group_named(text) == group
+    for text in ("6", "Расчёты", "68.2", ""):  # a part, or a postable account
+        assert cat.group_named(text) is None
+    assert [a.code for a in cat.subaccounts(group)] == ["68.1", "68.2", "68.3", "68.9"]
+
+
 def test_osv_top_level_only(window):
     window.show_place(("osv",))
     osv = current_page(window)
@@ -329,6 +365,19 @@ def test_osv_sections_by_class(window):
     assert not osv.menu_actions(headers[0])  # a section header is not an account
 
 
+def test_chart_fits_the_window_without_sideways_scrolling(window):
+    window.show_place(("chart",))
+    chart = current_page(window)
+    assert [c.title for c in chart.model.columns][:4] == ["Код", "Наименование", "Тип", "Сальдо"]
+    for width, subconto_shown in ((1500, True), (1000, False)):
+        window.resize(width, 820)
+        window.show()
+        QApplication.processEvents()
+        assert chart.table.isColumnHidden(4) is not subconto_shown
+        bar = chart.table.horizontalScrollBar()
+        assert bar.maximum() == 0, width  # the type is never pushed off the edge
+
+
 def test_change_type_from_chart_menu(window):
     window.show_place(("chart",))
     chart = current_page(window)
@@ -340,7 +389,7 @@ def test_change_type_from_chart_menu(window):
     changed = window.session.catalog.by_code["76"]
     assert (changed.account_class, changed.account_type) == ("asset", "other_receivable")
     row = next(a for a in chart.model.rows if a.code == "76")
-    cell = chart.model.data(chart.model.index(chart.model.rows.index(row), 3))
+    cell = chart.model.data(chart.model.index(chart.model.rows.index(row), 2))
     assert cell == "Прочая дебиторская задолженность"
     types = dict(e for e in chart.menu_actions(changed) if e is not None)["Тип счёта"]
     assets = dict(e for e in dict(e for e in types if e is not None)["✓  Активы"] if e)

@@ -160,6 +160,30 @@ class Catalog:
         """Accounts that can be posted to (hidden accounts are not offered)."""
         return [a for a in self.accounts.values() if not a.is_group and a.active]
 
+    def group_named(self, text: str) -> AccountInfo | None:
+        """The group whose code, name or label is exactly the text ("68", "68  Vergilər")."""
+        needle = fold(text.strip())
+        if not needle:
+            return None
+        return next(
+            (
+                a
+                for a in self.accounts.values()
+                if a.is_group
+                and a.active
+                and needle in {fold(a.code or ""), fold(a.name), fold(a.label)}
+            ),
+            None,
+        )
+
+    def subaccounts(self, group: AccountInfo) -> list[AccountInfo]:
+        """Postable accounts under a group, nested groups unfolded, in chart order."""
+        ids = {group.id}
+        for a in self.accounts.values():  # parents come before their children
+            if a.parent_id in ids:
+                ids.add(a.id)
+        return [a for a in self.leaf_accounts if a.id in ids and a.id != group.id]
+
     def values(self, kind_id: int, owner: int | None = None) -> list[SubcontoInfo]:
         """Values offered for entry (hidden ones are not). With an `owner` (the chosen
         counterparty) a contract list shows its contracts and the common ones only."""

@@ -196,6 +196,9 @@ class ReportModel(QAbstractTableModel):
 
 
 NAME_MIN = 180  # px an account name keeps before the amounts give up width
+# the chart of accounts: its columns, and the least width of the ones that narrow
+TYPE_COLUMN, SIDE_COLUMN, SUBCONTO_COLUMN = 2, 3, 4
+CHART_NAME_MIN, CHART_TYPE_MIN, CHART_SUBCONTO_MIN = 240, 180, 200
 
 
 class ReportPage(QWidget):
@@ -271,6 +274,7 @@ class ReportPage(QWidget):
 
         self.footer = QLabel()
         self.footer.setObjectName("secondary")
+        self.footer.setWordWrap(True)  # a long hint must not keep the window wide
         root.addWidget(self.footer)
 
         for keys, fn in (
@@ -795,13 +799,14 @@ class ChartPage(ReportPage):
         def name(a) -> str:
             return a.name if a.active else f"{a.name}  ·  {tr('скрыт')}"
 
+        # what the account is (the type) reads right after its name; the details follow
         columns = [
-            Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, width=110),
+            Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, width=100),
             Column(tr("Наименование"), name),
-            Column(tr("Сальдо"), self._side_text, width=150),
             Column(
                 tr("Тип"), self._type_text, width=290, icon=lambda a: class_icon(a.account_class)
             ),
+            Column(tr("Сальдо"), self._side_text, width=110),
             Column(tr("Субконто"), subconto, width=280),
         ]
         self.model.set(
@@ -817,6 +822,22 @@ class ChartPage(ReportPage):
     def drill(self, row) -> None:
         if row is not None:
             self.open_report.emit("card", row.id, month_of(self.s.working_date))
+
+    def _fit_columns(self) -> None:
+        """No sideways scrolling: the type and subconto columns narrow with the window
+        (their text cut with "…"), and in a narrow one the subconto column goes first:
+        it is the least needed, and the account dialog shows it."""
+        width = self.table.viewport().width()
+        if width <= 0 or not self.model.columns:
+            return
+        side = self._content_width(SIDE_COLUMN)
+        self.table.setColumnWidth(SIDE_COLUMN, side)
+        rest = width - self.model.columns[0].width - side
+        narrow = rest < CHART_NAME_MIN + CHART_TYPE_MIN + CHART_SUBCONTO_MIN
+        share = rest * 2 // 5 if narrow else rest * 3 // 10  # the subconto's room to the type
+        self.table.setColumnWidth(TYPE_COLUMN, max(CHART_TYPE_MIN, min(290, share)))
+        self.table.setColumnWidth(SUBCONTO_COLUMN, max(CHART_SUBCONTO_MIN, min(280, rest // 4)))
+        self.table.setColumnHidden(SUBCONTO_COLUMN, narrow)
 
     def _current(self):
         idx = self.table.currentIndex()

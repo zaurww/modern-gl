@@ -234,6 +234,7 @@ class InventoryPage(QWidget):
         )
         hint.setObjectName("tertiary")
         hint.setFont(fonts().small)
+        hint.setWordWrap(True)
         root.addWidget(hint)
         self.refresh()
 

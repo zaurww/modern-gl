@@ -6,8 +6,8 @@ from collections.abc import Callable
 from datetime import date
 from typing import ClassVar, cast
 
-from PySide6.QtCore import QDate, Qt
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QDate, QSize, Qt
+from PySide6.QtGui import QIcon, QPainter
 from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
@@ -115,6 +115,28 @@ class Chip(QLabel):
         )
 
 
+class ElidedLabel(QLabel):
+    """One line that gives way to a narrow window, its end cut with "…"."""
+
+    def minimumSizeHint(self) -> QSize:
+        hint = super().minimumSizeHint()
+        return QSize(min(hint.width(), 120), hint.height())
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        rect = self.contentsRect()
+        text = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, rect.width())
+        self.style().drawItemText(
+            painter,
+            rect,
+            int(self.alignment()),
+            self.palette(),
+            self.isEnabled(),
+            text,
+            self.foregroundRole(),
+        )
+
+
 class PageHeader(QWidget):
     """Large title, quiet subtitle, actions on the right."""
 
@@ -124,9 +146,9 @@ class PageHeader(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
         text = QVBoxLayout()
         text.setSpacing(2)
-        self.title = QLabel(title)
+        self.title = ElidedLabel(title)
         self.title.setFont(fonts().title)
-        self.subtitle = QLabel(subtitle)
+        self.subtitle = ElidedLabel(subtitle)
         self.subtitle.setObjectName("secondary")
         text.addWidget(self.title)
         text.addWidget(self.subtitle)

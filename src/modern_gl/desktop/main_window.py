@@ -8,7 +8,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol, TypeVar, runtime_checkable
+from typing import Protocol, TypeVar, cast, runtime_checkable
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -38,6 +38,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
@@ -45,6 +46,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QStackedWidget,
     QStyle,
     QStyledItemDelegate,
@@ -251,6 +253,7 @@ class MainWindow(QMainWindow):
         self.sidebar = Sidebar()
         lay.addWidget(self.sidebar)
         self.stack = QStackedWidget()
+        self.stack.currentChanged.connect(self._size_by_current_page)
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(central)
         self.statusBar().setSizeGripEnabled(False)
@@ -583,9 +586,22 @@ class MainWindow(QMainWindow):
     def _add_page(self, key, page: QWidget, open_item: bool = False) -> None:
         self.pages[key] = page
         self.stack.addWidget(page)
+        self._size_by_current_page()
         if open_item:
             title = page.title() if isinstance(page, TitledPage) else ""
             self.sidebar.add_item(key, title, open_icon(key))
+
+    def _size_by_current_page(self, _index: int = 0) -> None:
+        """Only the page shown sets how narrow the window may get: a stack takes the
+        widest of all its pages, so the OSV with its options, once opened, kept every
+        page wider than a laptop screen."""
+        current = self.stack.currentWidget()
+        for i in range(self.stack.count()):
+            page = cast(QWidget, self.stack.widget(i))
+            policy = QSizePolicy.Policy.Preferred if page is current else QSizePolicy.Policy.Ignored
+            page.setSizePolicy(policy, policy)
+        cast(QLayout, self.stack.layout()).invalidate()  # a hidden page does not report it
+        self.stack.updateGeometry()
 
     def _activate(self, key) -> None:
         page = self.pages[key]

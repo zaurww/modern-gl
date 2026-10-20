@@ -770,8 +770,17 @@ def fit_popup(popup: QAbstractItemView, rows: int, most: int = 12) -> None:
     popup.setFixedHeight(popup.sizeHintForRow(0) * shown + padding)
 
 
-def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> None:
-    """Completion list under a cell editor; `chosen(editor, text)` gets the picked item."""
+def attach_list(
+    editor: QLineEdit,
+    items: list[str],
+    show_all: bool,
+    chosen,
+    subaccounts: Callable[[str], list[str] | None] | None = None,
+) -> Callable[[], None]:
+    """Completion list under a cell editor; `chosen(editor, text)` gets the picked item.
+    `subaccounts(text)` lists the accounts of a group typed in full ("68"): they are
+    offered with none taken, so Enter does not pick 68.1 behind the user's back.
+    Returns `pick_first()`: the list again with its first item highlighted."""
     model = QStringListModel(editor)
     completer = QCompleter(model, editor)
     completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
@@ -780,10 +789,14 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
     popup = cast(QAbstractItemView, completer.popup())
     popup.setObjectName("completer")
 
-    def refresh(text: str) -> None:
+    def refresh(text: str, pick_first: bool = False) -> None:
         try:
             typed = bool(text.strip())
-            matches = search(items, text) if (typed or show_all) else []
+            group = subaccounts(text) if subaccounts and typed else None
+            if group is not None:
+                matches = group
+            else:
+                matches = search(items, text) if (typed or show_all) else []
             if not text.strip().startswith(TEMPLATE_MARK):  # templates only after "#"
                 matches = [m for m in matches if not m.startswith(TEMPLATE_MARK)]
             model.setStringList(matches)
@@ -794,8 +807,10 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
             rect.setWidth(max(rect.width(), 380))
             completer.complete(rect)
             fit_popup(popup, len(matches))
-            if typed:  # Enter takes the best match
+            if (typed and group is None) or pick_first:  # Enter takes the best match
                 popup.setCurrentIndex(model.index(0))
+            else:
+                popup.setCurrentIndex(QModelIndex())
         except RuntimeError:  # editor already closed
             pass
 
@@ -808,6 +823,13 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
     # reporting the choice, so the editor would commit what was typed (often nothing).
     PickWithKeys(popup, lambda text: chosen(editor, text))
     QTimer.singleShot(0, lambda: refresh(editor.text()))
+    return lambda: refresh(editor.text(), pick_first=True)
+
+
+class CellEditor(QLineEdit):
+    """A cell editor; an account cell keeps how to reopen its list on a group."""
+
+    pick_first: Callable[[], None] | None = None
 
 
 class PostingsDelegate(QStyledItemDelegate):
@@ -843,21 +865,21 @@ class PostingsDelegate(QStyledItemDelegate):
         return [self.catalog.value(v).label for v in recent] + [v.label for v in rest]
 
     def createEditor(self, parent, option, index):
-        editor = QLineEdit(parent)
+        editor = CellEditor(parent)
         editor.setFrame(False)
         editor.setProperty("gl_row", index.row())
         side, pos = column_role(index.column())
         model = index.model()
-        if side in ("debit", "credit"):
-            if pos is None:
-                items = [a.label for a in self.catalog.leaf_accounts]
-                if side == "debit" and not model.formulas:
-                    items += self._template_items()
-            else:
-                items = self._subconto_items(model, index.row(), index.column())
-            # A subconto cell opens with its whole list, like a 1C directory;
-            # an account cell shows suggestions from the first typed character.
-            attach_list(editor, items, pos is not None, self._chosen)
+        if side in ("debit", "credit") and pos is None:
+            items = [a.label for a in self.catalog.leaf_accounts]
+            if side == "debit" and not model.formulas:
+                items += self._template_items()
+            # an account cell shows suggestions from the first typed character
+            editor.pick_first = attach_list(editor, items, False, self._chosen, self._subaccounts)
+        elif side in ("debit", "credit"):
+            # a subconto cell opens with its whole list, like a 1C directory
+            items = self._subconto_items(model, index.row(), index.column())
+            attach_list(editor, items, True, self._chosen)
         elif side == "currency":
             attach_list(
                 editor, [c.label for c in self.catalog.active_currencies], True, self._chosen
@@ -867,6 +889,10 @@ class PostingsDelegate(QStyledItemDelegate):
         # Enter forwarded by an open popup reaches the editor as returnPressed.
         editor.returnPressed.connect(lambda e=editor: self._commit_and_next(e))
         return editor
+
+    def _subaccounts(self, text: str) -> list[str] | None:
+        group = self.catalog.group_named(text)
+        return [a.label for a in self.catalog.subaccounts(group)] if group else None
 
     def _chosen(self, editor: QLineEdit, text: str) -> None:
         editor.setText(text)
@@ -935,6 +961,13 @@ class PostingsDelegate(QStyledItemDelegate):
 
     def _commit_and_next(self, editor) -> None:
         if editor.property("gl_done"):
+            return
+        pick_first = editor.pick_first if isinstance(editor, CellEditor) else None
+        group = self.catalog.group_named(editor.text()) if pick_first else None
+        if pick_first and group:
+            # a group is not posted to: stay in the cell, its accounts listed
+            self.error.emit(tr("{code} — группа: выберите субсчёт из списка", code=group.short))
+            QTimer.singleShot(0, pick_first)  # after the completer hides its popup
             return
         editor.setProperty("gl_done", True)
         self.commitData.emit(editor)

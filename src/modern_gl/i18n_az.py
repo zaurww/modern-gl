@@ -38,6 +38,7 @@ AZ: dict[str, str] = {
     "счёт «{text}» не найден": "«{text}» hesabı tapılmadı",
     "«{text}» подходит к нескольким счетам: {codes}": "«{text}» bir neçə hesaba uyğundur: {codes}",
     "счёт {code} — группа, выберите субсчёт: {subs}": "{code} hesabı qrupdur, subhesab seçin: {subs}",
+    "{code} — группа: выберите субсчёт из списка": "{code} qrupdur: subhesabı siyahıdan seçin",
     "«{text}» подходит к нескольким: {names}": "«{text}» bir neçə elementə uyğundur: {names}",
     # ---- import / reports ------------------------------------------------------------------
     "{file}: нет колонок {cols}": "{file}: sütunlar yoxdur: {cols}",

@@ -18,7 +18,7 @@ if sys.platform == "win32":  # the offscreen platform doesn't see system fonts b
 
 from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtGui import QPainter
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLineEdit
 
 from modern_gl import i18n
 from modern_gl.desktop import qt_texts, theme
@@ -118,6 +118,15 @@ def main() -> None:
     page.table.edit(idx)
     shot("4b_subconto_list")
     page.table.setFocus()
+    idx = page.model.index(page.model.insert_row(), 0)  # a group typed in full: its accounts
+    page.table.setCurrentIndex(idx)
+    page.table.edit(idx)
+    editor = next(w for w in page.table.findChildren(QLineEdit) if w.isVisible())
+    editor.insert("68")
+    editor.textEdited.emit(editor.text())
+    editor.returnPressed.emit()
+    shot("4c_group_account")
+    page.table.setFocus()
     win.show_place(("osv",))
     shot("5_osv")
     osv = cast(OsvPage, win.pages[("osv",)])
@@ -135,6 +144,9 @@ def main() -> None:
     shot("7_card")
     win.show_place(("chart",))
     shot("8_chart")
+    win.resize(1100, 860)  # a laptop: the subconto column gives way, the type stays
+    shot("8b_chart_narrow")
+    win.resize(1400, 860)
     win.show_place(("directories",))
     directories = cast(DirectoriesPage, win.stack.currentWidget())
     banks = session.catalog.by_code["51"].sc_kinds[0]
