@@ -1,0 +1,29 @@
+# Зависимости Modern GL (версии как в uv.lock). Python 3.12+.
+#
+#   python -m venv .venv
+#   Windows:      .venv\Scripts\activate
+#   Linux/macOS:  source .venv/bin/activate
+#   pip install -r requirements.txt
+#   modern-gl            (или: python -m modern_gl.desktop.app)
+-e .
+et-xmlfile==2.0.0
+    # via openpyxl
+openpyxl==3.1.5
+    # via modern-gl
+pyside6==6.12.0
+    # via modern-gl
+pyside6-addons==6.12.0
+    # via
+    #   pyside6
+    #   pyside6-webengine
+pyside6-essentials==6.12.0
+    # via
+    #   pyside6
+    #   pyside6-addons
+    #   pyside6-pdf
+pyside6-pdf==6.12.0.140
+    # via pyside6
+pyside6-webengine==6.12.0.140
+    # via pyside6
+shiboken6==6.12.0
+    # via pyside6-essentials
