@@ -15,8 +15,6 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
 
-FEE_SIDES = ("from", "to")
-
 
 @dataclass(frozen=True)
 class ConversionSide:
@@ -30,14 +28,24 @@ class ConversionSide:
 
 
 @dataclass(frozen=True)
+class ConversionFee:
+    """A bank fee: taken from any money account (either side or a third one), in its
+    currency; it is an expense on `expense_account_id` (None: the account of the settings)."""
+
+    account_id: int
+    amount: int  # minor units of `currency_id`
+    subconto: Sequence[int | None] = ()
+    currency_id: int | None = None
+    expense_account_id: int | None = None
+
+
+@dataclass(frozen=True)
 class ConversionInput:
     doc_date: str  # the debit; the exchange difference is of this day
     source: ConversionSide | None  # a draft may lack one side
     target: ConversionSide | None
     target_date: str | None = None  # the credit, when the bank makes it later
-    fee_amount: int = 0  # in the currency of the fee side
-    fee_side: str = "from"
-    fee_account_id: int | None = None
+    fees: Sequence[ConversionFee] = ()
     memo: str = ""
 
 
@@ -56,9 +64,13 @@ class ConversionCalc:
 
     source_value: int | None
     target_value: int | None
-    fee_value: int
-    rates: dict[int, Rate] = field(default_factory=dict)
+    fee_values: tuple[int | None, ...] = ()  # each fee at the rate of its own day
+    rates: dict[int, Rate] = field(default_factory=dict)  # of the debit date
     missing: tuple[int, ...] = ()  # currencies without a rate on or before the date
+
+    @property
+    def fee_total(self) -> int:
+        return sum(v or 0 for v in self.fee_values)
 
     @property
     def difference(self) -> int | None:
@@ -68,31 +80,45 @@ class ConversionCalc:
         return self.source_value - self.target_value
 
 
+def fee_on_credit(data: ConversionInput, fee: ConversionFee) -> bool:
+    """A fee taken from the account credited goes with the credit (on its day, when the bank
+    credits later); any other fee goes with the debit."""
+    target = data.target
+    return (
+        target is not None
+        and fee.account_id == target.account_id
+        and pad_subconto(fee.subconto) == pad_subconto(target.subconto)
+    )
+
+
+def fee_date(data: ConversionInput, fee: ConversionFee) -> str:
+    if fee_on_credit(data, fee) and data.target_date:
+        return data.target_date
+    return data.doc_date
+
+
 def calculate(conn: sqlite3.Connection, company_id: int, data: ConversionInput) -> ConversionCalc:
-    rates: dict[int, Rate] = {}
+    rates: dict[tuple[int, str], Rate] = {}
     missing: list[int] = []
 
-    def value(currency_id: int | None, amount: int) -> int | None:
+    def value(currency_id: int | None, amount: int, day: str) -> int | None:
         if currency_id is None:
             return amount
-        if currency_id not in rates:
-            rate = rate_on(conn, company_id, currency_id, data.doc_date)
+        if (currency_id, day) not in rates:
+            rate = rate_on(conn, company_id, currency_id, day)
             if rate is None:
                 if currency_id not in missing:
                     missing.append(currency_id)
                 return None
-            rates[currency_id] = rate
-        return to_base(amount, rates[currency_id].per_unit)
+            rates[currency_id, day] = rate
+        return to_base(amount, rates[currency_id, day].per_unit)
 
-    source = data.source
-    target = data.target
-    source_value = value(source.currency_id, source.amount) if source else None
-    target_value = value(target.currency_id, target.amount) if target else None
-    fee_value = 0
-    fee_side = source if data.fee_side == "from" else target
-    if data.fee_amount and fee_side is not None:
-        fee_value = value(fee_side.currency_id, data.fee_amount) or 0
-    return ConversionCalc(source_value, target_value, fee_value, rates, tuple(missing))
+    source, target, day = data.source, data.target, data.doc_date
+    source_value = value(source.currency_id, source.amount, day) if source else None
+    target_value = value(target.currency_id, target.amount, day) if target else None
+    fees = tuple(value(f.currency_id, f.amount, fee_date(data, f)) for f in data.fees)
+    of_day = {c: r for (c, d), r in rates.items() if d == day}
+    return ConversionCalc(source_value, target_value, fees, of_day, tuple(missing))
 
 
 def bank_rate(data: ConversionInput) -> Fraction | None:
@@ -157,9 +183,20 @@ def load_conversion(conn: sqlite3.Connection, company_id: int, conversion_id: in
         source=side("from"),
         target=side("to"),
         target_date=r["to_date"],
-        fee_amount=r["fee_amount"],
-        fee_side=r["fee_side"],
-        fee_account_id=r["fee_account_id"],
+        fees=tuple(
+            ConversionFee(
+                f["account_id"],
+                f["amount"],
+                (f["sc1"], f["sc2"], f["sc3"]),
+                f["currency_id"],
+                f["expense_account_id"],
+            )
+            for f in conn.execute(
+                "SELECT * FROM conversion_fees WHERE company_id = ? AND conversion_id = ? "
+                "ORDER BY line_no",
+                (company_id, conversion_id),
+            )
+        ),
         memo=r["memo"],
         id=r["id"],
         document_id=r["document_id"],
