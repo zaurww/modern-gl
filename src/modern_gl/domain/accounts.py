@@ -48,6 +48,8 @@ ACCOUNT_TYPES = (
     ("cash", "asset", "Касса"),
     ("bank", "asset", "Банковские счета"),
     ("transit", "asset", "Переводы в пути"),
+    # ƏDV depozit hesabı: money that may only pay ƏDV, so not free cash like "bank" (D41)
+    ("vat_deposit", "asset", "Депозитный счёт НДС"),
     ("receivable", "asset", "Покупатели и заказчики"),
     ("advance_paid", "asset", "Авансы выданные"),
     ("other_receivable", "asset", "Прочая дебиторская задолженность"),
