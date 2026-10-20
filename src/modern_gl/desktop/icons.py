@@ -105,6 +105,17 @@ def _trade(p: QPainter) -> None:  # two arrows: bought in, sold out
     p.drawLine(QPointF(6, 15), QPointF(3, 12))
 
 
+def _bank(p: QPainter) -> None:  # a bank: a pediment on columns
+    path = QPainterPath(QPointF(2.5, 6.5))
+    path.lineTo(9, 2.5)
+    path.lineTo(15.5, 6.5)
+    path.closeSubpath()
+    p.drawPath(path)
+    for x in (4.5, 9.0, 13.5):
+        p.drawLine(QPointF(x, 8.5), QPointF(x, 12.5))
+    p.drawLine(QPointF(2.5, 15), QPointF(15.5, 15))
+
+
 def _document(p: QPainter) -> None:  # a sheet with a folded corner
     path = QPainterPath(QPointF(4, 2.5))
     path.lineTo(10.5, 2.5)
@@ -147,6 +158,7 @@ GLYPHS: dict[str, Callable[[QPainter], None]] = {
     "chart": _chart,
     "inventory": _inventory,
     "trade": _trade,
+    "bank": _bank,
     "directories": _directories,
     "templates": _templates,
     "currencies": _currencies,

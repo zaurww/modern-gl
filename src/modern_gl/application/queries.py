@@ -62,6 +62,7 @@ class DocumentData:
     inventory_document_id: int | None = None
     inventory_number: int | None = None
     conversion_id: int | None = None  # made by a currency conversion: corrected there
+    bank_operation_id: int | None = None  # made by a bank operation: corrected there
     postings: list[PostingData] = field(default_factory=list)
 
     @property
@@ -75,6 +76,7 @@ class DocumentData:
             and self.reversed_by is None
             and self.inventory_document_id is None
             and self.conversion_id is None
+            and self.bank_operation_id is None
         )
 
 
@@ -128,7 +130,9 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
                COALESCE(c.closed_through >= d.doc_date, 0) AS closed,
                i.id AS inventory_document_id, i.number AS inventory_number,
                (SELECT v.id FROM currency_conversions v
-                WHERE v.document_id = d.id OR v.credit_document_id = d.id) AS conversion_id
+                WHERE v.document_id = d.id OR v.credit_document_id = d.id) AS conversion_id,
+               (SELECT b.id FROM bank_operations b WHERE b.document_id = d.id)
+                   AS bank_operation_id
         FROM documents d
         JOIN layers l ON l.id = d.layer_id
         JOIN companies c ON c.id = d.company_id

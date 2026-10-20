@@ -261,7 +261,7 @@ class DocumentCommands(SubcontoCommands):
             )
 
     def _require_not_module_document(self, doc_id: int) -> None:
-        """Postings a module made (warehouse, currency conversion) are corrected there."""
+        """Postings a module made (warehouse, currency conversion, bank) are corrected there."""
         linked = self.conn.execute(
             "SELECT number FROM inventory_documents WHERE gl_document_id = ?", (doc_id,)
         ).fetchone()
@@ -279,6 +279,12 @@ class DocumentCommands(SubcontoCommands):
         ).fetchone():
             raise ValidationError(
                 tr("проводки созданы документом «Конвертация валюты»; исправьте его там")
+            )
+        if self.conn.execute(
+            "SELECT 1 FROM bank_operations WHERE document_id = ?", (doc_id,)
+        ).fetchone():
+            raise ValidationError(
+                tr("проводки созданы банковской операцией; исправьте её в разделе «Банк»")
             )
 
     def _snapshot(self, doc: sqlite3.Row) -> dict:

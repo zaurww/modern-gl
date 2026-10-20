@@ -12,7 +12,6 @@ with the credit, at the rate of its day.
 from __future__ import annotations
 
 import sqlite3
-from datetime import date
 from decimal import Decimal
 
 from modern_gl.application.common import pad_subconto
@@ -24,9 +23,8 @@ from modern_gl.application.conversions import (
     same_day,
 )
 from modern_gl.application.ledger.base import account_label
-from modern_gl.application.ledger.chart import ChartCommands
-from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
+from modern_gl.application.ledger.module import ModuleDocumentCommands
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
@@ -45,7 +43,7 @@ class MissingAccountRole(ValidationError):
         self.role = role
 
 
-class ConversionCommands(ChartCommands, DocumentCommands):
+class ConversionCommands(ModuleDocumentCommands):
     def save_conversion(
         self,
         company_id: int,
@@ -200,13 +198,19 @@ class ConversionCommands(ChartCommands, DocumentCommands):
         row = self._conversion_row(company_id, conversion_id)
         if same_day(data):
             lines = debit_lines + credit_lines
-            self._write(company_id, row["document_id"], data.doc_date, lines, data)
+            self._write_module_document(
+                company_id, row["document_id"], data.doc_date, lines, data.memo
+            )
             self._drop_credit_document(company_id, row)
             return
-        self._write(company_id, row["document_id"], data.doc_date, debit_lines, data)
+        self._write_module_document(
+            company_id, row["document_id"], data.doc_date, debit_lines, data.memo
+        )
         target_date = data.target_date or data.doc_date
         if row["credit_document_id"] is not None:
-            self._write(company_id, row["credit_document_id"], target_date, credit_lines, data)
+            self._write_module_document(
+                company_id, row["credit_document_id"], target_date, credit_lines, data.memo
+            )
             return
         credit_id = self._insert_document(company_id, target_date, data.memo, "common")
         self._insert_postings(company_id, credit_id, credit_lines)
@@ -215,30 +219,6 @@ class ConversionCommands(ChartCommands, DocumentCommands):
             "UPDATE currency_conversions SET credit_document_id = ? WHERE id = ?",
             (credit_id, conversion_id),
         )
-
-    def _write(
-        self,
-        company_id: int,
-        doc_id: int,
-        doc_date: date | str,
-        postings: list[PostingInput],
-        data: ConversionInput,
-    ) -> None:
-        doc = self._document(company_id, doc_id)
-        if doc["status"] == "posted":
-            if self._same_content(doc, doc_date, postings, data.memo):
-                return
-            snapshot = self._snapshot(doc)
-            self._rewrite(company_id, doc_id, doc_date, postings, data.memo, "common")
-            self._audit(company_id, "document", doc_id, "repost", snapshot)
-            return
-        self.conn.execute(
-            "UPDATE documents SET doc_date = ?, memo = ? WHERE id = ?",
-            (iso_date(doc_date), data.memo, doc_id),
-        )
-        self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
-        self._insert_postings(company_id, doc_id, postings)
-        self._post(company_id, doc_id)
 
     def _conversion_postings(
         self, company_id: int, data: ConversionInput
@@ -316,13 +296,13 @@ class ConversionCommands(ChartCommands, DocumentCommands):
                 loss = self._role_account(
                     company_id, FX_LOSS, tr("Не указан счёт убытка от курсовой разницы")
                 )
-                sc = self._item_subconto(company_id, loss, text)
+                sc = self.named_subconto(company_id, loss["id"], text)
                 debit_lines.append(line(loss["id"], transit["id"], difference, sc, (), text))
             else:
                 gain = self._role_account(
                     company_id, FX_GAIN, tr("Не указан счёт дохода от курсовой разницы")
                 )
-                sc = self._item_subconto(company_id, gain, text)
+                sc = self.named_subconto(company_id, gain["id"], text)
                 debit_lines.append(line(transit["id"], gain["id"], -difference, (), sc, text))
         credit_lines = [
             line(
@@ -347,7 +327,7 @@ class ConversionCommands(ChartCommands, DocumentCommands):
                 expense["id"],
                 fee.account_id,
                 value or 0,
-                self._item_subconto(company_id, expense, text),
+                self.named_subconto(company_id, expense["id"], text),
                 fee.subconto,
                 text,
                 currency_id=fee.currency_id,
@@ -363,25 +343,6 @@ class ConversionCommands(ChartCommands, DocumentCommands):
                 role, missing + ". " + tr("Выберите его в «Счета конвертации» (меню «⋯»).")
             )
         return self._account(company_id, account_id)
-
-    def _item_subconto(
-        self, company_id: int, account: sqlite3.Row, name: str
-    ) -> tuple[int | None, ...]:
-        """The account's subconto filled with an element of this name (an item of other
-        income and expenses, a cost item…), made on first use."""
-        values: list[int | None] = []
-        for i in (1, 2, 3):
-            kind_id = account[f"sc{i}_kind_id"]
-            if kind_id is None:
-                values.append(None)
-                continue
-            found = self.conn.execute(
-                "SELECT id FROM subconto_values WHERE company_id = ? AND kind_id = ? "
-                "AND name = ? ORDER BY active DESC, id LIMIT 1",
-                (company_id, kind_id, name),
-            ).fetchone()
-            values.append(found[0] if found else self.add_subconto_value(company_id, kind_id, name))
-        return tuple(values)
 
     def _code(self, company_id: int, currency_id: int | None) -> str:
         if currency_id is None:
@@ -411,13 +372,3 @@ class ConversionCommands(ChartCommands, DocumentCommands):
             "UPDATE currency_conversions SET credit_document_id = NULL WHERE id = ?", (row["id"],)
         )
         self._remove_document(company_id, self._document(company_id, row["credit_document_id"]))
-
-    def _remove_document(self, company_id: int, doc: sqlite3.Row) -> None:
-        snapshot = self._snapshot(doc)
-        if doc["status"] == "posted":  # immutability triggers allow only this path
-            self.conn.execute(
-                "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?",
-                (doc["id"],),
-            )
-        self.conn.execute("DELETE FROM documents WHERE id = ?", (doc["id"],))
-        self._audit(company_id, "document", doc["id"], "delete", snapshot)
