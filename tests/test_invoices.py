@@ -225,6 +225,11 @@ def test_invoice_number_fills_related_postings_without_overwriting(firm):
     model.setData(model.index(0, INVOICE), model.parse(0, INVOICE, " mt 77 "))
     assert [row.invoice for row in model.rows] == ["MT77", "MT77"]
 
+    # Qt asks for the account text whenever it repaints the table.  Reading display
+    # data must not erase a number that has just been inherited by the related row.
+    assert model.index(1, 4).data() == "60"
+    assert [row.invoice for row in model.rows] == ["MT77", "MT77"]
+
     model.setData(model.index(1, INVOICE), "OTHER")
     model.setData(model.index(0, INVOICE), "MT88")
     assert [row.invoice for row in model.rows] == ["MT88", "OTHER"]

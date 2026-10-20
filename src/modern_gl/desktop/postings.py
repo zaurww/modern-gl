@@ -371,9 +371,6 @@ class PostingsModel(QAbstractTableModel):
         r = self.rows[row]
         side, pos = column_role(col)
         if side in ("debit", "credit"):
-            if r.invoice_auto:
-                r.invoice = ""
-                r.invoice_auto = False
             if pos is None:
                 account_id = getattr(r, side)
                 return self.catalog.accounts[account_id].short if account_id else ""
@@ -423,6 +420,10 @@ class PostingsModel(QAbstractTableModel):
         r = self.rows[row]
         side, pos = column_role(col)
         if side in ("debit", "credit"):
+            # An inherited number belongs to the old account/dimensions.  Drop it only
+            # when the user actually changes that key; merely painting the cell must
+            # never mutate the row (and used to make inherited numbers disappear).
+            self._clear_auto_invoice(r)
             if pos is None:
                 self._set_account(r, side, value)
             else:
@@ -456,6 +457,12 @@ class PostingsModel(QAbstractTableModel):
             self._row_changed(row)
         self.changed.emit()
         return True
+
+    @staticmethod
+    def _clear_auto_invoice(row: PostingRow) -> None:
+        if row.invoice_auto:
+            row.invoice = ""
+            row.invoice_auto = False
 
     def _invoice_keys(self, row: int) -> set[tuple[int, tuple[int | None, ...]]]:
         """Settlement account + its dimensions identify lines of the same invoice.
