@@ -324,3 +324,116 @@ def test_import_dialog_loads_shows_and_creates_drafts(shop, conn, qtbot, monkeyp
     dialog.create_drafts()
     assert len(dialog.created) == 1
     assert shop.inventory.load_document(shop.company_id, dialog.created[0]).status == "draft"
+
+
+@pytest.mark.parametrize(
+    ("portal", "short"),
+    [
+        ('"ALFA TREYD" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ', "ALFA TREYD MMC"),
+        ("«Azərsun Holdinq» məhdud məsuliyyətli cəmiyyəti", "Azərsun Holdinq MMC"),
+        ("AÇIQ SƏHMDAR CƏMİYYƏTİ  “KAPİTAL BANK”", "KAPİTAL BANK ASC"),
+        ("Məmmədov Rauf Fərdi sahibkar", "Məmmədov Rauf FS"),
+        ("Kompyuter Dünyası", "Kompyuter Dünyası"),
+    ],
+)
+def test_short_name_suggests_a_shorter_counterparty_name(portal, short):
+    from modern_gl.application.eqaime_import import short_name
+
+    assert short_name(portal) == short
+
+
+def test_one_new_counterparty_per_voen_named_by_the_user(shop, conn):
+    """Two e-qaimə of one new supplier: it is listed once and added once, under the name
+    the user typed; the documents point at it."""
+    from modern_gl.application.eqaime_import import new_counterparties
+
+    long_name = '"KOMPYUTER DÜNYASI" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ'
+    invoices = []
+    for number in ("MT1", "MT2"):
+        row, detail = received(number)
+        detail["sender"] = {"tin": SUPPLIER_TIN, "name": long_name}
+        invoices.append(parse_invoice(row, detail, outgoing=False))
+    plans = plan_import(conn, shop.company_id, invoices)
+    (party,) = new_counterparties(plans)
+    assert (party.tax_id, party.portal_name, party.name, party.invoices) == (
+        SUPPLIER_TIN,
+        long_name,
+        "KOMPYUTER DÜNYASI MMC",
+        2,
+    )
+    drafts = import_drafts(shop.inventory, shop.company_id, plans, {party.key: "Kompyuter Dünyası"})
+    suppliers = conn.execute(
+        "SELECT id, name FROM subconto_values WHERE company_id = ? AND tax_id = ?",
+        (shop.company_id, SUPPLIER_TIN),
+    ).fetchall()
+    assert [row["name"] for row in suppliers] == ["Kompyuter Dünyası"]
+    for draft in drafts:
+        doc = shop.inventory.load_document(shop.company_id, draft)
+        assert doc.lines[0].offset_subconto[0] == suppliers[0]["id"]
+
+
+def test_counterparties_can_be_added_before_any_document(shop, conn):
+    """«Add counterparties» alone: no documents; the next plan finds them by VÖEN."""
+    from modern_gl.application.eqaime_import import add_counterparties, new_counterparties
+
+    plans = plan_import(conn, shop.company_id, [parse_invoice(*received(), outgoing=False)])
+    parties = new_counterparties(plans)
+    parties[0].name = "Təchizatçı"
+    ids = add_counterparties(shop.ledger, shop.company_id, parties, plans)
+    assert plans[0].counterparty_id == ids[SUPPLIER_TIN]
+    assert conn.execute("SELECT COUNT(*) FROM inventory_documents").fetchone()[0] == 0
+    again = plan_import(conn, shop.company_id, [parse_invoice(*received(), outgoing=False)])
+    assert again[0].counterparty_id == ids[SUPPLIER_TIN] and not new_counterparties(again)
+
+
+def test_import_dialog_adds_counterparties_with_edited_names(shop, conn, qtbot):
+    """The new supplier is listed once with a shortened name; the user corrects it and adds
+    the counterparties alone; the e-qaimə is then no longer «a new counterparty»."""
+    from modern_gl.application.catalog import Catalog
+    from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+    from modern_gl.desktop.session import Session
+
+    long_name = '"KOMPYUTER DÜNYASI" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ'
+    invoices = []
+    for number in ("MT1", "MT2"):
+        row, detail = received(number)
+        detail["sender"] = {"tin": SUPPLIER_TIN, "name": long_name}
+        invoices.append(parse_invoice(row, detail, outgoing=False))
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    dialog = EqaimeImportDialog(session)
+    qtbot.addWidget(dialog)
+    assert dialog.parties.isHidden()  # nothing loaded yet
+    dialog.show_invoices(invoices)
+    assert not dialog.parties.isHidden() and dialog.parties.rowCount() == 1
+    texts = [dialog.parties.item(0, c).text() for c in range(4)]
+    assert texts == [SUPPLIER_TIN, long_name, "KOMPYUTER DÜNYASI MMC", "2"]
+    assert dialog.parties_title.text() == "Новые контрагенты: 1"
+
+    dialog.parties.item(0, 2).setText("  Kompyuter   Dünyası ")
+    dialog.add_parties()
+    supplier = conn.execute(
+        "SELECT name FROM subconto_values WHERE tax_id = ?", (SUPPLIER_TIN,)
+    ).fetchone()
+    assert supplier["name"] == "Kompyuter Dünyası"
+    assert dialog.parties.isHidden()
+    first = dialog.tree.topLevelItem(0)
+    assert first is not None and "новый контрагент" not in first.text(7)
+    assert conn.execute("SELECT COUNT(*) FROM inventory_documents").fetchone()[0] == 0
+
+
+def test_counterparty_without_voen_is_found_by_its_exact_name(shop, conn):
+    """«Alfa» has no VÖEN in the company: an e-qaimə of «ALFA» without VÖEN finds it;
+    one with a VÖEN never matches by name."""
+    row = {
+        "id": "n",
+        "serialNumber": "MT9",
+        "createdAt": "2026-03-07",
+        "costWithoutVat": 10,
+        "receiverName": " ALFA ",
+        "receiverTin": "",
+    }
+    (plan,) = plan_import(conn, shop.company_id, [parse_invoice(row, {}, outgoing=True)])
+    assert plan.counterparty_id == shop.customer
+    row["receiverTin"] = CUSTOMER_TIN
+    (plan,) = plan_import(conn, shop.company_id, [parse_invoice(row, {}, outgoing=True)])
+    assert plan.counterparty_id is None

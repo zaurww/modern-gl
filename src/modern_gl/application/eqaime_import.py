@@ -26,6 +26,7 @@ from modern_gl.application.inventory import (
     SaleLine,
     vat_of,
 )
+from modern_gl.application.ledger import Ledger
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import fold, tr
@@ -182,7 +183,7 @@ def plan_import(
     }
     plans = []
     for invoice in invoices:
-        counterparty = _counterparty(conn, company_id, invoice.party_tin)
+        counterparty = _counterparty(conn, company_id, invoice.party_tin, invoice.party_name)
         plan = InvoicePlan(invoice, counterparty)
         existing = conn.execute(
             "SELECT number FROM inventory_documents "
@@ -224,16 +225,31 @@ def _line_plan(
     return LinePlan(line)
 
 
-def _counterparty(conn: sqlite3.Connection, company_id: int, tax_id: str) -> int | None:
-    if not tax_id:
+def _counterparty(
+    conn: sqlite3.Connection, company_id: int, tax_id: str, name: str = ""
+) -> int | None:
+    """The company's counterparty with this VÖEN; one without a VÖEN (a non-resident,
+    a person) by exactly the same name."""
+    if tax_id:
+        row = conn.execute(
+            "SELECT v.id FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id "
+            "WHERE v.company_id = ? AND k.code = 'counterparty' AND v.tax_id = ? "
+            "ORDER BY v.active DESC, v.id LIMIT 1",
+            (company_id, tax_id),
+        ).fetchone()
+        return row["id"] if row else None
+    if not name.strip():
         return None
-    row = conn.execute(
-        "SELECT v.id FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id "
-        "WHERE v.company_id = ? AND k.code = 'counterparty' AND v.tax_id = ? "
-        "ORDER BY v.active DESC, v.id LIMIT 1",
-        (company_id, tax_id),
-    ).fetchone()
-    return row["id"] if row else None
+    wanted = fold(" ".join(name.split()))
+    for row in conn.execute(
+        "SELECT v.id, v.name FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id "
+        "WHERE v.company_id = ? AND k.code = 'counterparty' AND v.tax_id IS NULL "
+        "ORDER BY v.active DESC, v.id",
+        (company_id,),
+    ):
+        if fold(" ".join(row["name"].split())) == wanted:
+            return row["id"]
+    return None
 
 
 def _history(
@@ -257,26 +273,122 @@ def _history(
     return result
 
 
-def import_drafts(inventory: Inventory, company_id: int, plans: Sequence[InvoicePlan]) -> list[int]:
-    """Write the importable plans as drafts in one transaction: a missing counterparty is
-    added with its VÖEN; the settlement account is the only one of its type (60 / 62)."""
+@dataclass
+class NewCounterparty:
+    """A counterparty of the e-qaimə the company does not have yet. The VÖEN identifies
+    it; the portal's name is often long, so the user may give it another (`name`)."""
+
+    tax_id: str
+    portal_name: str
+    name: str
+    invoices: int = 1
+
+    @property
+    def key(self) -> str:
+        return _party_key(self.tax_id, self.portal_name)
+
+
+def _party_key(tax_id: str, name: str) -> str:
+    return tax_id or f"name:{fold(name)}"  # a non-resident without VÖEN: by its name
+
+
+# legal forms written out in full on the portal and their usual short forms
+_LEGAL_FORMS = (
+    ("MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ", "MMC"),
+    ("AÇIQ SƏHMDAR CƏMİYYƏTİ", "ASC"),
+    ("QAPALI SƏHMDAR CƏMİYYƏTİ", "QSC"),
+    ("SƏHMDAR CƏMİYYƏTİ", "SC"),
+    ("PUBLİK HÜQUQİ ŞƏXS", "PHŞ"),
+    ("FƏRDİ SAHİBKAR", "FS"),
+)
+
+
+def short_name(name: str) -> str:
+    """A suggestion for the program's name: the legal form shortened and put last, quotes
+    and extra spaces dropped ('"ALFA TREYD" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ' -> 'ALFA TREYD
+    MMC'). The user corrects it as they like."""
+    text = " ".join(name.split())
+    form = ""
+    for full, short in _LEGAL_FORMS:
+        position = fold(text).find(fold(full))
+        if position >= 0:
+            text = (text[:position] + text[position + len(full) :]).strip(" ,")
+            form = short
+            break
+    for quote in "\"“”„«»'":
+        text = text.replace(quote, "")
+    text = " ".join(text.split())
+    return f"{text} {form}".strip() if text else name.strip()
+
+
+def new_counterparties(plans: Sequence[InvoicePlan]) -> list[NewCounterparty]:
+    """The counterparties to add, one per VÖEN, with a shorter name suggested."""
+    found: dict[str, NewCounterparty] = {}
+    for plan in plans:
+        invoice = plan.invoice
+        if plan.counterparty_id is not None or not (invoice.party_tin or invoice.party_name):
+            continue
+        key = _party_key(invoice.party_tin, invoice.party_name)
+        if key in found:
+            found[key].invoices += 1
+        else:
+            found[key] = NewCounterparty(
+                invoice.party_tin, invoice.party_name, short_name(invoice.party_name)
+            )
+    return sorted(found.values(), key=lambda c: fold(c.name))
+
+
+def add_counterparties(
+    ledger: Ledger,
+    company_id: int,
+    parties: Sequence[NewCounterparty],
+    plans: Sequence[InvoicePlan] = (),
+) -> dict[str, int]:
+    """Add the counterparties with their VÖEN (one that has appeared meanwhile is taken as
+    it is) and point the plans at them: key -> id."""
+    ids: dict[str, int] = {}
+    with transaction(ledger.conn):
+        kind = ledger.subconto_kind_id(company_id, "counterparty")
+        for party in parties:
+            existing = _counterparty(ledger.conn, company_id, party.tax_id, party.portal_name)
+            if existing is not None:
+                ids[party.key] = existing
+                continue
+            name = " ".join(party.name.split()) or party.portal_name or party.tax_id
+            value_id = ledger.add_subconto_value(company_id, kind, name or tr("Без названия"))
+            if party.tax_id:
+                ledger.set_subconto_value_tax(company_id, value_id, party.tax_id)
+            ids[party.key] = value_id
+        for plan in plans:
+            if plan.counterparty_id is None:
+                key = _party_key(plan.invoice.party_tin, plan.invoice.party_name)
+                plan.counterparty_id = ids.get(key)
+    return ids
+
+
+def import_drafts(
+    inventory: Inventory,
+    company_id: int,
+    plans: Sequence[InvoicePlan],
+    names: Mapping[str, str] | None = None,
+) -> list[int]:
+    """Write the importable plans as drafts in one transaction. Missing counterparties are
+    added first, once per VÖEN, under `names` (key -> name) or a shortened portal name;
+    the settlement account is the one of its type (60 / 62)."""
     ledger = inventory.ledger
     conn = inventory.conn
+    chosen = [plan for plan in plans if plan.importable]
     created = []
     with transaction(conn):
+        parties = new_counterparties(chosen)
+        for party in parties:
+            party.name = (names or {}).get(party.key, party.name)
+        add_counterparties(ledger, company_id, parties, chosen)
         kind = ledger.subconto_kind_id(company_id, "counterparty")
         warehouse = _only_warehouse(conn, company_id)
-        for plan in plans:
-            if not plan.importable:
-                continue
+        for plan in chosen:
             invoice = plan.invoice
-            if plan.counterparty_id is None:
-                name = invoice.party_name or invoice.party_tin or tr("Без названия")
-                plan.counterparty_id = ledger.add_subconto_value(company_id, kind, name)
-                if invoice.party_tin:
-                    ledger.set_subconto_value_tax(
-                        company_id, plan.counterparty_id, invoice.party_tin
-                    )
+            assert plan.counterparty_id is not None  # added above
             account = _settlement_account(conn, company_id, invoice.outgoing)
             subconto = _place(conn, account, kind, plan.counterparty_id)
             vat_rate = STANDARD_VAT_RATE if invoice.vat else None

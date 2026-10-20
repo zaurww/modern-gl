@@ -362,7 +362,10 @@ def main() -> None:
         "serialNumber": "MT2603000111",
         "createdAt": "2026-03-05T10:00:00",
         "kind": "defaultInvoice",
-        "sender": {"tin": "1700000001", "name": "Kompyuter Dünyası MMC"},
+        "sender": {
+            "tin": "1700000001",
+            "name": '"KOMPYUTER DÜNYASI" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ',
+        },
         "items": [
             {
                 "productName": i18n.tr("Бумага офисная А4"),

@@ -14,6 +14,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QTableWidget,
+    QTableWidgetItem,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -24,7 +26,10 @@ from modern_gl.application.eqaime_import import (
     EInvoice,
     InvoicePlan,
     LinePlan,
+    NewCounterparty,
+    add_counterparties,
     import_drafts,
+    new_counterparties,
     parse_invoice,
     plan_import,
 )
@@ -149,7 +154,44 @@ class EqaimeImportDialog(QDialog):
                 column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
         self.tree.itemChanged.connect(lambda *_: self._show_count())
-        root.addWidget(self.tree, 1)
+        root.addWidget(self.tree, 3)
+
+        # new counterparties: the VÖEN identifies them, the name is the user's to shorten
+        parties = QHBoxLayout()
+        self.parties_title = QLabel()
+        self.parties_title.setFont(fonts().heading)
+        parties.addWidget(self.parties_title, 1)
+        self.add_parties_button = button(tr("Добавить контрагентов"), "flat")
+        self.add_parties_button.setToolTip(tr("Только контрагенты, без документов"))
+        self.add_parties_button.clicked.connect(self.add_parties)
+        parties.addWidget(self.add_parties_button)
+        root.addLayout(parties)
+        self.parties = QTableWidget(0, 4)
+        self.parties.setHorizontalHeaderLabels(
+            [tr("VÖEN"), tr("Название на портале"), tr("Название в программе"), tr("E-qaimə")]
+        )
+        self.parties.verticalHeader().hide()
+        self.parties.setShowGrid(False)
+        parties_header = self.parties.horizontalHeader()
+        parties_header.setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        for column, mode in enumerate(
+            (
+                QHeaderView.ResizeMode.Interactive,
+                QHeaderView.ResizeMode.Stretch,
+                QHeaderView.ResizeMode.Stretch,
+                QHeaderView.ResizeMode.Interactive,
+            )
+        ):
+            parties_header.setSectionResizeMode(column, mode)
+        self.parties.setColumnWidth(0, 120)
+        self.parties.setColumnWidth(3, 80)
+        self.parties.setToolTip(tr("Название в программе можно исправить — двойной щелчок"))
+        root.addWidget(self.parties, 1)
+        self.new_parties: list[NewCounterparty] = []
+        self.invoices: list[EInvoice] = []
+        self._show_parties()
 
         self.status = QLabel(
             tr(
@@ -216,7 +258,10 @@ class EqaimeImportDialog(QDialog):
 
     def show_invoices(self, invoices: list[EInvoice]) -> None:
         self.load_button.setEnabled(True)
+        self.invoices = invoices
         self.plans = plan_import(self.s.conn, self.s.company_id, invoices)
+        self.new_parties = new_counterparties(self.plans)
+        self._show_parties()
         self.tree.blockSignals(True)
         self.tree.clear()
         for plan in self.plans:
@@ -355,12 +400,68 @@ class EqaimeImportDialog(QDialog):
                 )
             )
 
+    # ---- counterparties --------------------------------------------------------------
+
+    def _show_parties(self) -> None:
+        self.parties.setRowCount(len(self.new_parties))
+        for row, party in enumerate(self.new_parties):
+            cells = [party.tax_id, party.portal_name, party.name, str(party.invoices)]
+            for column, text in enumerate(cells):
+                cell = QTableWidgetItem(text)
+                if column != 2:  # only the name is the user's
+                    cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    cell.setForeground(QColor(P.secondary))
+                if column == 3:
+                    cell.setTextAlignment(
+                        Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+                    )
+                self.parties.setItem(row, column, cell)
+        shown = bool(self.new_parties)
+        for widget in (self.parties_title, self.add_parties_button, self.parties):
+            widget.setVisible(shown)
+        self.parties_title.setText(tr("Новые контрагенты: {n}", n=len(self.new_parties)))
+
+    def party_names(self) -> dict[str, str]:
+        """key -> the name typed in the table (the suggestion if left as it is)."""
+        names = {}
+        for row, party in enumerate(self.new_parties):
+            cell = self.parties.item(row, 2)
+            text = " ".join((cell.text() if cell else "").split())
+            names[party.key] = text or party.name
+        return names
+
+    def add_parties(self) -> None:
+        """Add the new counterparties alone (no documents), then show the list again."""
+        names = self.party_names()
+        for party in self.new_parties:
+            party.name = names[party.key]
+        try:
+            ids = add_counterparties(self.s.ledger, self.s.company_id, self.new_parties)
+        except LedgerError as exc:
+            self.status.setText(str(exc))
+            return
+        self.s.catalog.reload()
+        self.s.notify(tr("Добавлено контрагентов: {n}", n=len(ids)))
+        checked = {plan.invoice.portal_id for plan in self._checked()}
+        self.show_invoices(self.invoices)
+        for index in range(self.tree.topLevelItemCount()):  # keep what was ticked
+            item = self.tree.topLevelItem(index)
+            if item is None:
+                continue
+            plan: InvoicePlan = item.data(0, Qt.ItemDataRole.UserRole)
+            if plan.importable and plan.invoice.portal_id not in checked:
+                item.setCheckState(0, Qt.CheckState.Unchecked)
+
+    # ---- drafts --------------------------------------------------------------------
+
     def create_drafts(self) -> None:
         chosen = self._checked()
         if not chosen:
             return
         try:
-            self.created = import_drafts(self.inventory, self.s.company_id, chosen)
+            self.created = import_drafts(
+                self.inventory, self.s.company_id, chosen, self.party_names()
+            )
         except LedgerError as exc:
             self.status.setText(str(exc))
             return
