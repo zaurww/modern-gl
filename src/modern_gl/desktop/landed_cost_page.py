@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from fractions import Fraction
 from typing import Any, cast
 
 from PySide6.QtCore import (
@@ -38,6 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.currencies import rate_on
 from modern_gl.application.inventory import (
     QUANTITY_FACTOR,
     Inventory,
@@ -53,14 +55,17 @@ from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, money, to_qdate
+from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.reporting.inventory import (
+    BatchCostLine,
     CostSource,
     ReceiptLineChoice,
+    batch_cost,
     cost_sources,
     landed_cost_type_choices,
     receipt_line_choices,
@@ -70,6 +75,8 @@ COST_TYPE = "cost_type"
 ACCOUNT = "account"
 SC1, SC2, SC3 = "sc1", "sc2", "sc3"
 AMOUNT = "amount"
+CURRENCY_AMOUNT = "currency_amount"
+RATE = "rate"
 VAT = "vat"
 MEMO = "memo"
 CHARGE_HEADERS = {
@@ -78,6 +85,8 @@ CHARGE_HEADERS = {
     SC1: "Субконто",
     SC2: "",
     SC3: "",
+    CURRENCY_AMOUNT: "В валюте",
+    RATE: "Курс",
     AMOUNT: "Сумма",
     VAT: "НДС",
     MEMO: "Комментарий",
@@ -99,7 +108,7 @@ TARGET_HEADERS = {
     SHARE: "Расходы",
     UNIT_COST: "Цена с расходами",
 }
-NUMBER_KEYS = {AMOUNT, VAT, QUANTITY, COST, SHARE, UNIT_COST}
+NUMBER_KEYS = {AMOUNT, CURRENCY_AMOUNT, RATE, VAT, QUANTITY, COST, SHARE, UNIT_COST}
 
 METHODS = [
     ("value", "По стоимости"),
@@ -109,7 +118,7 @@ METHODS = [
 
 HINT = (
     "Enter / Tab — следующее поле   ·   Ins — расход   ·   Del — удалить строку   ·   "
-    "НДС: «18%» — посчитать   ·   Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
+    "Сумма «30 USD» — в валюте   ·   НДС «18%» — посчитать   ·   Ctrl+Enter — провести"
 )
 
 
@@ -123,11 +132,25 @@ class ChargeRow:
     source: tuple[int, int] | None = None  # a GL posting: (document id, line number)
     source_label: str = ""
     memo: str = ""
+    # an expense in a currency: the manat amount is the currency amount at the rate
+    currency_id: int | None = None
+    currency_code: str = ""
+    currency_amount: int | None = None
+    rate: Fraction | None = None
+    rate_typed: bool = False  # a new date of the document no longer changes it
+
+    def recalculate(self) -> None:
+        if self.currency_id is not None:
+            ok = self.currency_amount is not None and self.rate is not None
+            self.amount = (
+                to_base(self.currency_amount or 0, self.rate or Fraction(0)) if ok else None
+            )
 
     def is_empty(self) -> bool:
         return (
             self.cost_type_id is None
             and self.amount is None
+            and self.currency_amount is None
             and self.source is None
             and not self.memo.strip()
         )
@@ -155,15 +178,33 @@ def _resolve(choices: list[tuple[int, str]], text: str) -> int | None:
 class ChargesModel(QAbstractTableModel):
     changed = Signal()
 
-    def __init__(self, session: Session, rows: list[ChargeRow], read_only: bool) -> None:
+    def __init__(
+        self,
+        session: Session,
+        rows: list[ChargeRow],
+        read_only: bool,
+        rate_of=lambda _currency_id: None,
+    ) -> None:
         super().__init__()
         self.s = session
+        self.rate_of = rate_of  # currency id -> the rate on the document's date (or None)
         self.read_only = read_only
         self.cost_types = {
             c.id: c.label for c in landed_cost_type_choices(session.conn, session.company_id)
         }
         self.rows = rows or [self.default_row()]
-        self.columns = [COST_TYPE, ACCOUNT, SC1, SC2, SC3, AMOUNT, VAT, MEMO]
+        self.columns = [
+            COST_TYPE,
+            ACCOUNT,
+            SC1,
+            SC2,
+            SC3,
+            CURRENCY_AMOUNT,
+            RATE,
+            AMOUNT,
+            VAT,
+            MEMO,
+        ]
 
     def default_row(self) -> ChargeRow:
         account = self.s.catalog.by_code.get("60")
@@ -209,8 +250,11 @@ class ChargesModel(QAbstractTableModel):
     def editable(self, row: int, key: str) -> bool:
         if self.read_only:
             return False
-        if self.rows[row].source is not None:  # the account comes from the GL posting
+        charge = self.rows[row]
+        if charge.source is not None:  # the account comes from the GL posting
             return key in {COST_TYPE, AMOUNT, MEMO}
+        if key == RATE:
+            return charge.currency_id is not None
         return key not in {SC1, SC2, SC3} or self.kind_at(row, key) is not None
 
     def flags(self, index):
@@ -236,9 +280,14 @@ class ChargesModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return self._text(index.row(), key)
         if role == Qt.ItemDataRole.EditRole:  # what an editor starts with
+            if key in {AMOUNT, CURRENCY_AMOUNT} and charge.currency_id is not None:
+                amount = format_minor(charge.currency_amount or 0).replace(" ", "")
+                return f"{amount} {charge.currency_code}"
             if key in {AMOUNT, VAT}:
                 value = charge.amount if key == AMOUNT else charge.vat_amount
                 return "" if value is None else format_minor(value).replace(" ", "")
+            if key == RATE:
+                return "" if charge.rate is None else format_unit_rate(charge.rate)
             if key == MEMO:
                 return charge.memo
             if key in {SC1, SC2, SC3} and charge.subconto[int(key[-1]) - 1] is None:
@@ -270,6 +319,12 @@ class ChargesModel(QAbstractTableModel):
             return self.s.catalog.kinds[kind] if kind else ""
         if key == AMOUNT:
             return money(charge.amount)
+        if key == CURRENCY_AMOUNT:
+            if charge.currency_id is None or charge.currency_amount is None:
+                return ""
+            return f"{money(charge.currency_amount)} {charge.currency_code}"
+        if key == RATE:
+            return "" if charge.rate is None else format_unit_rate(charge.rate)
         if key == VAT:
             return "" if charge.vat_amount is None else money(charge.vat_amount, blank_zero=False)
         return charge.memo or (charge.source_label if charge.source else "")
@@ -279,30 +334,53 @@ class ChargesModel(QAbstractTableModel):
         text = text.strip()
         if not text:
             return None
+        if key in {ACCOUNT, SC1, SC2, SC3, COST_TYPE}:
+            return self._lookup(row, key, text)
+        if key == VAT and text.endswith("%"):  # "18%": calculate from the amount
+            rate = Decimal(plain_number(text[:-1]) or "0")
+            return vat_of(self.rows[row].amount or 0, int(rate * 100))
+        if key == RATE:
+            return unit_rate(parse_rate(plain_number(text)))
+        if key in {AMOUNT, CURRENCY_AMOUNT}:
+            return self._parse_amount(row, key, text)
+        if key == VAT:
+            value = to_minor(plain_number(text))
+            if value < 0:
+                raise ValueError(tr("сумма не может быть отрицательной"))
+            return value
+        return text
+
+    def _lookup(self, row: int, key: str, text: str) -> int | None:
+        """A directory cell: the account, the subconto value or the cost type."""
         if key == ACCOUNT:
             return self.s.catalog.resolve_account(text).id
-        if key in {SC1, SC2, SC3}:
+        if key == COST_TYPE:
+            value = _resolve(self.choices(row, key) or [], text)
+        else:
             kind = self.kind_at(row, key)
             if kind is None:
                 return None
             value = self.s.catalog.resolve_value(kind, text, self.owner_at(row, key))
-            if value is None:
-                raise LookupError(tr("нет в справочнике: {text}", text=text))
-            return value
-        if key == COST_TYPE:
-            value = _resolve(self.choices(row, key) or [], text)
-            if value is None:
-                raise LookupError(tr("нет в справочнике: {text}", text=text))
-            return value
-        if key == VAT and text.endswith("%"):  # "18%": calculate from the amount
-            rate = Decimal(plain_number(text[:-1]) or "0")
-            return vat_of(self.rows[row].amount or 0, int(rate * 100))
-        if key in {AMOUNT, VAT}:
-            value = to_minor(plain_number(text))
-            if value < 0 or (value == 0 and key == AMOUNT):
-                raise ValueError(tr("сумма должна быть больше нуля"))
-            return value
-        return text
+        if value is None:
+            raise LookupError(tr("нет в справочнике: {text}", text=text))
+        return value
+
+    def _parse_amount(self, row: int, key: str, text: str) -> tuple[int | None, int]:
+        """(currency id or None for manat, amount): «30 USD» is in dollars; a bare number
+        is in the line's currency in «В валюте», in manat in «Сумма»."""
+        words = text.replace("\u00a0", " ").split()
+        currency_id = None
+        if len(words) > 1 and words[-1].isalpha():
+            currency_id = self.s.catalog.resolve_currency(words[-1]).id
+            text = " ".join(words[:-1])
+        elif key == CURRENCY_AMOUNT:
+            currency_id = self.rows[row].currency_id
+        if currency_id is not None and self.rows[row].source is not None:
+            raise ValueError(tr("проводка-источник уже в манатах"))
+        value = to_minor(plain_number(text))
+        if value <= 0:
+            raise ValueError(tr("сумма должна быть больше нуля"))
+        return currency_id, value
 
     def setData(self, index, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
         if self.read_only or role != Qt.ItemDataRole.EditRole:
@@ -322,8 +400,11 @@ class ChargesModel(QAbstractTableModel):
                     charge.subconto[position] = None
         elif key in {SC1, SC2, SC3}:
             charge.subconto[int(key[-1]) - 1] = value
-        elif key == AMOUNT:
-            charge.amount = value
+        elif key in {AMOUNT, CURRENCY_AMOUNT}:
+            self._set_amount(charge, value)
+        elif key == RATE:
+            charge.rate, charge.rate_typed = value, value is not None
+            charge.recalculate()
         elif key == VAT:
             charge.vat_amount = value
         else:
@@ -333,6 +414,41 @@ class ChargesModel(QAbstractTableModel):
         )
         self.changed.emit()
         return True
+
+    def _set_amount(self, charge: ChargeRow, value: tuple[int | None, int] | int | None) -> None:
+        """`value`: (currency id, amount), or a manat amount, or None."""
+        if value is None or isinstance(value, int):
+            currency_id, amount = None, value
+        else:
+            currency_id, amount = value
+        if currency_id is None:
+            charge.currency_id, charge.currency_code = None, ""
+            charge.currency_amount = charge.rate = None
+            charge.amount = amount
+            return
+        if currency_id != charge.currency_id:
+            charge.currency_id = currency_id
+            charge.currency_code = next(
+                c.code for c in self.s.catalog.active_currencies if c.id == currency_id
+            )
+            charge.rate, charge.rate_typed = self.rate_of(currency_id), False
+        charge.currency_amount = amount
+        charge.recalculate()
+
+    def refresh_rates(self) -> None:
+        """A new date of the document: the rates nobody typed follow it."""
+        for charge in self.rows:
+            if charge.currency_id is not None and not charge.rate_typed:
+                charge.rate = self.rate_of(charge.currency_id)
+                charge.recalculate()
+        if self.rows:
+            self.dataChanged.emit(
+                self.index(0, 0), self.index(len(self.rows) - 1, len(self.columns) - 1)
+            )
+        self.changed.emit()
+
+    def has_currency(self) -> bool:
+        return any(charge.currency_id is not None for charge in self.rows)
 
     def insert_row(self, row: ChargeRow | None = None) -> int:
         if self.rows and self.rows[-1].is_empty() and row is not None:
@@ -371,6 +487,11 @@ class ChargesModel(QAbstractTableModel):
                 charge.source[0] if charge.source else None,
                 charge.source[1] if charge.source else None,
                 charge.memo.strip(),
+                charge.currency_id,
+                None if charge.rate is None else format_unit_rate(charge.rate),
+                None
+                if charge.currency_amount is None
+                else Decimal(charge.currency_amount).scaleb(-MONEY_SCALE),
             )
             for charge in self.rows
             if not charge.is_empty()
@@ -739,6 +860,145 @@ def source_label(source: CostSource) -> str:
     )
 
 
+@dataclass
+class _CostRow:
+    """A line of the batch cost report, or its total."""
+
+    document: str = ""
+    item: str = ""
+    quantity: str = ""
+    price: str = ""
+    rate: str = ""
+    cost: int = 0
+    shares: dict[int, int] = field(default_factory=dict)
+    expenses: int = 0
+    total: int = 0
+    unit_cost: int | None = None
+    is_total: bool = False
+
+
+def _cost_row(line: BatchCostLine) -> _CostRow:
+    price = ""
+    if line.currency and line.currency_amount is not None and line.quantity:
+        unit = round_ratio(line.currency_amount * QUANTITY_FACTOR, line.quantity)
+        price = f"{money(unit)} {line.currency}"
+    return _CostRow(
+        f"№{line.number}  ·  {ru_date(line.doc_date)}",
+        line.item_name,
+        f"{format_quantity(line.quantity, line.precision)} {line.unit}",
+        price,
+        "" if line.rate is None else format_unit_rate(unit_rate(line.rate)),
+        line.cost,
+        line.shares,
+        line.expenses,
+        line.total,
+        round_ratio(line.total * QUANTITY_FACTOR, line.quantity) if line.quantity else None,
+    )
+
+
+class BatchCostDialog(QDialog):
+    """«Себестоимость партии»: what each receipt line cost — the supplier's price (in a
+    currency and at what rate), every expense separately, the total and a unit's cost."""
+
+    def __init__(self, session: Session, document_id: int, title: str, parent=None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("Себестоимость партии"))
+        charges, lines = batch_cost(session.conn, session.company_id, document_id)
+        layout = QVBoxLayout(self)
+        heading = QLabel(title)
+        heading.setFont(fonts().heading)
+        layout.addWidget(heading)
+        notes = [
+            tr(
+                "{title}: {amount} {code} по курсу {rate}",
+                title=c.title,
+                amount=money(c.currency_amount or 0),
+                code=c.currency,
+                rate=format_unit_rate(unit_rate(c.rate or 0)),
+            )
+            for c in charges
+            if c.currency
+        ]
+        if notes:
+            note = QLabel("   ·   ".join(notes))
+            note.setObjectName("secondary")
+            layout.addWidget(note)
+        in_currency = any(line.currency for line in lines)
+        self.columns = [
+            Column(tr("Поступление"), lambda r: r.document, width=1),
+            Column(tr("Товар"), lambda r: r.item),
+            Column(tr("Количество"), lambda r: r.quantity, width=1, right=True),
+            *(
+                [
+                    Column(tr("Цена поставщика"), lambda r: r.price, width=1, right=True),
+                    Column(tr("Курс"), lambda r: r.rate, width=1, right=True),
+                ]
+                if in_currency
+                else []
+            ),
+            Column(tr("Стоимость"), lambda r: r.cost, money=True, width=1),
+            *[
+                Column(c.title, lambda r, cid=c.id: r.shares.get(cid, 0), money=True, width=1)
+                for c in charges
+            ],
+            Column(tr("Итого"), lambda r: r.total, money=True, width=1),
+            Column(tr("Цена за единицу"), lambda r: r.unit_cost, money=True, width=1),
+        ]  # width 1: as wide as the contents; the item takes the rest
+        rows = [_cost_row(line) for line in lines]
+        total = _CostRow(
+            tr("Итого"),
+            cost=sum(r.cost for r in rows),
+            shares={c.id: sum(r.shares.get(c.id, 0) for r in rows) for c in charges},
+            expenses=sum(r.expenses for r in rows),
+            total=sum(r.total for r in rows),
+            is_total=True,
+        )
+        self.model = ReportModel()
+        self.model.set(
+            self.columns,
+            [*rows, total],
+            emphasis=lambda r: r.is_total,
+            total=lambda r: r.is_total,
+        )
+        table = _list(QAbstractItemView.SelectionMode.SingleSelection)
+        table.setModel(self.model)
+        header = table.horizontalHeader()
+        header.setMinimumSectionSize(70)
+        for n, column in enumerate(self.columns):
+            mode = QHeaderView.ResizeMode.ResizeToContents
+            header.setSectionResizeMode(n, mode if column.width else QHeaderView.ResizeMode.Stretch)
+        table.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        layout.addWidget(table, 1)
+        fixed = sum(header.sectionSizeHint(n) for n, c in enumerate(self.columns) if c.width)
+        self.resize(min(max(fixed + 320, 900), 1500), 460)
+        buttons = QHBoxLayout()
+        copy = button(tr("Копировать для Excel"), "flat")
+        copy.clicked.connect(self.copy)
+        buttons.addWidget(copy)
+        buttons.addStretch(1)
+        close = button(tr("Закрыть"))
+        close.clicked.connect(self.accept)
+        buttons.addWidget(close)
+        layout.addLayout(buttons)
+
+    def text(self) -> str:
+        """The table as tab-separated lines with a header."""
+        model = self.model
+        lines = ["\t".join(c.title for c in self.columns)]
+        for row in range(model.rowCount()):
+            cells = [
+                str(model.index(row, column).data() or "").replace("\u00a0", "").replace(" ", "")
+                if self.columns[column].money
+                else str(model.index(row, column).data() or "")
+                for column in range(model.columnCount())
+            ]
+            lines.append("\t".join(cells))
+        return "\n".join(lines) + "\n"
+
+    def copy(self) -> None:
+        QApplication.clipboard().setText(self.text())
+
+
 class LandedCostPage(QWidget):
     saved = Signal(int)
     close_requested = Signal()
@@ -852,9 +1112,11 @@ class LandedCostPage(QWidget):
         self.btn_delete = button(tr("Удалить"), "danger")
         self.btn_unpost = button(tr("Отменить проведение"), "flat")
         self.btn_gl = button(tr("Открыть проводки"), "flat")
+        self.btn_report = button(tr("Себестоимость партии"), "flat")
         actions.addWidget(self.btn_delete)
         actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_gl)
+        actions.addWidget(self.btn_report)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
@@ -868,11 +1130,12 @@ class LandedCostPage(QWidget):
         self.btn_delete.clicked.connect(self.delete)
         self.btn_unpost.clicked.connect(self.unpost)
         self.btn_gl.clicked.connect(self._open_gl)
+        self.btn_report.clicked.connect(self.show_report)
         self.btn_add_charge.clicked.connect(self.add_charge)
         self.btn_from_gl.clicked.connect(self.add_from_gl)
         self.btn_add_receipts.clicked.connect(self.add_receipts)
         self.memo.textEdited.connect(self._changed)
-        self.date.dateChanged.connect(self._changed)
+        self.date.dateChanged.connect(self._date_changed)
         self.method.activated.connect(self._changed)
         for keys, callback in (
             ("Ctrl+S", lambda: self.save(post=False)),
@@ -922,12 +1185,22 @@ class LandedCostPage(QWidget):
     def _set_models(
         self, charges: list[ChargeRow], targets: list[TargetRow], read_only: bool
     ) -> None:
-        self.charges = ChargesModel(self.s, charges, read_only)
+        self.charges = ChargesModel(self.s, charges, read_only, self._rate_of)
         self.targets = TargetsModel(targets, read_only)
         self.charges_table.setModel(self.charges)
         self.targets_table.setModel(self.targets)
         self.charges_table.set_widths(
-            {COST_TYPE: 130, ACCOUNT: 150, SC1: 130, SC2: 120, SC3: 110, AMOUNT: 100, VAT: 90},
+            {
+                COST_TYPE: 130,
+                ACCOUNT: 150,
+                SC1: 130,
+                SC2: 120,
+                SC3: 110,
+                CURRENCY_AMOUNT: 110,
+                RATE: 80,
+                AMOUNT: 100,
+                VAT: 90,
+            },
             MEMO,
         )
         used = self.s.catalog.used_positions()
@@ -940,6 +1213,7 @@ class LandedCostPage(QWidget):
         )
         self.charges.changed.connect(self._changed)
         self.targets.changed.connect(self._changed)
+        self._show_currency_columns()
         self._recalculate()
 
     def _recalculate(self) -> None:
@@ -957,7 +1231,20 @@ class LandedCostPage(QWidget):
             self.totals[key].setVisible(shown)
             self.totals[f"{key}_caption"].setVisible(shown)
 
+    def _rate_of(self, currency_id: int) -> Fraction | None:
+        found = rate_on(self.s.conn, self.s.company_id, currency_id, edited_date(self.date))
+        return found.per_unit if found else None
+
+    def _date_changed(self, *_args) -> None:
+        self.charges.refresh_rates()  # also marks the page changed
+
+    def _show_currency_columns(self) -> None:
+        shown = self.charges.has_currency()
+        for key in (CURRENCY_AMOUNT, RATE):
+            self.charges_table.setColumnHidden(self.charges.columns.index(key), not shown)
+
     def _changed(self, *_args) -> None:
+        self._show_currency_columns()
         self._recalculate()
         if not self.charges.read_only and not self.dirty:
             self.dirty = True
@@ -1044,6 +1331,18 @@ class LandedCostPage(QWidget):
                 else (charge.source_document_id, charge.source_line_no or 0),
                 self._source_label(charge.source_document_id, charge.source_line_no, sources),
                 charge.memo,
+                charge.currency_id,
+                next(
+                    (
+                        c.code
+                        for c in self.s.catalog.active_currencies
+                        if c.id == charge.currency_id
+                    ),
+                    "",
+                ),
+                charge.currency_amount,
+                None if charge.currency_rate is None else unit_rate(charge.currency_rate),
+                rate_typed=True,  # the saved rate stays as it was
             )
             for charge in self.doc.charges
         ]
@@ -1083,6 +1382,7 @@ class LandedCostPage(QWidget):
         self.btn_delete.setVisible(self.doc is not None)
         self.btn_unpost.setVisible(posted and not read_only)
         self.btn_gl.setVisible(self.doc is not None and self.doc.gl_document_id is not None)
+        self.btn_report.setVisible(posted)  # the shares exist once it is posted
         self.hint.setVisible(not read_only)
 
     def save(self, post: bool) -> bool:
@@ -1169,6 +1469,12 @@ class LandedCostPage(QWidget):
             )
         )
         self.saved.emit(self.doc.id)
+
+    def show_report(self) -> None:
+        if self.doc is None or self.doc.status != "posted":
+            return
+        title = f"{self.title().rstrip(' •')}  ·  {self.doc.memo}".rstrip(" ·")
+        BatchCostDialog(self.s, self.doc.id, title, self).exec()
 
     def _open_gl(self) -> None:
         if self.doc is not None and self.doc.gl_document_id is not None:

@@ -225,6 +225,15 @@ def main() -> None:
                 "85", catalog.by_code["60"].id, (partner.id, contract.id), "15.30", freight
             ),
             LandedCostCharge("30", source_document_id=broker, source_line_no=1),
+            LandedCostCharge(
+                None,
+                catalog.by_code["60"].id,
+                (partner.id, contract.id),
+                memo=i18n.tr("Фрахт"),
+                currency_id=ledger.currency_id(cid, "USD"),
+                currency_rate="1.7",
+                currency_amount="25",
+            ),
         ],
         "value",
         i18n.tr("Партия"),
@@ -232,6 +241,28 @@ def main() -> None:
     stock.post_document(cid, batch)
     win.open_inventory_document(batch)
     shot("8c4_landed_cost")
+    from modern_gl.desktop.landed_cost_page import BatchCostDialog
+
+    report = BatchCostDialog(session, batch, i18n.tr("Партия"), win)
+    report.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    report.grab().save(str(out / "8c6_batch_cost.png"))
+    report.close()
+    win.new_inventory_document("receipt")
+    receipt_page = cast(InventoryDocumentPage, win.stack.currentWidget())
+    receipt_page.currency.setCurrentIndex(
+        receipt_page.currency.findData(ledger.currency_id(cid, "USD"))
+    )
+    receipt_page.rate.setText("1.7")
+    receipt_page._rate_edited()
+    receipt_page.model.rows[0].item_id = next(iter(receipt_page.model.items))
+    receipt_page.model.rows[0].quantity = 100 * 1_000_000
+    receipt_page.model.setData(
+        receipt_page.model.index(0, receipt_page.model.columns.index("currency_amount")), 50_000
+    )
+    shot("8c7_receipt_usd")
     picker = cost_source_picker(session, None, win)
     picker.show()
     loop = QEventLoop()

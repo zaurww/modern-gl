@@ -413,3 +413,117 @@ def cost_sources(
         for r in rows
         if r["amount"] > r["used"] or not only_left
     ]
+
+
+@dataclass(frozen=True)
+class BatchCharge:
+    """An expense of a batch, a column of the batch cost report."""
+
+    id: int
+    title: str  # the cost type, else the comment, else the account
+    amount: int
+    currency: str | None = None
+    currency_amount: int | None = None
+    rate: int | None = None  # millionths of a manat per unit
+
+
+@dataclass(frozen=True)
+class BatchCostLine:
+    """A receipt line of a batch: what it cost and what each expense added."""
+
+    line_id: int
+    number: int
+    doc_date: str
+    item_name: str
+    warehouse_name: str
+    quantity: int
+    precision: int
+    unit: str
+    cost: int  # the receipt amount in manat
+    currency: str | None
+    currency_amount: int | None
+    rate: int | None
+    shares: dict[int, int]  # charge id -> its share of this line
+
+    @property
+    def expenses(self) -> int:
+        return sum(self.shares.values())
+
+    @property
+    def total(self) -> int:
+        return self.cost + self.expenses
+
+
+def batch_cost(
+    conn: sqlite3.Connection, company_id: int, document_id: int
+) -> tuple[list[BatchCharge], list[BatchCostLine]]:
+    """«Себестоимость партии» of a posted batch document: its charges and its lines with
+    the receipt price (in a currency and at what rate), each expense and the total."""
+    charges = [
+        BatchCharge(
+            r["id"],
+            r["type_name"] or r["memo"] or r["account"] or "",
+            r["amount"],
+            r["currency"],
+            r["currency_amount"],
+            r["currency_rate"],
+        )
+        for r in conn.execute(
+            """
+            SELECT c.id, c.amount, c.memo, c.currency_amount, c.currency_rate,
+                   t.name AS type_name, cur.code AS currency,
+                   COALESCE(a.code || '  ' || a.name, a.name) AS account
+            FROM landed_cost_charges c
+            LEFT JOIN landed_cost_types t ON t.id = c.cost_type_id
+            LEFT JOIN currencies cur ON cur.id = c.currency_id
+            LEFT JOIN accounts a ON a.id = c.account_id
+            WHERE c.company_id = ? AND c.document_id = ?
+            ORDER BY c.line_no
+            """,
+            (company_id, document_id),
+        )
+    ]
+    shares: dict[int, dict[int, int]] = {}
+    for r in conn.execute(
+        "SELECT line_id, charge_id, amount FROM landed_cost_shares "
+        "WHERE company_id = ? AND document_id = ?",
+        (company_id, document_id),
+    ):
+        shares.setdefault(r["line_id"], {})[r["charge_id"]] = r["amount"]
+    lines = [
+        BatchCostLine(
+            r["id"],
+            r["number"],
+            r["doc_date"],
+            r["item_name"],
+            r["warehouse_name"],
+            r["quantity"],
+            r["precision"],
+            r["unit"],
+            r["amount"],
+            r["currency"],
+            r["currency_amount"],
+            r["currency_rate"],
+            shares.get(r["id"], {}),
+        )
+        for r in conn.execute(
+            """
+            SELECT lc.id, d.number, d.doc_date, v.name AS item_name, wv.name AS warehouse_name,
+                   src.quantity, u.precision, u.code AS unit, src.amount,
+                   src.currency_amount, d.currency_rate, cur.code AS currency
+            FROM inventory_lines lc
+            JOIN inventory_lines src ON src.id = lc.source_receipt_line_id
+            JOIN inventory_documents d ON d.id = src.document_id
+            JOIN inventory_items i ON i.id = src.item_id
+            JOIN subconto_values v ON v.id = i.subconto_value_id
+            JOIN inventory_units u ON u.id = i.unit_id
+            JOIN warehouses w ON w.id = src.warehouse_id
+            JOIN subconto_values wv ON wv.id = w.subconto_value_id
+            LEFT JOIN currencies cur ON cur.id = d.currency_id
+            WHERE lc.company_id = ? AND lc.document_id = ?
+            ORDER BY lc.line_no
+            """,
+            (company_id, document_id),
+        )
+    ]
+    return charges, lines

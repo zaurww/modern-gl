@@ -16,6 +16,7 @@ from decimal import Decimal, InvalidOperation
 from modern_gl.application.common import company_row, insert, now, pad_subconto, write_audit
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.accounts import INPUT_VAT
+from modern_gl.domain.currency import parse_rate, to_base, unit_rate
 from modern_gl.domain.dates import iso_date, ru_date
 from modern_gl.domain.errors import (
     LedgerError,
@@ -58,6 +59,7 @@ class ReceiptLine:
     credit_subconto: Sequence[int | None] = ()
     line_id: int | None = None  # the stored line it edits; None = a new line
     vat_amount: str | int | Decimal | None = None  # a receipt's VAT; the amount is without it
+    currency_amount: str | int | Decimal | None = None  # a receipt in a currency: the amount
 
 
 @dataclass(frozen=True)
@@ -104,6 +106,10 @@ class LandedCostCharge:
     source_document_id: int | None = None
     source_line_no: int | None = None
     memo: str = ""
+    # an expense in a currency: its amount there and the rate (manat per unit)
+    currency_id: int | None = None
+    currency_rate: str | int | Decimal | None = None
+    currency_amount: str | int | Decimal | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +124,9 @@ class LandedCostChargeData:
     source_document_id: int | None
     source_line_no: int | None
     memo: str
+    currency_id: int | None = None
+    currency_rate: int | None = None  # millionths of a manat per unit
+    currency_amount: int | None = None
 
 
 @dataclass(frozen=True)
@@ -136,6 +145,7 @@ class InventoryLineData:
     source_receipt_line_id: int | None
     memo: str
     vat_amount: int = 0
+    currency_amount: int | None = None
 
 
 @dataclass(frozen=True)
@@ -153,6 +163,8 @@ class InventoryDocumentData:
     vat_rate: int | None = None  # a receipt's VAT rate (1800 = 18%); None: without VAT
     allocation_method: str | None = None  # landed cost: value / quantity / manual
     charges: tuple[LandedCostChargeData, ...] = ()  # landed cost: its expenses
+    currency_id: int | None = None  # a receipt in a currency
+    currency_rate: int | None = None  # millionths of a manat per unit
 
     @property
     def editable(self) -> bool:
@@ -243,34 +255,54 @@ def split_charges(
     return result
 
 
+@dataclass(frozen=True)
+class _Credit:
+    """A credit piece of landed cost postings: a charge's share of one receipt line."""
+
+    account_id: int
+    subconto: Sequence[int | None]
+    amount: int
+    memo: str
+    currency_id: int | None = None
+    currency_amount: int = 0
+
+
 def _pair(
-    debits: Sequence[tuple[int, Sequence[int | None], int]],
-    credits: Sequence[tuple[int, Sequence[int | None], int, str]],
+    debits: Sequence[tuple[int, Sequence[int | None], int]], credits: Sequence[_Credit]
 ) -> list[PostingInput]:
     """Postings from debit pieces (account, subconto, amount) and credit pieces of the same
-    total (account, subconto, amount, memo), matched in order."""
-    result: list[PostingInput] = []
+    total, matched in order. A credit piece in a currency split over several postings
+    shares its currency amount in proportion to the manat amounts."""
+    pieces: list[tuple[int, int, int]] = []  # debit index, credit index, amount
     d_left = [amount for _, _, amount in debits]
-    c_left = [credit[2] for credit in credits]
+    c_left = [credit.amount for credit in credits]
     i = j = 0
     while i < len(debits) and j < len(credits):
         amount = min(d_left[i], c_left[j])
         if amount:
-            result.append(
-                PostingInput(
-                    debits[i][0],
-                    credits[j][0],
-                    _money(amount),
-                    tuple(debits[i][1]),
-                    tuple(credits[j][1]),
-                    credits[j][3],
-                )
-            )
+            pieces.append((i, j, amount))
         d_left[i] -= amount
         c_left[j] -= amount
         i += d_left[i] == 0
         j += c_left[j] == 0
-    return result
+    in_currency: dict[int, int] = {}
+    for j, credit in enumerate(credits):
+        mine = [(k, piece[2]) for k, piece in enumerate(pieces) if piece[1] == j]
+        if credit.currency_id is not None and credit.currency_amount > 0 and mine:
+            in_currency.update(allocate_minor(credit.currency_amount, mine))
+    return [
+        PostingInput(
+            debits[i][0],
+            credits[j].account_id,
+            _money(amount),
+            tuple(debits[i][1]),
+            tuple(credits[j].subconto),
+            credits[j].memo,
+            credits[j].currency_id,
+            None if credits[j].currency_id is None else _money(in_currency.get(k, 0)),
+        )
+        for k, (i, j, amount) in enumerate(pieces)
+    ]
 
 
 class Inventory:
@@ -447,6 +479,7 @@ class Inventory:
                     row["source_receipt_line_id"],
                     row["memo"],
                     row["vat_amount"],
+                    row["currency_amount"],
                 )
                 for row in rows
             ),
@@ -465,9 +498,14 @@ class Inventory:
                     row["source_document_id"],
                     row["source_line_no"],
                     row["memo"],
+                    row["currency_id"],
+                    row["currency_rate"],
+                    row["currency_amount"],
                 )
                 for row in self._charges(document_id)
             ),
+            currency_id=doc["currency_id"],
+            currency_rate=doc["currency_rate"],
         )
 
     def _closed(self, doc: sqlite3.Row) -> bool:
@@ -485,6 +523,8 @@ class Inventory:
         *,
         opening: bool = False,
         vat_rate: int | None = None,
+        currency_id: int | None = None,
+        currency_rate: str | int | Decimal | None = None,
     ) -> int:
         """Save an editable receipt/opening document without affecting stock or GL.
 
@@ -498,6 +538,7 @@ class Inventory:
                 memo,
             )
             self._set_vat_rate(document_id, None if opening else vat_rate)
+            self._set_currency(company_id, document_id, currency_id, currency_rate)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
             )
@@ -561,6 +602,8 @@ class Inventory:
         memo: str = "",
         *,
         vat_rate: int | None = None,
+        currency_id: int | None = None,
+        currency_rate: str | int | Decimal | None = None,
     ) -> None:
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
@@ -568,6 +611,7 @@ class Inventory:
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
             self._update_draft_header(company_id, document_id, doc_date, memo)
             self._set_vat_rate(document_id, vat_rate if doc["doc_type"] == "receipt" else None)
+            self._set_currency(company_id, document_id, currency_id, currency_rate)
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
@@ -661,6 +705,8 @@ class Inventory:
         *,
         opening: bool = False,
         vat_rate: int | None = None,
+        currency_id: int | None = None,
+        currency_rate: str | int | Decimal | None = None,
     ) -> int:
         """Post a receipt/opening balance and its Dr inventory / Cr offset entries
         (and Dr input VAT / Cr offset for the lines' VAT)."""
@@ -676,6 +722,8 @@ class Inventory:
                 memo,
                 opening=opening,
                 vat_rate=vat_rate,
+                currency_id=currency_id,
+                currency_rate=currency_rate,
             )
             self._post_in_sequence(company_id, inv_id)
         return inv_id
@@ -940,6 +988,7 @@ class Inventory:
                 line["quantity"],
                 amount,
             )
+            in_currency = doc["currency_id"] is not None and doc["doc_type"] == "receipt"
             return PostingInput(
                 item["inventory_account_id"],
                 line["offset_account_id"],
@@ -947,6 +996,8 @@ class Inventory:
                 self._inventory_subconto(company_id, item, warehouse),
                 offset_sc,
                 line["memo"],
+                doc["currency_id"] if in_currency else None,
+                _money(line["currency_amount"] or 0) if in_currency else None,
             )
 
         balance_qty, balance_amount = self._balance(
@@ -1080,6 +1131,12 @@ class Inventory:
                 "(company_id, document_id, charge_id, line_id, amount) VALUES (?, ?, ?, ?, ?)",
                 (company_id, doc["id"], charge_id, line_id, share),
             )
+        in_currency: dict[tuple[int, int], int] = {}  # a charge's currency amount by line
+        for charge in charges:
+            mine = [(line_id, v) for (c, line_id), v in shares.items() if c == charge["id"]]
+            if charge["currency_id"] is not None and charge["currency_amount"] and mine:
+                for line_id, value in allocate_minor(charge["currency_amount"], mine).items():
+                    in_currency[(charge["id"], line_id)] = value
         postings: list[PostingInput] = []
         for line in lines:
             allocated = targets[line["id"]]
@@ -1089,11 +1146,13 @@ class Inventory:
                 else ([], 0, 0)
             )
             credits = [
-                (
+                _Credit(
                     charge["account_id"],
                     (charge["sc1"], charge["sc2"], charge["sc3"]),
                     shares[(charge["id"], line["id"])],
                     self._charge_memo(company_id, doc, charge),
+                    charge["currency_id"],
+                    in_currency.get((charge["id"], line["id"]), 0),
                 )
                 for charge in charges
                 if (charge["id"], line["id"]) in shares
@@ -1305,6 +1364,21 @@ class Inventory:
             if charge.vat_amount is None or _blank(charge.vat_amount)
             else self._nonnegative_amount(charge.vat_amount)
         )
+        currency_id = rate = currency_amount = None
+        if charge.currency_id is not None:
+            if charge.source_document_id is not None:
+                raise ValidationError(tr("расход {n}: проводка-источник уже в манатах", n=line_no))
+            if vat:
+                raise ValidationError(
+                    tr("расход {n}: в расходе в валюте НДС не указывается", n=line_no)
+                )
+            currency_id = self._currency_id(company_id, charge.currency_id)
+            rate = self._rate(charge.currency_rate)
+            value = charge.currency_amount
+            currency_amount = (
+                0 if value is None or _blank(value) else self._positive_amount(value, line_no)
+            )
+            amount = to_base(currency_amount, unit_rate(rate))
         if charge.cost_type_id is not None:
             self._cost_type(company_id, charge.cost_type_id)
         if charge.source_document_id is not None:
@@ -1327,7 +1401,8 @@ class Inventory:
         self.conn.execute(
             "INSERT INTO landed_cost_charges (company_id, document_id, line_no, cost_type_id, "
             "account_id, sc1, sc2, sc3, amount, vat_amount, source_document_id, "
-            "source_line_no, memo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "source_line_no, memo, currency_id, currency_rate, currency_amount) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 company_id,
                 document_id,
@@ -1340,6 +1415,9 @@ class Inventory:
                 charge.source_document_id,
                 charge.source_line_no if charge.source_document_id is not None else None,
                 charge.memo.strip(),
+                currency_id,
+                rate,
+                currency_amount,
             ),
         )
 
@@ -1460,12 +1538,13 @@ class Inventory:
     ) -> None:
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
-        doc_type = self._document(company_id, document_id)["doc_type"]
+        doc = self._document(company_id, document_id)
+        doc_type = doc["doc_type"]
         for line_no, source in enumerate(lines, 1):
             item = self._item(company_id, source.item_id)
             warehouse_id = self._draft_warehouse(company_id, source.warehouse_id)
             quantity = self._draft_quantity(item, source.quantity, line_no)
-            amount = 0 if _blank(source.amount) else self._positive_amount(source.amount, line_no)
+            currency_amount, amount = self._line_amounts(doc, source, line_no)
             vat = (
                 0
                 if source.vat_amount is None or _blank(source.vat_amount)
@@ -1473,6 +1552,10 @@ class Inventory:
             )
             if vat and doc_type != "receipt":
                 raise ValidationError(tr("НДС указывается только в поступлении"))
+            if vat and doc["currency_id"] is not None:
+                raise ValidationError(
+                    tr("в поступлении в валюте НДС не указывается: импортный НДС — в расходах")
+                )
             line_credit_account = source.credit_account_id or credit_account_id
             if line_credit_account is not None:
                 self._account(company_id, line_credit_account)
@@ -1494,7 +1577,62 @@ class Inventory:
                 source.memo.strip(),
                 line_id=source.line_id,
                 vat_amount=vat,
+                currency_amount=currency_amount,
             )
+
+    def _line_amounts(
+        self, doc: sqlite3.Row, source: ReceiptLine, line_no: int
+    ) -> tuple[int | None, int]:
+        """(amount in the currency, amount in manat) of a receipt line. In a currency the
+        manat amount follows from the document's rate."""
+        if doc["currency_id"] is None:
+            if _blank(source.amount):
+                return None, 0
+            return None, self._positive_amount(source.amount, line_no)
+        value = source.currency_amount
+        if value is None or _blank(value):
+            return 0, 0
+        currency_amount = self._positive_amount(value, line_no)
+        return currency_amount, to_base(currency_amount, unit_rate(doc["currency_rate"]))
+
+    def _set_currency(
+        self,
+        company_id: int,
+        document_id: int,
+        currency_id: int | None,
+        rate: str | int | Decimal | None,
+    ) -> None:
+        if currency_id is None:
+            self.conn.execute(
+                "UPDATE inventory_documents SET currency_id = NULL, currency_rate = NULL "
+                "WHERE id = ?",
+                (document_id,),
+            )
+            return
+        if self._document(company_id, document_id)["doc_type"] != "receipt":
+            raise ValidationError(tr("в валюте может быть только поступление"))
+        self.conn.execute(
+            "UPDATE inventory_documents SET currency_id = ?, currency_rate = ? WHERE id = ?",
+            (self._currency_id(company_id, currency_id), self._rate(rate), document_id),
+        )
+
+    def _currency_id(self, company_id: int, currency_id: int) -> int:
+        row = self.conn.execute(
+            "SELECT id FROM currencies WHERE company_id = ? AND id = ?", (company_id, currency_id)
+        ).fetchone()
+        if row is None:
+            raise NotFoundError(tr("валюта не найдена"))
+        return row["id"]
+
+    @staticmethod
+    def _rate(rate: str | int | Decimal | None) -> int:
+        """A typed rate (manat per unit) -> millionths."""
+        if rate is None or _blank(rate):
+            raise ValidationError(tr("не указан курс валюты"))
+        try:
+            return parse_rate(rate)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError(str(exc)) from exc
 
     def _write_issue_draft(
         self, company_id: int, document_id: int, lines: Sequence[IssueLine]
@@ -1712,6 +1850,7 @@ class Inventory:
         *,
         line_id: int | None = None,
         vat_amount: int = 0,
+        currency_amount: int | None = None,
     ) -> int:
         sc = pad_subconto(offset_subconto)
         if line_id is not None:  # an edited line keeps its id: landed cost refers to it
@@ -1719,8 +1858,8 @@ class Inventory:
                 "UPDATE inventory_lines SET line_no = ?, item_id = ?, warehouse_id = ?, "
                 "to_warehouse_id = ?, quantity = ?, amount = ?, inventory_amount = ?, "
                 "expense_amount = ?, offset_account_id = ?, offset_sc1 = ?, offset_sc2 = ?, "
-                "offset_sc3 = ?, source_receipt_line_id = ?, memo = ?, vat_amount = ? "
-                "WHERE company_id = ? AND document_id = ? AND id = ?",
+                "offset_sc3 = ?, source_receipt_line_id = ?, memo = ?, vat_amount = ?, "
+                "currency_amount = ? WHERE company_id = ? AND document_id = ? AND id = ?",
                 (
                     line_no,
                     item_id,
@@ -1735,6 +1874,7 @@ class Inventory:
                     source_receipt_line_id,
                     memo,
                     vat_amount,
+                    currency_amount,
                     company_id,
                     document_id,
                     line_id,
@@ -1747,8 +1887,8 @@ class Inventory:
             "INSERT INTO inventory_lines (company_id, document_id, line_no, item_id, "
             "warehouse_id, to_warehouse_id, quantity, amount, inventory_amount, "
             "expense_amount, offset_account_id, offset_sc1, offset_sc2, offset_sc3, "
-            "source_receipt_line_id, memo, vat_amount) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "source_receipt_line_id, memo, vat_amount, currency_amount) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 company_id,
                 document_id,
@@ -1765,6 +1905,7 @@ class Inventory:
                 source_receipt_line_id,
                 memo,
                 vat_amount,
+                currency_amount,
             ),
         )
 
@@ -2154,6 +2295,8 @@ class Inventory:
             "gl_document_id": doc["gl_document_id"],
             "vat_rate": doc["vat_rate"],
             "allocation_method": doc["allocation_method"],
+            "currency_id": doc["currency_id"],
+            "currency_rate": doc["currency_rate"],
             "lines": lines,
             "charges": [
                 {key: row[key] for key in row.keys() if key not in {"company_id", "document_id"}}

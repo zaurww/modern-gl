@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from fractions import Fraction
 from typing import cast
 
 from PySide6.QtCore import (
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.currencies import rate_on
 from modern_gl.application.inventory import (
     QUANTITY_FACTOR,
     STANDARD_VAT_RATE,
@@ -53,6 +55,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, money, to_qdate
 from modern_gl.domain.accounts import INPUT_VAT
+from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
@@ -74,6 +77,7 @@ QUANTITY = "quantity"
 UNIT = "unit"
 PRICE = "price"
 AMOUNT = "amount"
+CURRENCY_AMOUNT = "currency_amount"
 VAT = "vat"
 ACCOUNT = "account"
 SC1 = "sc1"
@@ -90,7 +94,7 @@ STORED_FIELDS = {
     MEMO: "memo",
 }
 LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, SC1, SC2, SC3}
-NUMBER_KEYS = {QUANTITY, PRICE, AMOUNT, VAT}
+NUMBER_KEYS = {QUANTITY, PRICE, AMOUNT, CURRENCY_AMOUNT, VAT}
 # the VAT of a receipt: rate in hundredths of a percent, None = without VAT
 VAT_RATES = [(STANDARD_VAT_RATE, "18%"), (None, "Без НДС")]
 
@@ -102,6 +106,7 @@ HEADERS = {
     UNIT: "Ед.",
     PRICE: "Цена",
     AMOUNT: "Сумма",
+    CURRENCY_AMOUNT: "В валюте",
     VAT: "НДС",
     ACCOUNT: "Корр. счёт",  # the header stays short; its tooltip says more
     SC1: "Субконто",
@@ -145,7 +150,20 @@ PASTE_HEADERS = [
 ]
 SUBCONTO_HEADERS = _names("Субконто", "Subkonto")
 # accounts before their subconto, the quantity before a price, a pasted amount over a price
-PASTE_ORDER = [ITEM, WAREHOUSE, TO_WAREHOUSE, QUANTITY, ACCOUNT, SC1, SC2, SC3, PRICE, AMOUNT, VAT]
+PASTE_ORDER = [
+    ITEM,
+    WAREHOUSE,
+    TO_WAREHOUSE,
+    QUANTITY,
+    ACCOUNT,
+    SC1,
+    SC2,
+    SC3,
+    PRICE,
+    CURRENCY_AMOUNT,
+    AMOUNT,
+    VAT,
+]
 
 
 class UnknownName(LookupError):
@@ -194,6 +212,7 @@ class InventoryGridRow:
     line_id: int | None = None  # the stored line; landed cost refers to it
     vat_amount: int | None = None
     vat_typed: bool = False  # typed by hand: a new amount or rate no longer recalculates it
+    currency_amount: int | None = None  # a receipt in a currency
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""
@@ -218,6 +237,7 @@ class InventoryGridRow:
             self.memo,
             vat_amount=self.vat_amount,
             vat_typed=self.vat_typed,
+            currency_amount=self.currency_amount,
         )  # a copy is a new line: no line id
 
 
@@ -237,8 +257,11 @@ class InventoryLinesModel(QAbstractTableModel):
         self.doc_type = doc_type
         self.read_only = read_only
         self.vat_rate = vat_rate if doc_type == "receipt" else None
+        self.rate: Fraction | None = None  # a receipt in a currency: manat per unit
+        self.currency_code = ""
         self.items = self._items()
         self.warehouses = self._warehouses()
+        self.has_currency = False
         self.rows = rows or [self.default_row()]
         if doc_type == "transfer":
             self.columns = [
@@ -260,6 +283,7 @@ class InventoryLinesModel(QAbstractTableModel):
                 QUANTITY,
                 UNIT,
                 PRICE,
+                *([CURRENCY_AMOUNT] if doc_type == "receipt" else []),
                 AMOUNT,
                 *([VAT] if doc_type == "receipt" else []),
                 ACCOUNT,
@@ -329,7 +353,12 @@ class InventoryLinesModel(QAbstractTableModel):
     def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                return tr(HEADERS[self.columns[section]])
+                key = self.columns[section]
+                if key == CURRENCY_AMOUNT and self.currency_code:
+                    return tr("Сумма, {code}", code=self.currency_code)
+                if key == AMOUNT and self.rate is not None:
+                    return tr("Сумма, ₼")
+                return tr(HEADERS[key])
             return str(section + 1)
         if (
             role == Qt.ItemDataRole.ToolTipRole
@@ -365,6 +394,10 @@ class InventoryLinesModel(QAbstractTableModel):
             return False
         if key == VAT and self.doc_type != "receipt":
             return False
+        if key == CURRENCY_AMOUNT:  # in a currency the manat amount follows from the rate
+            return self.rate is not None
+        if key == AMOUNT and self.rate is not None:
+            return False
         return self.doc_type != "landed_cost"
 
     def flags(self, index):
@@ -377,9 +410,11 @@ class InventoryLinesModel(QAbstractTableModel):
         return flags
 
     def _price(self, row: InventoryGridRow) -> int | None:
-        if not row.quantity or row.amount is None:
+        """The price of a unit, in the document's currency."""
+        value = row.currency_amount if self.rate is not None else row.amount
+        if not row.quantity or value is None:
             return None
-        return round_ratio(row.amount * QUANTITY_FACTOR, row.quantity)
+        return round_ratio(value * QUANTITY_FACTOR, row.quantity)
 
     def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
         row = self.rows[index.row()]
@@ -411,8 +446,13 @@ class InventoryLinesModel(QAbstractTableModel):
             return row.offset_subconto[int(key[-1]) - 1]
         if key == QUANTITY:
             return "" if row.quantity is None else format_quantity(row.quantity, 6)
-        if key in {PRICE, AMOUNT, VAT}:
-            value = {PRICE: self._price(row), AMOUNT: row.amount, VAT: row.vat_amount}[key]
+        if key in {PRICE, AMOUNT, VAT, CURRENCY_AMOUNT}:
+            value = {
+                PRICE: self._price(row),
+                AMOUNT: row.amount,
+                VAT: row.vat_amount,
+                CURRENCY_AMOUNT: row.currency_amount,
+            }[key]
             return "" if value is None else format_minor(value).replace(" ", "")
         if key == UNIT:
             return self._display_text(row_index, key)
@@ -438,6 +478,8 @@ class InventoryLinesModel(QAbstractTableModel):
             return "" if value is None else money(value)
         if key == VAT:
             return "" if row.vat_amount is None else money(row.vat_amount, blank_zero=False)
+        if key == CURRENCY_AMOUNT:
+            return money(row.currency_amount)
         if key == ACCOUNT:
             account_id = row.offset_account_id
             account = self.s.catalog.accounts.get(account_id) if account_id is not None else None
@@ -458,8 +500,14 @@ class InventoryLinesModel(QAbstractTableModel):
         if key == PRICE:
             if not row.quantity:
                 raise ValidationError(tr("сначала укажите количество"))
-            row.amount = round_ratio(value * row.quantity, QUANTITY_FACTOR)
+            total = round_ratio(value * row.quantity, QUANTITY_FACTOR)
+            if self.rate is not None:
+                self._set_currency_amount(row, total)
+            else:
+                row.amount = total
             self._recalculate_vat(row)
+        elif key == CURRENCY_AMOUNT:
+            self._set_currency_amount(row, value)
         elif key == AMOUNT:
             row.amount = value
             self._recalculate_vat(row)
@@ -478,6 +526,34 @@ class InventoryLinesModel(QAbstractTableModel):
         )
         self.changed.emit()
         return True
+
+    def _set_currency_amount(self, row: InventoryGridRow, value: int | None) -> None:
+        row.currency_amount = value
+        row.amount = None if value is None or self.rate is None else to_base(value, self.rate)
+
+    def set_currency(self, code: str, rate: Fraction | None, in_currency: bool) -> None:
+        """Amounts in a currency (`in_currency`) at `rate`, or in manat."""
+        self.currency_code = code if in_currency else ""
+        self.rate = rate if in_currency else None
+        self.has_currency = in_currency
+        for row in self.rows:
+            if in_currency:
+                row.amount = (
+                    None
+                    if row.currency_amount is None or rate is None
+                    else to_base(row.currency_amount, rate)
+                )
+            else:
+                row.currency_amount = None
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
+        if self.rows:
+            self.dataChanged.emit(
+                self.index(0, 0), self.index(len(self.rows) - 1, len(self.columns) - 1)
+            )
+        self.changed.emit()
+
+    def currency_total(self) -> int:
+        return sum(row.currency_amount or 0 for row in self.rows)
 
     def _recalculate_vat(self, row: InventoryGridRow) -> None:
         """VAT follows the amount and the rate until it is typed by hand."""
@@ -535,7 +611,7 @@ class InventoryLinesModel(QAbstractTableModel):
             return value
         if key == QUANTITY:
             value = to_quantity(plain_number(text))
-        elif key in {PRICE, AMOUNT, VAT}:
+        elif key in {PRICE, AMOUNT, VAT, CURRENCY_AMOUNT}:
             value = to_minor(plain_number(text))
             if key == VAT and value == 0:
                 return 0
@@ -690,6 +766,9 @@ class InventoryLinesModel(QAbstractTableModel):
                         None
                         if row.vat_amount is None
                         else Decimal(row.vat_amount).scaleb(-MONEY_SCALE),
+                        None
+                        if row.currency_amount is None
+                        else Decimal(row.currency_amount).scaleb(-MONEY_SCALE),
                     )
                 )
             elif self.doc_type == "issue":
@@ -728,6 +807,8 @@ class InventoryLinesModel(QAbstractTableModel):
             return
         if self.doc_type in {"opening", "receipt"} and (row.amount is None or row.amount <= 0):
             raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
+        if self.rate is not None and not row.currency_amount:
+            raise ValidationError(tr("строка {line}: не указана сумма в валюте", line=line_no))
         if row.offset_account_id is None:
             raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
         account = self.s.catalog.accounts[row.offset_account_id]
@@ -820,7 +901,7 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                     return
             elif key == QUANTITY:
                 value = to_quantity(text) if text else None
-            elif key in {PRICE, AMOUNT, VAT}:
+            elif key in {PRICE, AMOUNT, VAT, CURRENCY_AMOUNT}:
                 value = to_minor(text) if text else None
                 if value is not None and (value < 0 or (value == 0 and key != VAT)):  # VAT 0 ok
                     raise ValueError(tr("сумма должна быть больше нуля"))
@@ -867,6 +948,7 @@ class InventoryLinesTable(QTableView):
             UNIT: 64,
             PRICE: 84,
             AMOUNT: 96,
+            CURRENCY_AMOUNT: 104,
             VAT: 84,
             ACCOUNT: 130,
             SC1: 100,
@@ -882,6 +964,8 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, int(key[-1]) not in used)
             if key == VAT:
                 self.setColumnHidden(column, not model.has_vat())
+            if key == CURRENCY_AMOUNT:
+                self.setColumnHidden(column, not model.has_currency)
             if key == ITEM:
                 header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
 
@@ -1022,6 +1106,25 @@ class InventoryDocumentPage(QWidget):
         for rate, label in VAT_RATES:
             self.vat_rate.addItem(tr(label), rate)
         meta.addWidget(self.vat_rate)
+        meta.addSpacing(12)
+        self.currency_caption = QLabel(tr("Валюта"))
+        self.currency_caption.setObjectName("secondary")
+        meta.addWidget(self.currency_caption)
+        self.currency = QComboBox()
+        self.currency.addItem("AZN", None)
+        for currency in session.catalog.active_currencies:
+            self.currency.addItem(currency.code, currency.id)
+        meta.addWidget(self.currency)
+        self.rate_caption = QLabel(tr("Курс"))
+        self.rate_caption.setObjectName("secondary")
+        meta.addWidget(self.rate_caption)
+        self.rate = QLineEdit()
+        self.rate.setFixedWidth(90)
+        self.rate.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.rate.setPlaceholderText(tr("курс"))
+        self.rate.setToolTip(tr("Курс на дату документа; можно исправить (например, курс таможни)"))
+        meta.addWidget(self.rate)
+        self.rate_typed = False  # typed by hand: a new date no longer changes it
         meta.addStretch(1)
         root.addLayout(meta)
 
@@ -1045,6 +1148,10 @@ class InventoryDocumentPage(QWidget):
         self.hint.setFont(fonts().small)
         summary.addWidget(self.hint, 1)
         summary.addSpacing(24)
+        self.currency_total = QLabel()
+        self.currency_total.setObjectName("secondary")
+        summary.addWidget(self.currency_total)
+        summary.addSpacing(16)
         self.vat_total_caption = QLabel(tr("НДС"))
         self.vat_total_caption.setObjectName("secondary")
         summary.addWidget(self.vat_total_caption)
@@ -1088,6 +1195,9 @@ class InventoryDocumentPage(QWidget):
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
         self.vat_rate.activated.connect(self._vat_rate_changed)
+        self.currency.activated.connect(self._currency_changed)
+        self.rate.textEdited.connect(self._rate_edited)
+        self.date.dateChanged.connect(self._date_changed)
         self._shortcut("Ctrl+S", lambda: self.save(post=False))
         self._shortcut("Ctrl+Return", lambda: self.save(post=True))
         self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
@@ -1343,7 +1453,56 @@ class InventoryDocumentPage(QWidget):
         self.model.set_vat_rate(self._chosen_vat_rate())
         self.table.configure_columns()
 
+    # ---- currency -------------------------------------------------------------------
+
+    def _chosen_currency(self) -> int | None:
+        return self.currency.currentData() if self.doc_type == "receipt" else None
+
+    def _typed_rate(self) -> Fraction | None:
+        try:
+            return unit_rate(parse_rate(plain_number(self.rate.text())))
+        except (TypeError, ValueError):
+            return None
+
+    def _rate_of_the_day(self) -> None:
+        """The rate in force on the document's date (unless the rate was typed)."""
+        currency_id = self._chosen_currency()
+        if currency_id is None or self.rate_typed:
+            return
+        found = rate_on(self.s.conn, self.s.company_id, currency_id, edited_date(self.date))
+        self.rate.setText(format_unit_rate(found.per_unit) if found else "")
+
+    def _apply_currency(self) -> None:
+        in_currency = self._chosen_currency() is not None
+        for widget in (self.rate_caption, self.rate):
+            widget.setVisible(in_currency)
+        if in_currency:  # an import has no Azerbaijani VAT: it comes with customs
+            self._show_vat_rate(None)
+            self.model.set_vat_rate(None)
+        self.vat_rate.setEnabled(not in_currency and not self.model.read_only)
+        self.model.set_currency(self.currency.currentText(), self._typed_rate(), in_currency)
+        self.table.configure_columns()
+
+    def _currency_changed(self, *_args) -> None:
+        self.rate_typed = False
+        self._rate_of_the_day()
+        self._apply_currency()
+
+    def _rate_edited(self, *_args) -> None:
+        self.rate_typed = True
+        self._apply_currency()
+
+    def _date_changed(self, *_args) -> None:
+        if self._chosen_currency() is not None and not self.rate_typed:
+            self._rate_of_the_day()
+            self._apply_currency()
+
     def _show_totals(self) -> None:
+        in_currency = self.model.rate is not None
+        self.currency_total.setVisible(in_currency)
+        self.currency_total.setText(
+            f"{money(self.model.currency_total(), blank_zero=False)} {self.model.currency_code}"
+        )
         vat = self.model.vat_total()
         shown = self.doc_type == "receipt" and self.model.has_vat()
         self.vat_total_caption.setVisible(shown)
@@ -1361,7 +1520,18 @@ class InventoryDocumentPage(QWidget):
         self.number.setText(tr("Новый"))
         self.status.set(tr("Новый"), "blue")
         self._apply_mode(False)
+        self._show_currency(None, None)
+        self.dirty = False  # showing the defaults is not an edit
         self._show_totals()
+
+    def _show_currency(self, currency_id: int | None, rate: int | None) -> None:
+        receipt = self.doc_type == "receipt"
+        self.currency.setCurrentIndex(max(self.currency.findData(currency_id), 0))
+        self.rate.setText("" if rate is None else format_unit_rate(unit_rate(rate)))
+        self.rate_typed = rate is not None  # a saved rate stays as it was
+        for widget in (self.currency_caption, self.currency):
+            widget.setVisible(receipt)
+        self._apply_currency()
 
     def load(self, document_id: int) -> None:
         self.doc = self.inventory.load_document(self.s.company_id, document_id)
@@ -1385,6 +1555,7 @@ class InventoryDocumentPage(QWidget):
                 line.id,
                 vat_amount=line.vat_amount if vat_rate is not None or line.vat_amount else None,
                 vat_typed=line.vat_amount != vat_of(line.amount, vat_rate),
+                currency_amount=line.currency_amount,
             )
             for line in self.doc.lines
         ] or [InventoryGridRow()]
@@ -1403,6 +1574,7 @@ class InventoryDocumentPage(QWidget):
         else:
             self.status.set(tr("Черновик"), "amber")
         self._apply_mode(read_only)
+        self._show_currency(self.doc.currency_id, self.doc.currency_rate)
         self.dirty = False
         self._show_totals()
         self.title_changed.emit()
@@ -1412,6 +1584,8 @@ class InventoryDocumentPage(QWidget):
         self.memo.setEnabled(not read_only)
         self.date.setEnabled(not read_only)
         self.vat_rate.setEnabled(not read_only)
+        self.currency.setEnabled(not read_only)
+        self.rate.setReadOnly(read_only)
         self.model.read_only = read_only
         posted = self.doc is not None and self.doc.status == "posted"
         editable = not read_only and self.doc_type != "landed_cost"
@@ -1475,6 +1649,8 @@ class InventoryDocumentPage(QWidget):
                     memo,
                     opening=self.doc_type == "opening",
                     vat_rate=self._chosen_vat_rate(),
+                    currency_id=self._chosen_currency(),
+                    currency_rate=self._rate_text(),
                 )
             self.inventory.update_receipt_draft(
                 company_id,
@@ -1485,6 +1661,8 @@ class InventoryDocumentPage(QWidget):
                 first.credit_subconto,
                 memo,
                 vat_rate=self._chosen_vat_rate(),
+                currency_id=self._chosen_currency(),
+                currency_rate=self._rate_text(),
             )
             return self.doc.id
         if self.doc_type == "issue":
@@ -1496,6 +1674,11 @@ class InventoryDocumentPage(QWidget):
             return self.inventory.create_transfer_draft(company_id, document_date, inputs, memo)
         self.inventory.update_transfer_draft(company_id, self.doc.id, document_date, inputs, memo)
         return self.doc.id
+
+    def _rate_text(self) -> str | None:
+        if self._chosen_currency() is None:
+            return None
+        return plain_number(self.rate.text()) or None
 
     def delete(self) -> None:
         if self.doc is None:
