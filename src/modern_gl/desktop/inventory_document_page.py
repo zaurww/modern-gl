@@ -64,6 +64,7 @@ from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, mone
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import LedgerError, ValidationError
+from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
 from modern_gl.i18n import fold, tr
@@ -1128,6 +1129,17 @@ class InventoryDocumentPage(QWidget):
             self.vat_rate.addItem(tr(label), rate)
         meta.addWidget(self.vat_rate)
         meta.addSpacing(12)
+        # the basis of a receipt: an e-qaimə, or a customs declaration for imported goods
+        self.basis = QComboBox()
+        self.basis.addItem(tr("E-qaimə"), EQAIME)
+        self.basis.addItem(tr("Декларация"), CUSTOMS)
+        self.basis.setToolTip(tr("Основание: e-qaimə или таможенная декларация (импорт)"))
+        meta.addWidget(self.basis)
+        self.invoice = QLineEdit()
+        self.invoice.setFixedWidth(170)
+        self.invoice.setPlaceholderText(tr("номер"))
+        meta.addWidget(self.invoice)
+        meta.addSpacing(12)
         self.currency_caption = QLabel(tr("Валюта"))
         self.currency_caption.setObjectName("secondary")
         meta.addWidget(self.currency_caption)
@@ -1216,6 +1228,8 @@ class InventoryDocumentPage(QWidget):
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
         self.vat_rate.activated.connect(self._vat_rate_changed)
+        self.basis.activated.connect(self._changed)
+        self.invoice.textEdited.connect(self._changed)
         self.currency.activated.connect(self._currency_changed)
         self.rate.textEdited.connect(self._rate_edited)
         self.date.dateChanged.connect(self._date_changed)
@@ -1542,8 +1556,21 @@ class InventoryDocumentPage(QWidget):
         self.status.set(tr("Новый"), "blue")
         self._apply_mode(False)
         self._show_currency(None, None)
+        self._show_basis(EQAIME, "")
         self.dirty = False  # showing the defaults is not an edit
         self._show_totals()
+
+    def _show_basis(self, kind: str, number: str) -> None:
+        """The e-qaimə / declaration of a receipt; other documents have none."""
+        self.basis.setCurrentIndex(max(self.basis.findData(kind), 0))
+        self.invoice.setText(number)
+        for widget in (self.basis, self.invoice):
+            widget.setVisible(self.doc_type == "receipt")
+
+    def _invoice(self) -> dict[str, str]:
+        """The basis for saving: number and kind (an empty number: none)."""
+        number = self.invoice.text().strip()
+        return {"invoice": number, "invoice_kind": self.basis.currentData() if number else ""}
 
     def _show_currency(self, currency_id: int | None, rate: int | None) -> None:
         receipt = self.doc_type == "receipt"
@@ -1596,6 +1623,7 @@ class InventoryDocumentPage(QWidget):
             self.status.set(tr("Черновик"), "amber")
         self._apply_mode(read_only)
         self._show_currency(self.doc.currency_id, self.doc.currency_rate)
+        self._show_basis(self.doc.invoice_kind, self.doc.invoice)
         self.dirty = False
         self._show_totals()
         self.title_changed.emit()
@@ -1607,6 +1635,8 @@ class InventoryDocumentPage(QWidget):
         self.vat_rate.setEnabled(not read_only)
         self.currency.setEnabled(not read_only)
         self.rate.setReadOnly(read_only)
+        self.basis.setEnabled(not read_only)
+        self.invoice.setReadOnly(read_only)
         self.model.read_only = read_only
         posted = self.doc is not None and self.doc.status == "posted"
         editable = not read_only and self.doc_type != "landed_cost"
@@ -1672,6 +1702,7 @@ class InventoryDocumentPage(QWidget):
                     vat_rate=self._chosen_vat_rate(),
                     currency_id=self._chosen_currency(),
                     currency_rate=self._rate_text(),
+                    **self._invoice(),
                 )
             self.inventory.update_receipt_draft(
                 company_id,
@@ -1684,6 +1715,7 @@ class InventoryDocumentPage(QWidget):
                 vat_rate=self._chosen_vat_rate(),
                 currency_id=self._chosen_currency(),
                 currency_rate=self._rate_text(),
+                **self._invoice(),
             )
             return self.doc.id
         if self.doc_type == "issue":

@@ -132,6 +132,7 @@ class CardLine:
     currency_debit: int = 0
     currency_credit: int = 0
     invoice: str = ""  # e-qaimə number
+    invoice_kind: str = ""  # "customs": a customs declaration
 
 
 @dataclass
@@ -484,7 +485,7 @@ def account_card(
                    p.line_no, 0 AS side, p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END AS currency_id,
                    COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0) AS cur_dt,
-                   0 AS cur_ct, p.invoice
+                   0 AS cur_ct, p.invoice, p.invoice_kind
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.debit_account_id
             WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
@@ -493,7 +494,7 @@ def account_card(
                    p.line_no, 1, p.debit_account_id, 0, p.amount,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END,
                    0, COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0),
-                   p.invoice
+                   p.invoice, p.invoice_kind
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.credit_account_id
             WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
@@ -539,6 +540,7 @@ def account_card(
                 currency_debit=r["cur_dt"],
                 currency_credit=r["cur_ct"],
                 invoice=r["invoice"] or "",
+                invoice_kind=r["invoice_kind"] or "",
             )
         )
     card.opening = opening

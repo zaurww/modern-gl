@@ -54,6 +54,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.i18n import tr
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import COMMON, IFRS, TAX, OsvRow, SubcontoRow, Turnovers
@@ -656,6 +657,13 @@ class AccountReportPage(ReportPage):
         )
 
 
+def invoice_text(line: reports.CardLine) -> str:
+    """An e-qaimə number; a customs declaration is marked as such."""
+    if line.invoice_kind == CUSTOMS:
+        return f"{tr('bəyannamə')} {line.invoice}"
+    return line.invoice
+
+
 class CardPage(AccountReportPage):
     kind, caption = "card", "Карточка счёта"
 
@@ -684,7 +692,7 @@ class CardPage(AccountReportPage):
                 Column(tr("Кт в валюте"), lambda ln: ln.currency_credit, money=True, width=110),
             ]
         if any(ln.invoice for ln in card.lines):
-            columns.insert(3, Column(tr("E-qaimə"), lambda ln: ln.invoice, width=150))
+            columns.insert(3, Column(tr("E-qaimə"), invoice_text, width=170))
         self.model.set(columns, card.lines)
         text = tr(
             "Сальдо на начало: {start}      Сальдо на конец: {end}",

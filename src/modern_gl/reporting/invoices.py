@@ -1,4 +1,5 @@
-"""E-qaimə report: postings gathered by the number of the electronic invoice.
+"""E-qaimə report: postings gathered by the number of the electronic invoice (or of
+the customs declaration of imported goods — kept apart from e-qaimə numbers).
 
 A purchase (Dt 41 / Kt 60), its ƏDV (Dt 19 / Kt 60) and the payment (Dt 60 / Kt 51)
 carry the same number. Per invoice the report sums the turnovers of the settlement
@@ -26,6 +27,7 @@ from modern_gl.reporting.reports import _DOCS_CTE, COMMON, _params
 class InvoiceRow:
     invoice: str
     doc_date: str = ""  # of the first posting
+    kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a customs declaration
     counterparties: list[int] = field(default_factory=list)  # more than one: a mistake?
     contract_id: int | None = None
     debit: int = 0  # turnovers of the settlement accounts
@@ -54,7 +56,7 @@ def invoice_report(
 ) -> list[InvoiceRow]:
     params = _params(conn, company_id, date_from, date_to, layers)
     chart = _Chart(conn, company_id)
-    rows: dict[str, InvoiceRow] = {}
+    rows: dict[tuple[str, str], InvoiceRow] = {}  # (kind, number)
     for p in conn.execute(
         f"""
         WITH {_DOCS_CTE}
@@ -65,7 +67,8 @@ def invoice_report(
         """,
         params,
     ):
-        row = rows.setdefault(p["invoice"], InvoiceRow(p["invoice"], p["doc_date"]))
+        kind = p["invoice_kind"] or ""
+        row = rows.setdefault((kind, p["invoice"]), InvoiceRow(p["invoice"], p["doc_date"], kind))
         row.in_period |= p["doc_date"] >= params["date_from"]
         if (p["document_id"], p["number"]) not in row.documents:
             row.documents.append((p["document_id"], p["number"]))

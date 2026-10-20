@@ -65,6 +65,7 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
         [alfa, c1],
         tr("Поступление материалов"),
         vat_rate=STANDARD_VAT_RATE,
+        invoice="MT2601001842",
     )
     post(cid, "2026-01-15", [p("60", "51", "1000", [alfa, c1], [bank])], tr("Оплата поставщику"))
     inventory.post_receipt(

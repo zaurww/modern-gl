@@ -24,6 +24,7 @@ from modern_gl.domain.errors import (
     PeriodClosedError,
     ValidationError,
 )
+from modern_gl.domain.invoice import EQAIME, KINDS, normalize_invoice
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
 from modern_gl.i18n import tr
@@ -165,6 +166,8 @@ class InventoryDocumentData:
     charges: tuple[LandedCostChargeData, ...] = ()  # landed cost: its expenses
     currency_id: int | None = None  # a receipt in a currency
     currency_rate: int | None = None  # millionths of a manat per unit
+    invoice: str = ""  # a receipt's e-qaimə number (or customs declaration number)
+    invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a declaration
 
     @property
     def editable(self) -> bool:
@@ -506,6 +509,8 @@ class Inventory:
             ),
             currency_id=doc["currency_id"],
             currency_rate=doc["currency_rate"],
+            invoice=doc["invoice"] or "",
+            invoice_kind=doc["invoice_kind"] or "",
         )
 
     def _closed(self, doc: sqlite3.Row) -> bool:
@@ -525,6 +530,8 @@ class Inventory:
         vat_rate: int | None = None,
         currency_id: int | None = None,
         currency_rate: str | int | Decimal | None = None,
+        invoice: str = "",
+        invoice_kind: str = "",
     ) -> int:
         """Save an editable receipt/opening document without affecting stock or GL.
 
@@ -539,6 +546,7 @@ class Inventory:
             )
             self._set_vat_rate(document_id, None if opening else vat_rate)
             self._set_currency(company_id, document_id, currency_id, currency_rate)
+            self._set_invoice(document_id, "" if opening else invoice, invoice_kind)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
             )
@@ -604,6 +612,8 @@ class Inventory:
         vat_rate: int | None = None,
         currency_id: int | None = None,
         currency_rate: str | int | Decimal | None = None,
+        invoice: str = "",
+        invoice_kind: str = "",
     ) -> None:
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
@@ -612,6 +622,8 @@ class Inventory:
             self._update_draft_header(company_id, document_id, doc_date, memo)
             self._set_vat_rate(document_id, vat_rate if doc["doc_type"] == "receipt" else None)
             self._set_currency(company_id, document_id, currency_id, currency_rate)
+            receipt = doc["doc_type"] == "receipt"
+            self._set_invoice(document_id, invoice if receipt else "", invoice_kind)
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
@@ -707,6 +719,8 @@ class Inventory:
         vat_rate: int | None = None,
         currency_id: int | None = None,
         currency_rate: str | int | Decimal | None = None,
+        invoice: str = "",
+        invoice_kind: str = "",
     ) -> int:
         """Post a receipt/opening balance and its Dr inventory / Cr offset entries
         (and Dr input VAT / Cr offset for the lines' VAT)."""
@@ -724,6 +738,8 @@ class Inventory:
                 vat_rate=vat_rate,
                 currency_id=currency_id,
                 currency_rate=currency_rate,
+                invoice=invoice,
+                invoice_kind=invoice_kind,
             )
             self._post_in_sequence(company_id, inv_id)
         return inv_id
@@ -958,6 +974,7 @@ class Inventory:
             if doc["doc_type"] == "receipt":
                 postings += self._vat_postings(
                     company_id,
+                    (doc["invoice"] or "", doc["invoice_kind"] or ""),
                     [
                         (
                             line["offset_account_id"],
@@ -998,6 +1015,8 @@ class Inventory:
                 line["memo"],
                 doc["currency_id"] if in_currency else None,
                 _money(line["currency_amount"] or 0) if in_currency else None,
+                doc["invoice"] or "",
+                doc["invoice_kind"] or "",
             )
 
         balance_qty, balance_amount = self._balance(
@@ -1071,7 +1090,10 @@ class Inventory:
         )
 
     def _vat_postings(
-        self, company_id: int, items: Sequence[tuple[int, tuple[int | None, ...], int]]
+        self,
+        company_id: int,
+        invoice: tuple[str, str],  # (number, kind) of the receipt's e-qaimə / declaration
+        items: Sequence[tuple[int, tuple[int | None, ...], int]],
     ) -> list[PostingInput]:
         """Dr input VAT / Cr the settlement account for (account, subconto, VAT) items: one
         posting per supplier (the same account and subconto). The VAT account takes the
@@ -1104,6 +1126,8 @@ class Inventory:
                     tuple(None if kind is None else by_kind.get(kind) for kind in vat_kinds),
                     offset_sc,
                     tr("НДС"),
+                    invoice=invoice[0],
+                    invoice_kind=invoice[1],
                 )
             )
         return result
@@ -1165,6 +1189,7 @@ class Inventory:
             )
         return postings + self._vat_postings(
             company_id,
+            ("", ""),
             [
                 (charge["account_id"], (charge["sc1"], charge["sc2"], charge["sc3"]), vat)
                 for charge in charges
@@ -1757,6 +1782,16 @@ class Inventory:
             (value_date, memo.strip(), company_id, document_id),
         )
 
+    def _set_invoice(self, document_id: int, invoice: str, kind: str = EQAIME) -> None:
+        """The receipt's e-qaimə, or the customs declaration of imported goods."""
+        if kind not in KINDS:
+            raise ValidationError(tr("неизвестный вид документа: {kind}", kind=kind))
+        number = normalize_invoice(invoice)
+        self.conn.execute(
+            "UPDATE inventory_documents SET invoice = ?, invoice_kind = ? WHERE id = ?",
+            (number, (kind or None) if number else None, document_id),
+        )
+
     def _set_vat_rate(self, document_id: int, rate: int | None) -> None:
         if rate is not None and not 0 <= rate <= VAT_RATE_SCALE:
             raise ValidationError(tr("ставка НДС должна быть от 0 до 100%"))
@@ -2297,6 +2332,8 @@ class Inventory:
             "allocation_method": doc["allocation_method"],
             "currency_id": doc["currency_id"],
             "currency_rate": doc["currency_rate"],
+            "invoice": doc["invoice"],
+            "invoice_kind": doc["invoice_kind"],
             "lines": lines,
             "charges": [
                 {key: row[key] for key in row.keys() if key not in {"company_id", "document_id"}}

@@ -17,7 +17,7 @@ from modern_gl.application.ledger.subconto import SubcontoCommands
 from modern_gl.domain.currency import CURRENCY_OPTIONAL, to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError, NotFoundError, PeriodClosedError, ValidationError
-from modern_gl.domain.invoice import normalize_invoice
+from modern_gl.domain.invoice import KINDS, normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
@@ -152,6 +152,7 @@ class DocumentCommands(SubcontoCommands):
                 p["currency_id"],
                 p["currency_amount"],
                 p["invoice"],
+                p["invoice_kind"],
             )
             for p in self.conn.execute(
                 "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
@@ -169,6 +170,7 @@ class DocumentCommands(SubcontoCommands):
                     p.currency_id,
                     None if p.currency_id is None else to_minor(p.currency_amount or 0),
                     normalize_invoice(p.invoice),
+                    _invoice_kind(p),
                 )
                 for p in postings
             ]
@@ -328,10 +330,10 @@ class DocumentCommands(SubcontoCommands):
                 """
                 INSERT INTO postings (company_id, document_id, line_no, debit_account_id,
                     credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, currency_amount, invoice)
+                    currency_id, currency_amount, invoice, invoice_kind)
                 SELECT company_id, ?, line_no, debit_account_id, credit_account_id, -amount,
                     dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, -currency_amount, invoice
+                    currency_id, -currency_amount, invoice, invoice_kind
                 FROM postings WHERE document_id = ? ORDER BY line_no
                 """,
                 (new_id, doc_id),
@@ -553,14 +555,15 @@ class DocumentCommands(SubcontoCommands):
                     p.currency_id,
                     currency_amount,
                     invoice,
+                    _invoice_kind(p) if invoice else None,
                 )
             )
         try:
             self.conn.executemany(
                 "INSERT INTO postings (company_id, document_id, line_no, debit_account_id, "
                 "credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo, "
-                "currency_id, currency_amount, invoice) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "currency_id, currency_amount, invoice, invoice_kind) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
             )
         except sqlite3.IntegrityError as e:
@@ -798,3 +801,10 @@ class DocumentCommands(SubcontoCommands):
         if row is None:
             raise NotFoundError(tr("слой {code} не найден", code=code))
         return row["id"]
+
+
+def _invoice_kind(p: PostingInput) -> str | None:
+    """Stored kind of the posting's number: None for an e-qaimə (or no number)."""
+    if p.invoice_kind not in KINDS:
+        raise ValidationError(tr("неизвестный вид документа: {kind}", kind=p.invoice_kind))
+    return p.invoice_kind or None if normalize_invoice(p.invoice) else None

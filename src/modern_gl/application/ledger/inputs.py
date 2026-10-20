@@ -31,6 +31,7 @@ class PostingInput:
     currency_id: int | None = None
     currency_amount: str | int | Decimal | None = None
     invoice: str = ""  # number of the e-qaimə the posting belongs to ("" = none)
+    invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a customs declaration
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,5 @@
-"""E-qaimələr: the postings of the period gathered by e-qaimə number.
+"""E-qaimələr: the postings of the period gathered by e-qaimə number (imported goods:
+by the number of the customs declaration, shown with its own basis).
 
 One row per invoice: its counterparty (with VÖEN) and contract, the turnovers of the
 settlement accounts, the ƏDV and what is left unpaid. A number used with two
@@ -14,9 +15,14 @@ from modern_gl.desktop.reports_page import Column, MenuAction, ReportPage, Repor
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import EmptyState, balance_text
 from modern_gl.domain.dates import ru_date
+from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.reporting.invoices import InvoiceRow, invoice_report
+
+
+def kind_name(r: InvoiceRow) -> str:
+    return tr("декларация") if r.kind == CUSTOMS else "e-qaimə"
 
 
 class InvoicesPage(ReportPage):
@@ -69,6 +75,9 @@ class InvoicesPage(ReportPage):
             Column(tr("ƏDV"), lambda r: r.vat, money=True, width=110),
             Column(tr("Остаток"), self._balance, width=140, right=True),
         ]
+        if any(r.kind == CUSTOMS for r in rows):  # imports: customs declarations too
+            columns[1] = Column(tr("Номер"), lambda r: r.invoice, width=170)
+            columns.insert(1, Column(tr("Основание"), kind_name, width=110))
         self.model.set(columns, rows)
         unpaid = [r for r in rows if r.balance]
         text = tr("{n} e-qaimə", n=len(rows))
@@ -109,7 +118,8 @@ class InvoicesPage(ReportPage):
         return balance_text(r.balance) if r.balance else ""
 
     def _searched(self, r: InvoiceRow) -> str:
-        return " ".join((r.invoice, self._partners(r), self._tax_id(r), self._contract(r)))
+        parts = (r.invoice, kind_name(r), self._partners(r), self._tax_id(r), self._contract(r))
+        return " ".join(parts)
 
     # ---- drill -----------------------------------------------------------------------
 

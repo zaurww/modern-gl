@@ -819,4 +819,13 @@ AZ: dict[str, str] = {
     "у {n} номер с разными контрагентами": "{n} nömrə müxtəlif kontragentlərdədir",
     "Открыть документ №{n}": "Sənəd №{n} açılsın",
     "В валюте на конец": "Sonda valyuta ilə",
+    "неизвестный вид документа: {kind}": "naməlum sənəd növü: {kind}",
+    "Декларация": "Bəyannamə",
+    "Основание: e-qaimə или таможенная декларация (импорт)": (
+        "Əsas: e-qaimə və ya gömrük bəyannaməsi (idxal)"
+    ),
+    "номер": "nömrə",
+    "декларация": "bəyannamə",
+    "Номер": "Nömrə",
+    "Основание": "Əsas",
 }

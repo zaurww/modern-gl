@@ -230,3 +230,85 @@ def test_page_finds_an_invoice_by_vöen(firm, qtbot):
     page.open_document.connect(opened.append)
     page.drill(page.model.rows[0])
     assert opened == [page.model.rows[0].documents[0][0]]
+
+
+def test_warehouse_receipt_carries_its_e_qaime_or_declaration(firm):
+    from modern_gl.application.inventory import Inventory, ReceiptLine
+    from modern_gl.domain.invoice import CUSTOMS
+
+    conn, _, cid, acc, v = firm
+    inventory = Inventory(conn, actor="test")
+    unit = inventory.add_unit(cid, "шт", "Штука", precision=0)
+    item = inventory.add_item(cid, "Бумага", unit, acc["41"])
+    store = inventory.add_warehouse(cid, "Склад")
+    alfa = (v["Альфа"], v["Д-1"])
+    # local supplier: 10 × 10.00 = 100.00 + ƏDV 18.00 on e-qaimə MT55
+    local = inventory.post_receipt(
+        cid,
+        "2026-03-05",
+        [ReceiptLine(item, store, "10", "100", vat_amount="18")],
+        acc["60"],
+        alfa,
+        "Поступление",
+        invoice="mt 55",
+    )
+    # imported goods: 300.00 by customs declaration, no ƏDV in the receipt
+    imported = inventory.post_receipt(
+        cid,
+        "2026-03-06",
+        [ReceiptLine(item, store, "5", "300")],
+        acc["60"],
+        (v["Бета"], v["Общий"]),
+        "Импорт",
+        invoice="AZ1000/060326/0001234",
+        invoice_kind=CUSTOMS,
+    )
+    doc = inventory.load_document(cid, local)
+    assert (doc.invoice, doc.invoice_kind) == ("MT55", "")
+    gl = load_document(conn, cid, doc.gl_document_id or 0)
+    # Dt 41 / Kt 60 100.00 and Dt 19 / Kt 60 18.00, both on MT55
+    assert [(p.amount, p.invoice) for p in gl.postings] == [(10_000, "MT55"), (1_800, "MT55")]
+    gl = load_document(conn, cid, inventory.load_document(cid, imported).gl_document_id or 0)
+    assert [(p.invoice, p.invoice_kind) for p in gl.postings] == [
+        ("AZ1000/060326/0001234", CUSTOMS)
+    ]
+    rows = {(r.kind, r.invoice): r for r in invoice_report(conn, cid, "2026-03-01", "2026-03-31")}
+    bought = rows[("", "MT55")]
+    assert (bought.credit, bought.vat, bought.balance) == (11_800, 1_800, -11_800)
+    assert rows[(CUSTOMS, "AZ1000/060326/0001234")].credit == 30_000
+
+
+def test_receipt_form_shows_and_saves_the_basis(firm, qtbot):
+    from PySide6.QtWidgets import QApplication
+
+    from modern_gl.application.inventory import Inventory, ReceiptLine
+    from modern_gl.desktop import theme
+    from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
+    from modern_gl.desktop.session import Session
+    from modern_gl.domain.invoice import CUSTOMS
+
+    conn, ledger, cid, acc, v = firm
+    inventory = Inventory(conn, actor="test")
+    unit = inventory.add_unit(cid, "шт", "Штука", precision=0)
+    item = inventory.add_item(cid, "Бумага", unit, acc["41"])
+    store = inventory.add_warehouse(cid, "Склад")
+    draft = inventory.create_receipt_draft(
+        cid,
+        "2026-03-05",
+        [ReceiptLine(item, store, "1", "10")],
+        acc["60"],
+        (v["Альфа"], v["Д-1"]),
+        invoice="MT9",
+    )
+    theme.apply(QApplication.instance())
+    s = Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda _m: None)
+    page = InventoryDocumentPage(s, doc_type="receipt")
+    qtbot.addWidget(page)
+    page.load(draft)
+    assert page.invoice.text() == "MT9" and page.basis.currentData() == ""
+    assert not page.invoice.isHidden()
+    page.basis.setCurrentIndex(page.basis.findData(CUSTOMS))
+    page.invoice.setText("AZ7")
+    assert page.save(post=False)
+    doc = inventory.load_document(cid, draft)
+    assert (doc.invoice, doc.invoice_kind) == ("AZ7", CUSTOMS)

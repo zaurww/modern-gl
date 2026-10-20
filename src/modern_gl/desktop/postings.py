@@ -219,6 +219,7 @@ class PostingRow:
     rate: Fraction | None = None  # manat per unit; the manat amount follows it
     rate_auto: bool = True  # taken from the rates of the document date (not typed)
     invoice: str = ""  # e-qaimə number
+    invoice_kind: str = ""  # "customs": a customs declaration (from a warehouse receipt)
 
     def is_empty(self) -> bool:
         return (
@@ -244,6 +245,7 @@ class PostingRow:
             rate=Fraction(p.amount, cur) if cur and p.amount else None,  # as it was posted
             rate_auto=False,
             invoice=p.invoice,
+            invoice_kind=p.invoice_kind,
         )
 
 
@@ -705,6 +707,7 @@ class PostingsModel(QAbstractTableModel):
                 src.rate,
                 src.rate_auto,
                 src.invoice,
+                src.invoice_kind,
             ),
         )
 
@@ -762,6 +765,7 @@ class PostingsModel(QAbstractTableModel):
                     r.currency_id if currency else None,
                     Decimal(r.currency_amount or 0).scaleb(-SCALE) if currency else None,
                     r.invoice if self.takes_invoice(n - 1) else "",
+                    r.invoice_kind if self.takes_invoice(n - 1) and r.invoice else "",
                 )
             )
         if not result:

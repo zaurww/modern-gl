@@ -7,6 +7,9 @@ from modern_gl.i18n import tr
 
 MAX_LENGTH = 40
 MARK = "№"  # in the quick entry line: «… 1180 №MT2410123456 Оплата»
+# What the number is: an e-qaimə (""), or the customs declaration of imported goods.
+EQAIME, CUSTOMS = "", "customs"
+KINDS = (EQAIME, CUSTOMS)
 
 
 def normalize_invoice(text: str | None) -> str | None:
