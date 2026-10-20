@@ -32,7 +32,12 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
-from modern_gl.reporting.inventory import cost_sources, receipt_line_choices, stock_balances
+from modern_gl.reporting.inventory import (
+    cost_sources,
+    list_inventory_documents,
+    receipt_line_choices,
+    stock_balances,
+)
 
 
 @dataclass
@@ -452,3 +457,43 @@ def test_cost_source_picker_shows_expenses_until_all_are_asked(batch, conn, qtbo
     assert [row.document_id for row in picker.model.rows] == [b.broker_doc]  # 44 only
     picker.show_all.setChecked(True)
     assert len(picker.model.rows) == 2
+
+
+def test_draft_batches_do_not_hide_what_is_left_of_a_posting(batch, conn):
+    """As when posting, only posted batches count: a draft may still change."""
+    b = batch
+    b.inventory.create_landed_cost_draft(
+        b.company_id, "2026-03-05", [LandedCostTarget(b.line_a)], [broker_fee(b)]
+    )
+    assert [s.left for s in cost_sources(conn, b.company_id)] == [9_000]
+
+
+def test_document_list_names_the_cost_types_of_a_batch(batch, conn):
+    b = batch
+    freight_type = b.inventory.add_landed_cost_type(b.company_id, "Доставка")
+    customs_type = b.inventory.add_landed_cost_type(b.company_id, "Таможня")
+    post_batch(
+        b,
+        [
+            LandedCostCharge("10", b.payable, [b.supplier], cost_type_id=freight_type),
+            LandedCostCharge("5", b.payable, [b.supplier], cost_type_id=customs_type),
+        ],
+    )
+    batch_row = next(
+        d for d in list_inventory_documents(conn, b.company_id) if d.doc_type == "landed_cost"
+    )
+    assert batch_row.cost_type_name == "Доставка, Таможня"
+    assert batch_row.amount == 1_500
+
+
+def test_input_vat_account_comes_from_the_account_type(batch):
+    """Without a chosen account the only account of type «input VAT» is used."""
+    b = batch
+    b.ledger.set_account_role(b.company_id, INPUT_VAT, None)
+    assert b.ledger.account_role(b.company_id, INPUT_VAT) is None  # 19 has no type yet
+    b.ledger.set_account_type(b.company_id, b.vat, "input_vat")
+    assert b.ledger.account_role(b.company_id, INPUT_VAT) == b.vat
+    other = b.ledger.add_account(b.company_id, "19.9", "НДС прочий", account_type="input_vat")
+    assert b.ledger.account_role(b.company_id, INPUT_VAT) is None  # two: choose one
+    b.ledger.set_account_role(b.company_id, INPUT_VAT, other)
+    assert b.ledger.account_role(b.company_id, INPUT_VAT) == other

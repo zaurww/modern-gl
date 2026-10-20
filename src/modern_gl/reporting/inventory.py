@@ -327,7 +327,11 @@ def list_inventory_documents(
         """
         SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.status,
                d.gl_document_id,
-               ct.name AS cost_type_name,
+               COALESCE(ct.name, (
+                   SELECT GROUP_CONCAT(t.name, ', ') FROM landed_cost_charges c
+                   JOIN landed_cost_types t ON t.id = c.cost_type_id
+                   WHERE c.document_id = d.id
+               )) AS cost_type_name,
                COALESCE(SUM(l.amount), 0) AS amount
         FROM inventory_documents d
         LEFT JOIN inventory_lines l ON l.company_id = d.company_id AND l.document_id = d.id
@@ -362,7 +366,8 @@ def cost_sources(
     only_left: bool = True,
 ) -> list[CostSource]:
     """Posted GL postings of the common book, not made by the warehouse, with something
-    left to allocate (other landed cost documents than `exclude_document_id` count),
+    left to allocate (posted landed cost documents other than `exclude_document_id` count,
+    as when posting),
     newest first. `only_left=False`: also those allocated in full."""
     rows = conn.execute(
         """
@@ -375,6 +380,7 @@ def cost_sources(
                (SELECT GROUP_CONCAT(v.name, ', ') FROM subconto_values v
                 WHERE v.id IN (p.ct_sc1, p.ct_sc2, p.ct_sc3)) AS ct_names,
                (SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c
+                JOIN inventory_documents i ON i.id = c.document_id AND i.status = 'posted'
                 WHERE c.company_id = p.company_id AND c.source_document_id = p.document_id
                   AND c.source_line_no = p.line_no AND c.document_id IS NOT ?) AS used
         FROM postings p

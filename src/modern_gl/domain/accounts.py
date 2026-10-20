@@ -7,6 +7,8 @@ DEBIT_NORMAL = {"asset", "expense"}  # liability, equity, revenue: credit-normal
 # Accounts that automatic postings use, chosen per company (table account_roles)
 INPUT_VAT = "input_vat"  # ƏDV к возмещению: a warehouse receipt debits it
 ACCOUNT_ROLES = (INPUT_VAT,)
+# Without an account chosen for a role, the only account of this type plays it (D35).
+ROLE_TYPES = {INPUT_VAT: "input_vat"}
 
 # Account types: what an account means, whatever its code (D35). The list is fixed by the
 # program so that reports and automatic postings understand any company's chart; the

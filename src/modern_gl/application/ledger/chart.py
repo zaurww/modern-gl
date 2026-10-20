@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from modern_gl.application.common import insert, pad_subconto
 from modern_gl.application.ledger.base import LedgerBase, account_label, clean_code
-from modern_gl.domain.accounts import ACCOUNT_CLASSES, ACCOUNT_ROLES, TYPE_CLASS
+from modern_gl.domain.accounts import ACCOUNT_CLASSES, ACCOUNT_ROLES, ROLE_TYPES, TYPE_CLASS
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY, currency_mode
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -381,11 +381,22 @@ class ChartCommands(LedgerBase):
             )
 
     def account_role(self, company_id: int, role: str) -> int | None:
+        """The account chosen for a role; if none is, the only active posting account of
+        the role's type (several such accounts: the user has to choose)."""
         row = self.conn.execute(
             "SELECT account_id FROM account_roles WHERE company_id = ? AND role = ?",
             (company_id, role),
         ).fetchone()
-        return row["account_id"] if row else None
+        if row is not None:
+            return row["account_id"]
+        if role not in ROLE_TYPES:
+            return None
+        typed = self.conn.execute(
+            "SELECT id FROM accounts WHERE company_id = ? AND account_type = ? "
+            "AND is_group = 0 AND active = 1 LIMIT 2",
+            (company_id, ROLE_TYPES[role]),
+        ).fetchall()
+        return typed[0]["id"] if len(typed) == 1 else None
 
     def _has_postings(self, account_id: int) -> bool:
         return (
