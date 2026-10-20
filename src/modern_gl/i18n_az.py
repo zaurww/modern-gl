@@ -931,4 +931,16 @@ AZ: dict[str, str] = {
     ),
     "строка {line}: не указан счёт покупателя": "sətir {line}: alıcının hesabı göstərilməyib",
     "строка {line}: у услуги нет склада": "sətir {line}: xidmətin anbarı olmur",
+    # Alış: услуги и ОС (сессия 12)
+    "«{text}» нет среди товаров. Это услуга, ОС или новый товар?": "«{text}» mallar arasında yoxdur. Bu xidmət, ƏV, yoxsa yeni maldır?",
+    "Услуга, ОС": "Xidmət, ƏV",
+    "строка {line}: укажите товар или что куплено (услуга, ОС)": "sətir {line}: malı və ya nə alındığını göstərin (xidmət, ƏV)",
+    "строка {line}: не указан счёт затрат": "sətir {line}: xərc hesabı göstərilməyib",
+    "Товар / услуга / ОС": "Mal / xidmət / ƏV",
+    "Субконто затрат": "Xərc subkontosu",
+    "Ремонт принтера": "Printerin təmiri",
+    "Ремонт": "Təmir",
+    "Ноутбук": "Noutbuk",
+    "Ноутбук Dell": "Noutbuk Dell",
+    "Ремонт и ноутбук": "Təmir və noutbuk",
 }

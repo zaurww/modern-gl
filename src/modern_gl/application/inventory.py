@@ -69,9 +69,12 @@ def _sequence_key(doc: sqlite3.Row) -> tuple[str, int, int]:
 
 @dataclass(frozen=True)
 class ReceiptLine:
-    """Receipt/opening line. In a draft, everything except the item may be left empty."""
+    """Receipt/opening line. In a draft, everything except the item may be left empty.
 
-    item_id: int
+    A receipt's line without an item is a service, a fixed asset or any expense: no stock,
+    its value goes to `expense_account_id` with `expense_subconto`; the memo says what it is."""
+
+    item_id: int | None
     warehouse_id: int | None
     quantity: str | int | Decimal | None
     amount: str | int | Decimal | None
@@ -81,6 +84,8 @@ class ReceiptLine:
     line_id: int | None = None  # the stored line it edits; None = a new line
     vat_amount: str | int | Decimal | None = None  # a receipt's VAT; the amount is without it
     currency_amount: str | int | Decimal | None = None  # a receipt in a currency: the amount
+    expense_account_id: int | None = None  # a line without an item: where its value goes
+    expense_subconto: Sequence[int | None] = ()
 
 
 @dataclass(frozen=True)
@@ -184,7 +189,10 @@ class InventoryLineData:
     memo: str
     vat_amount: int = 0
     currency_amount: int | None = None
-    cost_account_id: int | None = None  # a posted sale: where the cost of the goods went
+    # a posted sale: where the cost of the goods went; a receipt's line without an item:
+    # the account its value goes to, with these subconto
+    cost_account_id: int | None = None
+    cost_subconto: tuple[int | None, int | None, int | None] = (None, None, None)
 
 
 @dataclass(frozen=True)
@@ -522,6 +530,7 @@ class Inventory:
                     row["vat_amount"],
                     row["currency_amount"],
                     row["cost_account_id"],
+                    (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"]),
                 )
                 for row in rows
             ),
@@ -1117,6 +1126,8 @@ class Inventory:
 
     def _apply_line(self, company_id: int, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
         document_id = doc["id"]
+        if line["item_id"] is None:  # a receipt's service, fixed asset or expense
+            return self._expense_posting(doc, line)
         self._require_complete(doc["doc_type"], line)
         item = self._item(company_id, line["item_id"])
         warehouse = self._warehouse(company_id, line["warehouse_id"])
@@ -1208,6 +1219,33 @@ class Inventory:
             self._inventory_subconto(company_id, item, to_warehouse),
             self._inventory_subconto(company_id, item, warehouse),
             line["memo"],
+        )
+
+    def _expense_posting(self, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
+        """A receipt line without an item: Dr its account [subconto] / Cr the supplier."""
+        line_no = line["line_no"]
+        if not line["memo"]:
+            raise ValidationError(
+                tr("строка {line}: укажите товар или что куплено (услуга, ОС)", line=line_no)
+            )
+        if line["amount"] <= 0:
+            raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
+        if line["cost_account_id"] is None:
+            raise ValidationError(tr("строка {line}: не указан счёт затрат", line=line_no))
+        if line["offset_account_id"] is None:
+            raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
+        in_currency = doc["currency_id"] is not None
+        return PostingInput(
+            line["cost_account_id"],
+            line["offset_account_id"],
+            _money(line["amount"]),
+            (line["cost_sc1"], line["cost_sc2"], line["cost_sc3"]),
+            (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]),
+            line["memo"],
+            doc["currency_id"] if in_currency else None,
+            _money(line["currency_amount"] or 0) if in_currency else None,
+            doc["invoice"] or "",
+            doc["invoice_kind"] or "",
         )
 
     def _cost(
@@ -1852,9 +1890,14 @@ class Inventory:
         doc = self._document(company_id, document_id)
         doc_type = doc["doc_type"]
         for line_no, source in enumerate(lines, 1):
-            item = self._item(company_id, source.item_id)
-            warehouse_id = self._draft_warehouse(company_id, source.warehouse_id)
-            quantity = self._draft_quantity(item, source.quantity, line_no)
+            expense = self._expense_of(company_id, doc_type, source, line_no)
+            if source.item_id is None:  # a service, fixed asset or expense: no stock
+                warehouse_id = None
+                quantity = self._service_quantity(source.quantity, line_no)
+            else:
+                item = self._item(company_id, source.item_id)
+                warehouse_id = self._draft_warehouse(company_id, source.warehouse_id)
+                quantity = self._draft_quantity(item, source.quantity, line_no)
             currency_amount, amount = self._line_amounts(doc, source, line_no)
             vat = (
                 0
@@ -1871,17 +1914,18 @@ class Inventory:
             if line_credit_account is not None:
                 self._account(company_id, line_credit_account)
             line_credit_sc = pad_subconto(source.credit_subconto or credit_subconto)
+            stock = source.item_id is not None
             self._insert_line(
                 document_id,
                 company_id,
                 line_no,
-                item["id"],
+                source.item_id,
                 warehouse_id,
                 None,
                 quantity,
                 amount,
-                amount,
-                0,
+                amount if stock else 0,
+                0 if stock else amount,
                 line_credit_account,
                 line_credit_sc,
                 None,
@@ -1889,7 +1933,27 @@ class Inventory:
                 line_id=source.line_id,
                 vat_amount=vat,
                 currency_amount=currency_amount,
+                cost_account_id=expense[0],
+                cost_subconto=expense[1],
             )
+
+    def _expense_of(
+        self, company_id: int, doc_type: str, source: ReceiptLine, line_no: int
+    ) -> tuple[int | None, tuple[int | None, ...]]:
+        """The account and subconto a receipt line without an item goes to (an item's line
+        has none: its account is the item's)."""
+        if source.item_id is not None:
+            return None, (None, None, None)
+        if doc_type != "receipt":
+            raise ValidationError(tr("строка {line}: не указан товар", line=line_no))
+        if source.warehouse_id is not None:
+            raise ValidationError(tr("строка {line}: у услуги нет склада", line=line_no))
+        if source.expense_account_id is not None:
+            self._account(company_id, source.expense_account_id)
+        for value_id in source.expense_subconto:
+            if value_id is not None:
+                self._subconto_value(company_id, value_id)
+        return source.expense_account_id, pad_subconto(source.expense_subconto)
 
     def _line_amounts(
         self, doc: sqlite3.Row, source: ReceiptLine, line_no: int
@@ -2236,15 +2300,19 @@ class Inventory:
         line_id: int | None = None,
         vat_amount: int = 0,
         currency_amount: int | None = None,
+        cost_account_id: int | None = None,
+        cost_subconto: Sequence[int | None] = (),
     ) -> int:
         sc = pad_subconto(offset_subconto)
+        cost_sc = pad_subconto(cost_subconto)
         if line_id is not None:  # an edited line keeps its id: landed cost refers to it
             updated = self.conn.execute(
                 "UPDATE inventory_lines SET line_no = ?, item_id = ?, warehouse_id = ?, "
                 "to_warehouse_id = ?, quantity = ?, amount = ?, inventory_amount = ?, "
                 "expense_amount = ?, offset_account_id = ?, offset_sc1 = ?, offset_sc2 = ?, "
                 "offset_sc3 = ?, source_receipt_line_id = ?, memo = ?, vat_amount = ?, "
-                "currency_amount = ? WHERE company_id = ? AND document_id = ? AND id = ?",
+                "currency_amount = ?, cost_account_id = ?, cost_sc1 = ?, cost_sc2 = ?, "
+                "cost_sc3 = ? WHERE company_id = ? AND document_id = ? AND id = ?",
                 (
                     line_no,
                     item_id,
@@ -2260,6 +2328,8 @@ class Inventory:
                     memo,
                     vat_amount,
                     currency_amount,
+                    cost_account_id,
+                    *cost_sc,
                     company_id,
                     document_id,
                     line_id,
@@ -2272,8 +2342,9 @@ class Inventory:
             "INSERT INTO inventory_lines (company_id, document_id, line_no, item_id, "
             "warehouse_id, to_warehouse_id, quantity, amount, inventory_amount, "
             "expense_amount, offset_account_id, offset_sc1, offset_sc2, offset_sc3, "
-            "source_receipt_line_id, memo, vat_amount, currency_amount) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "source_receipt_line_id, memo, vat_amount, currency_amount, cost_account_id, "
+            "cost_sc1, cost_sc2, cost_sc3) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 company_id,
                 document_id,
@@ -2291,6 +2362,8 @@ class Inventory:
                 memo,
                 vat_amount,
                 currency_amount,
+                cost_account_id,
+                *cost_sc,
             ),
         )
 

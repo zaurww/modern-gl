@@ -309,6 +309,47 @@ def main() -> None:
         receipt_page.model.index(0, receipt_page.model.columns.index("currency_amount")), 50_000
     )
     shot("8c7_receipt_usd")
+    from modern_gl.application.inventory import STANDARD_VAT_RATE, ReceiptLine
+
+    def kind_value(kind: str, name: str) -> int:
+        return ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, kind), name)
+
+    supplier = stock.load_document(cid, inventory_document.id).lines[0]  # the demo's own
+    assert supplier.offset_account_id is not None
+    purchase = stock.post_receipt(  # a purchase of a service and a fixed asset
+        cid,
+        "2026-02-26",
+        [
+            ReceiptLine(
+                None,
+                None,
+                None,
+                "50",
+                i18n.tr("Ремонт принтера"),
+                vat_amount="9",
+                expense_account_id=ledger.account_id(cid, "26"),
+                expense_subconto=[kind_value("cost_item", i18n.tr("Ремонт"))],
+            ),
+            ReceiptLine(
+                None,
+                None,
+                "1",
+                "1000",
+                i18n.tr("Ноутбук"),
+                vat_amount="180",
+                expense_account_id=ledger.account_id(cid, "08"),
+                expense_subconto=[kind_value("fixed_asset", i18n.tr("Ноутбук Dell"))],
+            ),
+        ],
+        supplier.offset_account_id,
+        supplier.offset_subconto,
+        i18n.tr("Ремонт и ноутбук"),
+        vat_rate=STANDARD_VAT_RATE,
+        invoice="MT2602007788",
+    )
+    session.catalog.reload()  # the new cost item and fixed asset
+    win.open_inventory_document(purchase)
+    shot("8c9_purchase_services")
     picker = cost_source_picker(session, None, win)
     picker.show()
     loop = QEventLoop()

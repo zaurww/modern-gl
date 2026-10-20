@@ -363,8 +363,9 @@ def test_chart_templates_set_the_sale_accounts(ledger, template, codes):
 
 
 def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path):
-    """A file of version 20 with a classic chart and a posted receipt: after 0021 the
-    receipt is intact, the sale accounts are set, and a sale posts."""
+    """A file of version 20 with a classic chart and a receipt draft (written as the old
+    program did): after 0021-0022 the draft and its line keep their ids, the sale accounts
+    are set, a sale posts, and posted documents are protected as before."""
     path = tmp_path / "v20.gl"
     old = sqlite3.connect(path, isolation_level=None)
     old.row_factory = sqlite3.Row
@@ -377,7 +378,18 @@ def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path):
     old.execute("PRAGMA foreign_keys = ON")
     shop = make_shop(old, "classic")
     old.execute("DELETE FROM account_roles WHERE role NOT IN ('input_vat', 'fx_transit')")
-    receipt = shop.receipt("2026-01-10", "10", "120")
+    old.execute(
+        "INSERT INTO inventory_documents (id, company_id, number, doc_date, doc_type, status, "
+        "created_at) VALUES (7, ?, 1, '2026-01-10', 'receipt', 'draft', '2026-01-10')",
+        (shop.company_id,),
+    )
+    old.execute(
+        "INSERT INTO inventory_lines (id, company_id, document_id, line_no, item_id, "
+        "warehouse_id, quantity, amount, inventory_amount, offset_account_id, offset_sc1, "
+        "offset_sc2) VALUES (70, ?, 7, 1, ?, ?, 10000000, 12000, 12000, ?, ?, ?)",
+        (shop.company_id, shop.item, shop.main, shop.acc["60"], *shop.supplier),
+    )
+    old.execute("UPDATE companies SET last_inventory_number = 1")
     old.close()
 
     conn = connect(path)
@@ -386,11 +398,14 @@ def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path):
         roles = dict(conn.execute("SELECT role, account_id FROM account_roles").fetchall())
         assert roles[SALES_REVENUE] == roles[COST_OF_SALES] == roles[SALES_VAT] == shop.acc["46"]
         assert roles[OUTPUT_VAT] == shop.acc["68.2"]
-        doc = shop.inventory.load_document(shop.company_id, receipt)
-        assert (doc.status, doc.lines[0].amount) == ("posted", 12_000)
+        shop.inventory.post_document(shop.company_id, 7)
+        doc = shop.inventory.load_document(shop.company_id, 7)
+        assert (doc.status, doc.lines[0].id, doc.lines[0].amount) == ("posted", 70, 12_000)
         sale = shop.sale("2026-01-20", two_lines(shop))
         assert shop.postings(sale)[-1][:3] == ("46", "41", 3_600)
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            conn.execute("UPDATE inventory_lines SET amount = 1 WHERE id = 70")
     finally:
         conn.close()
 
