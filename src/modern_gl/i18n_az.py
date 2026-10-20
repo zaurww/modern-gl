@@ -665,4 +665,6 @@ AZ: dict[str, str] = {
     "Изменить": "Dəyiş",
     "С валютой строка сама берёт её, и проводка проверяется по ней.": "Valyuta varsa, sətir onu özü götürür və yazılış ona görə yoxlanılır.",
     "Ins — новый элемент   ·   F2 или двойной щелчок — изменить": "Ins — yeni element   ·   F2 və ya iki dəfə klik — dəyiş",
+    "+ Новый элемент «{kind}» — напишите название": "+ Yeni element «{kind}» — adını yazın",
+    "+ Добавить «{name}» в «{kind}»": "+ «{kind}»: «{name}» əlavə et",
 }

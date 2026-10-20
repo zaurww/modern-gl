@@ -183,11 +183,26 @@ def test_suggestions_follow_the_line(firm):
     _, _, _, cat = firm
     assert suggestions(cat, "26 ") == ["Аренда / "]  # after 26: its cost items
     assert suggestions(cat, "26 Аренда / 6")[:2] == ["60 ", "61 "]
-    assert suggestions(cat, "26 Аренда / 60 бе") == ["Бета, "]
+    assert suggestions(cat, "26 Аренда / 60 бе") == ["Бета, ", "+бе, "]  # or a new one
+    assert suggestions(cat, "26 Аренда / 60 бета") == ["Бета, "]  # it is there: nothing new
     assert suggestions(cat, "26 Аренда / 60 Бета, ") == ["Без договора ", "Фактура 15 "]
     assert suggestions(cat, "26 Аренда / 60 Бета, Фактура 15 400 us") == ["USD "]
     assert suggestions(cat, "26 Аренда / 60 Бета, Фактура 15 400 Услуги") == []
-    assert suggestions(cat, "05.03 26 ар") == ["Аренда / "]
+    assert suggestions(cat, "05.03 26 ар") == ["Аренда / ", "+ар / "]
+
+
+def test_new_element_is_offered_right_in_the_line(firm):
+    """A new company has no banks yet: "51 " offers to add one, "+Kapital" — only it."""
+    _, _, _, cat = firm
+    found = suggest("50 / 51 ", 8, cat)
+    assert [i.insert for i in found.items] == ["+"]
+    assert "Банковские счета" in found.items[0].label
+    assert suggestions(cat, "50 / 51 Kapital") == ["+Kapital "]
+    assert suggestions(cat, "50 / 51 +Kap") == ["+Kap "]
+    assert suggestions(cat, "50 / 51 +") == []
+    assert suggestions(cat, "50 / 51 Kapital 100") == []  # the amount, not a name
+    entry = parse("50 / 51 +Kapital 100", cat)
+    assert entry.new_values[0].name == "Kapital"
 
 
 def test_migration_gives_contracts_their_counterparty(tmp_path):
