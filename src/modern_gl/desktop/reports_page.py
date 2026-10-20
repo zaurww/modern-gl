@@ -816,8 +816,7 @@ class ChartPage(ReportPage):
 
     def build(self) -> None:
         cat = self.s.catalog
-        accounts = [a for a in cat.accounts.values() if a.id not in cat.system_account_ids]
-        self.header.subtitle.setText(tr("{n} счетов", n=len(accounts)))
+        self.header.subtitle.setText(tr("{n} счетов", n=len(cat.accounts)))
 
         def subconto(a) -> str:
             kinds = ", ".join(cat.kinds[k] for k in a.sc_kinds if k)
@@ -838,7 +837,7 @@ class ChartPage(ReportPage):
         ]
         self.model.set(
             columns,
-            accounts,
+            list(cat.accounts.values()),
             emphasis=lambda a: a.is_group,
             muted=lambda a: not a.active,
         )

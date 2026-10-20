@@ -141,10 +141,8 @@ def main() -> None:
         option.setChecked(False)
     win.show_place(("opening",))
     opening = cast(OpeningBalancesPage, win.pages[("opening",)])
-    opening.debit_model.setData(opening.debit_model.index(0, 0), session.catalog.by_code["50"].id)
-    opening.debit_model.setData(opening.debit_model.index(0, 11), 175_000)
-    opening.credit_model.setData(opening.credit_model.index(0, 4), session.catalog.by_code["85"].id)
-    opening.credit_model.setData(opening.credit_model.index(0, 11), 175_000)
+    QApplication.clipboard().setText("Счёт\tДебет\tКредит\n50\t1750\t\n51\t5200\t\n80\t\t5000\n")
+    opening.paste()  # the totals differ: the page shows the difference and its button
     shot("5e_opening_balances")
     win.open_report("subconto", session.catalog.by_code["60"].id, osv.params)
     shot("6_subconto")

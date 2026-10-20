@@ -163,25 +163,27 @@ def plain_number(text: str) -> str:
     return text.replace(",", ".")
 
 
-def _names(*sources: str) -> set[str]:
+def header_names(*sources: str) -> set[str]:
     """A header in Russian and in Azerbaijani, folded for matching."""
     return {fold(name) for src in sources for name in (src, AZ.get(src, src))}
 
 
 HEADER_FIELDS = [  # header names -> column (subconto headers are handled separately)
-    (_names("Дебет", "Дт", "Счёт Дт"), DT),
-    (_names("Кредит", "Кт", "Счёт Кт"), CT),
-    (_names("Валюта"), CURRENCY),
-    (_names("В валюте", "Сумма в валюте"), CURRENCY_AMOUNT),
-    (_names("Курс"), RATE),
-    (_names("Сумма"), AMOUNT),
-    (_names("Содержание", "Комментарий"), MEMO),
-    (_names("E-qaimə", "E-qaime", "Е-гаимя", "Счёт-фактура", "Qaimə"), INVOICE),
+    (header_names("Дебет", "Дт", "Счёт Дт"), DT),
+    (header_names("Кредит", "Кт", "Счёт Кт"), CT),
+    (header_names("Валюта"), CURRENCY),
+    (header_names("В валюте", "Сумма в валюте"), CURRENCY_AMOUNT),
+    (header_names("Курс"), RATE),
+    (header_names("Сумма"), AMOUNT),
+    (header_names("Содержание", "Комментарий"), MEMO),
+    (header_names("E-qaimə", "E-qaime", "Е-гаимя", "Счёт-фактура", "Qaimə"), INVOICE),
 ]
-SUBCONTO_NAMES = _names("Субконто")
+SUBCONTO_NAMES = header_names("Субконто")
 
 
-def header_columns(cells: list[str]) -> list[int | None] | None:
+def header_columns(
+    cells: list[str], fields: list[tuple[set[str], int]] = HEADER_FIELDS
+) -> list[int | None] | None:
     """Columns of a header line, or None if the line is not a header. A bare
     "Субконто" belongs to the account column before it (1st, 2nd… in a row);
     "Субконто Дт 2" / "Subkonto Kt 1" say it explicitly."""
@@ -189,7 +191,7 @@ def header_columns(cells: list[str]) -> list[int | None] | None:
     base, pos, known = None, 0, 0
     for cell in cells:
         name = fold(cell.strip())
-        column = next((col for names, col in HEADER_FIELDS if name in names), None)
+        column = next((col for names, col in fields if name in names), None)
         words = name.split()
         if column is None and words and words[0] in SUBCONTO_NAMES:
             side = next((w for w in words[1:] if w in ("дт", "dt", "кт", "kt")), None)
@@ -285,8 +287,15 @@ class PostingsModel(QAbstractTableModel):
                 return tr(HEADERS[section]) if HEADERS[section] else ""
             return str(section + 1)
         if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
-            return ALIGN_RIGHT if section in NUMBER_COLUMNS else ALIGN_LEFT
+            return ALIGN_RIGHT if self.is_number(section) else ALIGN_LEFT
         return None
+
+    def column_order(self) -> list[int]:
+        """Columns in the order they are shown, typed and pasted."""
+        return list(range(self.columnCount()))
+
+    def is_number(self, col: int) -> bool:
+        return col in NUMBER_COLUMNS
 
     def _currency_modes(self, row: int) -> list[int]:
         r = self.rows[row]
@@ -354,7 +363,7 @@ class PostingsModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.FontRole and self._is_placeholder(row, col):
             return fonts().cell_italic
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            return ALIGN_RIGHT if col in NUMBER_COLUMNS else ALIGN_LEFT
+            return ALIGN_RIGHT if self.is_number(col) else ALIGN_LEFT
         if role == Qt.ItemDataRole.ToolTipRole:
             side, pos = column_role(col)
             if side in ("debit", "credit") and pos is None:
@@ -571,7 +580,7 @@ class PostingsModel(QAbstractTableModel):
     # ---- currency ----------------------------------------------------------------------
 
     def _row_changed(self, row: int) -> None:
-        self.dataChanged.emit(self.index(row, 0), self.index(row, len(HEADERS) - 1))
+        self.dataChanged.emit(self.index(row, 0), self.index(row, self.columnCount() - 1))
 
     def _fit_currency(self, row: int) -> None:
         """After an account or subconto changes: a line without currency accounts drops
@@ -687,7 +696,7 @@ class PostingsModel(QAbstractTableModel):
         result = PasteResult()
         if not cells:
             return result
-        mapping = header_columns(cells[0])
+        mapping = self.header_columns(cells[0])
         if mapping is not None:
             cells = cells[1:]
         target = start_row
@@ -706,6 +715,9 @@ class PostingsModel(QAbstractTableModel):
         self.changed.emit()
         return result
 
+    def header_columns(self, cells: list[str]) -> list[int | None] | None:
+        return header_columns(cells)
+
     def _paste_by_header(self, row, line, mapping, n, result) -> None:
         # accounts first: their subconto columns apply only once the account is known
         order = sorted(
@@ -717,19 +729,20 @@ class PostingsModel(QAbstractTableModel):
                 self._paste_cell(row, mapping[i], line[i], n, result)
 
     def _paste_in_order(self, row, line, start_col, shown, n, result) -> None:
-        col = start_col
+        order = self.column_order()
+        at = order.index(start_col)
         for cell in line:
-            while col < len(HEADERS) and not (shown(col) and self.applies(row, col)):
-                col += 1
-            if col >= len(HEADERS):
+            while at < len(order) and not (shown(order[at]) and self.applies(row, order[at])):
+                at += 1
+            if at >= len(order):
                 if cell.strip():
                     result.errors.append(
                         tr("строка {n}: лишнее значение «{text}»", n=n, text=cell.strip())
                     )
                 continue
             if cell.strip():
-                self._paste_cell(row, col, cell, n, result)
-            col += 1
+                self._paste_cell(row, order[at], cell, n, result)
+            at += 1
 
     def _paste_cell(self, row, col, text, n, result) -> None:
         try:
@@ -744,13 +757,13 @@ class PostingsModel(QAbstractTableModel):
 
     def copy_text(self, shown) -> str:
         """The document as tab-separated lines with a header, for Excel."""
-        columns = [c for c in range(len(HEADERS)) if shown(c)]
+        columns = [c for c in self.column_order() if shown(c)]
 
         def title(col: int) -> str:
             side, pos = column_role(col)
             if pos is not None:
                 return f"{tr('Субконто')} {tr('Дт' if side == 'debit' else 'Кт')} {pos}"
-            return tr(HEADERS[col])
+            return str(self.headerData(col, Qt.Orientation.Horizontal))
 
         lines = ["\t".join(title(c) for c in columns)]
         for r, row in enumerate(self.rows):
@@ -1030,7 +1043,7 @@ class PostingsDelegate(QStyledItemDelegate):
             attach_list(
                 editor, [c.label for c in self.catalog.active_currencies], True, self._chosen
             )
-        elif index.column() in NUMBER_COLUMNS:
+        elif model.is_number(index.column()):
             editor.setAlignment(ALIGN_RIGHT)
         # Enter forwarded by an open popup reaches the editor as returnPressed.
         editor.returnPressed.connect(lambda e=editor: self._commit_and_next(e))
@@ -1047,7 +1060,7 @@ class PostingsDelegate(QStyledItemDelegate):
         model = index.model()
         r = model.rows[index.row()]
         if (
-            column_role(index.column())[0] == "memo"
+            index.column() == MEMO
             and not r.memo
             and r.debit is not None
             and r.credit is not None
@@ -1116,6 +1129,9 @@ class PostingsTable(QTableView):
         super().__init__()
         self.setModel(model)
         self.setItemDelegate(delegate)
+        hh = self.horizontalHeader()
+        for visual, col in enumerate(model.column_order()):
+            hh.moveSection(hh.visualIndex(col), visual)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setEditTriggers(
@@ -1130,7 +1146,6 @@ class PostingsTable(QTableView):
         vh.setDefaultSectionSize(34)
         vh.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         vh.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
-        hh = self.horizontalHeader()
         hh.setHighlightSections(False)
         self.setColumnWidth(DT, 78)
         self.setColumnWidth(CT, 78)
@@ -1183,7 +1198,7 @@ class PostingsTable(QTableView):
             return
         fixed = sum(
             self.columnWidth(c)
-            for c in range(len(HEADERS))
+            for c in range(self.model().columnCount())
             if c not in subconto and c != MEMO and not self.isColumnHidden(c)
         )
         free = self.viewport().width() - self.verticalHeader().width() - fixed - self.MEMO_MIN
@@ -1202,7 +1217,7 @@ class PostingsTable(QTableView):
     def _last_enabled_column(self, row: int) -> int:
         cols = [
             c
-            for c in range(len(HEADERS))
+            for c in self.model().column_order()
             if not self.isColumnHidden(c) and self.model().applies(row, c)
         ]
         return cols[-1]
@@ -1227,7 +1242,7 @@ class PostingsTable(QTableView):
     def _first_enabled_column(self, row: int) -> int:
         return next(
             c
-            for c in range(len(HEADERS))
+            for c in self.model().column_order()
             if not self.isColumnHidden(c) and self.model().applies(row, c)
         )
 

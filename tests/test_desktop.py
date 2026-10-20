@@ -18,7 +18,7 @@ from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
-from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.opening_balances_page import CREDIT_AMOUNT, OpeningBalancesPage
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
 from modern_gl.desktop.reports_page import OsvPage, SectionRow
 from modern_gl.infrastructure.db import connect
@@ -83,13 +83,23 @@ def test_opening_balances_have_their_own_page(window):
     assert isinstance(page, OpeningBalancesPage)
     cat = window.session.catalog
 
-    page.debit_model.setData(page.debit_model.index(0, DT), cat.by_code["50"].id)
-    page.debit_model.setData(page.debit_model.index(0, AMOUNT), 100_000)
-    page.credit_model.setData(page.credit_model.index(0, CT), cat.by_code["80"].id)
-    page.credit_model.setData(page.credit_model.index(0, AMOUNT), 100_000)
+    model = page.model
+    model.setData(model.index(0, DT), cat.by_code["50"].id)
+    model.setData(model.index(0, AMOUNT), 100_000)
+    model.insert_row()
+    model.setData(model.index(1, DT), cat.by_code["80"].id)
+    assert model.rows[1].on_credit  # a capital account starts in "Кредит"
+    model.setData(model.index(1, CREDIT_AMOUNT), 100_000)
+    assert model.totals() == (100_000, 100_000)
+    assert page.btn_difference.isHidden()
 
     assert page.save(post=True)
     assert page.status.text() == "Проведён"
+    reloaded = [(r.debit, r.amount, r.on_credit) for r in page.model.rows]
+    assert reloaded == [
+        (cat.by_code["50"].id, 100_000, False),
+        (cat.by_code["80"].id, 100_000, True),
+    ]
     rows = {
         row.code: row
         for row in trial_balance(
@@ -101,6 +111,31 @@ def test_opening_balances_have_their_own_page(window):
     assert page.doc_id is not None
     window.copy_document(page.doc_id)
     assert current_page(window) is page
+
+
+def test_opening_balances_paste_from_trial_balance_and_close_difference(window):
+    window.show_place(("opening",))
+    page = current_page(window)
+    assert isinstance(page, OpeningBalancesPage)
+    cat = window.session.catalog
+    QApplication.clipboard().setText("Счёт\tДебет\tКредит\n50\t1 500,00\t\n80\t\t1000\n")
+
+    page.paste()
+
+    model = page.model
+    rows = [r for r in model.rows if not r.is_empty()]
+    assert [(r.debit, r.amount, r.on_credit) for r in rows] == [
+        (cat.by_code["50"].id, 150_000, False),
+        (cat.by_code["80"].id, 100_000, True),
+    ]
+    assert page.difference.text() == "500.00"
+    assert not page.btn_difference.isHidden()
+
+    page.close_difference()  # Kt 500 on a line whose account is still to choose
+    last = model.rows[-1]
+    assert (last.amount, last.on_credit) == (50_000, True)
+    model.setData(model.index(len(model.rows) - 1, DT), cat.by_code["80"].id)
+    assert model.totals() == (150_000, 150_000)
 
 
 def test_keyboard_entry_skips_subconto_cells_that_do_not_apply(window, qtbot):

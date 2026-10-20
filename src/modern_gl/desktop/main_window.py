@@ -57,8 +57,12 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.opening_balances import is_opening_document
-from modern_gl.application.queries import company_name, load_document, load_template
+from modern_gl.application.queries import (
+    company_name,
+    is_opening_document,
+    load_document,
+    load_template,
+)
 from modern_gl.desktop import icons, theme
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage

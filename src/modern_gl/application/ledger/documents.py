@@ -14,6 +14,8 @@ from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.inputs import SIDES, ImportedDocument, ImportOutcome, PostingInput
 from modern_gl.application.ledger.subconto import SubcontoCommands
+from modern_gl.application.queries import is_opening_document
+from modern_gl.domain.accounts import OPENING_BALANCE
 from modern_gl.domain.currency import CURRENCY_OPTIONAL, to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError, NotFoundError, PeriodClosedError, ValidationError
@@ -622,6 +624,19 @@ class DocumentCommands(SubcontoCommands):
         )
         owners = {v["owner_id"] for v in values.values()} - {None} - set(values)
         values |= self._rows_by_id("subconto_values", company_id, owners)
+
+        control = self.conn.execute(
+            "SELECT account_id FROM account_roles WHERE company_id = ? AND role = ?",
+            (company_id, OPENING_BALANCE),
+        ).fetchone()
+        if (
+            control is not None
+            and control["account_id"] in accounts
+            and not is_opening_document(self.conn, company_id, doc["id"])
+        ):
+            raise ValidationError(
+                tr("счёт ввода начальных остатков проводится только в разделе «Начальные остатки»")
+            )
 
         is_reversal = doc["reversal_of"] is not None
         currencies = {

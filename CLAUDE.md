@@ -14,7 +14,7 @@
 
 ## Структура
 - `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt.
-- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart`, `templates`, `documents`); общие помощники — `application/common.py`.
+- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart`, `templates`, `documents`, `opening`); общие помощники — `application/common.py`.
 - `src/modern_gl/reporting/reports.py` — ОСВ, ОСВ по субконто, карточка, анализ счёта (агрегация в SQL).
 - `src/modern_gl/infrastructure` — SQLite, миграции (`migrations/NNNN_*.sql`), импорт CSV, `workspace.py` (файл на компанию).
 - `src/modern_gl/desktop` — интерфейс: `main_window` (боковая панель), `document_page`, `postings` (таблица ввода), `journal_page`, `reports_page` (ОСВ, карточка, план счетов), `directories_page`, `account_dialog`, `theme` (все цвета и шрифты), `i18n_az.py` (переводы).

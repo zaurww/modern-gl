@@ -243,3 +243,30 @@ def last_memo(conn: sqlite3.Connection, company_id: int, debit: int, credit: int
         (company_id, debit, credit),
     ).fetchone()
     return row[0] if row else ""
+
+
+@dataclass(frozen=True)
+class OpeningBalanceDocument:
+    document_id: int
+    effective_date: str  # the morning the balances take effect; the document is a day earlier
+    status: str
+
+
+def opening_document(conn: sqlite3.Connection, company_id: int) -> OpeningBalanceDocument | None:
+    row = conn.execute(
+        "SELECT o.document_id, o.effective_date, d.status FROM opening_balance_documents o "
+        "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
+        "WHERE o.company_id = ?",
+        (company_id,),
+    ).fetchone()
+    return OpeningBalanceDocument(**dict(row)) if row is not None else None
+
+
+def is_opening_document(conn: sqlite3.Connection, company_id: int, document_id: int) -> bool:
+    return (
+        conn.execute(
+            "SELECT 1 FROM opening_balance_documents WHERE company_id = ? AND document_id = ?",
+            (company_id, document_id),
+        ).fetchone()
+        is not None
+    )

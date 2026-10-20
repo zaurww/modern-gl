@@ -18,6 +18,7 @@ from modern_gl.application.ledger.inputs import (
     PostingInput,
     TemplateLine,
 )
+from modern_gl.application.ledger.opening import OpeningBalanceCommands
 from modern_gl.application.ledger.subconto import SubcontoCommands
 from modern_gl.application.ledger.templates import TemplateCommands
 
@@ -35,6 +36,7 @@ __all__ = [
 class Ledger(
     CompanyCommands,
     CurrencyCommands,
+    OpeningBalanceCommands,
     ChartCommands,
     TemplateCommands,
     DocumentCommands,
