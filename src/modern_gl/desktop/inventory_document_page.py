@@ -10,6 +10,7 @@ from typing import cast
 
 from PySide6.QtCore import (
     QAbstractTableModel,
+    QEvent,
     QModelIndex,
     QPersistentModelIndex,
     Qt,
@@ -50,7 +51,13 @@ from modern_gl.application.inventory import (
     vat_of,
 )
 from modern_gl.desktop.inventory_page import ItemDialog
-from modern_gl.desktop.postings import attach_list, plain_number
+from modern_gl.desktop.postings import (
+    CellEditor,
+    attach_account_list,
+    attach_list,
+    holds_on_group,
+    plain_number,
+)
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, money, to_qdate
@@ -854,12 +861,15 @@ class InventoryLinesDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         model: InventoryLinesModel = index.model()
         key = model.key(index)
-        editor = QLineEdit(parent)
+        editor = CellEditor(parent)
         editor.setFrame(False)
         if key in LIST_KEYS:
             # Directory cells open with the whole list; the account list starts with typing.
             labels = [label for _, label in model.choices(index.row(), key)]
-            attach_list(editor, labels, key != ACCOUNT, self._chosen)
+            if key == ACCOUNT:
+                attach_account_list(editor, labels, model.s.catalog, self._chosen)
+            else:
+                attach_list(editor, labels, True, self._chosen)
         elif key in NUMBER_KEYS:
             editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         editor.returnPressed.connect(lambda widget=editor: self._commit_and_next(widget))
@@ -911,8 +921,19 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         except (LedgerError, LookupError, ValueError, TypeError) as exc:
             self.error.emit(str(exc).strip("'\""))
 
+    def eventFilter(self, editor, event):
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and holds_on_group(editor, self.error)
+        ):
+            return True
+        return super().eventFilter(editor, event)
+
     def _commit_and_next(self, editor) -> None:
         if editor.property("inventory_done"):
+            return
+        if holds_on_group(editor, self.error):
             return
         editor.setProperty("inventory_done", True)
         self.commitData.emit(editor)

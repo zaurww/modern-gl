@@ -38,6 +38,7 @@ from PySide6.QtCore import (
     Qt,
     QTimer,
     Signal,
+    SignalInstance,
 )
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -791,6 +792,8 @@ def attach_list(
 
     def refresh(text: str, pick_first: bool = False) -> None:
         try:
+            # asked anew each time: PySide may drop a kept wrapper of the parentless popup
+            popup = cast(QAbstractItemView, completer.popup())
             typed = bool(text.strip())
             group = subaccounts(text) if subaccounts and typed else None
             if group is not None:
@@ -809,8 +812,8 @@ def attach_list(
             fit_popup(popup, len(matches))
             if (typed and group is None) or pick_first:  # Enter takes the best match
                 popup.setCurrentIndex(model.index(0))
-            else:
-                popup.setCurrentIndex(QModelIndex())
+            else:  # the completer puts its cursor on the first row on showing the list
+                popup.selectionModel().clear()
         except RuntimeError:  # editor already closed
             pass
 
@@ -830,6 +833,32 @@ class CellEditor(QLineEdit):
     """A cell editor; an account cell keeps how to reopen its list on a group."""
 
     pick_first: Callable[[], None] | None = None
+    catalog: Catalog | None = None
+
+
+def attach_account_list(editor: CellEditor, items: list[str], catalog: Catalog, chosen) -> None:
+    """The list of an account cell: suggestions from the first typed character, and a
+    group typed in full ("68") lists its accounts (see `holds_on_group`)."""
+
+    def subaccounts(text: str) -> list[str] | None:
+        group = catalog.group_named(text)
+        return [a.label for a in catalog.subaccounts(group)] if group else None
+
+    editor.catalog = catalog
+    editor.pick_first = attach_list(editor, items, False, chosen, subaccounts)
+
+
+def holds_on_group(editor: QLineEdit, error: SignalInstance) -> bool:
+    """Enter on a group in an account cell: a group is not posted to, so the editor
+    stays open, says so, and highlights the group's first account. True if held."""
+    if not isinstance(editor, CellEditor) or editor.catalog is None or not editor.pick_first:
+        return False
+    group = editor.catalog.group_named(editor.text())
+    if group is None:
+        return False
+    error.emit(tr("{code} — группа: выберите субсчёт из списка", code=group.short))
+    QTimer.singleShot(0, editor.pick_first)  # after the completer hides its popup
+    return True
 
 
 class PostingsDelegate(QStyledItemDelegate):
@@ -875,7 +904,7 @@ class PostingsDelegate(QStyledItemDelegate):
             if side == "debit" and not model.formulas:
                 items += self._template_items()
             # an account cell shows suggestions from the first typed character
-            editor.pick_first = attach_list(editor, items, False, self._chosen, self._subaccounts)
+            attach_account_list(editor, items, self.catalog, self._chosen)
         elif side in ("debit", "credit"):
             # a subconto cell opens with its whole list, like a 1C directory
             items = self._subconto_items(model, index.row(), index.column())
@@ -889,10 +918,6 @@ class PostingsDelegate(QStyledItemDelegate):
         # Enter forwarded by an open popup reaches the editor as returnPressed.
         editor.returnPressed.connect(lambda e=editor: self._commit_and_next(e))
         return editor
-
-    def _subaccounts(self, text: str) -> list[str] | None:
-        group = self.catalog.group_named(text)
-        return [a.label for a in self.catalog.subaccounts(group)] if group else None
 
     def _chosen(self, editor: QLineEdit, text: str) -> None:
         editor.setText(text)
@@ -962,12 +987,7 @@ class PostingsDelegate(QStyledItemDelegate):
     def _commit_and_next(self, editor) -> None:
         if editor.property("gl_done"):
             return
-        pick_first = editor.pick_first if isinstance(editor, CellEditor) else None
-        group = self.catalog.group_named(editor.text()) if pick_first else None
-        if pick_first and group:
-            # a group is not posted to: stay in the cell, its accounts listed
-            self.error.emit(tr("{code} — группа: выберите субсчёт из списка", code=group.short))
-            QTimer.singleShot(0, pick_first)  # after the completer hides its popup
+        if holds_on_group(editor, self.error):
             return
         editor.setProperty("gl_done", True)
         self.commitData.emit(editor)

@@ -6,6 +6,8 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QCompleter
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
@@ -383,6 +385,31 @@ def lc_page(b: Batch, conn, qtbot, document_id: int | None = None) -> LandedCost
     page = LandedCostPage(session, document_id)
     qtbot.addWidget(page)
     return page
+
+
+def test_charge_account_cell_holds_on_a_group(batch, conn, qtbot):
+    b = batch
+    b.ledger.add_account(b.company_id, "76", "Прочие расчёты", is_group=True)
+    for code, name in (("76.1", "С подотчётными"), ("76.2", "С прочими")):
+        b.ledger.add_account(b.company_id, code, name, parent="76", account_class="liability")
+    page = lc_page(b, conn, qtbot)
+    page.show()
+    table, charges = page.charges_table, page.charges
+    index = charges.index(0, charges.columns.index(ACCOUNT))
+    table.setCurrentIndex(index)
+    table.edit(index)
+    editor = table.indexWidget(index)
+    editor.setText("76")
+    editor.textEdited.emit(editor.text())
+    popup = editor.findChild(QCompleter).popup()
+    assert popup.model().rowCount() == 2 and not popup.currentIndex().isValid()
+
+    qtbot.keyClick(editor, Qt.Key.Key_Return)  # a group: stays in the cell
+    QApplication.processEvents()
+    assert charges.rows[0].account_id == b.payable
+    assert table.indexWidget(index) is editor
+    qtbot.keyClick(popup, Qt.Key.Key_Return)  # the first subaccount, now highlighted
+    assert charges.rows[0].account_id == page.s.catalog.by_code["76.1"].id
 
 
 def test_landed_cost_page_previews_and_posts(batch, conn, qtbot):

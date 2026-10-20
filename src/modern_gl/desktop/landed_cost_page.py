@@ -14,6 +14,7 @@ from typing import Any, cast
 
 from PySide6.QtCore import (
     QAbstractTableModel,
+    QEvent,
     QModelIndex,
     QPersistentModelIndex,
     Qt,
@@ -50,7 +51,13 @@ from modern_gl.application.inventory import (
     format_quantity,
     vat_of,
 )
-from modern_gl.desktop.postings import attach_list, plain_number
+from modern_gl.desktop.postings import (
+    CellEditor,
+    attach_account_list,
+    attach_list,
+    holds_on_group,
+    plain_number,
+)
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -645,11 +652,14 @@ class CellDelegate(QStyledItemDelegate):
     def createEditor(self, parent, option, index):
         model = index.model()
         key = model.key(index)
-        editor = QLineEdit(parent)
+        editor = CellEditor(parent)
         editor.setFrame(False)
         choices = model.choices(index.row(), key)
-        if choices is not None:
-            attach_list(editor, [label for _, label in choices], key != ACCOUNT, self._chosen)
+        if choices is not None and key == ACCOUNT:
+            labels = [label for _, label in choices]
+            attach_account_list(editor, labels, model.s.catalog, self._chosen)
+        elif choices is not None:
+            attach_list(editor, [label for _, label in choices], True, self._chosen)
         elif key in NUMBER_KEYS:
             editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         editor.returnPressed.connect(lambda widget=editor: self._commit_and_next(widget))
@@ -670,8 +680,19 @@ class CellDelegate(QStyledItemDelegate):
         except (LedgerError, LookupError, ValueError, ArithmeticError) as exc:
             self.error.emit(str(exc).strip("'\""))
 
+    def eventFilter(self, editor, event):
+        if (
+            event.type() == QEvent.Type.KeyPress
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and holds_on_group(editor, self.error)
+        ):
+            return True
+        return super().eventFilter(editor, event)
+
     def _commit_and_next(self, editor) -> None:
         if editor.property("done"):
+            return
+        if holds_on_group(editor, self.error):
             return
         editor.setProperty("done", True)
         self.commitData.emit(editor)

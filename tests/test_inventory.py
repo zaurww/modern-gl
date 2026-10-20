@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
@@ -791,6 +791,46 @@ def _type_in_cell(qtbot, page: InventoryDocumentPage, row: int, key: str, text: 
     editor = page.table.indexWidget(index)
     editor.setText(text)
     qtbot.keyClick(editor, Qt.Key.Key_Tab)
+
+
+def test_inventory_account_cell_lists_a_group_and_holds_on_it(inventory_demo, ledger, conn, qtbot):
+    demo = inventory_demo
+    ledger.add_account(demo.company_id, "76", "Прочие расчёты", is_group=True)
+    for code, name in (("76.1", "С подотчётными"), ("76.2", "С прочими")):
+        ledger.add_account(demo.company_id, code, name, parent="76", account_class="liability")
+    catalog = Catalog(conn, demo.company_id)
+    session = Session(
+        conn,
+        demo.inventory.ledger,
+        demo.company_id,
+        "Склад",
+        catalog,
+        working_date=date(2026, 1, 10),
+    )
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    page.show()
+    group = catalog.by_code["76"]
+    subs = catalog.subaccounts(group)
+    assert [a.code for a in subs] == ["76.1", "76.2"]
+    index = page.model.index(0, page.model.columns.index(ACCOUNT))
+    page.table.setCurrentIndex(index)
+    page.table.edit(index)
+    editor = page.table.indexWidget(index)
+    editor.setText(group.code)
+    editor.textEdited.emit(editor.text())
+    popup = editor.findChild(QCompleter).popup()
+    assert popup.model().rowCount() == len(subs)
+    assert not popup.currentIndex().isValid()  # not the first subaccount behind the back
+
+    qtbot.keyClick(editor, Qt.Key.Key_Return)  # a group: stays in the cell
+    QApplication.processEvents()
+    assert page.model.rows[0].offset_account_id == demo.payable_account  # unchanged
+    assert page.table.indexWidget(index) is editor
+    assert f"{group.code} — группа" in page.error.text()
+    assert popup.currentIndex().row() == 0
+    qtbot.keyClick(popup, Qt.Key.Key_Return)
+    assert page.model.rows[0].offset_account_id == subs[0].id
 
 
 def test_inventory_grid_tab_commits_adds_counterparty_and_saves_unfinished_draft(
