@@ -1,11 +1,13 @@
 """Import a chart of accounts from CSV (Excel 'CSV UTF-8', ';'-separated).
 
-Columns: code;name;parent;group;subconto[;class;contra;two_sided;currency]
+Columns: code;name;parent;group;subconto[;class;type;contra;two_sided;currency]
   code      - optional: an account without a code is known by its name
   parent    - parent account code, empty for top level (parents must come first)
   group     - 1 for a group (no postings allowed), empty or 0 otherwise
   subconto  - subconto kind codes for positions 1..3, comma-separated; must already exist
   class     - optional: asset / liability / equity / revenue / expense (empty: parent's)
+  type      - optional: an account type of domain.accounts.ACCOUNT_TYPES (cash, bank,
+              receivable…); it gives the class
   contra    - optional: 1 for a contra account (e.g. accumulated depreciation)
   two_sided - optional: 1 if the balance may be on either side (settlements, taxes)
   currency  - optional: 1 if every posting is in a currency (52), 2 if postings may be in
@@ -29,10 +31,12 @@ from modern_gl.infrastructure.db import transaction
 COLUMNS = ("code", "name", "parent", "group", "subconto")
 SUBCONTO_COLUMNS = ("code", "name")
 ENTRY_COLUMNS = ("template", "debit", "credit", "formula", "memo")
+TYPE_COLUMNS = ("code", "type")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 LEGACY_CLASS = {"A": "asset", "P": "liability"}
 # Each template exists per language: chart_<name>_<lang>.csv, chart_<name>_subconto_<lang>.csv
-# and, optionally, ready entry templates (типовые операции): entries_<name>_<lang>.csv
+# and, optionally, ready entry templates (типовые операции): entries_<name>_<lang>.csv.
+# Account types do not depend on the language: chart_<name>_types.csv (code;type).
 TEMPLATES = ("classic", "1c77")
 DEFAULT_TEMPLATE = "classic"
 
@@ -74,6 +78,8 @@ def apply_chart_template(
                 owner_kind_id=ledger.subconto_kind_id(company_id, owner) if owner else None,
             )
         count = import_chart_csv(ledger, company_id, TEMPLATES_DIR / f"chart_{name}_{lang}.csv")
+        for row in _read_rows(TEMPLATES_DIR / f"chart_{name}_types.csv", TYPE_COLUMNS, ";"):
+            ledger.set_account_type(company_id, row["code"].strip(), row["type"].strip())
         entries = TEMPLATES_DIR / f"entries_{name}_{lang}.csv"
         if entries.exists():
             import_entry_templates(ledger, company_id, entries)
@@ -126,6 +132,7 @@ def import_chart_csv(
                     is_group=(row["group"] or "").strip() == "1",
                     subconto=[ledger.subconto_kind_id(company_id, k) for k in kinds],
                     account_class=account_class,
+                    account_type=(row.get("type") or "").strip() or None,
                     contra=(row.get("contra") or "").strip() == "1",
                     two_sided=two_sided,
                     currency=None

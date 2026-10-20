@@ -329,16 +329,24 @@ def test_osv_sections_by_class(window):
     assert not osv.menu_actions(headers[0])  # a section header is not an account
 
 
-def test_change_class_from_chart_menu(window):
+def test_change_type_from_chart_menu(window):
     window.show_place(("chart",))
     chart = current_page(window)
     acc = window.session.catalog.by_code["76"]
     menu = dict(e for e in chart.menu_actions(acc) if e is not None)
-    submenu = dict(e for e in menu["Класс счёта"] if e is not None)
-    submenu["     Активы"]()
-    assert window.session.catalog.by_code["76"].account_class == "asset"
+    types = dict(e for e in menu["Тип счёта"] if e is not None)
+    assets = dict(e for e in types["     Активы"] if e is not None)
+    assets["     Прочая дебиторская задолженность"]()
+    changed = window.session.catalog.by_code["76"]
+    assert (changed.account_class, changed.account_type) == ("asset", "other_receivable")
     row = next(a for a in chart.model.rows if a.code == "76")
-    assert chart.model.data(chart.model.index(chart.model.rows.index(row), 3)) == "Активы"
+    cell = chart.model.data(chart.model.index(chart.model.rows.index(row), 3))
+    assert cell == "Прочая дебиторская задолженность"
+    types = dict(e for e in chart.menu_actions(changed) if e is not None)["Тип счёта"]
+    assets = dict(e for e in dict(e for e in types if e is not None)["✓  Активы"] if e)
+    assets["     Активы"]()  # the class alone: the type is cleared, the class stays
+    changed = window.session.catalog.by_code["76"]
+    assert (changed.account_class, changed.account_type) == ("asset", None)
 
 
 def test_open_reports_are_translated_in_sidebar(window):
@@ -392,6 +400,15 @@ def test_account_dialog_adds_subaccount_and_renames(window, monkeypatch):
     assert cat.by_code["52"].is_group
     assert cat.by_code["52.1"].parent_id == cat.by_code["52"].id
     assert cat.by_code["52.1"].account_class == "asset"  # inherited
+    assert cat.by_code["52.1"].account_type == "bank"
+
+    def make_loan(d):  # the type picker: the class follows the type
+        d.account_type.setCurrentIndex(d.account_type.findData("short_term_loan"))
+
+    run(make_loan)
+    chart.edit_account(cat.by_code["52.1"])
+    loan = window.session.catalog.by_code["52.1"]
+    assert (loan.account_class, loan.account_type) == ("liability", "short_term_loan")
 
     def rename(d):
         d.name.setText("Kassa (AZN)")

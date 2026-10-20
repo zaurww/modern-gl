@@ -271,6 +271,12 @@ def main() -> None:
     QTimer.singleShot(300, loop.quit)
     loop.exec()
     dialog.grab().save(str(out / "9b_account_dialog_60.png"))
+    dialog.account_type.showPopup()  # the type list, grouped by class
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    dialog.account_type.view().window().grab().save(str(out / "9c_account_types.png"))
+    dialog.account_type.hidePopup()
     dialog.close()
 
     # Currencies: a USD bank account, CBAR-like rates, a payment in USD, revaluation.

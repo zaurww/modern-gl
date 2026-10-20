@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from modern_gl.application.common import insert, pad_subconto
 from modern_gl.application.ledger.base import LedgerBase, account_label, clean_code
-from modern_gl.domain.accounts import ACCOUNT_CLASSES, ACCOUNT_ROLES
+from modern_gl.domain.accounts import ACCOUNT_CLASSES, ACCOUNT_ROLES, TYPE_CLASS
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY, currency_mode
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -25,6 +25,7 @@ class ChartCommands(LedgerBase):
         is_group: bool = False,
         subconto: Sequence[int] = (),
         account_class: str | None = None,
+        account_type: str | None = None,
         contra: bool = False,
         two_sided: bool | None = None,
         currency: bool | int | None = None,
@@ -33,7 +34,9 @@ class ChartCommands(LedgerBase):
 
         The code is optional (empty: the account is known by its name). `parent` is the
         parent account's id or code. Without `account_class` the account inherits its
-        parent's class (or stays unclassified). `two_sided` (balance may be on either
+        parent's class (or stays unclassified). `account_type` (domain.accounts.ACCOUNT_TYPES)
+        gives the class; without it the account takes its parent's type if it has the
+        parent's class. `two_sided` (balance may be on either
         side, shown expanded per first subconto) is inherited from the parent unless given,
         and so is `currency`: a mode of domain.currency (CURRENCY_ONLY, CURRENCY_OPTIONAL;
         True means CURRENCY_ONLY).
@@ -44,6 +47,7 @@ class ChartCommands(LedgerBase):
         if not name:
             raise ValidationError(tr("название счёта не может быть пустым"))
         self._check_class(label, account_class)
+        account_class = self._class_of_type(label, account_type, account_class)
         if is_group and subconto:
             raise ValidationError(tr("счёт {code}: у группы не бывает субконто", code=label))
         sc = pad_subconto(subconto)
@@ -61,6 +65,8 @@ class ChartCommands(LedgerBase):
                     )
                 parent_id = parent_row["id"]
                 account_class = account_class or parent_row["account_class"]
+                if account_type is None and account_class == parent_row["account_class"]:
+                    account_type = parent_row["account_type"]
                 if two_sided is None:
                     two_sided = bool(parent_row["two_sided"])
                 if currency is None:
@@ -70,8 +76,8 @@ class ChartCommands(LedgerBase):
                 account_id = insert(
                     self.conn,
                     "INSERT INTO accounts (company_id, code, name, parent_id, is_group, "
-                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, contra, two_sided, "
-                    "currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, account_type, contra, "
+                    "two_sided, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         company_id,
                         code,
@@ -80,6 +86,7 @@ class ChartCommands(LedgerBase):
                         int(is_group),
                         *sc,
                         account_class,
+                        account_type,
                         int(contra),
                         int(bool(two_sided)),
                         mode,
@@ -100,6 +107,7 @@ class ChartCommands(LedgerBase):
                     "code": code,
                     "name": name,
                     "class": account_class,
+                    "type": account_type,
                     "two_sided": bool(two_sided),
                     "currency": mode,
                 },
@@ -120,7 +128,7 @@ class ChartCommands(LedgerBase):
 
         `account` is the account id or code. Subaccounts that had the same class as the
         account follow it, so changing a group re-classifies its subaccounts unless they
-        were set differently on purpose.
+        were set differently on purpose. A type of another class is cleared.
         """
         with transaction(self.conn):
             acc = self._account(company_id, account)
@@ -140,6 +148,10 @@ class ChartCommands(LedgerBase):
                 "UPDATE accounts SET account_class = ? WHERE id = ?",
                 [(account_class, i) for i in ids],
             )
+            self.conn.executemany(
+                "UPDATE accounts SET account_type = NULL WHERE id = ?",
+                [(i,) for i in ids if self._type_class(i) not in (None, account_class)],
+            )
             if contra is not None:
                 self.conn.execute(
                     "UPDATE accounts SET contra = ? WHERE id = ?", (int(contra), acc["id"])
@@ -154,6 +166,44 @@ class ChartCommands(LedgerBase):
                     "from": old,
                     "to": account_class,
                     "contra": contra,
+                    "subaccounts": len(ids) - 1,
+                },
+            )
+
+    def set_account_type(
+        self, company_id: int, account: int | str, account_type: str | None
+    ) -> None:
+        """Change an account's type; the class follows it (None clears the type and keeps
+        the class). Audited. Subaccounts that had the account's type and class follow it."""
+        with transaction(self.conn):
+            acc = self._account(company_id, account)
+            label = account_label(acc)
+            account_class = self._class_of_type(label, account_type, None) or acc["account_class"]
+            old = (acc["account_type"], acc["account_class"])
+            ids = [acc["id"]]
+            stack = [acc["id"]]
+            while stack:
+                children = self.conn.execute(
+                    "SELECT id FROM accounts WHERE company_id = ? AND parent_id = ? "
+                    "AND account_type IS ? AND account_class IS ?",
+                    (company_id, stack.pop(), *old),
+                ).fetchall()
+                ids += [c["id"] for c in children]
+                stack += [c["id"] for c in children]
+            self.conn.executemany(
+                "UPDATE accounts SET account_type = ?, account_class = ? WHERE id = ?",
+                [(account_type, account_class, i) for i in ids],
+            )
+            self._audit(
+                company_id,
+                "account",
+                acc["id"],
+                "set_type",
+                {
+                    "code": acc["code"],
+                    "from": old[0],
+                    "to": account_type,
+                    "class": account_class,
                     "subaccounts": len(ids) - 1,
                 },
             )
@@ -346,6 +396,32 @@ class ChartCommands(LedgerBase):
             ).fetchone()
             is not None
         )
+
+    def _type_class(self, account_id: int) -> str | None:
+        row = self.conn.execute(
+            "SELECT account_type FROM accounts WHERE id = ?", (account_id,)
+        ).fetchone()
+        return TYPE_CLASS.get(row["account_type"])
+
+    @staticmethod
+    def _class_of_type(code: str, account_type: str | None, account_class: str | None):
+        """The class a type gives (or `account_class` without a type); they must agree."""
+        if account_type is None:
+            return account_class
+        if account_type not in TYPE_CLASS:
+            raise ValidationError(
+                tr("счёт {code}: неизвестный тип счёта {type}", code=code, type=account_type)
+            )
+        if account_class not in (None, TYPE_CLASS[account_type]):
+            raise ValidationError(
+                tr(
+                    "счёт {code}: тип {type} не подходит к классу {cls}",
+                    code=code,
+                    type=account_type,
+                    cls=account_class,
+                )
+            )
+        return TYPE_CLASS[account_type]
 
     @staticmethod
     def _check_class(code: str, account_class: str | None) -> None:

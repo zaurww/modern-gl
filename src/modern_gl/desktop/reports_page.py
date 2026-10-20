@@ -38,7 +38,6 @@ from modern_gl.desktop.account_dialog import AccountDialog
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
-    ACCOUNT_CLASSES,
     CLASS_ORDER,
     EmptyState,
     PageHeader,
@@ -50,6 +49,8 @@ from modern_gl.desktop.widgets import (
     edited_date,
     money,
     ru_date,
+    type_choices,
+    type_name,
 )
 from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.errors import LedgerError
@@ -399,7 +400,7 @@ class ReportPage(QWidget):
                 menu.addAction(act)
 
     def _class_actions(self, account_id: int) -> list[MenuAction | None]:
-        """Submenu to change an account's class and contra flag."""
+        """Submenu to change an account's type (and so class) and contra flag."""
         acc = self.s.catalog.accounts.get(account_id)
         if acc is None:
             return []
@@ -407,31 +408,48 @@ class ReportPage(QWidget):
         def mark(on: bool, text: str) -> str:
             return ("✓  " if on else "     ") + text
 
-        def setter(account_class, contra=None):
-            def run():
-                self.s.ledger.set_account_class(self.s.company_id, acc.id, account_class, contra)
-                self.s.catalog.reload()
-                self.s.notify(
-                    tr(
-                        "Счёт {code}: класс «{name}»",
-                        code=acc.short,
-                        name=class_name(account_class),
-                    )
+        def done() -> None:
+            self.s.catalog.reload()
+            changed = self.s.catalog.accounts[acc.id]
+            self.s.notify(
+                tr(
+                    "Счёт {code}: тип «{name}»",
+                    code=acc.short,
+                    name=type_name(changed.account_class, changed.account_type),
                 )
-                self.refresh()
+            )
+            self.refresh()
+
+        def setter(account_class, account_type):
+            def run():
+                led, cid = self.s.ledger, self.s.company_id
+                if account_class != acc.account_class:
+                    led.set_account_class(cid, acc.id, account_class)
+                if account_type != acc.account_type:
+                    led.set_account_type(cid, acc.id, account_type)
+                done()
 
             return run
 
-        items: list[MenuAction | None] = [
-            (mark(acc.account_class == c, tr(name)), setter(c)) for c, name, _ in ACCOUNT_CLASSES
-        ]
-        items += [
-            None,
-            (mark(acc.account_class is None, tr("Не задан")), setter(None)),
-            None,
-            (mark(acc.contra, tr("Контрсчёт")), setter(acc.account_class, not acc.contra)),
-        ]
-        return [None, (tr("Класс счёта"), items)]
+        def toggle_contra():
+            self.s.ledger.set_account_class(
+                self.s.company_id, acc.id, acc.account_class, not acc.contra
+            )
+            done()
+
+        items: list[MenuAction | None] = []
+        by_class: dict[str | None, list[MenuAction | None]] = {}
+        for cls, t, text in type_choices():
+            entry = (mark((acc.account_class, acc.account_type) == (cls, t), text), setter(cls, t))
+            if cls is None:
+                items += [None, entry]
+            elif t is None:
+                by_class[cls] = [entry, None]
+                items.append((mark(acc.account_class == cls, class_name(cls)), by_class[cls]))
+            else:
+                by_class[cls].append(entry)
+        items += [None, (mark(acc.contra, tr("Контрсчёт")), toggle_contra)]
+        return [None, (tr("Тип счёта"), items)]
 
     def _account_actions(self, account_id: int) -> list[MenuAction | None]:
         acc = self.s.catalog.accounts.get(account_id)
@@ -782,7 +800,7 @@ class ChartPage(ReportPage):
             Column(tr("Наименование"), name),
             Column(tr("Сальдо"), self._side_text, width=150),
             Column(
-                tr("Класс"), self._class_text, width=190, icon=lambda a: class_icon(a.account_class)
+                tr("Тип"), self._type_text, width=290, icon=lambda a: class_icon(a.account_class)
             ),
             Column(tr("Субконто"), subconto, width=280),
         ]
@@ -805,8 +823,8 @@ class ChartPage(ReportPage):
         return idx.data(Qt.ItemDataRole.UserRole) if idx.isValid() else None
 
     @staticmethod
-    def _class_text(acc) -> str:
-        text = class_name(acc.account_class)
+    def _type_text(acc) -> str:
+        text = type_name(acc.account_class, acc.account_type)
         return f"{text} · {tr('контрсчёт')}" if acc.contra else text
 
     @staticmethod
