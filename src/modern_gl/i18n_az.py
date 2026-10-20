@@ -1016,4 +1016,5 @@ AZ: dict[str, str] = {
     "Стало на портале": "Portalda indi",
     "Сейчас в программе": "Proqramda indi",
     "Новое название в программе": "Proqramda yeni ad",
+    "Модули": "Modullar",
 }
