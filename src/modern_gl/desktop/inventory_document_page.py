@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -83,11 +84,11 @@ HEADERS = {
     UNIT: "Ед.",
     PRICE: "Цена",
     AMOUNT: "Сумма",
-    ACCOUNT: "Счёт расчётов / затрат",
+    ACCOUNT: "Корр. счёт",  # the header stays short; its tooltip says more
     SC1: "Субконто",
     SC2: "",
     SC3: "",
-    MEMO: "Комментарий строки",
+    MEMO: "Комментарий",
 }
 
 DOCUMENT_TYPES = {
@@ -203,9 +204,20 @@ class InventoryLinesModel(QAbstractTableModel):
         if key == ACCOUNT:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         kind_id = self.kind_at(row_index, key)
+        owner = self.owner_at(row_index, key)
         return (
-            [(value.id, value.label) for value in self.s.catalog.values(kind_id)] if kind_id else []
+            [(value.id, value.label) for value in self.s.catalog.values(kind_id, owner)]
+            if kind_id
+            else []
         )
+
+    def owner_at(self, row_index: int, key: str) -> int | None:
+        """The counterparty chosen on the line, for its contracts (None: any contract)."""
+        row = self.rows[row_index]
+        if key not in {SC1, SC2, SC3} or row.offset_account_id is None:
+            return None
+        account = self.s.catalog.accounts[row.offset_account_id]
+        return self.s.catalog.owner_in(account, row.offset_subconto, int(key[-1]) - 1)
 
     def default_row(self) -> InventoryGridRow:
         code = "60" if self.doc_type in {"opening", "receipt"} else "46"
@@ -235,6 +247,17 @@ class InventoryLinesModel(QAbstractTableModel):
             if orientation == Qt.Orientation.Horizontal:
                 return tr(HEADERS[self.columns[section]])
             return str(section + 1)
+        if (
+            role == Qt.ItemDataRole.ToolTipRole
+            and orientation == Qt.Orientation.Horizontal
+            and self.columns[section] == ACCOUNT
+        ):
+            return tr("Счёт расчётов / затрат")
+        if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
+            numbers = self.columns[section] in {QUANTITY, PRICE, AMOUNT}  # like their cells
+            return (
+                Qt.AlignmentFlag.AlignRight if numbers else Qt.AlignmentFlag.AlignLeft
+            ) | Qt.AlignmentFlag.AlignVCenter
         return None
 
     def key(self, index: QModelIndex) -> str:
@@ -532,7 +555,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                 kind_id = model.kind_at(index.row(), key)
                 if kind_id is None:  # the account has no subconto at this position
                     return
-                value = model.s.catalog.resolve_value(kind_id, text) if text else None
+                owner = model.owner_at(index.row(), key)
+                value = model.s.catalog.resolve_value(kind_id, text, owner) if text else None
                 if text and value is None:
                     self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
                     return
@@ -582,23 +606,29 @@ class InventoryLinesTable(QTableView):
 
     def configure_columns(self) -> None:
         model = self.model()
+        # Fits an ordinary window without a horizontal scroll bar: the item name takes
+        # what is left; subconto positions no account uses are not shown.
         widths = {
-            ITEM: 210,
-            WAREHOUSE: 150,
-            TO_WAREHOUSE: 160,
-            QUANTITY: 110,
-            UNIT: 65,
-            PRICE: 110,
-            AMOUNT: 120,
-            ACCOUNT: 190,
-            SC1: 150,
-            SC2: 140,
-            SC3: 130,
+            WAREHOUSE: 110,
+            TO_WAREHOUSE: 110,
+            QUANTITY: 100,
+            UNIT: 64,
+            PRICE: 84,
+            AMOUNT: 96,
+            ACCOUNT: 130,
+            SC1: 100,
+            SC2: 100,
+            SC3: 100,
         }
+        used = model.s.catalog.used_positions()
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
         for column, key in enumerate(model.columns):
-            if key in widths:
-                self.setColumnWidth(column, widths[key])
-        self.horizontalHeader().setStretchLastSection(True)
+            self.setColumnWidth(column, widths.get(key, 120))
+            if key in {SC1, SC2, SC3}:
+                self.setColumnHidden(column, int(key[-1]) not in used)
+            if key == ITEM:
+                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
 
     def model(self) -> InventoryLinesModel:
         return cast(InventoryLinesModel, super().model())
@@ -855,8 +885,11 @@ class InventoryDocumentPage(QWidget):
         kind = self.s.catalog.kinds[kind_id]
         if not index.isValid() or not self._ask_add(text, kind):
             return
-        value_id = self.s.ledger.add_subconto_value(self.s.company_id, kind_id, text)
-        self.s.catalog.add_value(value_id, kind_id, text)
+        owner = self.model.owner_at(index.row(), self.model.columns[index.column()])
+        value_id = self.s.ledger.add_subconto_value(
+            self.s.company_id, kind_id, text, owner_id=owner
+        )
+        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
         self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
 

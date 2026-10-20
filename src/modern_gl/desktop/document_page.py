@@ -7,12 +7,13 @@ from datetime import date
 from fractions import Fraction
 
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
     QApplication,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -149,6 +150,22 @@ class DocumentPage(QWidget):
         self.table = PostingsTable(self.model, self.delegate)
         root.addWidget(self.table, 1)
 
+        # No rate of the document date: load the Central Bank's rates right from here.
+        self.rate_note = QFrame()
+        self.rate_note.setObjectName("note")
+        note = QHBoxLayout(self.rate_note)
+        note.setContentsMargins(14, 6, 6, 6)
+        self.rate_text = QLabel()
+        self.rate_text.setWordWrap(True)
+        note.addWidget(self.rate_text, 1)
+        self.btn_rates = button(
+            tr("Загрузить курс ЦБА"), "flat", tr("Курсы с cbar.az на дату документа")
+        )
+        self.btn_rates.clicked.connect(self.load_rates)
+        note.addWidget(self.btn_rates)
+        self.rate_note.hide()
+        root.addWidget(self.rate_note)
+
         self.error = QLabel()
         self.error.setObjectName("error")
         self.error.setWordWrap(True)
@@ -160,6 +177,9 @@ class DocumentPage(QWidget):
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window
+        keep = self.hint.sizePolicy()
+        keep.setRetainSizeWhenHidden(True)  # a posted document: "Итого" stays by the total
+        self.hint.setSizePolicy(keep)
         bottom.addWidget(self.hint, 1)
         total_caption = QLabel(tr("Итого"))
         total_caption.setObjectName("secondary")
@@ -265,6 +285,7 @@ class DocumentPage(QWidget):
 
     def _wire_dirty(self) -> None:
         self.model.changed.connect(self._changed)
+        self.model.changed.connect(self._update_rate_note)
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
         self.date.dateChanged.connect(self._date_changed)
@@ -294,21 +315,58 @@ class DocumentPage(QWidget):
             self.title_changed.emit()
 
     def _rate_for(self, currency_id: int) -> Fraction | None:
-        """Manat per unit of a currency on the document date; tells when there is none."""
+        """Manat per unit of a currency on the document date (the latest one before it)."""
+        rate = rate_on(self.s.conn, self.s.company_id, currency_id, edited_date(self.date))
+        return rate.per_unit if rate else None
+
+    def _stale_rates(self) -> list[tuple[str, str | None]]:
+        """Currencies of lines on the offered rate that have no rate set for the document
+        date itself: (code, date of the rate used or None)."""
         day = edited_date(self.date)
-        rate = rate_on(self.s.conn, self.s.company_id, currency_id, day)
-        if rate is None:
-            code = self.s.catalog.currencies[currency_id].code
-            self.show_error(
-                tr(
-                    "Нет курса {code} на {date}: введите курс в строке или загрузите курсы "
-                    "в разделе «Валюты»",
-                    code=code,
-                    date=ru_date(day.isoformat()),
-                )
-            )
-            return None
-        return rate.per_unit
+        found: dict[str, str | None] = {}
+        for i, r in enumerate(self.model.rows):
+            if r.currency_id is None or not r.rate_auto or not self.model.in_currency(i):
+                continue
+            rate = rate_on(self.s.conn, self.s.company_id, r.currency_id, day)
+            if rate is None or rate.rate_date < day.isoformat():
+                code = self.s.catalog.currencies[r.currency_id].code
+                found[code] = rate.rate_date if rate else None
+        return sorted(found.items())
+
+    def _update_rate_note(self) -> None:
+        stale = [] if self.model.read_only else self._stale_rates()
+        if not stale:
+            self.rate_note.hide()
+            return
+        day = ru_date(edited_date(self.date).isoformat())
+        parts = [
+            tr("курс {code} от {old}", code=code, old=ru_date(old))
+            if old
+            else tr("нет курса {code}", code=code)
+            for code, old in stale
+        ]
+        self.rate_text.setText(
+            tr("На {date} курс не загружен: {what}", date=day, what=", ".join(parts))
+        )
+        self.rate_note.show()
+
+    def load_rates(self) -> None:
+        """Official rates of the document date from cbar.az; the lines take them."""
+        day = edited_date(self.date)
+        QGuiApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            count = self.s.ledger.import_rates(self.s.company_id, day, self.s.fetch_rates(day))
+        except LedgerError as e:
+            self.show_error(str(e))
+            return
+        finally:
+            QGuiApplication.restoreOverrideCursor()
+        self.error.hide()
+        self.model.refresh_rates()
+        self._update_rate_note()
+        self.s.notify(
+            tr("Курсы ЦБА на {date} загружены: {n}", date=ru_date(day.isoformat()), n=count)
+        )
 
     def _date_changed(self, *_) -> None:
         if not self.model.read_only:
@@ -430,6 +488,7 @@ class DocumentPage(QWidget):
         self._apply_mode(read_only)
         self.dirty = False
         self._update_total()
+        self._update_rate_note()
         self.title_changed.emit()
 
     def _select_layer(self, code: str) -> None:
@@ -685,12 +744,21 @@ class DocumentPage(QWidget):
         )
         if answer != QMessageBox.StandardButton.Yes:
             return False
-        for (kind_id, text), cells in names.items():
-            value_id = self.s.ledger.add_subconto_value(self.s.company_id, kind_id, text)
-            self.s.catalog.add_value(value_id, kind_id, text)
-            for row, col in cells:
-                self.model.setData(self.model.index(row, col), value_id)
+        # one by one: a new contract belongs to the counterparty its line has by then
+        created: dict[tuple[int, str, int | None], int] = {}
+        for row, col, kind_id, text in unknown:
+            key = (kind_id, text, self.model.owner_at(row, col))
+            if key not in created:
+                created[key] = self._add_value(kind_id, text, key[2])
+            self.model.setData(self.model.index(row, col), created[key])
         return True
+
+    def _add_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
+        value_id = self.s.ledger.add_subconto_value(
+            self.s.company_id, kind_id, text, owner_id=owner_id
+        )
+        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
+        return value_id
 
     def copy(self) -> None:
         QApplication.clipboard().setText(self.model.copy_text(self._shown))
@@ -711,7 +779,7 @@ class DocumentPage(QWidget):
         )
         if answer != QMessageBox.StandardButton.Yes or not index.isValid():
             return
-        value_id = self.s.ledger.add_subconto_value(self.s.company_id, kind_id, text)
-        self.s.catalog.add_value(value_id, kind_id, text)
+        owner = self.model.owner_at(index.row(), index.column())  # a contract of this partner
+        value_id = self._add_value(kind_id, text, owner)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
         self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))

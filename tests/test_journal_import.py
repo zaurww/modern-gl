@@ -127,7 +127,8 @@ def test_new_elements_when_allowed(books):
     conn, ledger, cid, cat = books
     table = "Дата\tДебет\tСубконто\tКредит\tСумма\n05.03.2026\t26\tРеклама\t50\t10\n"
     plan = read_plan(from_clipboard(table), cat, add_new=True)
-    assert plan.errors == 0 and plan.new_values == [(cat.by_code["26"].sc_kinds[0], "Реклама")]
+    assert plan.errors == 0
+    assert plan.new_values == [(cat.by_code["26"].sc_kinds[0], "Реклама", None)]
     assert plan.rows[0].debit_names == ["+Реклама"]
     [doc_id] = run(ledger, cid, plan, post=False)
     doc = load_document(conn, cid, doc_id)

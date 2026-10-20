@@ -323,12 +323,12 @@ def _currency_turnovers(conn: sqlite3.Connection, params: dict) -> dict[int, lis
                    p.currency_amount AS dt, 0 AS ct
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts a ON a.id = p.debit_account_id
-            WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+            WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
             UNION ALL
             SELECT docs.doc_date, p.credit_account_id, p.currency_id, 0, p.currency_amount
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts a ON a.id = p.credit_account_id
-            WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+            WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
         )
         SELECT m.account_id, m.currency_id, c.code,
                SUM(CASE WHEN doc_date <  :date_from THEN dt - ct ELSE 0 END) AS opening,
@@ -445,8 +445,8 @@ def account_card(
         lines AS (
             SELECT docs.doc_date, docs.number, docs.id AS document_id, docs.memo,
                    p.line_no, 0 AS side, p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct,
-                   CASE WHEN own.currency = 1 THEN p.currency_id END AS currency_id,
-                   CASE WHEN own.currency = 1 THEN p.currency_amount ELSE 0 END AS cur_dt,
+                   CASE WHEN own.currency <> 0 THEN p.currency_id END AS currency_id,
+                   COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0) AS cur_dt,
                    0 AS cur_ct
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.debit_account_id
@@ -454,8 +454,8 @@ def account_card(
             UNION ALL
             SELECT docs.doc_date, docs.number, docs.id, docs.memo,
                    p.line_no, 1, p.debit_account_id, 0, p.amount,
-                   CASE WHEN own.currency = 1 THEN p.currency_id END,
-                   0, CASE WHEN own.currency = 1 THEN p.currency_amount ELSE 0 END
+                   CASE WHEN own.currency <> 0 THEN p.currency_id END,
+                   0, COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0)
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.credit_account_id
             WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))

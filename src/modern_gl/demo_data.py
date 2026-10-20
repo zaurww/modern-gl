@@ -12,13 +12,15 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
     cid = ledger.create_company(name or tr("ДЕМО ООО"))
     apply_chart_template(ledger, cid, "classic")
 
-    def value(kind: str, title: str) -> int:
-        return ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, kind), title)
+    def value(kind: str, title: str, owner: int | None = None) -> int:
+        kind_id = ledger.subconto_kind_id(cid, kind)
+        return ledger.add_subconto_value(cid, kind_id, title, owner_id=owner)
 
     alfa = value("counterparty", tr("Альфа Трейд"))
     beta = value("counterparty", tr("Бета Сервис"))
     founder = value("counterparty", tr("Учредитель"))
-    c1, c2 = value("contract", tr("Договор поставки №1")), value("contract", tr("Договор №7-У"))
+    c1 = value("contract", tr("Договор поставки №1"), alfa)
+    c2 = value("contract", tr("Договор №7-У"), beta)
     bank = value("bank_account", tr("Основной расчётный счёт"))
     paper = value("item", tr("Бумага офисная А4"))
     store = value("warehouse", tr("Основной склад"))

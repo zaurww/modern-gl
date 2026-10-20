@@ -189,7 +189,7 @@ QTableView QLineEdit {{
 QHeaderView {{ background: {P.surface}; border: none; }}
 QHeaderView::section {{
     background: {P.surface}; color: {P.tertiary}; border: none;
-    border-bottom: 1px solid {P.hairline}; padding: 6px 8px;
+    border-bottom: 1px solid {P.hairline}; padding: 6px 11px;  /* = cell padding + text margin */
 }}
 QHeaderView::section:vertical {{
     color: {P.tertiary}; border: none; border-bottom: 1px solid {P.hairline}; padding: 0 6px;
@@ -226,6 +226,9 @@ QLabel#tertiary {{ color: {P.tertiary}; }}
 QLabel#error {{
     color: {P.red}; background: {P.red_soft}; border-radius: 7px; padding: 7px 10px;
 }}
+QFrame#note {{ background: {P.accent_soft}; border: none; border-radius: 8px; }}
+QFrame#note QLabel {{ color: {P.text}; background: transparent; }}
+QFrame#note QPushButton#flat:hover {{ background: {P.selection}; }}
 """
 
 

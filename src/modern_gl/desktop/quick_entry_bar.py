@@ -1,14 +1,26 @@
 """The quick entry line above the journal: type a document as text, see how it is
-understood, Enter posts it (see application.quick_entry for the syntax)."""
+understood, Enter posts it (see application.quick_entry for the syntax).
+
+While typing, a list offers what fits at the cursor — accounts, then the elements of
+their subconto (after "26 " the cost items), currencies, templates — so the syntax need
+not be remembered: Enter or Tab takes the highlighted item and adds what comes next."""
 
 from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
 from fractions import Fraction
+from typing import cast
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtCore import QStringListModel, Qt, Signal
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QCompleter,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from modern_gl.application import quick_entry
 from modern_gl.application.common import pad_subconto
@@ -19,7 +31,9 @@ from modern_gl.application.queries import (
     PostingData,
     list_templates,
     load_document,
+    recent_subconto,
 )
+from modern_gl.desktop.postings import PickWithKeys, fit_popup
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.domain.errors import LedgerError
@@ -29,7 +43,7 @@ from modern_gl.infrastructure.db import transaction
 
 HELP = (
     "Enter — провести   ·   Shift+Enter — черновик   ·   Ctrl+Enter — открыть в форме   ·   "
-    "↑ — прошлые строки   ·   «+Имя» — новый элемент справочника"
+    "↑ — прошлые строки   ·   «+Имя» — новый элемент справочника   ·   Esc — скрыть список"
 )
 
 
@@ -66,6 +80,71 @@ class QuickEntryBar(QWidget):
         self.help.hide()
         self.edit.textChanged.connect(self._preview)
         self.edit.installEventFilter(self)
+        self._setup_suggestions()
+
+    # ---- suggestions -------------------------------------------------------------------
+
+    def _setup_suggestions(self) -> None:
+        self._found = quick_entry.Suggestions(0)
+        self._names = QStringListModel(self)
+        self.completer = QCompleter(self._names, self)
+        self.completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
+        self.completer.setMaxVisibleItems(10)
+        self.completer.setWidget(self.edit)  # filtering is ours (quick_entry.suggest)
+        popup = cast(QAbstractItemView, self.completer.popup())
+        popup.setObjectName("completer")
+        # mouse click; the str overload of the signal is not in the PySide6 stubs
+        self.completer.activated[str].connect(  # pyright: ignore[reportIndexIssue]
+            self.take
+        )
+        PickWithKeys(popup, self.take)
+        self.edit.textEdited.connect(lambda _text: self.suggest())
+
+    def suggest(self) -> list[str]:
+        """Show what fits at the cursor; returns the labels offered."""
+        cid = self.s.company_id
+        self._found = quick_entry.suggest(
+            self.edit.text(),
+            self.edit.cursorPosition(),
+            self.s.catalog,
+            list_templates(self.s.conn, cid),
+            lambda account, pos: recent_subconto(self.s.conn, cid, account, pos),
+        )
+        labels = [i.label for i in self._found.items]
+        popup = cast(QAbstractItemView, self.completer.popup())
+        if not labels:
+            popup.hide()
+            return []
+        self._names.setStringList(labels)
+        # the list opens under the word being typed
+        rect = self.edit.cursorRect()
+        rect.moveLeft(
+            max(
+                0,
+                rect.left()
+                - self.edit.fontMetrics().horizontalAdvance(
+                    self.edit.text()[self._found.start : self.edit.cursorPosition()]
+                ),
+            )
+        )
+        rect.setWidth(380)
+        self.completer.complete(rect)
+        fit_popup(popup, len(labels), self.completer.maxVisibleItems())
+        if self._found.typed:  # Enter takes the best match
+            popup.setCurrentIndex(self._names.index(0))
+        return labels
+
+    def take(self, label: str) -> None:
+        """Put the chosen item in place of the word being typed, then offer what is next."""
+        item = next((i for i in self._found.items if i.label == label), None)
+        if item is None:
+            return
+        cast(QAbstractItemView, self.completer.popup()).hide()
+        text, cursor = self.edit.text(), self.edit.cursorPosition()
+        start = min(self._found.start, cursor)
+        self.edit.setText(text[:start] + item.insert + text[cursor:])
+        self.edit.setCursorPosition(start + len(item.insert))
+        self.suggest()
 
     # ---- parsing -----------------------------------------------------------------------
 
@@ -89,8 +168,8 @@ class QuickEntryBar(QWidget):
             return
         try:
             entry = self.parse()
-        except LedgerError as e:
-            self._show(str(e), error=True)
+        except LedgerError as e:  # still being typed: a quiet hint, red only on Enter
+            self._show(str(e), error=False)
             return
         lines = quick_entry.describe(entry, self.s.catalog)
         day = entry.doc_date or self.s.working_date
@@ -158,6 +237,7 @@ class QuickEntryBar(QWidget):
         self.history.append(text)
         self._back = 0
         self.edit.clear()
+        cast(QAbstractItemView, self.completer.popup()).hide()
         self.posted.emit(doc_id)
         return doc_id
 
@@ -189,9 +269,13 @@ class QuickEntryBar(QWidget):
         self.open_form.emit(doc)
 
     def _add_new_values(self, entry: quick_entry.QuickEntry) -> None:
-        for new in entry.new_values:
-            value_id = self.s.ledger.add_subconto_value(self.s.company_id, new.kind_id, new.name)
-            self.s.catalog.add_value(value_id, new.kind_id, new.name)
+        for new in entry.new_values:  # a new counterparty comes before its new contract
+            owner = new.owner.id if isinstance(new.owner, quick_entry.NewValue) else new.owner
+            value_id = self.s.ledger.add_subconto_value(
+                self.s.company_id, new.kind_id, new.name, owner_id=owner
+            )
+            new.id = value_id
+            self.s.catalog.add_value(value_id, new.kind_id, new.name, owner_id=owner)
             for index, side, pos in new.cells:
                 getattr(entry.lines[index], f"{side}_sc")[pos] = value_id
 

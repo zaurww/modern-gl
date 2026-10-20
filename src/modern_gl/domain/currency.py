@@ -16,6 +16,21 @@ from modern_gl.i18n import language, tr
 RATE_SCALE = 6
 RATE_UNIT = 10**RATE_SCALE
 
+# Currency accounting of an account (accounts.currency):
+NO_CURRENCY = 0  # manat only
+CURRENCY_ONLY = 1  # every posting in a currency (52 — a currency bank account)
+CURRENCY_OPTIONAL = 2  # in manat or in a currency (60, 62: local and foreign partners)
+CURRENCY_MODES = (NO_CURRENCY, CURRENCY_ONLY, CURRENCY_OPTIONAL)
+
+
+def currency_mode(value: bool | int) -> int:
+    """True / False of older callers mean CURRENCY_ONLY / NO_CURRENCY."""
+    mode = int(value)
+    if mode not in CURRENCY_MODES:
+        raise ValueError(f"currency mode {value!r}")
+    return mode
+
+
 # Currencies a new company starts with; others are added from KNOWN when needed.
 DEFAULT_CURRENCIES = ("USD", "EUR", "RUB", "TRY", "GBP")
 KNOWN = {  # code: (Russian, Azerbaijani)

@@ -55,7 +55,13 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import PostingData
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain import formula
-from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
+from modern_gl.domain.currency import (
+    CURRENCY_ONLY,
+    format_unit_rate,
+    parse_rate,
+    to_base,
+    unit_rate,
+)
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import SCALE, format_minor, to_minor
 from modern_gl.i18n import fold, tr
@@ -118,6 +124,18 @@ class EntryHints:
 
 TEMPLATE_MARK = "#"
 ARITHMETIC = re.compile(r"[-+*/()=]")
+CURRENCY_AMOUNT_TEXT = re.compile(
+    r"^\s*(?:(?P<number>[\d\s.,']+?)\s*(?P<code>[A-Za-z]{3})"
+    r"|(?P<code2>[A-Za-z]{3})\s*(?P<number2>[\d\s.,']+))\s*$"
+)
+
+
+@dataclass(frozen=True)
+class InCurrency:
+    """An amount typed with its currency: 500 EUR."""
+
+    currency_id: int
+    amount: int
 
 
 @dataclass
@@ -253,11 +271,26 @@ class PostingsModel(QAbstractTableModel):
             return ALIGN_RIGHT if section in NUMBER_COLUMNS else ALIGN_LEFT
         return None
 
-    def is_currency(self, row: int) -> bool:
-        """The line hits a currency account, so it has a currency and an amount in it."""
+    def _currency_modes(self, row: int) -> list[int]:
         r = self.rows[row]
-        return not self.formulas and any(
-            a is not None and self.catalog.accounts[a].currency for a in (r.debit, r.credit)
+        if self.formulas:
+            return []
+        modes = [self.catalog.accounts[a].currency for a in (r.debit, r.credit) if a is not None]
+        return [m for m in modes if m]
+
+    def is_currency(self, row: int) -> bool:
+        """The line hits a currency account, so it may have a currency and an amount in it."""
+        return bool(self._currency_modes(row))
+
+    def currency_required(self, row: int) -> bool:
+        """The line hits an account kept only in currency (52): manat alone won't do."""
+        return CURRENCY_ONLY in self._currency_modes(row)
+
+    def in_currency(self, row: int) -> bool:
+        """The line is (or has to be) in a currency: its currency cells are in use.
+        A line on 60 / 62 with a local partner stays in manat and shows none of them."""
+        return self.currency_required(row) or (
+            self.is_currency(row) and self.rows[row].currency_id is not None
         )
 
     def kind_at(self, row: int, col: int) -> int | None:
@@ -271,8 +304,10 @@ class PostingsModel(QAbstractTableModel):
         return self.catalog.accounts[account_id].sc_kinds[pos - 1]
 
     def applies(self, row: int, col: int) -> bool:
-        if col in CURRENCY_COLUMNS:
+        if col == CURRENCY:
             return self.is_currency(row)
+        if col in CURRENCY_COLUMNS:
+            return self.in_currency(row)
         _, pos = column_role(col)
         return pos is None or self.kind_at(row, col) is not None
 
@@ -316,7 +351,7 @@ class PostingsModel(QAbstractTableModel):
             return self._subconto_text(row, col, getattr(r, f"{side}_sc")[pos - 1], display)
         if side == "amount" and self.formulas:
             return r.formula
-        if side in ("currency", "currency_amount", "rate") and not self.is_currency(row):
+        if side in ("currency", "currency_amount", "rate") and not self.in_currency(row):
             return ""
         if side == "currency":
             currency = self.catalog.currencies.get(r.currency_id or 0)
@@ -361,12 +396,17 @@ class PostingsModel(QAbstractTableModel):
                 self._set_account(r, side, value)
             else:
                 getattr(r, f"{side}_sc")[pos - 1] = value
+                self._fit_owned(r, side)
             self._fit_currency(row)
         elif side in ("currency", "currency_amount", "rate"):
             self._set_currency_field(r, side, value)
         elif side == "amount":
             if self.formulas:
                 r.formula = value
+            elif isinstance(value, InCurrency):  # "500 EUR" typed in the amount cell
+                self._set_currency_field(r, "currency", value.currency_id)
+                self._set_currency_field(r, "currency_amount", value.amount)
+                side = "currency"  # the whole row changed
             else:
                 r.amount = value
                 r.formula = ""  # typed by hand: no longer follows the operation amount
@@ -388,11 +428,25 @@ class PostingsModel(QAbstractTableModel):
             if sc[i] is not None and (kind is None or self.catalog.value(sc[i]).kind_id != kind):
                 sc[i] = None
 
+    def _fit_owned(self, r: PostingRow, side: str) -> None:
+        """A contract of another counterparty than the one chosen leaves the line."""
+        account_id = getattr(r, side)
+        if account_id is None:
+            return
+        account = self.catalog.accounts[account_id]
+        sc = getattr(r, f"{side}_sc")
+        for pos, value_id in enumerate(sc):
+            owner = self.catalog.owner_in(account, sc, pos)
+            if value_id is not None and self.catalog.owned_elsewhere(value_id, owner):
+                sc[pos] = None
+
     def _set_currency_field(self, r: PostingRow, side: str, value) -> None:
         if side == "currency":
             r.currency_id = value
             r.rate_auto = True
             r.rate = self.rate_for(value) if value is not None else None
+            if value is None:  # back to manat (60 / 62): the manat amount stays
+                r.currency_amount = None
         elif side == "currency_amount":
             r.currency_amount = value
         else:
@@ -456,13 +510,7 @@ class PostingsModel(QAbstractTableModel):
         if side in ("debit", "credit") and pos is None:
             return self.catalog.resolve_account(text).id
         if side in ("debit", "credit"):
-            kind = self.kind_at(row, col)
-            if kind is None:
-                raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
-            value = self.catalog.resolve_value(kind, text)
-            if value is None:
-                raise UnknownValue(kind, text)
-            return value
+            return self._parse_subconto(row, col, text)
         if side == "currency":
             return self.catalog.resolve_currency(text).id
         if side == "rate":
@@ -470,6 +518,8 @@ class PostingsModel(QAbstractTableModel):
         if side == "amount" and self.formulas:
             formula.parse(text)  # check now, not when the template is saved
             return text
+        if side == "amount" and self.is_currency(row) and (found := self._in_currency(text)):
+            return found
         if side in ("amount", "currency_amount"):
             if ARITHMETIC.search(text):  # a small calculator: 1180*18/118
                 value = formula.evaluate(text)
@@ -479,6 +529,38 @@ class PostingsModel(QAbstractTableModel):
                 raise ValueError(tr("сумма должна быть больше нуля"))
             return value
         return text
+
+    def _parse_subconto(self, row: int, col: int, text: str) -> int:
+        kind = self.kind_at(row, col)
+        if kind is None:
+            raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
+        value = self.catalog.resolve_value(kind, text, self.owner_at(row, col))
+        if value is None:
+            raise UnknownValue(kind, text)
+        return value
+
+    def owner_at(self, row: int, col: int) -> int | None:
+        """The counterparty chosen on the line for a contract cell (None: any contract)."""
+        side, pos = column_role(col)
+        account_id = getattr(self.rows[row], side) if pos is not None else None
+        if account_id is None or pos is None:
+            return None
+        account = self.catalog.accounts[account_id]
+        return self.catalog.owner_in(account, getattr(self.rows[row], f"{side}_sc"), pos - 1)
+
+    def _in_currency(self, text: str) -> InCurrency | None:
+        """ "500 EUR" / "EUR 500" in the amount cell of a line on 60 / 62 / 52."""
+        m = CURRENCY_AMOUNT_TEXT.match(text)
+        if not m:
+            return None
+        code = (m["code"] or m["code2"]).upper()
+        currency = next((c for c in self.catalog.active_currencies if c.code == code), None)
+        if currency is None:
+            raise LookupError(tr("валюта «{text}» не найдена", text=code))
+        amount = to_minor(plain_number(m["number"] or m["number2"]))
+        if amount <= 0:
+            raise ValueError(tr("сумма должна быть больше нуля"))
+        return InCurrency(currency.id, amount)
 
     def paste(self, text: str, start_row: int, start_col: int, shown) -> PasteResult:
         """Put lines copied from Excel into the grid (see the module docstring).
@@ -659,7 +741,7 @@ class PostingsModel(QAbstractTableModel):
         return result
 
 
-class _PickWithKeys(QObject):
+class PickWithKeys(QObject):
     """On the open list, Enter or Tab takes the highlighted item."""
 
     KEYS = (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab)
@@ -677,6 +759,15 @@ class _PickWithKeys(QObject):
                 self.choose(index.data())
                 return True
         return False
+
+
+def fit_popup(popup: QAbstractItemView, rows: int, most: int = 12) -> None:
+    """Height for exactly the rows shown: Qt does not count the popup's padding, so a
+    short list would get a scroll bar."""
+    shown = min(rows, most)
+    margins = popup.contentsMargins()
+    padding = 8 + margins.top() + margins.bottom()  # theme: QListView#completer padding 4px
+    popup.setFixedHeight(popup.sizeHintForRow(0) * shown + padding)
 
 
 def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> None:
@@ -702,6 +793,7 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
             rect = editor.rect()
             rect.setWidth(max(rect.width(), 380))
             completer.complete(rect)
+            fit_popup(popup, len(matches))
             if typed:  # Enter takes the best match
                 popup.setCurrentIndex(model.index(0))
         except RuntimeError:  # editor already closed
@@ -714,7 +806,7 @@ def attach_list(editor: QLineEdit, items: list[str], show_all: bool, chosen) -> 
     )
     # Enter / Tab on a highlighted item: Qt would hand the key to the editor *before*
     # reporting the choice, so the editor would commit what was typed (often nothing).
-    _PickWithKeys(popup, lambda text: chosen(editor, text))
+    PickWithKeys(popup, lambda text: chosen(editor, text))
     QTimer.singleShot(0, lambda: refresh(editor.text()))
 
 
@@ -739,7 +831,7 @@ class PostingsDelegate(QStyledItemDelegate):
         if kind is None:
             return []
         side, pos = column_role(col)
-        values = self.catalog.values(kind)
+        values = self.catalog.values(kind, model.owner_at(row, col))
         account = getattr(model.rows[row], side)
         active = {v.id for v in values}
         recent = (
@@ -886,19 +978,44 @@ class PostingsTable(QTableView):
         model.modelReset.connect(self._fit_currency_columns)
 
     def _fit_currency_columns(self) -> None:
-        """Currency columns appear only while a line hits a currency account; then the
-        subconto columns get narrower, so the amount and memo stay in view."""
+        """Currency columns appear only while a line is in a currency."""
         m = self.model()
-        show = any(m.is_currency(r) for r in range(m.rowCount()))
+        show = any(m.in_currency(r) for r in range(m.rowCount()))
         if show == self._currency_shown:
             return
         self._currency_shown = show
         for col in CURRENCY_COLUMNS:
             self.setColumnHidden(col, not show)
-        widths = (120, 100, 90) if show else (160, 140, 120)
-        for base in (DT, CT):
-            for pos, w in enumerate(widths, start=1):
-                self.setColumnWidth(base + pos, w)
+        self._fit_subconto_widths()
+
+    MEMO_MIN = 200  # the memo keeps room to be read
+    SUBCONTO_WIDTH = (100, 180)  # each subconto column, narrowest and widest
+
+    def _fit_subconto_widths(self) -> None:
+        """Subconto columns share what the window leaves after the fixed columns and the
+        memo: a wide window shows whole names, a narrow one keeps the memo in view."""
+        subconto = [
+            base + pos
+            for base in (DT, CT)
+            for pos in (1, 2, 3)
+            if not self.isColumnHidden(base + pos)
+        ]
+        if not subconto:
+            return
+        fixed = sum(
+            self.columnWidth(c)
+            for c in range(len(HEADERS))
+            if c not in subconto and c != MEMO and not self.isColumnHidden(c)
+        )
+        free = self.viewport().width() - self.verticalHeader().width() - fixed - self.MEMO_MIN
+        low, high = self.SUBCONTO_WIDTH
+        width = max(low, min(high, free // len(subconto)))
+        for col in subconto:
+            self.setColumnWidth(col, width)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_subconto_widths()
 
     def model(self) -> PostingsModel:  # typed accessor
         return cast(PostingsModel, super().model())

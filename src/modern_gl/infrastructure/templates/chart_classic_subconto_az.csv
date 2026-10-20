@@ -1,10 +1,10 @@
-code;name
-counterparty;Kontragentlər
-contract;Müqavilələr
-item;Nomenklatura
-warehouse;Anbarlar
-fixed_asset;Əsas vəsaitlər
-intangible;Qeyri-maddi aktivlər
-cost_item;Xərc maddələri
-employee;İşçilər
-bank_account;Bank hesabları
+code;name;owner
+counterparty;Kontragentlər;
+contract;Müqavilələr;counterparty
+item;Nomenklatura;
+warehouse;Anbarlar;
+fixed_asset;Əsas vəsaitlər;
+intangible;Qeyri-maddi aktivlər;
+cost_item;Xərc maddələri;
+employee;İşçilər;
+bank_account;Bank hesabları;

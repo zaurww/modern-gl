@@ -14,7 +14,7 @@ from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.inputs import SIDES, ImportedDocument, ImportOutcome, PostingInput
 from modern_gl.application.ledger.subconto import SubcontoCommands
-from modern_gl.domain.currency import to_base
+from modern_gl.domain.currency import CURRENCY_OPTIONAL, to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError, NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.domain.money import to_minor
@@ -218,24 +218,28 @@ class DocumentCommands(SubcontoCommands):
         self,
         company_id: int,
         documents: Sequence[ImportedDocument],
-        new_values: Sequence[tuple[int, str]] = (),
+        new_values: Sequence[tuple[int, str, int | None]] = (),
         post: bool = True,
         check_only: bool = False,
     ) -> ImportOutcome:
         """Create many documents at once (import from Excel): all or nothing.
 
-        `new_values` are (kind id, name) directory elements to add first; a posting refers
-        to the i-th of them by the subconto id -(i + 1). Every document is checked on its
+        `new_values` are (kind id, name, owner) directory elements to add first; a posting
+        refers to the i-th of them by the subconto id -(i + 1), and so may the owner (a new
+        contract of a new counterparty). Every document is checked on its
         own (a savepoint each), so all problems are reported, not only the first. With any
         problem, or with `check_only`, nothing is kept.
         """
         outcome = ImportOutcome()
         try:
             with transaction(self.conn):
-                created = [
-                    self.add_subconto_value(company_id, kind_id, name)
-                    for kind_id, name in new_values
-                ]
+                created: list[int] = []
+                for kind_id, name, owner in new_values:
+                    if owner is not None and owner < 0:
+                        owner = created[-owner - 1]
+                    created.append(
+                        self.add_subconto_value(company_id, kind_id, name, owner_id=owner)
+                    )
 
                 def real(values: Sequence[int | None]) -> tuple[int | None, ...]:
                     return tuple(created[-v - 1] if v is not None and v < 0 else v for v in values)
@@ -340,13 +344,13 @@ class DocumentCommands(SubcontoCommands):
                        p.dt_sc3 AS sc3, p.currency_id, p.amount, p.currency_amount
                 FROM postings p JOIN docs ON docs.id = p.document_id
                 JOIN accounts a ON a.id = p.debit_account_id
-                WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+                WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
                 UNION ALL
                 SELECT p.credit_account_id, p.ct_sc1, p.ct_sc2, p.ct_sc3, p.currency_id,
                        -p.amount, -p.currency_amount
                 FROM postings p JOIN docs ON docs.id = p.document_id
                 JOIN accounts a ON a.id = p.credit_account_id
-                WHERE a.currency = 1 AND p.currency_id IS NOT NULL
+                WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
             )
             SELECT m.account_id, m.sc1, m.sc2, m.sc3, m.currency_id, c.code,
                    SUM(m.amount) AS balance, SUM(m.currency_amount) AS currency_balance
@@ -483,6 +487,8 @@ class DocumentCommands(SubcontoCommands):
             }
             - {None},
         )
+        owners = {v["owner_id"] for v in values.values()} - {None} - set(values)
+        values |= self._rows_by_id("subconto_values", company_id, owners)
 
         is_reversal = doc["reversal_of"] is not None
         currencies = {
@@ -517,6 +523,8 @@ class DocumentCommands(SubcontoCommands):
                 if not acc["active"] and not is_reversal:
                     raise ValidationError(tr("{label}: счёт не активен", label=label))
                 self._validate_subconto(acc, p, prefix, label, values)
+                if not is_reversal:
+                    self._validate_owners(p, prefix, label, values)
 
     def _rows_by_id(self, table: str, company_id: int, ids: set[int]) -> dict[int, sqlite3.Row]:
         """Rows of a company table (accounts, subconto_values) with these ids, by id."""
@@ -551,15 +559,41 @@ class DocumentCommands(SubcontoCommands):
                 raise ValidationError(tr("{label}: субконто {i} не того вида", label=label, i=i))
 
     @staticmethod
+    def _validate_owners(
+        p: sqlite3.Row, prefix: str, label: str, values: dict[int, sqlite3.Row]
+    ) -> None:
+        """A contract of a counterparty goes only next to that counterparty."""
+        side = [values[v] for i in range(1, MAX_SUBCONTO + 1) if (v := p[f"{prefix}_sc{i}"])]
+        for value in side:
+            if value["owner_id"] is None:
+                continue
+            owner = values[value["owner_id"]]
+            other = next(
+                (w for w in side if w["kind_id"] == owner["kind_id"] and w["id"] != owner["id"]),
+                None,
+            )
+            if other is not None:
+                raise ValidationError(
+                    tr(
+                        "{label}: «{name}» относится к «{owner}», а не к «{other}»",
+                        label=label,
+                        name=value["name"],
+                        owner=owner["name"],
+                        other=other["name"],
+                    )
+                )
+
+    @staticmethod
     def _validate_currency(
         p: sqlite3.Row,
         accounts: dict[int, sqlite3.Row],
         values: dict[int, sqlite3.Row],
         currencies: dict[int, str],
     ) -> None:
-        """A side on a currency account needs the posting's currency; a posting without
-        currency accounts has no currency. Elements with a currency (a USD bank account)
-        accept only that currency."""
+        """A side on a currency account needs the posting's currency, unless the account
+        takes manat too (CURRENCY_OPTIONAL) and no element of that side has a currency;
+        a posting without currency accounts has no currency. Elements with a currency
+        (a USD bank account, a contract in EUR) accept only that currency."""
         line = p["line_no"]
         currency_sides = [
             (side, prefix)
@@ -579,11 +613,21 @@ class DocumentCommands(SubcontoCommands):
                 side=tr("Дт" if side == "debit" else "Кт"),
                 code=account_label(accounts[p[f"{side}_account_id"]]),
             )
-            if p["currency_id"] is None:
-                raise ValidationError(tr("{label}: не указана валюта", label=label))
+            optional = accounts[p[f"{side}_account_id"]]["currency"] == CURRENCY_OPTIONAL
             for i in range(1, MAX_SUBCONTO + 1):
                 value = values.get(p[f"{prefix}_sc{i}"])
-                if value is not None and value["currency_id"] not in (None, p["currency_id"]):
+                if value is None or value["currency_id"] is None:
+                    continue
+                if p["currency_id"] is None:
+                    raise ValidationError(
+                        tr(
+                            "{label}: «{name}» в валюте {expected} — укажите сумму в валюте",
+                            label=label,
+                            name=value["name"],
+                            expected=currencies.get(value["currency_id"], "?"),
+                        )
+                    )
+                if value["currency_id"] != p["currency_id"]:
                     raise ValidationError(
                         tr(
                             "{label}: «{name}» в валюте {expected}, а проводка в {actual}",
@@ -593,7 +637,9 @@ class DocumentCommands(SubcontoCommands):
                             actual=currencies[p["currency_id"]],
                         )
                     )
-        if p["currency_amount"] * p["amount"] < 0:
+            if p["currency_id"] is None and not optional:
+                raise ValidationError(tr("{label}: не указана валюта", label=label))
+        if p["currency_id"] is not None and p["currency_amount"] * p["amount"] < 0:
             raise ValidationError(
                 tr(
                     "строка {line}: сумма в валюте и сумма в манатах разных знаков",

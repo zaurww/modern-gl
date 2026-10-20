@@ -71,6 +71,7 @@ class Column:
     width: int = 0  # 0 = stretch
     icon: Callable[[Any], Any] | None = None  # optional QIcon in front of the text
     warn: Callable[[Any], str | None] | None = None  # text -> red cell with a tooltip
+    right: bool = False  # a number that is not money ("7 000.00 Dt"): aligned like one
 
 
 @dataclass
@@ -148,7 +149,7 @@ class ReportModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return self.columns[section].title
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            return RIGHT if self.columns[section].money else LEFT
+            return RIGHT if self.columns[section].money or self.columns[section].right else LEFT
         return None
 
     def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
@@ -159,7 +160,7 @@ class ReportModel(QAbstractTableModel):
                 return money(value, blank_zero=not self.total(row))
             return "" if value is None else str(value)
         if role == Qt.ItemDataRole.TextAlignmentRole:
-            return RIGHT if col.money else LEFT
+            return RIGHT if col.money or col.right else LEFT
         if role == Qt.ItemDataRole.FontRole and self.emphasis(row):
             return fonts().cell_bold
         if role in (Qt.ItemDataRole.ForegroundRole, Qt.ItemDataRole.ToolTipRole) and col.warn:
@@ -587,7 +588,7 @@ class CardPage(AccountReportPage):
             Column(tr("Корр. счёт"), lambda ln: ln.corr_code, width=100),
             Column(tr("Дебет"), lambda ln: ln.debit, money=True, width=130),
             Column(tr("Кредит"), lambda ln: ln.credit, money=True, width=130),
-            Column(tr("Сальдо"), lambda ln: balance_text(ln.balance), width=150),
+            Column(tr("Сальдо"), lambda ln: balance_text(ln.balance), width=150, right=True),
         ]
         if card.currency_closing or self.account.currency:
             columns[4:4] = [

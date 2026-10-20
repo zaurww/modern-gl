@@ -18,9 +18,9 @@ code;name;parent;group;class;contra;two_sided;subconto;currency
 50;Kassa;;;asset;;;;
 51;Hesablaşma hesabı;;;asset;;;bank_account;
 52;Valyuta hesabı;;;asset;;;bank_account;1
-60;Malsatan və podratçılarla hesablaşmalar;;;liability;;1;counterparty,contract;
+60;Malsatan və podratçılarla hesablaşmalar;;;liability;;1;counterparty,contract;2
 61;Verilmiş avanslar üzrə hesablaşmalar;;;asset;;1;counterparty,contract;
-62;Alıcı və sifarişçilərlə hesablaşmalar;;;asset;;1;counterparty,contract;
+62;Alıcı və sifarişçilərlə hesablaşmalar;;;asset;;1;counterparty,contract;2
 64;Alınmış avanslar üzrə hesablaşmalar;;;liability;;1;counterparty,contract;
 68;Büdcə ilə hesablaşmalar;;1;liability;;1;;
 68.1;Gəlir vergisi;68;;liability;;1;;
