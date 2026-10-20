@@ -221,7 +221,9 @@ def main() -> None:
     win.open_inventory_document(inventory_document.id)
     assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
     shot("8c2_inventory_document")
-    sale = next(row for row in inventory.documents_model.rows if row.doc_type == "sale")
+    from modern_gl.reporting.trade import SALE, trade_documents
+
+    sale = trade_documents(session.conn, session.company_id, SALE)[0]  # a service: not in stock
     win.open_inventory_document(sale.id)
     assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
     shot("8c8_sale")
@@ -352,6 +354,62 @@ def main() -> None:
     shot("8c9_purchase_services")
     win.show_place(("trade",))
     shot("8c0_trade")
+    from modern_gl.application.eqaime_import import parse_invoice
+    from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+
+    sample = {  # the shape of the portal's answer (etaxes-ext docs/api-reference.md)
+        "id": "1",
+        "serialNumber": "MT2603000111",
+        "createdAt": "2026-03-05T10:00:00",
+        "kind": "defaultInvoice",
+        "sender": {"tin": "1700000001", "name": "Kompyuter Dünyası MMC"},
+        "items": [
+            {
+                "productName": i18n.tr("Бумага офисная А4"),
+                "productGroup": {"code": "4802569000"},
+                "unit": "qutu",
+                "quantity": 20,
+                "cost": 200,
+                "vat18": 200,
+            },
+            {
+                "productName": "Printerin təmiri",
+                "productGroup": {"code": "9995110000"},
+                "unit": "xidmət",
+                "quantity": 1,
+                "cost": 50,
+                "vat18": 50,
+            },
+        ],
+    }
+    importer = EqaimeImportDialog(session, win)
+    importer.company.setText("Portal: DEMO MMC · VÖEN 1402375141")
+    importer.show_invoices(
+        [
+            parse_invoice(sample, sample, outgoing=False),
+            parse_invoice(
+                {
+                    **sample,
+                    "serialNumber": "MT2602004571",
+                    "receiver": {"tin": "", "name": "Beta Servis"},
+                },
+                {
+                    **sample,
+                    "serialNumber": "MT2602004571",
+                    "sender": None,
+                    "receiver": {"tin": "", "name": "Beta Servis"},
+                },
+                outgoing=True,
+            ),
+        ]
+    )
+    importer.tree.expandAll()
+    importer.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    importer.grab().save(str(out / "8c10_eqaime_import.png"))
+    importer.close()
     picker = cost_source_picker(session, None, win)
     picker.show()
     loop = QEventLoop()
