@@ -385,11 +385,22 @@ def main() -> None:
             },
         ],
     }
+    alfa = supplier.offset_subconto[0]  # renamed on the portal since the last import
+    assert alfa is not None
+    ledger.set_subconto_value_tax(cid, alfa, "1500000005")
+    ledger.set_subconto_value_legal_name(cid, alfa, '"ALFA TREYD" MMC')
+    renamed = {
+        **sample,
+        "serialNumber": "MT2603000222",
+        "createdAt": "2026-03-12T10:00:00",
+        "sender": {"tin": "1500000005", "name": '"ALFA TREYD GROUP" MMC'},
+    }
     importer = EqaimeImportDialog(session, win)
     importer.company.setText("Portal: DEMO MMC · VÖEN 1402375141")
     importer.show_invoices(
         [
             parse_invoice(sample, sample, outgoing=False),
+            parse_invoice(renamed, renamed, outgoing=False),
             parse_invoice(
                 {
                     **sample,
@@ -406,7 +417,7 @@ def main() -> None:
             ),
         ]
     )
-    importer.tree.expandAll()
+    importer.resize(1180, 860)
     importer.show()
     loop = QEventLoop()
     QTimer.singleShot(300, loop.quit)

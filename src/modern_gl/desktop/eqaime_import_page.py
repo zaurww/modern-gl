@@ -27,11 +27,14 @@ from modern_gl.application.eqaime_import import (
     InvoicePlan,
     LinePlan,
     NewCounterparty,
+    RenamedCounterparty,
     add_counterparties,
+    apply_renames,
     import_drafts,
     new_counterparties,
     parse_invoice,
     plan_import,
+    renamed_counterparties,
 )
 from modern_gl.application.inventory import Inventory, format_quantity, to_quantity
 from modern_gl.desktop.session import Session
@@ -193,6 +196,41 @@ class EqaimeImportDialog(QDialog):
         self.invoices: list[EInvoice] = []
         self._show_parties()
 
+        # the same VÖEN under a new name on the portal: rename here, or keep the name
+        renames = QHBoxLayout()
+        self.renames_title = QLabel()
+        self.renames_title.setFont(fonts().heading)
+        renames.addWidget(self.renames_title, 1)
+        self.renames_button = button(tr("Применить названия"), "flat")
+        self.renames_button.setToolTip(
+            tr("Отмеченные — переименовать в программе; у всех запомнить новое название портала")
+        )
+        self.renames_button.clicked.connect(self.apply_renames)
+        renames.addWidget(self.renames_button)
+        root.addLayout(renames)
+        self.renames = QTableWidget(0, 5)
+        self.renames.setHorizontalHeaderLabels(
+            [
+                tr("VÖEN"),
+                tr("Было на портале"),
+                tr("Стало на портале"),
+                tr("Сейчас в программе"),
+                tr("Новое название в программе"),
+            ]
+        )
+        self.renames.verticalHeader().hide()
+        self.renames.setShowGrid(False)
+        renames_header = self.renames.horizontalHeader()
+        renames_header.setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
+        for column in range(1, 5):
+            renames_header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+        self.renames.setColumnWidth(0, 140)
+        root.addWidget(self.renames, 1)
+        self.renamed: list[RenamedCounterparty] = []
+        self._show_renames()
+
         self.status = QLabel(
             tr(
                 "Выберите период и нажмите «Загрузить с портала»: откроется вход через ASAN İmza. "
@@ -262,6 +300,8 @@ class EqaimeImportDialog(QDialog):
         self.plans = plan_import(self.s.conn, self.s.company_id, invoices)
         self.new_parties = new_counterparties(self.plans)
         self._show_parties()
+        self.renamed = renamed_counterparties(self.s.conn, self.s.company_id, self.plans)
+        self._show_renames()
         self.tree.blockSignals(True)
         self.tree.clear()
         for plan in self.plans:
@@ -420,6 +460,53 @@ class EqaimeImportDialog(QDialog):
         for widget in (self.parties_title, self.add_parties_button, self.parties):
             widget.setVisible(shown)
         self.parties_title.setText(tr("Новые контрагенты: {n}", n=len(self.new_parties)))
+
+    def _show_renames(self) -> None:
+        self.renames.setRowCount(len(self.renamed))
+        for row, item in enumerate(self.renamed):
+            cells = [
+                item.tax_id,
+                item.old_legal_name,
+                item.new_legal_name,
+                item.current_name,
+                item.name,
+            ]
+            for column, text in enumerate(cells):
+                cell = QTableWidgetItem(text)
+                if column == 0:  # ticked: rename here
+                    cell.setFlags(
+                        (cell.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                        & ~Qt.ItemFlag.ItemIsEditable
+                    )
+                    cell.setCheckState(
+                        Qt.CheckState.Checked if item.rename else Qt.CheckState.Unchecked
+                    )
+                elif column != 4:
+                    cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    cell.setForeground(QColor(P.secondary))
+                self.renames.setItem(row, column, cell)
+        shown = bool(self.renamed)
+        for widget in (self.renames_title, self.renames_button, self.renames):
+            widget.setVisible(shown)
+        self.renames_title.setText(tr("Название изменилось: {n}", n=len(self.renamed)))
+
+    def apply_renames(self) -> None:
+        """Ticked rows are renamed here (to the typed name); every row remembers the new
+        official name, so it is not asked about again."""
+        for row, item in enumerate(self.renamed):
+            tick, name = self.renames.item(row, 0), self.renames.item(row, 4)
+            item.rename = tick is not None and tick.checkState() == Qt.CheckState.Checked
+            item.name = " ".join((name.text() if name else "").split()) or item.current_name
+        try:
+            apply_renames(self.s.ledger, self.s.company_id, self.renamed)
+        except LedgerError as exc:
+            self.status.setText(str(exc))
+            return
+        self.s.catalog.reload()
+        renamed = sum(1 for item in self.renamed if item.rename)
+        self.s.notify(tr("Переименовано контрагентов: {n}", n=renamed))
+        self.renamed = []
+        self._show_renames()
 
     def party_names(self) -> dict[str, str]:
         """key -> the name typed in the table (the suggestion if left as it is)."""

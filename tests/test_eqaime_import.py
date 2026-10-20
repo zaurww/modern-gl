@@ -10,7 +10,7 @@ from decimal import Decimal
 import pytest
 from PySide6.QtCore import Qt
 
-from modern_gl.application.eqaime_import import import_drafts, parse_invoice, plan_import
+from modern_gl.application.eqaime_import import EInvoice, import_drafts, parse_invoice, plan_import
 from modern_gl.application.inventory import QUANTITY_FACTOR, ReceiptLine, SaleLine
 from modern_gl.infrastructure.etaxes import (
     APPROVED,
@@ -437,3 +437,121 @@ def test_counterparty_without_voen_is_found_by_its_exact_name(shop, conn):
     row["receiverTin"] = CUSTOMER_TIN
     (plan,) = plan_import(conn, shop.company_id, [parse_invoice(row, {}, outgoing=True)])
     assert plan.counterparty_id is None
+
+
+def _named(number: str, day: str, name: str) -> EInvoice:
+    row, detail = received(number)
+    detail["sender"] = {"tin": SUPPLIER_TIN, "name": name}
+    detail["createdAt"] = f"{day}T10:00:00"
+    return parse_invoice(row, detail, outgoing=False)
+
+
+def test_a_counterparty_renamed_on_the_portal_is_asked_about(shop, conn):
+    """Imported once as «"ALFA" MMC» (named «Alfa» here); in March its e-qaimə say «"BETA
+    TREYD" MMC» with the same VÖEN: listed as renamed, with the latest name; renaming
+    changes the name here and remembers the new official one; quotes and case alone are
+    no rename."""
+    from modern_gl.application.eqaime_import import (
+        apply_renames,
+        new_counterparties,
+        renamed_counterparties,
+    )
+
+    first = plan_import(conn, shop.company_id, [_named("MT1", "2026-02-01", '"ALFA" MMC')])
+    (party,) = new_counterparties(first)
+    import_drafts(shop.inventory, shop.company_id, first, {party.key: "Alfa"})
+    value = conn.execute(
+        "SELECT id, name, legal_name FROM subconto_values WHERE tax_id = ?", (SUPPLIER_TIN,)
+    ).fetchone()
+    assert (value["name"], value["legal_name"]) == ("Alfa", '"ALFA" MMC')
+
+    same = plan_import(conn, shop.company_id, [_named("MT2", "2026-03-01", "«alfa»  mmc")])
+    assert renamed_counterparties(conn, shop.company_id, same) == []
+
+    march = plan_import(
+        conn,
+        shop.company_id,
+        [
+            _named("MT3", "2026-03-02", '"ALFA" MMC'),
+            _named("MT4", "2026-03-20", '"BETA TREYD" MMC'),
+        ],
+    )
+    (renamed,) = renamed_counterparties(conn, shop.company_id, march)
+    assert (renamed.value_id, renamed.old_legal_name, renamed.new_legal_name) == (
+        value["id"],
+        '"ALFA" MMC',
+        '"BETA TREYD" MMC',
+    )
+    assert (renamed.current_name, renamed.name, renamed.rename) == ("Alfa", "BETA TREYD MMC", True)
+    renamed.name = "Beta Treyd"
+    apply_renames(shop.ledger, shop.company_id, [renamed])
+    after = conn.execute(
+        "SELECT name, legal_name FROM subconto_values WHERE id = ?", (value["id"],)
+    ).fetchone()
+    assert tuple(after) == ("Beta Treyd", '"BETA TREYD" MMC')
+    assert renamed_counterparties(conn, shop.company_id, march[1:]) == []
+
+
+def test_a_kept_name_is_not_asked_about_again(shop, conn):
+    """The user keeps its name here: only the official name is remembered."""
+    from modern_gl.application.eqaime_import import apply_renames, renamed_counterparties
+
+    shop.ledger.set_subconto_value_tax(shop.company_id, shop.supplier[0], SUPPLIER_TIN)
+    shop.ledger.set_subconto_value_legal_name(shop.company_id, shop.supplier[0], "Köhnə MMC")
+    plans = plan_import(conn, shop.company_id, [_named("MT5", "2026-03-01", "Yeni MMC")])
+    (renamed,) = renamed_counterparties(conn, shop.company_id, plans)
+    renamed.rename = False
+    apply_renames(shop.ledger, shop.company_id, [renamed])
+    row = conn.execute(
+        "SELECT name, legal_name FROM subconto_values WHERE id = ?", (shop.supplier[0],)
+    ).fetchone()
+    assert tuple(row) == ("Təchizatçı", "Yeni MMC")
+    assert renamed_counterparties(conn, shop.company_id, plans) == []
+
+
+def test_a_known_counterparty_gets_its_official_name_quietly(shop, conn):
+    """A counterparty made by hand (no official name) is not «renamed»: importing its
+    e-qaimə remembers the portal's name."""
+    from modern_gl.application.eqaime_import import renamed_counterparties
+
+    shop.ledger.set_subconto_value_tax(shop.company_id, shop.supplier[0], SUPPLIER_TIN)
+    plans = plan_import(conn, shop.company_id, [_named("MT6", "2026-03-01", "Rəsmi Ad MMC")])
+    assert renamed_counterparties(conn, shop.company_id, plans) == []
+    import_drafts(shop.inventory, shop.company_id, plans)
+    row = conn.execute(
+        "SELECT name, legal_name FROM subconto_values WHERE id = ?", (shop.supplier[0],)
+    ).fetchone()
+    assert tuple(row) == ("Təchizatçı", "Rəsmi Ad MMC")
+
+
+def test_import_dialog_renames_a_counterparty(shop, conn, qtbot):
+    """The renamed supplier is listed with old and new portal names; unticked it keeps its
+    name here, the new official name is remembered and the block goes away."""
+    from modern_gl.application.catalog import Catalog
+    from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+    from modern_gl.desktop.session import Session
+
+    shop.ledger.set_subconto_value_tax(shop.company_id, shop.supplier[0], SUPPLIER_TIN)
+    shop.ledger.set_subconto_value_legal_name(shop.company_id, shop.supplier[0], '"ALFA" MMC')
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    dialog = EqaimeImportDialog(session)
+    qtbot.addWidget(dialog)
+    assert dialog.renames.isHidden()
+    dialog.show_invoices([_named("MT7", "2026-03-01", '"BETA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ')])
+    assert not dialog.renames.isHidden() and dialog.renames.rowCount() == 1
+    texts = [dialog.renames.item(0, c).text() for c in range(5)]
+    assert texts == [
+        SUPPLIER_TIN,
+        '"ALFA" MMC',
+        '"BETA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ',
+        "Təchizatçı",
+        "BETA MMC",
+    ]
+    assert dialog.renames_title.text() == "Название изменилось: 1"
+    dialog.renames.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
+    dialog.apply_renames()
+    row = conn.execute(
+        "SELECT name, legal_name FROM subconto_values WHERE id = ?", (shop.supplier[0],)
+    ).fetchone()
+    assert tuple(row) == ("Təchizatçı", '"BETA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ')
+    assert dialog.renames.isHidden()

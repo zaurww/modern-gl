@@ -100,6 +100,26 @@ class SubcontoCommands(LedgerBase):
                 company_id, "subconto_value", value_id, "rename", {"from": old["name"], "to": name}
             )
 
+    def set_subconto_value_legal_name(
+        self, company_id: int, value_id: int, legal_name: str | None
+    ) -> None:
+        """A counterparty's official name as the tax portal writes it (not its name here)."""
+        legal_name = " ".join((legal_name or "").split()) or None
+        with transaction(self.conn):
+            old = self._subconto_value(company_id, value_id)
+            if old["legal_name"] == legal_name:
+                return
+            self.conn.execute(
+                "UPDATE subconto_values SET legal_name = ? WHERE id = ?", (legal_name, value_id)
+            )
+            self._audit(
+                company_id,
+                "subconto_value",
+                value_id,
+                "legal_name",
+                {"from": old["legal_name"], "to": legal_name},
+            )
+
     def set_subconto_value_active(self, company_id: int, value_id: int, active: bool) -> None:
         """Hide an element from entry lists (history and reports keep it), or show it again."""
         with transaction(self.conn):
