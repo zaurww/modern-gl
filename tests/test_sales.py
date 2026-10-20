@@ -363,15 +363,15 @@ def test_chart_templates_set_the_sale_accounts(ledger, template, codes):
 
 
 def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path):
-    """A file of version 20 with a classic chart and a receipt draft (written as the old
-    program did): after 0021-0022 the draft and its line keep their ids, the sale accounts
+    """A file of version 21 with a classic chart and a receipt draft (written as the old
+    program did): after 0022-0023 the draft and its line keep their ids, the sale accounts
     are set, a sale posts, and posted documents are protected as before."""
-    path = tmp_path / "v20.gl"
+    path = tmp_path / "v21.gl"
     old = sqlite3.connect(path, isolation_level=None)
     old.row_factory = sqlite3.Row
     for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
         version = int(migration.name.split("_", 1)[0])
-        if version > 20:
+        if version > 21:
             break
         sql = migration.read_text(encoding="utf-8")
         old.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;")
