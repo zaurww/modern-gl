@@ -193,14 +193,19 @@ class Workspace:
         return target
 
     def add_file(self, source: Path) -> list[Path]:
-        """Copy a company file into the folder. An old shared file holding several
-        companies is split: each company gets its own file. Source is left untouched."""
-        src = sqlite3.connect(f"file:{Path(source).as_posix()}?mode=ro", uri=True)
+        """Add a company file where it lies: it is remembered and opened in place. An old
+        shared file holding several companies is split into the folder, one file per
+        company, and is itself left untouched."""
+        source = Path(source).absolute()
+        src = sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)
         try:
             companies = src.execute("SELECT id, name FROM companies ORDER BY id").fetchall()
         finally:
             src.close()
-        return [self._extract(Path(source), cid, name) for cid, name in companies]
+        if len(companies) == 1:
+            self.remember(source)
+            return [source]
+        return [self._extract(source, cid, name) for cid, name in companies]
 
     # ---- internals -------------------------------------------------------------------
 

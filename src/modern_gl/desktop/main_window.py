@@ -469,6 +469,7 @@ class MainWindow(QMainWindow):
                 tr("Это не файл компании: {file}", file=Path(path).name),
             )
             return
+        self._store_files()
         if added:
             self.open_company(added[0])
             self.notify(tr("Добавлено компаний: {n}", n=len(added)))

@@ -59,3 +59,19 @@ def test_add_file_splits_an_old_shared_file(tmp_path):
             pass
         c.close()
     assert shared.exists()  # the source file is left as it was
+
+
+def test_add_file_opens_a_company_file_in_place(tmp_path):
+    elsewhere = tmp_path / "Clients" / "Alfa.gl"
+    elsewhere.parent.mkdir()
+    Workspace(tmp_path / "other").create("Alfa", chart=None, path=elsewhere)
+    ws = Workspace(tmp_path / "data")
+    assert ws.add_file(elsewhere) == [elsewhere]
+    assert list((tmp_path / "data").glob("*.gl")) == []  # not copied
+    assert ws.files == [elsewhere] and [c.name for c in ws.companies()] == ["Alfa"]
+    ws.add_file(elsewhere)  # adding it again changes nothing
+    assert ws.files == [elsewhere]
+    conn, cid = ws.open(elsewhere)  # and it is worked on right there
+    Ledger(conn).rename_company(cid, "Alfa MMC")
+    conn.close()
+    assert [c.name for c in ws.companies()] == ["Alfa MMC"]
