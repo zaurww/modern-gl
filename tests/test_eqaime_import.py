@@ -555,3 +555,21 @@ def test_import_dialog_renames_a_counterparty(shop, conn, qtbot):
     ).fetchone()
     assert tuple(row) == ("Təchizatçı", '"BETA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ')
     assert dialog.renames.isHidden()
+
+
+@pytest.mark.parametrize(
+    ("direction", "purchases", "sales"), [("receipt", True, False), ("sale", False, True)]
+)
+def test_import_dialog_from_a_section_loads_one_direction(
+    shop, conn, qtbot, direction, purchases, sales
+):
+    """From «Alış» only received e-qaimə, from «Satış» only sent ones (D46)."""
+    from modern_gl.application.catalog import Catalog
+    from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+    from modern_gl.desktop.session import Session
+
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    dialog = EqaimeImportDialog(session, direction=direction)
+    qtbot.addWidget(dialog)
+    assert (dialog.purchases.isChecked(), dialog.sales.isChecked()) == (purchases, sales)
+    assert dialog.purchases.isHidden() and dialog.sales.isHidden()

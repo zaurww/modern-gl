@@ -96,13 +96,18 @@ def _invoices(p: QPainter) -> None:  # a receipt with a torn edge
     p.drawLine(QPointF(6.5, 9), QPointF(11.5, 9))
 
 
-def _trade(p: QPainter) -> None:  # two arrows: bought in, sold out
-    p.drawLine(QPointF(3, 6), QPointF(15, 6))
-    p.drawLine(QPointF(12, 3), QPointF(15, 6))
-    p.drawLine(QPointF(12, 9), QPointF(15, 6))
-    p.drawLine(QPointF(3, 12), QPointF(15, 12))
-    p.drawLine(QPointF(6, 9), QPointF(3, 12))
-    p.drawLine(QPointF(6, 15), QPointF(3, 12))
+def _purchases(p: QPainter) -> None:  # an arrow in: bought
+    p.drawLine(QPointF(15, 9), QPointF(3.5, 9))
+    p.drawLine(QPointF(7.5, 5), QPointF(3.5, 9))
+    p.drawLine(QPointF(7.5, 13), QPointF(3.5, 9))
+    p.drawLine(QPointF(15, 3.5), QPointF(15, 14.5))
+
+
+def _sales(p: QPainter) -> None:  # an arrow out: sold
+    p.drawLine(QPointF(3, 9), QPointF(14.5, 9))
+    p.drawLine(QPointF(10.5, 5), QPointF(14.5, 9))
+    p.drawLine(QPointF(10.5, 13), QPointF(14.5, 9))
+    p.drawLine(QPointF(3, 3.5), QPointF(3, 14.5))
 
 
 def _document(p: QPainter) -> None:  # a sheet with a folded corner
@@ -146,7 +151,8 @@ GLYPHS: dict[str, Callable[[QPainter], None]] = {
     "opening": _opening,
     "chart": _chart,
     "inventory": _inventory,
-    "trade": _trade,
+    "purchases": _purchases,
+    "sales": _sales,
     "directories": _directories,
     "templates": _templates,
     "currencies": _currencies,

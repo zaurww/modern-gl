@@ -352,8 +352,10 @@ def main() -> None:
     session.catalog.reload()  # the new cost item and fixed asset
     win.open_inventory_document(purchase)
     shot("8c9_purchase_services")
-    win.show_place(("trade",))
-    shot("8c0_trade")
+    win.show_place(("purchases",))
+    shot("8c0_purchases")
+    win.show_place(("sales",))
+    shot("8c0_sales")
     from modern_gl.application.eqaime_import import parse_invoice
     from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 

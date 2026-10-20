@@ -93,6 +93,7 @@ class EqaimeImportDialog(QDialog):
         session: Session,
         parent: QWidget | None = None,
         sign_in: Callable[[QWidget], str | None] | None = None,
+        direction: str | None = None,  # "receipt" / "sale": one direction only, from its section
     ) -> None:
         super().__init__(parent)
         self.s = session
@@ -133,6 +134,11 @@ class EqaimeImportDialog(QDialog):
         self.sales.setChecked(True)
         bar.addWidget(self.purchases)
         bar.addWidget(self.sales)
+        if direction is not None:
+            self.purchases.setChecked(direction == "receipt")
+            self.sales.setChecked(direction == "sale")
+            self.purchases.hide()
+            self.sales.hide()
         bar.addSpacing(10)
         self.load_button = button(tr("Загрузить с портала"), "primary")
         self.load_button.clicked.connect(self.load)
