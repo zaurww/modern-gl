@@ -203,9 +203,20 @@ class InventoryLinesModel(QAbstractTableModel):
         if key == ACCOUNT:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         kind_id = self.kind_at(row_index, key)
+        owner = self.owner_at(row_index, key)
         return (
-            [(value.id, value.label) for value in self.s.catalog.values(kind_id)] if kind_id else []
+            [(value.id, value.label) for value in self.s.catalog.values(kind_id, owner)]
+            if kind_id
+            else []
         )
+
+    def owner_at(self, row_index: int, key: str) -> int | None:
+        """The counterparty chosen on the line, for its contracts (None: any contract)."""
+        row = self.rows[row_index]
+        if key not in {SC1, SC2, SC3} or row.offset_account_id is None:
+            return None
+        account = self.s.catalog.accounts[row.offset_account_id]
+        return self.s.catalog.owner_in(account, row.offset_subconto, int(key[-1]) - 1)
 
     def default_row(self) -> InventoryGridRow:
         code = "60" if self.doc_type in {"opening", "receipt"} else "46"
@@ -532,7 +543,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                 kind_id = model.kind_at(index.row(), key)
                 if kind_id is None:  # the account has no subconto at this position
                     return
-                value = model.s.catalog.resolve_value(kind_id, text) if text else None
+                owner = model.owner_at(index.row(), key)
+                value = model.s.catalog.resolve_value(kind_id, text, owner) if text else None
                 if text and value is None:
                     self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
                     return
@@ -855,8 +867,11 @@ class InventoryDocumentPage(QWidget):
         kind = self.s.catalog.kinds[kind_id]
         if not index.isValid() or not self._ask_add(text, kind):
             return
-        value_id = self.s.ledger.add_subconto_value(self.s.company_id, kind_id, text)
-        self.s.catalog.add_value(value_id, kind_id, text)
+        owner = self.model.owner_at(index.row(), self.model.columns[index.column()])
+        value_id = self.s.ledger.add_subconto_value(
+            self.s.company_id, kind_id, text, owner_id=owner
+        )
+        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
         self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
 

@@ -1,10 +1,10 @@
-code;name
-counterparty;Контрагенты
-contract;Договоры
-item;Номенклатура
-warehouse;Склады
-fixed_asset;Основные средства
-intangible;Нематериальные активы
-cost_item;Статьи затрат
-employee;Сотрудники
-bank_account;Банковские счета
+code;name;owner
+counterparty;Контрагенты;
+contract;Договоры;counterparty
+item;Номенклатура;
+warehouse;Склады;
+fixed_asset;Основные средства;
+intangible;Нематериальные активы;
+cost_item;Статьи затрат;
+employee;Сотрудники;
+bank_account;Банковские счета;

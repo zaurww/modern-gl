@@ -7,9 +7,11 @@ into ids. Plain Python, no Qt, so it is unit-testable.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from modern_gl.application.currencies import CurrencyInfo, list_currencies
+from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import fold, sort_key, tr
 
 
@@ -25,7 +27,12 @@ class AccountInfo:
     contra: bool = False
     active: bool = True
     two_sided: bool = False
-    currency: bool = False  # keeps amounts in currency too (52, settlements in USD…)
+    currency: int = 0  # domain.currency mode: 0 manat, 1 only in currency, 2 either
+
+    @property
+    def currency_optional(self) -> bool:
+        """Postings may be in manat or in a currency (60, 62)."""
+        return self.currency == CURRENCY_OPTIONAL
 
     @property
     def label(self) -> str:
@@ -45,6 +52,7 @@ class SubcontoInfo:
     code: str | None
     active: bool = True
     currency_id: int | None = None  # a USD bank account, a contract in EUR
+    owner_id: int | None = None  # the counterparty a contract belongs to (None: common)
 
     @property
     def label(self) -> str:
@@ -70,7 +78,7 @@ class Catalog:
                 bool(r["contra"]),
                 bool(r["active"]),
                 bool(r["two_sided"]),
-                bool(r["currency"]),
+                r["currency"],
             )
             for r in self.conn.execute(
                 "SELECT * FROM accounts WHERE company_id = ? ORDER BY code IS NULL, code",
@@ -79,22 +87,31 @@ class Catalog:
         }
         self._tree_order()
         self.by_code = {a.code: a for a in self.accounts.values() if a.code}
-        self.kinds: dict[int, str] = {
-            r["id"]: r["name"]
-            for r in self.conn.execute(
-                "SELECT id, name FROM subconto_kinds WHERE company_id = ?", (self.company_id,)
-            )
+        kinds = self.conn.execute(
+            "SELECT id, name, owner_kind_id FROM subconto_kinds WHERE company_id = ?",
+            (self.company_id,),
+        ).fetchall()
+        self.kinds: dict[int, str] = {r["id"]: r["name"] for r in kinds}
+        # contracts -> counterparties: elements of a kind belong to elements of another
+        self.owner_kinds: dict[int, int] = {
+            r["id"]: r["owner_kind_id"] for r in kinds if r["owner_kind_id"] is not None
         }
         self._values: dict[int, SubcontoInfo] = {}
         self._by_kind: dict[int, list[SubcontoInfo]] = {k: [] for k in self.kinds}
         for r in self.conn.execute(
-            "SELECT id, kind_id, name, code, active, currency_id FROM subconto_values "
+            "SELECT id, kind_id, name, code, active, currency_id, owner_id FROM subconto_values "
             "WHERE company_id = ? ORDER BY name",
             (self.company_id,),
         ):
             self._add(
                 SubcontoInfo(
-                    r["id"], r["kind_id"], r["name"], r["code"], bool(r["active"]), r["currency_id"]
+                    r["id"],
+                    r["kind_id"],
+                    r["name"],
+                    r["code"],
+                    bool(r["active"]),
+                    r["currency_id"],
+                    r["owner_id"],
                 )
             )
         for values in self._by_kind.values():
@@ -123,9 +140,16 @@ class Catalog:
         self._values[value.id] = value
         self._by_kind.setdefault(value.kind_id, []).append(value)
 
-    def add_value(self, value_id: int, kind_id: int, name: str, code: str | None = None) -> None:
+    def add_value(
+        self,
+        value_id: int,
+        kind_id: int,
+        name: str,
+        code: str | None = None,
+        owner_id: int | None = None,
+    ) -> None:
         """Register a value just created through the Ledger, without a full reload."""
-        self._add(SubcontoInfo(value_id, kind_id, name, code))
+        self._add(SubcontoInfo(value_id, kind_id, name, code, owner_id=owner_id))
         self._by_kind[kind_id].sort(key=lambda v: sort_key(v.name))
 
     @property
@@ -133,9 +157,32 @@ class Catalog:
         """Accounts that can be posted to (hidden accounts are not offered)."""
         return [a for a in self.accounts.values() if not a.is_group and a.active]
 
-    def values(self, kind_id: int) -> list[SubcontoInfo]:
-        """Values offered for entry (hidden ones are not)."""
-        return [v for v in self._by_kind.get(kind_id, []) if v.active]
+    def values(self, kind_id: int, owner: int | None = None) -> list[SubcontoInfo]:
+        """Values offered for entry (hidden ones are not). With an `owner` (the chosen
+        counterparty) a contract list shows its contracts and the common ones only."""
+        return [
+            v
+            for v in self._by_kind.get(kind_id, [])
+            if v.active and (owner is None or v.owner_id in (None, owner))
+        ]
+
+    def owner_slot(self, account: AccountInfo, pos: int) -> int | None:
+        """Position (0..2) on the account of the owner of position `pos`: where the
+        counterparty of a contract is. None if the kind has no owner or it is not there."""
+        owner_kind = self.owner_kinds.get(account.sc_kinds[pos] or 0)
+        if owner_kind is None:
+            return None
+        return next((i for i, k in enumerate(account.sc_kinds) if k == owner_kind), None)
+
+    def owner_in(self, account: AccountInfo, values: Sequence[int | None], pos: int) -> int | None:
+        """The owner chosen on the same side for position `pos` (the line's counterparty)."""
+        slot = self.owner_slot(account, pos)
+        return values[slot] if slot is not None else None
+
+    def owned_elsewhere(self, value_id: int, owner: int | None) -> bool:
+        """The element belongs to another owner than the one chosen."""
+        value = self._values[value_id]
+        return owner is not None and value.owner_id not in (None, owner)
 
     def all_values(self, kind_id: int) -> list[SubcontoInfo]:
         """Every value of a directory, hidden ones included."""
@@ -207,11 +254,17 @@ class Catalog:
             )
         return found
 
-    def resolve_value(self, kind_id: int, text: str) -> int | None:
-        """Exact or unique partial name match; None if nothing matches."""
+    def resolve_value(self, kind_id: int, text: str, owner: int | None = None) -> int | None:
+        """Exact or unique partial name match; None if nothing matches. With an `owner`
+        only its elements and the common ones are looked at (each counterparty may have
+        its own "Фактура 15")."""
         needle = fold(text.strip())
-        values = self.values(kind_id)
+        values = self.values(kind_id, owner)
         exact = [v for v in values if fold(v.name) == needle or (v.code or "") == text.strip()]
+        if len({v.owner_id for v in exact}) > 1:  # "Фактура 15" of two counterparties
+            raise LookupError(
+                tr("«{text}» есть у нескольких: сначала укажите, чей", text=text.strip())
+            )
         if exact:
             return exact[0].id
         partial = [v for v in values if needle in fold(v.name)]

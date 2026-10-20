@@ -76,6 +76,11 @@ def main() -> None:
     journal.quick.edit.setText("71 " + i18n.tr("Мамедов Р.").split()[0][:5] + " / 50 120 Avans")
     journal.focus_quick_entry()
     shot("1b_quick_entry")
+    journal.quick.edit.setText("26 ")  # the list offers 26's cost items
+    journal.quick.edit.setCursorPosition(3)
+    journal.quick.suggest()
+    shot("1d_quick_suggest")
+    journal.quick.completer.popup().hide()
     journal.quick.edit.clear()
     win.show_import()
     importer = win.pages[("import",)]
@@ -138,6 +143,8 @@ def main() -> None:
     session.catalog.reload()
     directories.refresh(select_kind=banks)
     shot("8b_directories")
+    directories.refresh(select_kind=session.catalog.by_code["60"].sc_kinds[1])
+    shot("8b2_contracts")
     win.show_place(("inventory",))
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()
@@ -173,6 +180,13 @@ def main() -> None:
     QTimer.singleShot(300, loop.quit)
     loop.exec()
     dialog.grab().save(str(out / "9_account_dialog.png"))
+    dialog.close()
+    dialog = AccountDialog(session, session.catalog.by_code["60"], parent=win)
+    dialog.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    dialog.grab().save(str(out / "9b_account_dialog_60.png"))
     dialog.close()
 
     # Currencies: a USD bank account, CBAR-like rates, a payment in USD, revaluation.
@@ -213,6 +227,20 @@ def main() -> None:
     shot("10b_document_currency")
     page.dirty = False
     win.close_current()
+    # 60 in dollars on a day without its own rate: the note offers the Central Bank's
+    session.working_date = date(2026, 3, 10)
+    win.new_document()
+    page = cast(DocumentPage, win.stack.currentWidget())
+    page.memo.setText("Hosting")
+    m = page.model
+    m.setData(m.index(0, 0), acc["26"].id)
+    m.setData(m.index(0, 1), next(iter(session.catalog.values(acc["26"].sc_kinds[0]))).id)
+    m.setData(m.index(0, 4), acc["60"].id)
+    m.setData(m.index(0, 11), m.parse(0, 11, "500 USD"))
+    shot("10e_document_rate_note")
+    page.dirty = False
+    win.close_current()
+    session.working_date = date(2026, 2, 28)
     ledger.revalue(cid, "2026-02-28", "80")
     win.show_place(("osv",))
     osv = cast(OsvPage, win.pages[("osv",)])

@@ -23,11 +23,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import date
 from fractions import Fraction
 
-from modern_gl.application.catalog import AccountInfo, Catalog
+from modern_gl.application.catalog import AccountInfo, Catalog, search
 from modern_gl.application.queries import TemplateData
 from modern_gl.domain import formula
 from modern_gl.domain.currency import format_unit_rate, to_base
@@ -59,6 +60,8 @@ class NewValue:
     kind_id: int
     name: str
     cells: list[tuple[int, str, int]] = field(default_factory=list)
+    owner: int | NewValue | None = None  # "+Договор" next to a counterparty (maybe new too)
+    id: int | None = None  # set once it is added
 
 
 @dataclass
@@ -145,7 +148,7 @@ class _Parser:
         debit = self._account(n, dt_words[0])
         credit = self._account(n, ct_words[0])
         line.debit, line.credit = debit.id, credit.id
-        at = next((i for i, w in enumerate(ct_words[1:], start=1) if _number(w)), None)
+        at = self._amount_at(credit, ct_words)
         if at is None:
             raise ValidationError(tr("строка {n}: не указана сумма", n=n))
         self._subconto(n, index, line, "debit", debit, " ".join(dt_words[1:]))
@@ -158,6 +161,27 @@ class _Parser:
         line.memo = " ".join(rest)
         self._amount(n, line, amount, currency, (debit, credit))
         self.entry.lines.append(line)
+
+    def _amount_at(self, credit: AccountInfo, words: list[str]) -> int | None:
+        """Index of the amount among the Kt words. Names may hold numbers ("Фактура 15"):
+        the first number after which the subconto text names elements exactly wins,
+        else the first number."""
+        numbers = [i for i, w in enumerate(words[1:], start=1) if _number(w)]
+        for at in numbers:
+            if self._names_exactly(credit, " ".join(words[1:at])):
+                return at
+        return numbers[0] if numbers else None
+
+    def _names_exactly(self, acc: AccountInfo, text: str) -> bool:
+        pieces = [p.strip() for p in text.split(",") if p.strip()]
+        slots = [(i, k) for i, k in enumerate(acc.sc_kinds) if k is not None]
+        if not pieces or len(pieces) > len(slots):
+            return not pieces
+        last = pieces[-1]
+        if last.startswith(NEW):
+            return True
+        kind = slots[len(pieces) - 1][1]
+        return any(fold(v.name) == fold(last) for v in self.cat.values(kind))
 
     def _account(self, n: int, text: str) -> AccountInfo:
         try:
@@ -183,27 +207,55 @@ class _Parser:
             )
         values = getattr(line, f"{side}_sc")
         for (pos, kind), piece in zip(slots, pieces, strict=False):
-            values[pos] = self._value(n, index, side, pos, kind, piece)
+            owner = self._owner(index, side, acc, values, pos)
+            values[pos] = self._value(n, index, side, pos, kind, piece, owner)
         for _, kind in slots[len(pieces) :]:
             self.entry.missing.append(
                 f"{tr('Дт' if side == 'debit' else 'Кт')} {acc.short}: {self.cat.kinds[kind]}"
             )
 
-    def _value(self, n: int, index: int, side: str, pos: int, kind: int, piece: str):
+    def _owner(
+        self, index: int, side: str, acc: AccountInfo, values: list[int | None], pos: int
+    ) -> int | NewValue | None:
+        """The counterparty of a contract at `pos`: chosen on the same side, or new."""
+        slot = self.cat.owner_slot(acc, pos)
+        if slot is None:
+            return None
+        if values[slot] is not None:
+            return values[slot]
+        return next((v for v in self.entry.new_values if (index, side, slot) in v.cells), None)
+
+    def _value(
+        self,
+        n: int,
+        index: int,
+        side: str,
+        pos: int,
+        kind: int,
+        piece: str,
+        owner: int | NewValue | None = None,
+    ):
         if piece.startswith(NEW):
             name = piece[len(NEW) :].strip()
             if not name:
                 raise ValidationError(tr("строка {n}: после «+» нет названия", n=n))
             new = next(
-                (v for v in self.entry.new_values if v.kind_id == kind and v.name == name), None
+                (
+                    v
+                    for v in self.entry.new_values
+                    if v.kind_id == kind and v.name == name and v.owner == owner
+                ),
+                None,
             )
             if new is None:
-                new = NewValue(kind, name)
+                new = NewValue(kind, name, owner=owner)
                 self.entry.new_values.append(new)
             new.cells.append((index, side, pos))
             return None
-        try:
-            value = self.cat.resolve_value(kind, piece)
+        try:  # next to a new counterparty only the common contracts are there
+            value = self.cat.resolve_value(
+                kind, piece, -1 if isinstance(owner, NewValue) else owner
+            )
         except LookupError as e:
             raise ValidationError(tr("строка {n}: {error}", n=n, error=str(e).strip("'\""))) from e
         if value is None:
@@ -223,7 +275,8 @@ class _Parser:
         return next((c.id for c in self.cat.active_currencies if c.code == code), None)
 
     def _amount(self, n, line: QuickLine, amount, currency, accounts) -> None:
-        if not any(a.currency for a in accounts):
+        currency_accounts = [a for a in accounts if a.currency]
+        if not currency_accounts:
             if currency is not None:
                 raise ValidationError(
                     tr("строка {line}: валюта указана, но счета без валютного учёта", line=n)
@@ -240,6 +293,9 @@ class _Parser:
                 None,
             )
         if currency is None:
+            if all(a.currency_optional for a in currency_accounts):
+                line.amount = amount  # 60 / 62 with a local partner: manat
+                return
             raise ValidationError(
                 tr("строка {n}: счёт в валюте — укажите валюту после суммы: 1000 USD", n=n)
             )
@@ -327,7 +383,9 @@ class _Parser:
                 return ", ".join(pieces[i:])
             for ln, side, pos in slots.pop(kind):
                 index = self.entry.lines.index(ln)
-                getattr(ln, f"{side}_sc")[pos] = self._value(n, index, side, pos, kind, piece)
+                values = getattr(ln, f"{side}_sc")
+                owner = self._owner(index, side, self.cat.accounts[getattr(ln, side)], values, pos)
+                values[pos] = self._value(n, index, side, pos, kind, piece, owner)
         for kind, cells in slots.items():
             for ln, side, _pos in cells:
                 acc = self.cat.accounts[getattr(ln, side)]
@@ -383,3 +441,131 @@ def describe(entry: QuickEntry, catalog: Catalog) -> str:
             text += f"      «{ln.memo}»"
         result.append(text)
     return "\n".join(result)
+
+
+# ---- suggestions while typing ---------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Suggestion:
+    label: str  # shown in the list
+    insert: str  # replaces the word being typed
+
+
+@dataclass
+class Suggestions:
+    start: int  # where the word being typed starts; it is replaced up to the cursor
+    items: list[Suggestion] = field(default_factory=list)
+    typed: bool = False  # something is typed: the best match may be taken with Enter
+
+
+def suggest(
+    text: str,
+    cursor: int,
+    catalog: Catalog,
+    templates: Sequence[TemplateData] = (),
+    recent: Callable[[int, int], list[int]] = lambda _account, _position: [],
+) -> Suggestions:
+    """What fits where the cursor is: accounts, then the elements of their subconto in
+    order (recently used on the account first; the contracts of the counterparty
+    chosen), a currency after the amount, templates after "#". Choosing an element adds
+    what comes next: ", " for the next subconto, " / " after the Dt side."""
+    before = text[:cursor]
+    seg_start = max(before.rfind(";"), before.rfind("\n")) + 1
+    segment = before[seg_start:]
+    lead = len(segment) - len(segment.lstrip())
+    words = segment.split()
+    date_done = len(words) > 1 or segment.rstrip() != segment  # "05.03 " — the date is typed
+    if words and date_done and _date(words[0], date.today()) is not None:
+        lead = segment.index(words[0]) + len(words[0])
+        lead += len(segment[lead:]) - len(segment[lead:].lstrip())
+    body = segment[lead:]
+    offset = seg_start + lead
+    if body.startswith("#"):
+        return _suggest_template(body, offset, templates)
+    if "/" in body:
+        slash = body.index("/")
+        side_text, side_start, credit = body[slash + 1 :], offset + slash + 1, True
+    else:
+        side_text, side_start, credit = body, offset, False
+    stripped = side_text.lstrip()
+    side_start += len(side_text) - len(stripped)
+    if not stripped or " " not in stripped:  # the account is being typed
+        if not stripped and not credit:
+            return Suggestions(side_start)
+        items = [Suggestion(a.label, f"{a.short} ") for a in catalog.leaf_accounts]
+        return _filter(items, stripped, side_start)
+    word = stripped.split()[0]
+    try:
+        account = catalog.resolve_account(word)
+    except LookupError:
+        return Suggestions(cursor)
+    rest_start = side_start + len(word)
+    rest = before[rest_start:cursor]
+    found = _suggest_subconto(catalog, account, rest, rest_start, credit, recent)
+    if found.items or not credit:
+        return found
+    return _suggest_currency(catalog, account, rest, rest_start)
+
+
+def _filter(items: list[Suggestion], typed: str, start: int) -> Suggestions:
+    labels = search([i.label for i in items], typed)
+    by_label = {i.label: i for i in items}
+    return Suggestions(start, [by_label[label] for label in labels], bool(typed.strip()))
+
+
+def _suggest_subconto(
+    catalog: Catalog,
+    account: AccountInfo,
+    rest: str,
+    rest_start: int,
+    credit: bool,
+    recent: Callable[[int, int], list[int]],
+) -> Suggestions:
+    slots = [(i, k) for i, k in enumerate(account.sc_kinds) if k is not None]
+    pieces = rest.split(",")
+    n = len(pieces) - 1  # the piece being typed
+    if n >= len(slots) or (not rest.startswith(" ") and n == 0):
+        return Suggestions(rest_start + len(rest))
+    typed = pieces[-1].lstrip()
+    start = rest_start + len(rest) - len(typed)
+    values: list[int | None] = [None, None, None]
+    for (pos, kind), piece in zip(slots, pieces[:-1], strict=False):
+        with suppress(LookupError):  # a piece that names nothing yet: no owner from it
+            values[pos] = catalog.resolve_value(kind, piece, catalog.owner_in(account, values, pos))
+    pos, kind = slots[n]
+    owner = catalog.owner_in(account, values, pos)
+    last = n == len(slots) - 1
+    tail = " " if credit and last else (" / " if last else ", ")
+    offered = catalog.values(kind, owner)
+    first = [v for v in recent(account.id, pos + 1) if v in {o.id for o in offered}]
+    ordered = [catalog.value(v) for v in first] + [v for v in offered if v.id not in first]
+    items = [Suggestion(v.name, v.name + tail) for v in ordered]
+    return _filter(items, typed, start)
+
+
+def _suggest_currency(
+    catalog: Catalog, account: AccountInfo, rest: str, rest_start: int
+) -> Suggestions:
+    """After the amount on a currency account: "400 us" -> USD."""
+    words = rest.split()
+    if not account.currency or len(words) < 2 or not _number(words[-2]) or rest.endswith(" "):
+        return Suggestions(rest_start + len(rest))
+    typed = words[-1]
+    if len(typed) < 2 or not typed.isalpha():
+        return Suggestions(rest_start + len(rest))
+    start = rest_start + len(rest) - len(typed)
+    items = [
+        Suggestion(c.label, f"{c.code} ")
+        for c in catalog.active_currencies
+        if c.code.startswith(typed.upper())
+    ]
+    return Suggestions(start, items, True)
+
+
+def _suggest_template(body: str, offset: int, templates: Sequence[TemplateData]) -> Suggestions:
+    typed = body[1:]
+    if any(_number(w) for w in typed.split()):
+        return Suggestions(offset + len(body))
+    items = [Suggestion(f"#{t.name}", f"#{t.name} ") for t in templates]
+    return _filter(items, body, offset)

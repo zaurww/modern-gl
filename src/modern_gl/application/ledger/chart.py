@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from modern_gl.application.common import insert, pad_subconto
 from modern_gl.application.ledger.base import LedgerBase, account_label, clean_code
 from modern_gl.domain.accounts import ACCOUNT_CLASSES
+from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY, currency_mode
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
@@ -26,7 +27,7 @@ class ChartCommands(LedgerBase):
         account_class: str | None = None,
         contra: bool = False,
         two_sided: bool | None = None,
-        currency: bool | None = None,
+        currency: bool | int | None = None,
     ) -> int:
         """Add an account. `subconto` lists subconto kind ids for positions 1..3.
 
@@ -34,7 +35,8 @@ class ChartCommands(LedgerBase):
         parent account's id or code. Without `account_class` the account inherits its
         parent's class (or stays unclassified). `two_sided` (balance may be on either
         side, shown expanded per first subconto) is inherited from the parent unless given,
-        and so is `currency` (the account keeps amounts in currency too).
+        and so is `currency`: a mode of domain.currency (CURRENCY_ONLY, CURRENCY_OPTIONAL;
+        True means CURRENCY_ONLY).
         """
         code = clean_code(code)
         name = name.strip()
@@ -62,7 +64,8 @@ class ChartCommands(LedgerBase):
                 if two_sided is None:
                     two_sided = bool(parent_row["two_sided"])
                 if currency is None:
-                    currency = bool(parent_row["currency"])
+                    currency = parent_row["currency"]
+            mode = currency_mode(currency or NO_CURRENCY)
             try:
                 account_id = insert(
                     self.conn,
@@ -79,7 +82,7 @@ class ChartCommands(LedgerBase):
                         account_class,
                         int(contra),
                         int(bool(two_sided)),
-                        int(bool(currency)),
+                        mode,
                     ),
                 )
             except sqlite3.IntegrityError as e:
@@ -98,7 +101,7 @@ class ChartCommands(LedgerBase):
                     "name": name,
                     "class": account_class,
                     "two_sided": bool(two_sided),
-                    "currency": bool(currency),
+                    "currency": mode,
                 },
             )
         return account_id
@@ -165,13 +168,15 @@ class ChartCommands(LedgerBase):
         two_sided: bool | None = None,
         is_group: bool | None = None,
         subconto: Sequence[int] | None = None,
-        currency: bool | None = None,
+        currency: bool | int | None = None,
     ) -> None:
         """Rename / re-code / reconfigure an account (given by id or code). Audited.
 
         `new_code=""` removes the code. History is protected: an account with postings
-        cannot become a group, and neither its subconto kinds nor its currency accounting
-        can change (old postings carry values of those kinds, or no currency). Codes are
+        cannot become a group and its subconto kinds cannot change (old postings carry
+        values of those kinds). Currency accounting changes only as far as the old postings
+        fit: "in manat or in a currency" always does; "manat only" needs no posting in a
+        currency, "currency only" none in manat. Codes are
         only labels — postings reference the account id, so re-coding is safe.
         """
         with transaction(self.conn):
@@ -181,7 +186,7 @@ class ChartCommands(LedgerBase):
             name = acc["name"] if name is None else name.strip()
             two_sided = bool(acc["two_sided"]) if two_sided is None else bool(two_sided)
             group = bool(acc["is_group"]) if is_group is None else bool(is_group)
-            currency = bool(acc["currency"]) if currency is None else bool(currency)
+            mode: int = acc["currency"] if currency is None else currency_mode(currency)
             current_sc = (acc["sc1_kind_id"], acc["sc2_kind_id"], acc["sc3_kind_id"])
             sc = current_sc if subconto is None else pad_subconto(subconto)
             if not name:
@@ -208,18 +213,13 @@ class ChartCommands(LedgerBase):
                 raise ValidationError(
                     tr("счёт {code}: по счёту есть проводки, субконто менять нельзя", code=label)
                 )
-            if currency != bool(acc["currency"]) and used:
-                raise ValidationError(
-                    tr(
-                        "счёт {code}: по счёту есть проводки, валютный учёт менять нельзя",
-                        code=label,
-                    )
-                )
+            if mode != acc["currency"] and used:
+                self._check_currency_fits(acc, label, mode)
             try:
                 self.conn.execute(
                     "UPDATE accounts SET code = ?, name = ?, two_sided = ?, is_group = ?, "
                     "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ?, currency = ? WHERE id = ?",
-                    (new_code, name, int(two_sided), int(group), *sc, int(currency), acc["id"]),
+                    (new_code, name, int(two_sided), int(group), *sc, mode, acc["id"]),
                 )
             except sqlite3.IntegrityError as e:
                 raise ValidationError(tr("счёт {code} уже есть", code=new_code)) from e
@@ -235,7 +235,7 @@ class ChartCommands(LedgerBase):
                         "two_sided": bool(acc["two_sided"]),
                         "group": bool(acc["is_group"]),
                         "subconto": current_sc,
-                        "currency": bool(acc["currency"]),
+                        "currency": acc["currency"],
                     },
                     "after": {
                         "code": new_code,
@@ -243,7 +243,7 @@ class ChartCommands(LedgerBase):
                         "two_sided": two_sided,
                         "group": group,
                         "subconto": sc,
-                        "currency": currency,
+                        "currency": mode,
                     },
                 },
             )
@@ -261,6 +261,46 @@ class ChartCommands(LedgerBase):
                 acc["id"],
                 "show" if active else "hide",
                 {"code": acc["code"]},
+            )
+
+    def _check_currency_fits(self, account: sqlite3.Row, label: str, mode: int) -> None:
+        """Old postings must fit the new currency accounting of the account. A manat-only
+        account may already have postings in a currency — of the other side (51 in
+        Dt 52 / Ct 51): those would start counting in currency here, so it keeps them out."""
+
+        def any_posting(in_currency: bool) -> bool:
+            return (
+                self.conn.execute(
+                    "SELECT 1 FROM postings WHERE (debit_account_id = ? OR credit_account_id = ?) "
+                    "AND (currency_id IS NOT NULL) = ? LIMIT 1",
+                    (account["id"], account["id"], int(in_currency)),
+                ).fetchone()
+                is not None
+            )
+
+        if account["currency"] == NO_CURRENCY and any_posting(in_currency=True):
+            raise ValidationError(
+                tr(
+                    "счёт {code}: в проводках по счёту уже есть валюта другого счёта, "
+                    "валютный учёт включить нельзя",
+                    code=label,
+                )
+            )
+        if mode == NO_CURRENCY and any_posting(in_currency=True):
+            raise ValidationError(
+                tr(
+                    "счёт {code}: по счёту есть проводки в валюте, учёт только в манатах "
+                    "невозможен",
+                    code=label,
+                )
+            )
+        if mode == CURRENCY_ONLY and any_posting(in_currency=False):
+            raise ValidationError(
+                tr(
+                    "счёт {code}: по счёту есть проводки в манатах, учёт только в валюте "
+                    "невозможен",
+                    code=label,
+                )
             )
 
     def _has_postings(self, account_id: int) -> bool:

@@ -77,7 +77,8 @@ class Row:
 class ImportPlan:
     rows: list[Row] = field(default_factory=list)
     documents: list[ImportedDocument] = field(default_factory=list)
-    new_values: list[tuple[int, str]] = field(default_factory=list)  # (kind id, name)
+    # (kind id, name, owner): owner is an id, or -(i + 1) for the i-th new value, or None
+    new_values: list[tuple[int, str, int | None]] = field(default_factory=list)
     problem: str = ""  # the table as a whole cannot be read (no header…)
 
     @property
@@ -148,7 +149,7 @@ class _Reader:
         self.rate_for = rate_for
         self.add_new = add_new
         self.plan = ImportPlan()
-        self.new_index: dict[tuple[int, str], int] = {}
+        self.new_index: dict[tuple[int, str, int | None], int] = {}
 
     def read(self, rows: Sequence[Sequence[str]]) -> ImportPlan:
         rows = [list(r) for r in rows]
@@ -272,8 +273,9 @@ class _Reader:
                     )
                 )
                 continue
+            owner = self.cat.owner_in(acc, result, pos - 1)
             try:
-                value = self.cat.resolve_value(kind, text)
+                value = self.cat.resolve_value(kind, text, owner)  # a new owner: common only
             except LookupError as e:
                 row.errors.append(str(e).strip("'\""))
                 continue
@@ -281,7 +283,7 @@ class _Reader:
                 result[pos - 1] = value
                 names.append(self.cat.value(value).name)
             elif self.add_new:
-                key = (kind, text)
+                key = (kind, text, owner if kind in self.cat.owner_kinds else None)
                 if key not in self.new_index:
                     self.new_index[key] = len(self.plan.new_values)
                     self.plan.new_values.append(key)
@@ -334,6 +336,10 @@ class _Reader:
                 None,
             )
         if currency_id is None:
+            if currency_amount is None and all(
+                a.currency_optional for a in accounts.values() if a is not None and a.currency
+            ):
+                return None, None  # 60 / 62 in manat
             row.errors.append(tr("счёт в валюте: нет колонки «Валюта» или валюты у элемента"))
             return None, None
         if currency_amount is None:

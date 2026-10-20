@@ -18,7 +18,7 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.postings import AMOUNT, CT, CURRENCY, CURRENCY_AMOUNT, MEMO, RATE
 from modern_gl.desktop.reports_page import CardPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
-from modern_gl.domain.currency import parse_rate
+from modern_gl.domain.currency import CURRENCY_OPTIONAL, parse_rate
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 
@@ -213,10 +213,10 @@ def test_account_dialog_sets_currency_accounting(session, qtbot):
     qtbot.addWidget(dialog)
     dialog.code.setText("55")
     dialog.name.setText("Аккредитивы")
-    dialog.currency.setChecked(True)
+    dialog.currency.setCurrentIndex(dialog.currency.findData(CURRENCY_OPTIONAL))
     dialog.save()
     session.catalog.reload()
-    assert session.catalog.by_code["55"].currency
+    assert session.catalog.by_code["55"].currency_optional
 
 
 def type_into_cell(qtbot, page: DocumentPage, row: int, col: int, text: str) -> None:

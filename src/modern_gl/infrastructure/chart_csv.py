@@ -8,7 +8,8 @@ Columns: code;name;parent;group;subconto[;class;contra;two_sided;currency]
   class     - optional: asset / liability / equity / revenue / expense (empty: parent's)
   contra    - optional: 1 for a contra account (e.g. accumulated depreciation)
   two_sided - optional: 1 if the balance may be on either side (settlements, taxes)
-  currency  - optional: 1 if the account keeps amounts in currency too (52, settlements in USD)
+  currency  - optional: 1 if every posting is in a currency (52), 2 if postings may be in
+              manat or in a currency (60, 62: local and foreign partners)
 
 A 1C-style `kind` column (A / P / AP) is also understood: AP means two-sided,
 and A / P give the class (asset / liability) when `class` is empty.
@@ -64,7 +65,13 @@ def apply_chart_template(
     with transaction(ledger.conn):
         kinds_file = TEMPLATES_DIR / f"chart_{name}_subconto_{lang}.csv"
         for row in _read_rows(kinds_file, SUBCONTO_COLUMNS, ";"):
-            ledger.add_subconto_kind(company_id, row["code"].strip(), row["name"].strip())
+            owner = (row.get("owner") or "").strip()  # contracts belong to counterparties
+            ledger.add_subconto_kind(
+                company_id,
+                row["code"].strip(),
+                row["name"].strip(),
+                owner_kind_id=ledger.subconto_kind_id(company_id, owner) if owner else None,
+            )
         count = import_chart_csv(ledger, company_id, TEMPLATES_DIR / f"chart_{name}_{lang}.csv")
         entries = TEMPLATES_DIR / f"entries_{name}_{lang}.csv"
         if entries.exists():
@@ -122,7 +129,7 @@ def import_chart_csv(
                     two_sided=two_sided,
                     currency=None
                     if row.get("currency") is None
-                    else (row["currency"] or "").strip() == "1",
+                    else int((row["currency"] or "").strip() or 0),
                 )
             except Exception as e:
                 raise ValidationError(

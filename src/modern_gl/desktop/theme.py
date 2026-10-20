@@ -226,6 +226,9 @@ QLabel#tertiary {{ color: {P.tertiary}; }}
 QLabel#error {{
     color: {P.red}; background: {P.red_soft}; border-radius: 7px; padding: 7px 10px;
 }}
+QFrame#note {{ background: {P.accent_soft}; border: none; border-radius: 8px; }}
+QFrame#note QLabel {{ color: {P.text}; background: transparent; }}
+QFrame#note QPushButton#flat:hover {{ background: {P.selection}; }}
 """
 
 

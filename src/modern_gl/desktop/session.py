@@ -8,6 +8,7 @@ from datetime import date
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import list_layers
+from modern_gl.infrastructure import cbar
 
 
 @dataclass
@@ -21,6 +22,8 @@ class Session:
     catalog: Catalog
     working_date: date = field(default_factory=date.today)  # 1C "рабочая дата"
     notify: Callable[[str], None] = print
+    # official rates of a day {code: (rate, nominal)}; tests put a stub here (no network)
+    fetch_rates: Callable[[date], dict[str, tuple[int, int]]] = cbar.fetch
 
     @property
     def layers(self) -> list[tuple[str, str]]:

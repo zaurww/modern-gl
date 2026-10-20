@@ -17,7 +17,14 @@ import pytest
 
 from modern_gl.application.currencies import latest_rates, list_currencies, rate_on
 from modern_gl.application.ledger import PostingInput
-from modern_gl.domain.currency import format_rate, parse_rate, to_base, unit_rate
+from modern_gl.domain.currency import (
+    CURRENCY_ONLY,
+    CURRENCY_OPTIONAL,
+    format_rate,
+    parse_rate,
+    to_base,
+    unit_rate,
+)
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure import cbar
 from modern_gl.reporting.reports import account_card, trial_balance
@@ -141,11 +148,21 @@ def test_element_with_a_currency_accepts_only_it(ledger, books):
     )
 
 
-def test_currency_accounting_cannot_change_once_used(ledger, books):
+def test_currency_accounting_changes_only_as_far_as_postings_fit(ledger, books):
     cid, acc, *_ = books
     post_example(ledger, books)
-    with pytest.raises(ValidationError, match="валютный учёт менять нельзя"):
+    with pytest.raises(ValidationError, match="учёт только в манатах невозможен"):
         ledger.update_account(cid, acc["52"], currency=False)
+    ledger.update_account(cid, acc["52"], currency=CURRENCY_OPTIONAL)  # always fits
+    ledger.update_account(cid, acc["52"], currency=CURRENCY_ONLY)  # all postings in USD
+    with pytest.raises(ValidationError, match="валютный учёт включить нельзя"):
+        # Dt 52 / Ct 51 1 000 USD: the dollars are 52's, 51 would get -1 000 USD
+        ledger.update_account(cid, acc["51"], currency=CURRENCY_OPTIONAL)
+    costs = ledger.add_account(cid, "20", "Производство", account_class="expense")
+    ledger.post_new(cid, "2026-03-25", [PostingInput(costs, acc["51"], "10")])
+    ledger.update_account(cid, costs, currency=CURRENCY_OPTIONAL)  # only manat postings
+    with pytest.raises(ValidationError, match="учёт только в валюте невозможен"):
+        ledger.update_account(cid, costs, currency=CURRENCY_ONLY)
     ledger.update_account(cid, acc["80"], name="Прибыль")  # other changes still allowed
 
 
@@ -275,7 +292,12 @@ def test_imported_rates_go_to_the_company_currencies(ledger, conn):
 def test_migration_gives_existing_companies_their_currencies(tmp_path):
     import sqlite3
 
-    from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
+    from modern_gl.infrastructure.db import (
+        MIGRATIONS_DIR,
+        connect,
+        latest_version,
+        schema_version,
+    )
 
     path = tmp_path / "v7.gl"
     old = sqlite3.connect(path, isolation_level=None)
@@ -292,7 +314,7 @@ def test_migration_gives_existing_companies_their_currencies(tmp_path):
     old.close()
     upgraded = connect(path)
     try:
-        assert schema_version(upgraded) == 8
+        assert schema_version(upgraded) == latest_version()
         codes = [c.code for c in list_currencies(upgraded, 1)]
         assert codes == ["EUR", "GBP", "RUB", "TRY", "USD"]
     finally:

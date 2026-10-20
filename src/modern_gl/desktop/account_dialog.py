@@ -18,11 +18,17 @@ from modern_gl.application.catalog import AccountInfo
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import ACCOUNT_CLASSES, button, class_icon
+from modern_gl.domain.currency import CURRENCY_ONLY, CURRENCY_OPTIONAL, NO_CURRENCY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 AUTO = "auto"  # class combobox: let the ledger decide (parent's class or from kind)
+CURRENCY_CHOICES = (
+    (NO_CURRENCY, "Только в манатах"),
+    (CURRENCY_OPTIONAL, "В манатах и в валюте"),
+    (CURRENCY_ONLY, "Только в валюте"),
+)
 
 
 class AccountDialog(QDialog):
@@ -68,10 +74,12 @@ class AccountDialog(QDialog):
             )
         )
         self.group = QCheckBox(tr("Группа (есть субсчета, проводки только на субсчета)"))
-        self.currency = QCheckBox(tr("Учёт в валюте"))
+        self.currency = QComboBox()
+        for mode, text in CURRENCY_CHOICES:
+            self.currency.addItem(tr(text), mode)
         self.currency.setToolTip(
             tr(
-                "В каждой проводке по счёту — валюта и сумма в ней; остатки "
+                "Проводки в валюте несут валюту и сумму в ней; остатки в валюте "
                 "переоцениваются по курсу"
             )
         )
@@ -99,7 +107,7 @@ class AccountDialog(QDialog):
         form.addRow("", self.group)
         form.addRow(tr("Класс"), class_row)
         form.addRow("", self.two_sided)
-        form.addRow("", self.currency)
+        form.addRow(tr("Валюта"), self.currency)
         for i, box in enumerate(self.subconto, start=1):
             form.addRow(tr("Субконто {i}", i=i), box)
         root.addLayout(form)
@@ -139,7 +147,7 @@ class AccountDialog(QDialog):
         self._select(self.parent_box, parent.id if parent else None)
         self.parent_box.setEnabled(False)  # moving accounts between groups: not yet
         self.two_sided.setChecked(a.two_sided)
-        self.currency.setChecked(a.currency)
+        self._select(self.currency, a.currency)
         self.group.setChecked(a.is_group)
         self._select(self.account_class, a.account_class)
         self.contra.setChecked(a.contra)
@@ -153,7 +161,7 @@ class AccountDialog(QDialog):
         parent = cat.accounts[parent_id]
         self._select(self.parent_box, parent_id)
         self.two_sided.setChecked(parent.two_sided)
-        self.currency.setChecked(parent.currency)
+        self._select(self.currency, parent.currency)
         if parent.code:  # a coded parent suggests the next subaccount code: 60.1, 60.2…
             n = 1
             while f"{parent.code}.{n}" in cat.by_code:
@@ -193,7 +201,7 @@ class AccountDialog(QDialog):
                         subconto=subconto,
                         account_class=None if account_class == AUTO else account_class,
                         contra=self.contra.isChecked(),
-                        currency=self.currency.isChecked(),
+                        currency=self.currency.currentData(),
                     )
                 else:
                     a = self.account
@@ -206,7 +214,7 @@ class AccountDialog(QDialog):
                         two_sided=two_sided,
                         is_group=group,
                         subconto=subconto,
-                        currency=self.currency.isChecked(),
+                        currency=self.currency.currentData(),
                     )
                     if account_class != a.account_class or self.contra.isChecked() != a.contra:
                         led.set_account_class(cid, a.id, account_class, self.contra.isChecked())
