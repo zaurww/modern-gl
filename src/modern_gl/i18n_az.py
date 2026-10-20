@@ -612,6 +612,7 @@ AZ: dict[str, str] = {
     "Сохранить копию…": "Surəti saxla…",
     "Восстановить из копии…": "Ehtiyat nüsxədən bərpa et…",
     "Сохранить как…": "Fərqli saxla…",
+    "Где сохранить файл компании": "Şirkət faylını harada saxlamalı",
     "Сохранить как": "Fərqli saxla",
     "Сохранить компанию как": "Şirkəti fərqli saxla",
     "Название компании:": "Şirkətin adı:",

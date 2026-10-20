@@ -336,10 +336,36 @@ class MainWindow(QMainWindow):
         name, ok = QInputDialog.getText(self, tr("Новая компания"), prompt)
         if not ok or not name.strip():
             return False
+        target = self._ask_file(tr("Где сохранить файл компании"), name.strip())
+        if target is None:
+            return False
+        if self.company_path is not None and target.resolve() == self.company_path.resolve():
+            QMessageBox.warning(
+                self, tr("Новая компания"), tr("Выберите другой файл: этот уже открыт")
+            )
+            return False
         if not self._confirm_close_all():
             return False
-        self.open_company(self.workspace.create(name.strip()))
+        try:
+            path = self.workspace.create(name.strip(), path=target)
+        except (LedgerError, OSError, sqlite3.Error) as e:
+            QMessageBox.warning(self, tr("Новая компания"), str(e))
+            return False
+        self._store_files()
+        self.open_company(path)
         return True
+
+    def _ask_file(self, title: str, name: str, folder: Path | None = None) -> Path | None:
+        """The standard «Save as» window, offering «<name>.gl» (in the data folder unless
+        another is given); None if cancelled."""
+        suggested = self.workspace.new_path(name, folder)
+        target, _ = QFileDialog.getSaveFileName(
+            self, title, str(suggested), tr("Файлы компаний (*.gl)")
+        )
+        if not target:
+            return None
+        path = Path(target)
+        return path if path.suffix.lower() == SUFFIX else path.with_name(path.name + SUFFIX)
 
     def open_company(self, path: Path) -> None:
         if not self._confirm_close_all():
@@ -457,12 +483,11 @@ class MainWindow(QMainWindow):
         )
         if not ok or not name.strip():
             return
-        suggested = self.workspace.new_path(name.strip(), self.company_path.parent)
-        target, _ = QFileDialog.getSaveFileName(
-            self, tr("Сохранить компанию как"), str(suggested), tr("Файлы компаний (*.gl)")
+        target = self._ask_file(
+            tr("Сохранить компанию как"), name.strip(), self.company_path.parent
         )
-        if target:
-            self.save_as_to(Path(target), name.strip())
+        if target is not None:
+            self.save_as_to(target, name.strip())
 
     def save_as_to(self, target: Path, name: str) -> bool:
         if self.conn is None or self.company_path is None or not self._confirm_close_all():

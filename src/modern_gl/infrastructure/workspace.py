@@ -91,17 +91,34 @@ class Workspace:
                 continue  # not a company file (or damaged): never fail the whole list
         return sorted(result, key=lambda c: sort_key(c.name))
 
-    def create(self, name: str, chart: str | None = DEFAULT_TEMPLATE) -> Path:
-        """New company file with the chart template (in the interface language)."""
-        path = self._free_path(name)
-        conn = connect(path)
+    def create(
+        self, name: str, chart: str | None = DEFAULT_TEMPLATE, path: Path | None = None
+    ) -> Path:
+        """New company file with the chart template (in the interface language); in the
+        folder unless `path` is given (then it is remembered). The file is built aside and
+        put in place only when complete, so a failure leaves nothing half-made."""
+        path = self._free_path(name) if path is None else Path(path)
+        partial = path.with_name(path.name + ".part")
+        for leftover in (partial, *_sidecars(partial)):
+            leftover.unlink(missing_ok=True)
         try:
-            ledger = Ledger(conn)
-            company_id = ledger.create_company(name)
-            if chart:
-                apply_chart_template(ledger, company_id, chart)
-        finally:
-            conn.close()
+            conn = connect(partial)
+            try:
+                ledger = Ledger(conn)
+                company_id = ledger.create_company(name)
+                if chart:
+                    apply_chart_template(ledger, company_id, chart)
+                conn.execute("PRAGMA journal_mode = DELETE")  # a single self-contained file
+            finally:
+                conn.close()
+            for side in _sidecars(path):  # leftovers of a file being replaced are not ours
+                side.unlink(missing_ok=True)
+            partial.replace(path)
+        except BaseException:
+            for leftover in (partial, *_sidecars(partial)):
+                leftover.unlink(missing_ok=True)
+            raise
+        self.remember(path)
         return path
 
     def remember(self, path: Path) -> None:
@@ -121,8 +138,8 @@ class Workspace:
         target = Path(target)
         if _same(target, Path(current)):
             raise backup.BackupError(tr("Выберите другой файл: этот уже открыт"))
-        for extra in ("-wal", "-shm"):  # leftovers of the file being replaced are not ours
-            Path(str(target) + extra).unlink(missing_ok=True)
+        for side in _sidecars(target):  # leftovers of the file being replaced are not ours
+            side.unlink(missing_ok=True)
         backup.copy_to(conn, target)
         copy, company_id = open_company(target)
         try:
@@ -233,6 +250,10 @@ class Workspace:
             path = folder / f"{stem} ({n}){SUFFIX}"
             n += 1
         return path
+
+
+def _sidecars(path: Path) -> tuple[Path, Path]:
+    return path.with_name(path.name + "-wal"), path.with_name(path.name + "-shm")
 
 
 def _same(a: Path, b: Path) -> bool:

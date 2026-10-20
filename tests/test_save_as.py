@@ -110,3 +110,54 @@ def test_window_save_as_goes_on_in_the_new_file(qtbot, tmp_path):
     assert total(target.with_suffix(".gl")) == 15000
     assert total(path) == 10000
     assert settings.value("company_files", [], type=list) == [str(target.with_suffix(".gl"))]
+
+
+def test_new_company_anywhere_is_remembered(tmp_path):
+    ws = Workspace(tmp_path / "data")
+    target = tmp_path / "Clients" / "Alfa.gl"
+    target.parent.mkdir()
+    assert ws.create("Alfa", path=target) == target
+    assert ws.files == [target.absolute()]
+    assert [c.path for c in ws.companies()] == [target]
+    # replacing an existing file gives a fresh company, nothing of the old one
+    old, conn, *_ = company(ws, "Old")
+    conn.close()
+    ws.create("Fresh", chart=None, path=old)
+    assert company_name(old) == "Fresh"
+    check = sqlite3.connect(old)
+    assert check.execute("SELECT COUNT(*) FROM companies").fetchone()[0] == 1
+    assert check.execute("SELECT COUNT(*) FROM postings").fetchone()[0] == 0
+    check.close()
+    assert not list(tmp_path.rglob("*.part"))
+
+
+def test_window_asks_where_to_put_a_new_company(qtbot, tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+
+    from modern_gl.desktop.main_window import MainWindow
+
+    ws = Workspace(tmp_path / "data")
+    company(ws)[1].close()
+    settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
+    win = MainWindow(ws, settings)
+    qtbot.addWidget(win)
+    win.start()
+    monkeypatch.setattr(
+        "modern_gl.desktop.main_window.QInputDialog.getText",
+        staticmethod(lambda *a, **k: ("Beta", True)),
+    )
+    chosen = tmp_path / "Clients" / "Beta MMC"  # the extension is added
+    chosen.parent.mkdir()
+    answer = [""]  # cancelled first: nothing is created
+    monkeypatch.setattr(
+        "modern_gl.desktop.main_window.QFileDialog.getSaveFileName",
+        staticmethod(lambda *a, **k: (answer[0], "")),
+    )
+    assert not win.create_company()
+    assert [c.name for c in ws.companies()] == ["Firma"]
+    answer[0] = str(chosen)
+    assert win.create_company()
+    assert win.company_path == chosen.with_suffix(".gl")
+    assert win.open_session.company_name == "Beta"
+    assert settings.value("company_files", [], type=list) == [str(chosen.with_suffix(".gl"))]
+    win.shutdown()

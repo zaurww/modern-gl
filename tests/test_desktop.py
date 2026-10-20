@@ -564,7 +564,13 @@ def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch)
         "modern_gl.desktop.main_window.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("Yeni MMC", True)),
     )
+    offered = []
+    monkeypatch.setattr(  # the file goes where it is offered: the data folder
+        "modern_gl.desktop.main_window.QFileDialog.getSaveFileName",
+        staticmethod(lambda _w, _t, path, _f: (offered.append(path) or path, "")),
+    )
     assert window.create_company()
+    assert offered == [str(workspace.folder / "Yeni MMC.gl")]
     assert window.session.company_name == "Yeni MMC"
     assert window.company_path == workspace.folder / "Yeni MMC.gl"
     assert current_page(window).model.rowCount() == 0  # new company: empty journal
