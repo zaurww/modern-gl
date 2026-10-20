@@ -1,4 +1,4 @@
-code;name;parent;group;class;contra;two_sided;subconto;currency
+code;name;parent;group;class;contra;two_sided;subconto;currency;role
 01;Основные средства;;;asset;;;fixed_asset;
 02;Амортизация основных средств;;;asset;1;;fixed_asset;
 03;Доходные вложения в материальные ценности;;;asset;;;fixed_asset;
@@ -17,7 +17,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency
 16;Отклонение в стоимости материальных ценностей;;;asset;;1;;
 19;НДС по приобретённым ценностям;;1;asset;;;;
 19.1;НДС при приобретении основных средств;19;;asset;;;counterparty;
-19.3;НДС по приобретённым материально-производственным запасам;19;;asset;;;counterparty;
+19.3;НДС по приобретённым материально-производственным запасам;19;;asset;;;counterparty;;input_vat
 19.4;НДС по приобретённым работам и услугам;19;;asset;;;counterparty;
 20;Основное производство;;;asset;;;department,cost_item;
 21;Полуфабрикаты собственного производства;;;asset;;;item,warehouse;

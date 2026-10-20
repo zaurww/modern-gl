@@ -15,6 +15,7 @@ from decimal import Decimal, InvalidOperation
 
 from modern_gl.application.common import company_row, insert, now, pad_subconto, write_audit
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.dates import iso_date, ru_date
 from modern_gl.domain.errors import (
     LedgerError,
@@ -30,6 +31,9 @@ from modern_gl.infrastructure.db import transaction
 QUANTITY_SCALE = 6
 QUANTITY_FACTOR = 10**QUANTITY_SCALE
 _QUANTITY_QUANTUM = Decimal(1).scaleb(-QUANTITY_SCALE)
+# VAT rates are in hundredths of a percent; a receipt starts with the standard rate.
+VAT_RATE_SCALE = 10_000
+STANDARD_VAT_RATE = 1800
 
 # Within one day, arrivals come before what leaves: the sequence of posting is
 # (date, rank, number). There is no time of day.
@@ -52,6 +56,7 @@ class ReceiptLine:
     credit_account_id: int | None = None
     credit_subconto: Sequence[int | None] = ()
     line_id: int | None = None  # the stored line it edits; None = a new line
+    vat_amount: str | int | Decimal | None = None  # a receipt's VAT; the amount is without it
 
 
 @dataclass(frozen=True)
@@ -90,6 +95,7 @@ class InventoryLineData:
     offset_subconto: tuple[int | None, int | None, int | None]
     source_receipt_line_id: int | None
     memo: str
+    vat_amount: int = 0
 
 
 @dataclass(frozen=True)
@@ -104,6 +110,7 @@ class InventoryDocumentData:
     gl_document_id: int | None
     lines: tuple[InventoryLineData, ...]
     closed: bool = False  # dated in a closed period: cannot be changed
+    vat_rate: int | None = None  # a receipt's VAT rate (1800 = 18%); None: without VAT
 
     @property
     def editable(self) -> bool:
@@ -130,6 +137,11 @@ def to_quantity(value: str | int | Decimal) -> int:
             tr("больше {n} знаков после запятой: {value}", n=QUANTITY_SCALE, value=value)
         )
     return int(result.scaleb(QUANTITY_SCALE))
+
+
+def vat_of(amount: int, rate: int | None) -> int:
+    """VAT on an amount without VAT, rounded to a minor unit (half away from zero)."""
+    return 0 if not rate else round_ratio(amount * rate, VAT_RATE_SCALE)
 
 
 def format_quantity(quantity: int, precision: int = 3) -> str:
@@ -343,10 +355,12 @@ class Inventory:
                     (row["offset_sc1"], row["offset_sc2"], row["offset_sc3"]),
                     row["source_receipt_line_id"],
                     row["memo"],
+                    row["vat_amount"],
                 )
                 for row in rows
             ),
             closed=self._closed(doc),
+            vat_rate=doc["vat_rate"],
         )
 
     def _closed(self, doc: sqlite3.Row) -> bool:
@@ -363,10 +377,12 @@ class Inventory:
         memo: str = "",
         *,
         opening: bool = False,
+        vat_rate: int | None = None,
     ) -> int:
         """Save an editable receipt/opening document without affecting stock or GL.
 
-        A draft may be unfinished: only the item of each line is required."""
+        A draft may be unfinished: only the item of each line is required. Line amounts
+        are without VAT; each line's VAT is given (`vat_rate` only remembers the rate)."""
         with transaction(self.conn):
             document_id = self._insert_document(
                 company_id,
@@ -374,6 +390,7 @@ class Inventory:
                 "opening" if opening else "receipt",
                 memo,
             )
+            self._set_vat_rate(document_id, None if opening else vat_rate)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
             )
@@ -435,12 +452,15 @@ class Inventory:
         credit_account_id: int | None,
         credit_subconto: Sequence[int | None] = (),
         memo: str = "",
+        *,
+        vat_rate: int | None = None,
     ) -> None:
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
             if doc["doc_type"] not in {"opening", "receipt"}:
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
             self._update_draft_header(company_id, document_id, doc_date, memo)
+            self._set_vat_rate(document_id, vat_rate if doc["doc_type"] == "receipt" else None)
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
@@ -539,8 +559,10 @@ class Inventory:
         memo: str = "",
         *,
         opening: bool = False,
+        vat_rate: int | None = None,
     ) -> int:
-        """Post a receipt/opening balance and its Dr inventory / Cr offset entries."""
+        """Post a receipt/opening balance and its Dr inventory / Cr offset entries
+        (and Dr input VAT / Cr offset for the lines' VAT)."""
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
         with transaction(self.conn):
@@ -552,6 +574,7 @@ class Inventory:
                 credit_subconto,
                 memo,
                 opening=opening,
+                vat_rate=vat_rate,
             )
             self._post_in_sequence(company_id, inv_id)
         return inv_id
@@ -744,6 +767,8 @@ class Inventory:
             postings = self._apply_landed_cost(company_id, doc, lines)
         else:
             postings = [self._apply_line(company_id, doc, line) for line in lines]
+            if doc["doc_type"] == "receipt":
+                postings += self._vat_postings(company_id, lines)
         self._finish(doc["id"], company_id, doc["doc_date"], postings, doc["memo"])
 
     def _apply_line(self, company_id: int, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
@@ -843,6 +868,44 @@ class Inventory:
             self._inventory_subconto(company_id, item, warehouse),
             line["memo"],
         )
+
+    def _vat_postings(self, company_id: int, lines: Sequence[sqlite3.Row]) -> list[PostingInput]:
+        """Dr input VAT / Cr the settlement account: one posting per supplier (the same
+        account and subconto). The VAT account takes the supplier's subconto by kind."""
+        totals: dict[tuple[int, tuple[int | None, ...]], int] = {}
+        for line in lines:
+            if line["vat_amount"]:
+                key = (
+                    line["offset_account_id"],
+                    (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]),
+                )
+                totals[key] = totals.get(key, 0) + line["vat_amount"]
+        if not totals:
+            return []
+        vat_account_id = self.ledger.account_role(company_id, INPUT_VAT)
+        if vat_account_id is None:
+            raise ValidationError(
+                tr("не указан счёт НДС к возмещению — выберите его в настройках склада")
+            )
+        vat_kinds = self._account_kind_ids(self._account(company_id, vat_account_id))
+        result = []
+        for (account_id, offset_sc), amount in totals.items():
+            by_kind = {
+                self._subconto_value(company_id, value_id)["kind_id"]: value_id
+                for value_id in offset_sc
+                if value_id is not None
+            }
+            result.append(
+                PostingInput(
+                    vat_account_id,
+                    account_id,
+                    _money(amount),
+                    tuple(None if kind is None else by_kind.get(kind) for kind in vat_kinds),
+                    offset_sc,
+                    tr("НДС"),
+                )
+            )
+        return result
 
     def _apply_landed_cost(
         self, company_id: int, doc: sqlite3.Row, lines: Sequence[sqlite3.Row]
@@ -1045,11 +1108,19 @@ class Inventory:
     ) -> None:
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
+        doc_type = self._document(company_id, document_id)["doc_type"]
         for line_no, source in enumerate(lines, 1):
             item = self._item(company_id, source.item_id)
             warehouse_id = self._draft_warehouse(company_id, source.warehouse_id)
             quantity = self._draft_quantity(item, source.quantity, line_no)
             amount = 0 if _blank(source.amount) else self._positive_amount(source.amount, line_no)
+            vat = (
+                0
+                if source.vat_amount is None or _blank(source.vat_amount)
+                else self._nonnegative_amount(source.vat_amount)
+            )
+            if vat and doc_type != "receipt":
+                raise ValidationError(tr("НДС указывается только в поступлении"))
             line_credit_account = source.credit_account_id or credit_account_id
             if line_credit_account is not None:
                 self._account(company_id, line_credit_account)
@@ -1070,6 +1141,7 @@ class Inventory:
                 None,
                 source.memo.strip(),
                 line_id=source.line_id,
+                vat_amount=vat,
             )
 
     def _write_issue_draft(
@@ -1192,6 +1264,13 @@ class Inventory:
             (value_date, memo.strip(), company_id, document_id),
         )
 
+    def _set_vat_rate(self, document_id: int, rate: int | None) -> None:
+        if rate is not None and not 0 <= rate <= VAT_RATE_SCALE:
+            raise ValidationError(tr("ставка НДС должна быть от 0 до 100%"))
+        self.conn.execute(
+            "UPDATE inventory_documents SET vat_rate = ? WHERE id = ?", (rate, document_id)
+        )
+
     def _draft_warehouse(self, company_id: int, warehouse_id: int | None) -> int | None:
         return None if warehouse_id is None else self._warehouse(company_id, warehouse_id)["id"]
 
@@ -1277,6 +1356,7 @@ class Inventory:
         memo: str,
         *,
         line_id: int | None = None,
+        vat_amount: int = 0,
     ) -> int:
         sc = pad_subconto(offset_subconto)
         if line_id is not None:  # an edited line keeps its id: landed cost refers to it
@@ -1284,7 +1364,7 @@ class Inventory:
                 "UPDATE inventory_lines SET line_no = ?, item_id = ?, warehouse_id = ?, "
                 "to_warehouse_id = ?, quantity = ?, amount = ?, inventory_amount = ?, "
                 "expense_amount = ?, offset_account_id = ?, offset_sc1 = ?, offset_sc2 = ?, "
-                "offset_sc3 = ?, source_receipt_line_id = ?, memo = ? "
+                "offset_sc3 = ?, source_receipt_line_id = ?, memo = ?, vat_amount = ? "
                 "WHERE company_id = ? AND document_id = ? AND id = ?",
                 (
                     line_no,
@@ -1299,6 +1379,7 @@ class Inventory:
                     *sc,
                     source_receipt_line_id,
                     memo,
+                    vat_amount,
                     company_id,
                     document_id,
                     line_id,
@@ -1311,8 +1392,8 @@ class Inventory:
             "INSERT INTO inventory_lines (company_id, document_id, line_no, item_id, "
             "warehouse_id, to_warehouse_id, quantity, amount, inventory_amount, "
             "expense_amount, offset_account_id, offset_sc1, offset_sc2, offset_sc3, "
-            "source_receipt_line_id, memo) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "source_receipt_line_id, memo, vat_amount) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 company_id,
                 document_id,
@@ -1328,6 +1409,7 @@ class Inventory:
                 *sc,
                 source_receipt_line_id,
                 memo,
+                vat_amount,
             ),
         )
 
@@ -1510,6 +1592,9 @@ class Inventory:
         codes = {code for code in self._account_kind_codes(company_id, account) if code}
         if not {"item", "warehouse"}.issubset(codes):
             raise ValidationError(tr("на складском счёте нужны субконто Товар и Склад"))
+
+    def _account_kind_ids(self, account: sqlite3.Row) -> tuple[int | None, ...]:
+        return tuple(account[f"sc{position}_kind_id"] for position in range(1, 4))
 
     def _account_kind_codes(
         self, company_id: int, account: sqlite3.Row
@@ -1712,6 +1797,7 @@ class Inventory:
             "memo": doc["memo"],
             "landed_cost_type_id": doc["landed_cost_type_id"],
             "gl_document_id": doc["gl_document_id"],
+            "vat_rate": doc["vat_rate"],
             "lines": lines,
         }
 

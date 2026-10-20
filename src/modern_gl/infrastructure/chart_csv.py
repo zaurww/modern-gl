@@ -10,6 +10,7 @@ Columns: code;name;parent;group;subconto[;class;contra;two_sided;currency]
   two_sided - optional: 1 if the balance may be on either side (settlements, taxes)
   currency  - optional: 1 if every posting is in a currency (52), 2 if postings may be in
               manat or in a currency (60, 62: local and foreign partners)
+  role      - optional: the account automatic postings use for a role (input_vat: 19)
 
 A 1C-style `kind` column (A / P / AP) is also understood: AP means two-sided,
 and A / P give the class (asset / liability) when `class` is empty.
@@ -117,7 +118,7 @@ def import_chart_csv(
                 two_sided = (row.get("two_sided") or "").strip() == "1" or legacy == "AP"
                 if row.get("two_sided") is None and not legacy:
                     two_sided = None  # no such column: inherit from the parent
-                ledger.add_account(
+                account_id = ledger.add_account(
                     company_id,
                     row["code"].strip(),
                     row["name"].strip(),
@@ -131,6 +132,9 @@ def import_chart_csv(
                     if row.get("currency") is None
                     else int((row["currency"] or "").strip() or 0),
                 )
+                role = (row.get("role") or "").strip()
+                if role:
+                    ledger.set_account_role(company_id, role, account_id)
             except Exception as e:
                 raise ValidationError(
                     tr(

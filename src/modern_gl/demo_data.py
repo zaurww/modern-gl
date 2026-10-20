@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from modern_gl.application.inventory import Inventory, IssueLine, ReceiptLine
+from modern_gl.application.inventory import STANDARD_VAT_RATE, Inventory, IssueLine, ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.chart_csv import apply_chart_template
@@ -54,10 +54,11 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
     inventory.post_receipt(
         cid,
         "2026-01-10",
-        [ReceiptLine(paper_item, main_warehouse, "120", "1200")],
+        [ReceiptLine(paper_item, main_warehouse, "120", "1200", vat_amount="216")],
         ledger.account_id(cid, "60"),
         [alfa, c1],
         tr("Поступление материалов"),
+        vat_rate=STANDARD_VAT_RATE,
     )
     post(cid, "2026-01-15", [p("60", "51", "1000", [alfa, c1], [bank])], tr("Оплата поставщику"))
     inventory.post_receipt(

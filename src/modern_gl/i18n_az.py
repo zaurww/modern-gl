@@ -686,4 +686,18 @@ AZ: dict[str, str] = {
     "Проводки сформированы складским документом": "Yazılışlar anbar sənədi ilə yaradılıb",
     "Складской документ №{n}": "Anbar sənədi №{n}",
     "сторно №{n} нельзя изменить, его можно только удалить": "storno №{n} dəyişdirilə bilməz, onu yalnız silmək olar",
+    # VAT in a receipt, account roles (session 7)
+    "НДС": "ƏDV",
+    "Без НДС": "ƏDV-siz",
+    "не указан счёт НДС к возмещению — выберите его в настройках склада": "əvəzləşdiriləcək ƏDV hesabı göstərilməyib — onu anbar parametrlərində seçin",
+    "ставка НДС должна быть от 0 до 100%": "ƏDV dərəcəsi 0-dan 100%-ə qədər olmalıdır",
+    "НДС указывается только в поступлении": "ƏDV yalnız daxilolmada göstərilir",
+    "Настройки склада": "Anbar parametrləri",
+    "Настройки склада…": "Anbar parametrləri…",
+    "Настройки склада сохранены": "Anbar parametrləri saxlanıldı",
+    "— не указан —": "— göstərilməyib —",
+    "Счёт НДС к возмещению": "Əvəzləşdiriləcək ƏDV hesabı",
+    "Поступление с НДС: Дт этот счёт [поставщик] / Кт счёт расчётов.": "ƏDV ilə daxilolma: Dt bu hesab [təchizatçı] / Kt hesablaşma hesabı.",
+    "неизвестная роль счёта: {role}": "naməlum hesab rolu: {role}",
+    "счёт {code}: нужен активный счёт проводок": "hesab {code}: aktiv yazılış hesabı lazımdır",
 }

@@ -1,4 +1,4 @@
-code;name;parent;group;class;contra;two_sided;subconto;currency
+code;name;parent;group;class;contra;two_sided;subconto;currency;role
 01;Əsas vəsaitlər;;;asset;;;fixed_asset;
 02;Əsas vəsaitlərin amortizasiyası;;;asset;1;;fixed_asset;
 03;Maddi sərvətlərə gəlirli qoyuluşlar;;;asset;;;fixed_asset;
@@ -17,7 +17,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency
 16;Maddi sərvətlərin dəyərində kənarlaşmalar;;;asset;;1;;
 19;Alınmış sərvətlər üzrə ƏDV;;1;asset;;;;
 19.1;Əsas vəsaitlərin alınması üzrə ƏDV;19;;asset;;;counterparty;
-19.3;Alınmış material-istehsal ehtiyatları üzrə ƏDV;19;;asset;;;counterparty;
+19.3;Alınmış material-istehsal ehtiyatları üzrə ƏDV;19;;asset;;;counterparty;;input_vat
 19.4;Alınmış iş və xidmətlər üzrə ƏDV;19;;asset;;;counterparty;
 20;Əsas istehsalat;;;asset;;;department,cost_item;
 21;Öz istehsalımızın yarımfabrikatları;;;asset;;;item,warehouse;

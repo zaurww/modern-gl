@@ -46,6 +46,7 @@ from modern_gl.desktop.widgets import (
     more_button,
     ru_date,
 )
+from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -173,6 +174,45 @@ class ItemDialog(QDialog):
             )
         except LedgerError as exc:
             QMessageBox.warning(self, tr("Новый товар"), str(exc))
+            return
+        self.accept()
+
+
+class InventorySettingsDialog(QDialog):
+    """Accounts the warehouse posts to by itself: chosen here, not found by a code."""
+
+    def __init__(self, session: Session, parent=None) -> None:
+        super().__init__(parent)
+        self.s = session
+        self.setWindowTitle(tr("Настройки склада"))
+        self.setMinimumWidth(460)
+        form = QFormLayout(self)
+        self.input_vat = QComboBox()
+        self.input_vat.addItem(tr("— не указан —"), None)
+        for account in session.catalog.leaf_accounts:
+            self.input_vat.addItem(account.label, account.id)
+        current = session.ledger.account_role(session.company_id, INPUT_VAT)
+        self.input_vat.setCurrentIndex(max(self.input_vat.findData(current), 0))
+        form.addRow(tr("Счёт НДС к возмещению"), self.input_vat)
+        hint = QLabel(tr("Поступление с НДС: Дт этот счёт [поставщик] / Кт счёт расчётов."))
+        hint.setObjectName("tertiary")
+        hint.setFont(fonts().small)
+        hint.setWordWrap(True)
+        form.addRow(hint)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        form.addRow(buttons)
+
+    def _save(self) -> None:
+        try:
+            self.s.ledger.set_account_role(
+                self.s.company_id, INPUT_VAT, self.input_vat.currentData()
+            )
+        except LedgerError as exc:
+            QMessageBox.warning(self, tr("Настройки склада"), str(exc))
             return
         self.accept()
 
@@ -362,6 +402,7 @@ class InventoryPage(QWidget):
                     (tr("+ Единица"), self.add_unit),
                     (tr("+ Склад"), self.add_warehouse),
                     (tr("+ Вид расходов"), self.add_landed_cost_type),
+                    (tr("Настройки склада…"), self.settings),
                 ]
             )
         )
@@ -563,6 +604,10 @@ class InventoryPage(QWidget):
             self.s.notify(str(exc))
             return
         self.s.notify(tr("Вид расходов «{name}» добавлен", name=name.strip()))
+
+    def settings(self) -> None:
+        if InventorySettingsDialog(self.s, self).exec() == QDialog.DialogCode.Accepted:
+            self.s.notify(tr("Настройки склада сохранены"))
 
     def operation(self, operation: str) -> None:
         if operation != "landed_cost":

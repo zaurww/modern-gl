@@ -172,12 +172,22 @@ def main() -> None:
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()
     shot("8c_inventory")
-    inventory_document = next(
-        row for row in inventory.documents_model.rows if row.doc_type == "receipt"
+    inventory_document = min(  # the first one, with VAT
+        (row for row in inventory.documents_model.rows if row.doc_type == "receipt"),
+        key=lambda row: row.number,
     )
     win.open_inventory_document(inventory_document.id)
     assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
     shot("8c2_inventory_document")
+    from modern_gl.desktop.inventory_page import InventorySettingsDialog
+
+    settings_dialog = InventorySettingsDialog(session, win)
+    settings_dialog.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    settings_dialog.grab().save(str(out / "8c3_inventory_settings.png"))
+    settings_dialog.close()
     win.show_place(("templates",))
     shot("8d_templates")
     from modern_gl.application.queries import list_templates

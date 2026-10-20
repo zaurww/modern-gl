@@ -1,11 +1,11 @@
-code;name;parent;group;class;contra;two_sided;subconto;currency
+code;name;parent;group;class;contra;two_sided;subconto;currency;role
 01;Основные средства;;;asset;;;fixed_asset;
 02;Износ основных средств;;;asset;1;;fixed_asset;
 04;Нематериальные активы;;;asset;;;intangible;
 05;Износ нематериальных активов;;;asset;1;;intangible;
 08;Капитальные вложения;;;asset;;;fixed_asset;
 10;Материалы;;;asset;;;item,warehouse;
-19;НДС по приобретённым ценностям;;;asset;;;counterparty;
+19;НДС по приобретённым ценностям;;;asset;;;counterparty;;input_vat
 20;Основное производство;;;asset;;;cost_item;
 26;Общехозяйственные расходы;;;expense;;;cost_item;
 31;Расходы будущих периодов;;;asset;;;;

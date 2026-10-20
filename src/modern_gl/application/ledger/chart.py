@@ -7,7 +7,7 @@ from collections.abc import Sequence
 
 from modern_gl.application.common import insert, pad_subconto
 from modern_gl.application.ledger.base import LedgerBase, account_label, clean_code
-from modern_gl.domain.accounts import ACCOUNT_CLASSES
+from modern_gl.domain.accounts import ACCOUNT_CLASSES, ACCOUNT_ROLES
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY, currency_mode
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -302,6 +302,40 @@ class ChartCommands(LedgerBase):
                     code=label,
                 )
             )
+
+    def set_account_role(self, company_id: int, role: str, account: int | str | None) -> None:
+        """Which account automatic postings use for a role (ACCOUNT_ROLES); None clears it."""
+        if role not in ACCOUNT_ROLES:
+            raise ValidationError(tr("неизвестная роль счёта: {role}", role=role))
+        with transaction(self.conn):
+            self._company(company_id)
+            if account is None:
+                self.conn.execute(
+                    "DELETE FROM account_roles WHERE company_id = ? AND role = ?",
+                    (company_id, role),
+                )
+                self._audit(company_id, "account_role", 0, "clear", {"role": role})
+                return
+            acc = self._account(company_id, account)
+            if acc["is_group"] or not acc["active"]:
+                raise ValidationError(
+                    tr("счёт {code}: нужен активный счёт проводок", code=account_label(acc))
+                )
+            self.conn.execute(
+                "INSERT INTO account_roles (company_id, role, account_id) VALUES (?, ?, ?) "
+                "ON CONFLICT (company_id, role) DO UPDATE SET account_id = excluded.account_id",
+                (company_id, role, acc["id"]),
+            )
+            self._audit(
+                company_id, "account_role", acc["id"], "set", {"role": role, "code": acc["code"]}
+            )
+
+    def account_role(self, company_id: int, role: str) -> int | None:
+        row = self.conn.execute(
+            "SELECT account_id FROM account_roles WHERE company_id = ? AND role = ?",
+            (company_id, role),
+        ).fetchone()
+        return row["account_id"] if row else None
 
     def _has_postings(self, account_id: int) -> bool:
         return (

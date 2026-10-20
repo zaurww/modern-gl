@@ -9,24 +9,35 @@ from PySide6.QtWidgets import QDialog, QMessageBox
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
     QUANTITY_FACTOR,
+    STANDARD_VAT_RATE,
     Inventory,
     IssueLine,
     ReceiptLine,
     TransferLine,
     format_quantity,
     to_quantity,
+    vat_of,
 )
 from modern_gl.desktop.inventory_document_page import (
     ACCOUNT,
+    AMOUNT,
     ITEM,
     SC1,
+    VAT,
     WAREHOUSE,
     InventoryDocumentPage,
     InventoryGridRow,
 )
-from modern_gl.desktop.inventory_page import InventoryPage, OperationDialog
+from modern_gl.desktop.inventory_page import (
+    InventoryPage,
+    InventorySettingsDialog,
+    OperationDialog,
+)
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.widgets import money
+from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.errors import ValidationError
+from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
 from modern_gl.reporting.inventory import (
     has_units,
@@ -1170,3 +1181,278 @@ def test_issue_moved_to_an_earlier_date_takes_its_place(inventory_demo):
             [IssueLine(demo.item, demo.main, "5", demo.expense_account, line_id=line.id)],
         )
     assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 5_000
+
+
+# ---- VAT in a receipt (stage 2, D33) ----------------------------------------------
+
+
+@pytest.fixture
+def vat_demo(inventory_demo, ledger) -> tuple[InventoryDemo, int]:
+    demo = inventory_demo
+    counterparty_kind = ledger.subconto_kind_id(demo.company_id, "counterparty")
+    vat_account = ledger.add_account(
+        demo.company_id,
+        "19",
+        "НДС по приобретённым ценностям",
+        subconto=[counterparty_kind],
+        account_class="asset",
+    )
+    ledger.set_account_role(demo.company_id, INPUT_VAT, vat_account)
+    return demo, vat_account
+
+
+def vat_receipt(demo: InventoryDemo, lines) -> int:
+    return demo.inventory.post_receipt(
+        demo.company_id,
+        "2026-01-10",
+        lines,
+        demo.payable_account,
+        [demo.supplier],
+        "Поступление с НДС",
+        vat_rate=STANDARD_VAT_RATE,
+    )
+
+
+def test_vat_of_rounds_to_minor_units():
+    assert vat_of(10_000, 1800) == 1_800  # 100.00 * 18% = 18.00
+    assert vat_of(3_333, 1800) == 600  # 33.33 * 18% = 5.9994 -> 6.00
+    assert vat_of(25, 1800) == 5  # 0.25 * 18% = 0.045 -> 0.05 (half away from zero)
+    assert vat_of(10_000, None) == 0
+    assert vat_of(10_000, 0) == 0
+
+
+def test_receipt_vat_posts_to_the_input_vat_account_per_supplier(vat_demo, conn):
+    """Two lines 100.00 + 50.00 without VAT, VAT 18.00 + 9.00: the stock is worth 150.00,
+    one posting Dt 19 [supplier] / Ct 60 [supplier] 27.00, the supplier is owed 177.00."""
+    demo, vat_account = vat_demo
+    inv_doc = vat_receipt(
+        demo,
+        [
+            ReceiptLine(demo.item, demo.main, "10", "100", vat_amount="18"),
+            ReceiptLine(demo.other_item, demo.main, "5", "50", vat_amount="9"),
+        ],
+    )
+    doc = demo.inventory.load_document(demo.company_id, inv_doc)
+    assert doc.vat_rate == STANDARD_VAT_RATE
+    assert [line.vat_amount for line in doc.lines] == [1_800, 900]
+    assert sum(b.amount for b in stock_balances(conn, demo.company_id)) == 15_000
+
+    vat_postings = conn.execute(
+        "SELECT * FROM postings WHERE document_id = ? AND debit_account_id = ?",
+        (doc.gl_document_id, vat_account),
+    ).fetchall()
+    assert len(vat_postings) == 1
+    vat = vat_postings[0]
+    assert (vat["credit_account_id"], vat["amount"], vat["dt_sc1"], vat["ct_sc1"]) == (
+        demo.payable_account,
+        2_700,
+        demo.supplier,
+        demo.supplier,
+    )
+    owed = conn.execute(
+        "SELECT SUM(amount) FROM postings WHERE document_id = ? AND credit_account_id = ?",
+        (doc.gl_document_id, demo.payable_account),
+    ).fetchone()[0]
+    assert owed == 17_700
+
+
+def test_receipt_vat_is_split_by_supplier(vat_demo, ledger, conn):
+    demo, vat_account = vat_demo
+    kind = ledger.subconto_kind_id(demo.company_id, "counterparty")
+    other = ledger.add_subconto_value(demo.company_id, kind, "Другой поставщик")
+    inv_doc = demo.inventory.post_receipt(
+        demo.company_id,
+        "2026-01-10",
+        [
+            ReceiptLine(demo.item, demo.main, "1", "10", vat_amount="1.80"),
+            ReceiptLine(
+                demo.item,
+                demo.main,
+                "1",
+                "20",
+                credit_account_id=demo.payable_account,
+                credit_subconto=[other],
+                vat_amount="3.60",
+            ),
+        ],
+        demo.payable_account,
+        [demo.supplier],
+        vat_rate=STANDARD_VAT_RATE,
+    )
+    gl_id = demo.inventory.load_document(demo.company_id, inv_doc).gl_document_id
+    rows = conn.execute(
+        "SELECT dt_sc1, amount FROM postings WHERE document_id = ? AND debit_account_id = ? "
+        "ORDER BY amount",
+        (gl_id, vat_account),
+    ).fetchall()
+    assert [(r["dt_sc1"], r["amount"]) for r in rows] == [(demo.supplier, 180), (other, 360)]
+
+
+def test_receipt_vat_needs_the_input_vat_account_setting(inventory_demo, conn):
+    demo = inventory_demo
+    before = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    with pytest.raises(ValidationError, match="настройках склада"):
+        vat_receipt(demo, [ReceiptLine(demo.item, demo.main, "10", "100", vat_amount="18")])
+    assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == before
+    assert stock_balances(conn, demo.company_id) == []
+    receipt(demo)  # without VAT the same receipt posts: the setting is needed only for VAT
+
+
+def test_opening_balance_has_no_vat(vat_demo):
+    demo, _ = vat_demo
+    with pytest.raises(ValidationError, match="только в поступлении"):
+        demo.inventory.post_receipt(
+            demo.company_id,
+            "2026-01-01",
+            [ReceiptLine(demo.item, demo.main, "1", "10", vat_amount="1.80")],
+            demo.payable_account,
+            [demo.supplier],
+            opening=True,
+        )
+
+
+def test_editing_posted_receipt_vat_rewrites_its_gl_document(vat_demo, conn):
+    demo, vat_account = vat_demo
+    inv_doc = vat_receipt(demo, [ReceiptLine(demo.item, demo.main, "10", "100", vat_amount="18")])
+    line = demo.inventory.load_document(demo.company_id, inv_doc).lines[0]
+    with demo.inventory.reposting(demo.company_id, inv_doc):
+        demo.inventory.update_receipt_draft(
+            demo.company_id,
+            inv_doc,
+            "2026-01-10",
+            [ReceiptLine(demo.item, demo.main, "10", "100", line_id=line.id)],
+            demo.payable_account,
+            [demo.supplier],
+            vat_rate=None,  # the supplier turned out not to be a VAT payer
+        )
+    doc = demo.inventory.load_document(demo.company_id, inv_doc)
+    assert (doc.status, doc.vat_rate, doc.lines[0].vat_amount) == ("posted", None, 0)
+    vat = conn.execute(
+        "SELECT COUNT(*) FROM postings WHERE document_id = ? AND debit_account_id = ?",
+        (doc.gl_document_id, vat_account),
+    ).fetchone()[0]
+    assert vat == 0
+
+
+def test_account_role_must_be_a_posting_account(vat_demo, ledger):
+    demo, _ = vat_demo
+    group = ledger.add_account(demo.company_id, "68", "Налоги", is_group=True)
+    with pytest.raises(ValidationError):
+        ledger.set_account_role(demo.company_id, INPUT_VAT, group)
+    with pytest.raises(ValidationError):
+        ledger.set_account_role(demo.company_id, "no_such_role", demo.payable_account)
+    ledger.set_account_role(demo.company_id, INPUT_VAT, None)
+    assert ledger.account_role(demo.company_id, INPUT_VAT) is None
+
+
+@pytest.mark.parametrize(("template", "code"), [("classic", "19"), ("1c77", "19.3")])
+def test_chart_template_sets_the_input_vat_account(ledger, template, code):
+    company_id = ledger.create_company(template)
+    apply_chart_template(ledger, company_id, template, "ru")
+    assert ledger.account_role(company_id, INPUT_VAT) == ledger.account_id(company_id, code)
+
+
+def test_migration_sets_input_vat_for_existing_companies(tmp_path):
+    path = tmp_path / "v9.gl"
+    old = sqlite3.connect(path, isolation_level=None)
+    for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        version = int(migration.name.split("_", 1)[0])
+        if version > 9:
+            break
+        sql = migration.read_text(encoding="utf-8")
+        old.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;")
+    old.execute("INSERT INTO companies (name, created_at) VALUES ('A', '2026-01-01')")
+    old.execute(
+        "INSERT INTO accounts (company_id, code, name, account_class) "
+        "VALUES (1, '19', 'НДС', 'asset')"
+    )
+    old.close()
+
+    upgraded = connect(path)
+    try:
+        roles = upgraded.execute("SELECT company_id, role FROM account_roles").fetchall()
+        assert [tuple(r) for r in roles] == [(1, INPUT_VAT)]
+    finally:
+        upgraded.close()
+
+
+def vat_page(demo: InventoryDemo, conn, qtbot) -> InventoryDocumentPage:
+    session = Session(
+        conn,
+        demo.inventory.ledger,
+        demo.company_id,
+        "Склад",
+        Catalog(conn, demo.company_id),
+        working_date=date(2026, 1, 10),
+    )
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    return page
+
+
+def test_receipt_page_calculates_vat_until_it_is_typed(vat_demo, conn, qtbot):
+    demo, vat_account = vat_demo
+    page = vat_page(demo, conn, qtbot)
+    model = page.model
+    vat_column = model.columns.index(VAT)
+    assert page._chosen_vat_rate() == STANDARD_VAT_RATE  # the company has a VAT account
+    assert not page.table.isColumnHidden(vat_column)
+    model.rows = [
+        InventoryGridRow(
+            demo.item,
+            demo.main,
+            quantity=QUANTITY_FACTOR,
+            offset_account_id=demo.payable_account,
+            offset_subconto=[demo.supplier, None, None],
+        )
+        for _ in range(2)
+    ]
+    model.setData(model.index(0, model.columns.index(AMOUNT)), 10_000)
+    assert model.rows[0].vat_amount == 1_800  # 100.00 * 18%
+    model.setData(model.index(0, vat_column), 2_000)  # the invoice says 20.00
+    model.setData(model.index(0, model.columns.index(AMOUNT)), 20_000)
+    assert model.rows[0].vat_amount == 2_000  # typed: stays
+    model.setData(model.index(0, vat_column), None)  # cleared: from the rate again
+    assert model.rows[0].vat_amount == 3_600  # 200.00 * 18%
+    model.setData(model.index(1, model.columns.index(AMOUNT)), 5_000)
+    assert model.rows[1].vat_amount == 900
+    # 200.00 + 50.00 without VAT, VAT 36.00 + 9.00
+    assert (page.vat_total.text(), page.total.text()) == (money(4_500), money(29_500))
+
+    page.vat_rate.setCurrentIndex(page.vat_rate.findData(None))
+    page._vat_rate_changed()
+    assert [row.vat_amount for row in model.rows] == [None, None]
+    assert page.table.isColumnHidden(vat_column)
+    assert page.total.text() == money(25_000)
+
+    page.vat_rate.setCurrentIndex(page.vat_rate.findData(STANDARD_VAT_RATE))
+    page._vat_rate_changed()
+    assert page.save(post=True)
+    assert page.doc is not None and page.doc.vat_rate == STANDARD_VAT_RATE
+    assert [line.vat_amount for line in page.doc.lines] == [3_600, 900]
+    assert not any(row.vat_typed for row in page.model.rows)
+    vat = conn.execute(
+        "SELECT SUM(amount) FROM postings WHERE document_id = ? AND debit_account_id = ?",
+        (page.doc.gl_document_id, vat_account),
+    ).fetchone()[0]
+    assert vat == 4_500
+
+
+def test_receipt_page_without_vat_account_starts_without_vat(inventory_demo, conn, qtbot):
+    page = vat_page(inventory_demo, conn, qtbot)
+    assert page._chosen_vat_rate() is None
+    assert page.table.isColumnHidden(page.model.columns.index(VAT))
+    assert page.vat_total.isHidden()
+
+
+def test_inventory_settings_choose_the_input_vat_account(vat_demo, conn, qtbot):
+    demo, vat_account = vat_demo
+    session = Session(
+        conn, demo.inventory.ledger, demo.company_id, "Склад", Catalog(conn, demo.company_id)
+    )
+    dialog = InventorySettingsDialog(session)
+    qtbot.addWidget(dialog)
+    assert dialog.input_vat.currentData() == vat_account
+    dialog.input_vat.setCurrentIndex(dialog.input_vat.findData(demo.expense_account))
+    dialog._save()
+    assert demo.inventory.ledger.account_role(demo.company_id, INPUT_VAT) == demo.expense_account
