@@ -871,6 +871,26 @@ def test_theme_switches_at_once_and_keeps_the_company(window):
     assert theme.P.canvas == "#FFFFFF"
 
 
+def test_every_theme_colors_the_whole_stylesheet():
+    """A theme names only palette colors, and the stylesheet takes every color from the
+    palette: no hardcoded white or grey is left in a dark theme."""
+    import re
+    from dataclasses import fields
+
+    from modern_gl.desktop import theme
+
+    names = {f.name for f in fields(theme.Palette)}
+    try:
+        for name, (_, changes) in theme.THEMES.items():
+            assert set(changes) <= names, name
+            theme.set_theme(name)
+            palette = {getattr(theme.P, n).upper() for n in names}
+            used = {c.upper() for c in re.findall(r"#[0-9A-Fa-f]{6}", theme.stylesheet())}
+            assert used <= palette, (name, used - palette)
+    finally:
+        theme.set_theme(theme.DEFAULT_THEME)
+
+
 def test_posted_document_is_corrected_in_place(window):
     """From the journal (or a report) a posted document opens editable; posting it again
     keeps its number."""

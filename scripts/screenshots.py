@@ -1,6 +1,6 @@
 """Render the main screens of the demo company to PNG (for design review).
 
-uv run python scripts/screenshots.py [out_dir] [az|ru]
+uv run python scripts/screenshots.py [out_dir] [az|ru] [theme]
 """
 
 from __future__ import annotations
@@ -39,6 +39,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     i18n.set_language(sys.argv[2] if len(sys.argv) > 2 else "az")
     app = QApplication(sys.argv)
+    theme.set_theme(sys.argv[3] if len(sys.argv) > 3 else theme.DEFAULT_THEME)
     theme.apply(app)
     qt_texts.install(app)
     workspace = Workspace(Path(tempfile.mkdtemp()))

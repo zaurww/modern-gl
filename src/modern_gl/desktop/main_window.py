@@ -85,16 +85,16 @@ from modern_gl.infrastructure.workspace import TRASH, Workspace
 from modern_gl.reporting.inventory import inventory_document_of
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
-PLACES = [  # key, title (translated on display), icon color
-    (("journal",), "Журнал", P.accent),
-    (("osv",), "ОСВ", P.green),
-    (("opening",), "Начальные остатки", P.accent),
-    (("chart",), "План счетов", P.violet),
-    (("inventory",), "Склад", P.amber),
-    (("directories",), "Справочники", P.teal),
-    (("templates",), "Шаблоны", P.amber),
-    (("currencies",), "Валюты", P.green),
-    (("invoices",), "E-qaimələr", P.accent),
+PLACES = [  # key, title (translated on display), icon color (a palette name: themes change it)
+    (("journal",), "Журнал", "accent"),
+    (("osv",), "ОСВ", "green"),
+    (("opening",), "Начальные остатки", "accent"),
+    (("chart",), "План счетов", "violet"),
+    (("inventory",), "Склад", "amber"),
+    (("directories",), "Справочники", "teal"),
+    (("templates",), "Шаблоны", "amber"),
+    (("currencies",), "Валюты", "green"),
+    (("invoices",), "E-qaimələr", "accent"),
 ]
 PLACE_KEYS = [key for key, _, _ in PLACES]
 # open pages: a quiet grey icon of what they are (a new document is the blue plus)
@@ -189,7 +189,7 @@ class Sidebar(QWidget):
         item = QListWidgetItem(title.upper())
         item.setFlags(Qt.ItemFlag.NoItemFlags)
         item.setFont(fonts().caption)
-        item.setForeground(Qt.GlobalColor.gray)
+        item.setForeground(QColor(P.tertiary))
         item.setSizeHint(QSize(0, 34))
         item.setData(KEY_ROLE, None)
         self.nav.addItem(item)
@@ -346,7 +346,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{name} — Modern GL")
         self.sidebar.retranslate()
         for key, text, color in PLACES:
-            self.sidebar.add_item(key, tr(text), icons.icon(key[0], color))
+            self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
         self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
 

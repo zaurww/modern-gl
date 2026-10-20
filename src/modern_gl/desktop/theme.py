@@ -8,10 +8,22 @@ company menu. A new theme is one more entry there.
 
 from __future__ import annotations
 
+import tempfile
 from dataclasses import dataclass, fields
+from pathlib import Path
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPalette, QPixmap
+from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontDatabase,
+    QIcon,
+    QImage,
+    QPainter,
+    QPalette,
+    QPen,
+    QPixmap,
+)
 from PySide6.QtWidgets import QApplication
 
 
@@ -47,6 +59,12 @@ class Palette:
     canvas: str = "#FFFFFF"  # behind pages ("craft": grey under white sheets)
     sheet_border: str = "transparent"
     sheet_padding: str = "0"  # a sheet keeps its rows off its rounded edge
+    sidebar_hover: str = "#ECEEF2"
+    scrollbar: str = "#D5D9DF"
+    scrollbar_hover: str = "#BCC2CA"
+    on_accent: str = "#FFFFFF"  # text on accent, red buttons and icon squares
+    tooltip: str = "#1D2025"
+    tooltip_text: str = "#FFFFFF"
 
 
 # name -> (title in the menu, the colors that differ from Palette)
@@ -63,6 +81,149 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "field_hover": "#FFFFFF",
             "sheet_border": "#E6E8EC",
             "sheet_padding": "0 6px",
+        },
+    ),
+    # Popular editor palettes (catppuccin.com, rosepinetheme.com, nordtheme.com): their
+    # own colors; soft tints are the color mixed into the background.
+    "catppuccin_latte": (
+        "Catppuccin Latte — тёплый кремовый",
+        {
+            "window": "#EFF1F5",
+            "canvas": "#EFF1F5",
+            "surface": "#EFF1F5",
+            "sidebar": "#E6E9EF",
+            "sidebar_hover": "#DFE3EA",
+            "sidebar_selection": "#DCE0E8",
+            "subtle": "#E6E9EF",
+            "hairline": "#DCE0E8",
+            "field": "#E6E9EF",
+            "field_hover": "#DCE0E8",
+            "text": "#4C4F69",
+            "secondary": "#6C6F85",
+            "tertiary": "#9CA0B0",
+            "header_text": "#8C8FA1",
+            "accent": "#1E66F5",
+            "accent_hover": "#1A57D1",
+            "accent_soft": "#DCE5F8",
+            "selection": "#D5DFF5",
+            "green": "#40A02B",
+            "green_soft": "#DDEBDB",
+            "amber": "#DF8E1D",
+            "amber_soft": "#F3E6D6",
+            "red": "#D20F39",
+            "red_soft": "#F3DADF",
+            "violet": "#8839EF",
+            "teal": "#179299",
+            "scrollbar": "#CCD0DA",
+            "scrollbar_hover": "#ACB0BE",
+            "tooltip": "#4C4F69",
+            "tooltip_text": "#EFF1F5",
+        },
+    ),
+    "rose_pine_dawn": (
+        "Rosé Pine Dawn — мягкий бежевый",
+        {
+            "window": "#FAF4ED",
+            "canvas": "#FAF4ED",
+            "surface": "#FAF4ED",
+            "sidebar": "#F2E9E1",
+            "sidebar_hover": "#ECE2D9",
+            "sidebar_selection": "#E4DBD5",
+            "subtle": "#F4EDE8",
+            "hairline": "#E8DFD8",
+            "field": "#F2E9E1",
+            "field_hover": "#ECE2D9",
+            "text": "#575279",
+            "secondary": "#797593",
+            "tertiary": "#9893A5",
+            "header_text": "#9893A5",
+            "accent": "#286983",
+            "accent_hover": "#215A71",
+            "accent_soft": "#E0E6E4",
+            "selection": "#DCE4E3",
+            "green": "#56949F",
+            "green_soft": "#E2EAE6",
+            "amber": "#D7902A",
+            "amber_soft": "#F7E8D3",
+            "red": "#B4637A",
+            "red_soft": "#F2E1DF",
+            "violet": "#907AA9",
+            "teal": "#56949F",
+            "scrollbar": "#DFDAD9",
+            "scrollbar_hover": "#CECACD",
+            "tooltip": "#575279",
+            "tooltip_text": "#FAF4ED",
+        },
+    ),
+    "nord_light": (
+        "Nord — холодный серо-голубой",
+        {
+            "window": "#ECEFF4",
+            "canvas": "#ECEFF4",
+            "surface": "#ECEFF4",
+            "sidebar": "#E5E9F0",
+            "sidebar_hover": "#DEE3EB",
+            "sidebar_selection": "#D8DEE9",
+            "subtle": "#E5E9F0",
+            "hairline": "#D8DEE9",
+            "field": "#E5E9F0",
+            "field_hover": "#DEE3EB",
+            "text": "#2E3440",
+            "secondary": "#4C566A",
+            "tertiary": "#8A93A5",
+            "header_text": "#7B8598",
+            "accent": "#5E81AC",
+            "accent_hover": "#50729C",
+            "accent_soft": "#DCE3EE",
+            "selection": "#D5DEEA",
+            "green": "#6E9459",
+            "green_soft": "#E0E8DE",
+            "amber": "#C08A2E",
+            "amber_soft": "#F0E8DA",
+            "red": "#BF616A",
+            "red_soft": "#F0DEE1",
+            "violet": "#B48EAD",
+            "teal": "#6FA3A2",
+            "scrollbar": "#D8DEE9",
+            "scrollbar_hover": "#B9C2D0",
+            "tooltip": "#3B4252",
+            "tooltip_text": "#ECEFF4",
+        },
+    ),
+    "catppuccin_mocha": (
+        "Catppuccin Mocha — тёмная",
+        {
+            "window": "#1E1E2E",
+            "canvas": "#1E1E2E",
+            "surface": "#1E1E2E",
+            "sidebar": "#181825",
+            "sidebar_hover": "#232334",
+            "sidebar_selection": "#313244",
+            "subtle": "#262637",
+            "hairline": "#313244",
+            "field": "#292A3B",
+            "field_hover": "#313244",
+            "text": "#CDD6F4",
+            "secondary": "#A6ADC8",
+            "tertiary": "#6C7086",
+            "header_text": "#7F849C",
+            "accent": "#89B4FA",
+            "accent_hover": "#A4C4FB",
+            "accent_soft": "#2B3450",
+            "selection": "#323D5A",
+            "on_accent": "#1E1E2E",
+            "green": "#A6E3A1",
+            "green_soft": "#2A3B33",
+            "amber": "#F9E2AF",
+            "amber_soft": "#3B3628",
+            "red": "#F38BA8",
+            "red_soft": "#43293A",
+            "violet": "#CBA6F7",
+            "teal": "#94E2D5",
+            "scrollbar": "#45475A",
+            "scrollbar_hover": "#585B70",
+            "tooltip": "#313244",
+            "tooltip_text": "#CDD6F4",
         },
     ),
 }
@@ -139,7 +300,7 @@ def dot_icon(color: str, size: int = 18, glyph: str = "") -> QIcon:
     p.setBrush(QColor(color))
     p.drawRoundedRect(QRectF(1, 1, size - 2, size - 2), 5, 5)
     if glyph:
-        p.setPen(QColor("#FFFFFF"))
+        p.setPen(QColor(P.on_accent))
         f = QFont(fonts().text_family, 8)
         f.setWeight(QFont.Weight.Bold)
         p.setFont(f)
@@ -150,12 +311,32 @@ def dot_icon(color: str, size: int = 18, glyph: str = "") -> QIcon:
     return icon
 
 
+def _check_mark(color: str) -> str:
+    """A check mark image in the color (a stylesheet takes images only from files)."""
+    path = Path(tempfile.gettempdir()) / "modern-gl" / f"check-{color.lstrip('#')}.png"
+    if not path.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        image = QImage(32, 32, QImage.Format.Format_ARGB32)
+        image.fill(Qt.GlobalColor.transparent)
+        p = QPainter(image)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(color), 4.2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.drawPolyline([QPointF(8, 16.5), QPointF(13.5, 22), QPointF(24, 10)])
+        p.end()
+        image.save(str(path))
+    return path.as_posix()
+
+
 def stylesheet() -> str:
     return f"""
 * {{ outline: 0; }}
 QMainWindow, QWidget#page {{ background: {P.canvas}; }}
 QToolTip {{
-    background: {P.text}; color: #FFFFFF; border: none; padding: 5px 8px; border-radius: 6px;
+    background: {P.tooltip}; color: {P.tooltip_text}; border: none; padding: 5px 8px;
+    border-radius: 6px;
 }}
 
 /* Sidebar */
@@ -164,14 +345,14 @@ QListWidget#nav {{ background: transparent; border: none; }}
 QListWidget#nav::item {{
     color: {P.text}; padding: 6px 8px; margin: 1px 10px; border-radius: 7px;
 }}
-QListWidget#nav::item:hover {{ background: #ECEEF2; }}
+QListWidget#nav::item:hover {{ background: {P.sidebar_hover}; }}
 QListWidget#nav::item:selected {{ background: {P.sidebar_selection}; color: {P.text}; }}
 QListWidget#nav::item:disabled {{ color: {P.tertiary}; background: transparent; }}
 QPushButton#company {{
     text-align: left; padding: 10px 12px; margin: 14px 10px 8px 10px; border: none;
     border-radius: 8px; color: {P.text}; background: transparent;
 }}
-QPushButton#company:hover {{ background: #ECEEF2; }}
+QPushButton#company:hover {{ background: {P.sidebar_hover}; }}
 QPushButton#company::menu-indicator {{ image: none; }}
 
 /* Buttons */
@@ -182,11 +363,11 @@ QPushButton {{
 QPushButton:hover {{ background: {P.subtle}; }}
 QPushButton:disabled {{ color: {P.tertiary}; }}
 QPushButton#primary {{
-    background: {P.accent}; color: #FFFFFF; border: 1px solid {P.accent}; font-weight: 600;
+    background: {P.accent}; color: {P.on_accent}; border: 1px solid {P.accent}; font-weight: 600;
 }}
 QPushButton#primary:hover {{ background: {P.accent_hover}; }}
 QPushButton#primary:disabled {{
-    background: {P.accent_soft}; border-color: {P.accent_soft}; color: #FFFFFF;
+    background: {P.accent_soft}; border-color: {P.accent_soft}; color: {P.surface};
 }}
 QPushButton#flat {{ background: transparent; border: none; color: {P.accent}; padding: 6px 8px; }}
 QPushButton#flat:hover {{ background: {P.accent_soft}; }}
@@ -198,13 +379,13 @@ QPushButton#more:hover {{ background: {P.field}; color: {P.text}; }}
 QPushButton#danger {{ background: transparent; border: none; color: {P.red}; padding: 6px 8px; }}
 QPushButton#danger:hover {{ background: {P.red_soft}; }}
 QPushButton#dangerSolid {{
-    background: {P.red}; color: #FFFFFF; border: 1px solid {P.red}; font-weight: 600;
+    background: {P.red}; color: {P.on_accent}; border: 1px solid {P.red}; font-weight: 600;
 }}
 QPushButton#dangerSolid:disabled {{
-    background: {P.red_soft}; border: 1px solid {P.red_soft}; color: #FFFFFF;
+    background: {P.red_soft}; border: 1px solid {P.red_soft}; color: {P.surface};
 }}
 QPushButton#fab {{
-    background: {P.accent}; color: #FFFFFF; border: none; border-radius: 26px;
+    background: {P.accent}; color: {P.on_accent}; border: none; border-radius: 26px;
     font-size: 22pt; padding: 0 0 4px 0;
 }}
 QPushButton#fab:hover {{ background: {P.accent_hover}; }}
@@ -253,10 +434,10 @@ QHeaderView::section:vertical {{
 QTableCornerButton::section {{ background: {P.surface}; border: none; }}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
-QScrollBar::handle:vertical {{ background: #D5D9DF; border-radius: 3px; min-height: 30px; }}
-QScrollBar::handle:vertical:hover {{ background: #BCC2CA; }}
+QScrollBar::handle:vertical {{ background: {P.scrollbar}; border-radius: 3px; min-height: 30px; }}
+QScrollBar::handle:vertical:hover {{ background: {P.scrollbar_hover}; }}
 QScrollBar:horizontal {{ background: transparent; height: 10px; margin: 2px; }}
-QScrollBar::handle:horizontal {{ background: #D5D9DF; border-radius: 3px; min-width: 30px; }}
+QScrollBar::handle:horizontal {{ background: {P.scrollbar}; border-radius: 3px; min-width: 30px; }}
 QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
 QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
 
@@ -268,6 +449,17 @@ QListView#completer::item {{ padding: 6px 10px; border-radius: 6px; color: {P.te
 QListView#completer::item:hover {{ background: {P.subtle}; }}
 QListView#completer::item:selected {{ background: {P.selection}; color: {P.text}; }}
 QCheckBox {{ color: {P.secondary}; spacing: 8px; }}
+/* drawn here, not by the style: its box is "the background a bit darker" — lost on dark */
+QCheckBox::indicator {{
+    width: 14px; height: 14px; border: 1px solid {P.scrollbar_hover}; border-radius: 4px;
+    background: {P.surface};
+}}
+QCheckBox::indicator:hover {{ border-color: {P.accent}; }}
+QCheckBox::indicator:checked {{
+    background: {P.accent}; border-color: {P.accent}; image: url({_check_mark(P.on_accent)});
+}}
+QCheckBox::indicator:disabled {{ background: {P.subtle}; border-color: {P.hairline}; }}
+QCheckBox::indicator:checked:disabled {{ background: {P.accent_soft}; }}
 
 QMenu {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 10px; padding: 6px;
@@ -302,5 +494,14 @@ def apply(app: QApplication) -> None:
     pal.setColor(QPalette.ColorRole.Highlight, QColor(P.selection))
     pal.setColor(QPalette.ColorRole.HighlightedText, QColor(P.text))
     pal.setColor(QPalette.ColorRole.PlaceholderText, QColor(P.tertiary))
+    # dialogs, calendars and message boxes draw with these (dark themes)
+    pal.setColor(QPalette.ColorRole.Button, QColor(P.surface))
+    pal.setColor(QPalette.ColorRole.ToolTipBase, QColor(P.tooltip))
+    pal.setColor(QPalette.ColorRole.ToolTipText, QColor(P.tooltip_text))
+    pal.setColor(QPalette.ColorRole.Light, QColor(P.subtle))
+    pal.setColor(QPalette.ColorRole.Midlight, QColor(P.hairline))
+    pal.setColor(QPalette.ColorRole.Mid, QColor(P.hairline))
+    pal.setColor(QPalette.ColorRole.Dark, QColor(P.tertiary))
+    pal.setColor(QPalette.ColorRole.Link, QColor(P.accent))
     app.setPalette(pal)
     app.setStyleSheet(stylesheet())
