@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.companies import CompanyCommands
+from modern_gl.application.ledger.conversion import ConversionCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import (
@@ -36,6 +37,7 @@ __all__ = [
 class Ledger(
     CompanyCommands,
     CurrencyCommands,
+    ConversionCommands,
     OpeningBalanceCommands,
     ChartCommands,
     TemplateCommands,

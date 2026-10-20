@@ -76,7 +76,7 @@ class DocumentCommands(SubcontoCommands):
         """
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
-            self._require_not_inventory_document(doc_id)
+            self._require_not_module_document(doc_id)
             if doc["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
             if doc["reversal_of"] is not None:
@@ -103,7 +103,7 @@ class DocumentCommands(SubcontoCommands):
         and keeps the number; the audit trail keeps the old content."""
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
-            self._require_not_inventory_document(doc_id)
+            self._require_not_module_document(doc_id)
             if doc["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
             if doc["reversal_of"] is not None:
@@ -208,7 +208,7 @@ class DocumentCommands(SubcontoCommands):
         """
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
-            self._require_not_inventory_document(doc_id)
+            self._require_not_module_document(doc_id)
             if doc["status"] == "posted":
                 self._require_changeable(company_id, doc)
             snapshot = self._snapshot(doc)
@@ -260,7 +260,8 @@ class DocumentCommands(SubcontoCommands):
                 )
             )
 
-    def _require_not_inventory_document(self, doc_id: int) -> None:
+    def _require_not_module_document(self, doc_id: int) -> None:
+        """Postings a module made (warehouse, currency conversion) are corrected there."""
         linked = self.conn.execute(
             "SELECT number FROM inventory_documents WHERE gl_document_id = ?", (doc_id,)
         ).fetchone()
@@ -271,6 +272,13 @@ class DocumentCommands(SubcontoCommands):
                     "исправьте его через склад",
                     n=linked["number"],
                 )
+            )
+        if self.conn.execute(
+            "SELECT 1 FROM currency_conversions WHERE document_id = ? OR credit_document_id = ?",
+            (doc_id, doc_id),
+        ).fetchone():
+            raise ValidationError(
+                tr("проводки созданы документом «Конвертация валюты»; исправьте его там")
             )
 
     def _snapshot(self, doc: sqlite3.Row) -> dict:
@@ -312,7 +320,7 @@ class DocumentCommands(SubcontoCommands):
         """Red storno: a new posted document with the same postings and negated amounts."""
         with transaction(self.conn):
             orig = self._document(company_id, doc_id)
-            self._require_not_inventory_document(doc_id)
+            self._require_not_module_document(doc_id)
             if orig["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=orig["number"]))
             if orig["reversal_of"] is not None:

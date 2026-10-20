@@ -510,6 +510,8 @@ class DocumentPage(QWidget):
         if doc is None:  # not saved yet
             return [(tr("Сделать шаблоном"), self.save_as_template)]
         copy = (tr("Копировать"), lambda: self.copy_requested.emit(self._as_template()))
+        if doc.conversion_id is not None:  # corrected in the conversion itself
+            return [copy]
         if doc.inventory_number is not None:
             return [
                 (tr("Складской документ №{n}", n=doc.inventory_number), self._open_source),

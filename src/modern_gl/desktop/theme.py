@@ -475,6 +475,10 @@ QLabel#error {{
     color: {P.red}; background: {P.red_soft}; border-radius: 7px; padding: 7px 10px;
 }}
 QFrame#note {{ background: {P.accent_soft}; border: none; border-radius: 8px; }}
+QFrame#card {{
+    background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 12px;
+}}
+QFrame#card QLabel {{ background: transparent; border: none; }}
 QFrame#note QLabel {{ color: {P.text}; background: transparent; }}
 QFrame#note QPushButton#flat:hover {{ background: {P.selection}; }}
 """

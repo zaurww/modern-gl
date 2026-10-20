@@ -403,6 +403,36 @@ def main() -> None:
     shot("10e_document_rate_note")
     page.dirty = False
     win.close_current()
+    # Currency conversion (D37): the classic chart has no 57 and 91, so they are added here
+    from modern_gl.desktop.conversion_page import ConversionPage
+    from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
+
+    transit = ledger.add_account(cid, "57", i18n.tr("Переводы в пути"), account_class="asset")
+    other = ledger.add_account(
+        cid, "91", i18n.tr("Прочие доходы и расходы"), account_class="revenue", two_sided=True
+    )
+    ledger.set_account_role(cid, FX_TRANSIT, transit)
+    ledger.set_account_role(cid, FX_GAIN, other)
+    ledger.set_account_role(cid, FX_LOSS, other)
+    ledger.set_account_role(cid, BANK_FEE, other)
+    session.catalog.reload()
+    session.working_date = date(2026, 2, 27)
+    win.new_conversion()
+    conversion = cast(ConversionPage, win.stack.currentWidget())
+    for panel, value, amount in (
+        (conversion.source, usd_bank, "300"),
+        (conversion.target, azn_bank, "509.40"),
+    ):
+        box = panel.sc[0]
+        box.setCurrentIndex(box.findData(value))
+        panel._subconto_changed()
+        panel.amount.setText(amount)
+    conversion.fee.setText("1")
+    conversion._changed()
+    shot("10f_conversion")
+    conversion.save(post=True)
+    shot("10g_conversion_posted")
+    win.close_current()
     session.working_date = date(2026, 2, 28)
     ledger.revalue(cid, "2026-02-28", "80")
     win.show_place(("osv",))
