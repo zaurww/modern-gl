@@ -896,6 +896,7 @@ AZ: dict[str, str] = {
     "документ №{n} проведён: чтобы сохранить его черновиком, сначала отмените проведение": "sənəd №{n} keçirilib: onu qaralama kimi saxlamaq üçün əvvəlcə keçirilməni ləğv edin",
     "Курсовая разница при конвертации": "Konvertasiya zamanı məzənnə fərqi",
     "Переводы в пути": "Yolda olan köçürmələr",
+    "Депозитный счёт НДС": "ƏDV depozit hesabı",
     "Доход от курсовой разницы": "Məzənnə fərqindən gəlir",
     "Убыток от курсовой разницы": "Məzənnə fərqindən zərər",
     "удержана с": "tutulduğu hesab",
