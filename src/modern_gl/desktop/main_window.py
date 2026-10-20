@@ -90,17 +90,20 @@ from modern_gl.reporting.inventory import inventory_document_of
 KEY_ROLE = Qt.ItemDataRole.UserRole
 PLACES = [  # key, title (translated on display), icon color (a palette name: themes change it)
     (("journal",), "Журнал", "accent"),
-    (("trade",), "Покупки и продажи", "green"),
     (("osv",), "ОСВ", "green"),
     (("opening",), "Начальные остатки", "accent"),
     (("chart",), "План счетов", "violet"),
-    (("inventory",), "Склад", "amber"),
     (("directories",), "Справочники", "teal"),
     (("templates",), "Шаблоны", "amber"),
     (("currencies",), "Валюты", "green"),
     (("invoices",), "E-qaimələr", "accent"),
 ]
-PLACE_KEYS = [key for key, _, _ in PLACES]
+# Modules: optional ways of working beside the journal (D30, D44), in a block of their own
+MODULES = [
+    (("trade",), "Покупки и продажи", "green"),
+    (("inventory",), "Склад", "amber"),
+]
+PLACE_KEYS = [key for key, _, _ in PLACES + MODULES]
 # open pages: a quiet grey icon of what they are (a new document is the blue plus)
 OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
 OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
@@ -352,6 +355,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{name} — Modern GL")
         self.sidebar.retranslate()
         for key, text, color in PLACES:
+            self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
+        self.sidebar.add_section(tr("Модули"))
+        for key, text, color in MODULES:
             self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
         self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
