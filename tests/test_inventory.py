@@ -31,7 +31,6 @@ from modern_gl.desktop.inventory_document_page import (
 from modern_gl.desktop.inventory_page import (
     InventoryPage,
     InventorySettingsDialog,
-    OperationDialog,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import money
@@ -719,47 +718,6 @@ def test_multiline_inventory_document_page_posts_rows(inventory_demo, conn, qtbo
     assert page.doc is not None and page.doc.status == "posted"
     assert len(page.doc.lines) == 2
     assert sum(row.amount for row in stock_balances(conn, demo.company_id)) == 6_500
-
-
-def test_landed_cost_dialog_selects_multiple_receipts(inventory_demo, conn, qtbot):
-    demo = inventory_demo
-    freight = demo.inventory.add_landed_cost_type(demo.company_id, "Доставка")
-    receipt(demo, "5", "60")
-    demo.inventory.post_receipt(
-        demo.company_id,
-        "2026-01-11",
-        [ReceiptLine(demo.other_item, demo.main, "5", "40")],
-        demo.payable_account,
-        [demo.supplier],
-    )
-    session = Session(
-        conn,
-        demo.inventory.ledger,
-        demo.company_id,
-        "Склад",
-        Catalog(conn, demo.company_id),
-        working_date=date(2026, 1, 15),
-    )
-    dialog = OperationDialog(session, demo.inventory, "landed_cost")
-    qtbot.addWidget(dialog)
-    assert dialog.receipt_lines.count() == 2
-    dialog.cost_type.setCurrentIndex(dialog.cost_type.findData(freight))
-    for row in range(dialog.receipt_lines.count()):
-        dialog.receipt_lines.item(row).setSelected(True)
-    dialog.amount.setText("10")
-    dialog._post()
-    allocations = conn.execute(
-        "SELECT amount FROM inventory_lines WHERE document_id = "
-        "(SELECT MAX(id) FROM inventory_documents) ORDER BY line_no"
-    ).fetchall()
-    assert [row["amount"] for row in allocations] == [400, 600]
-    assert (
-        conn.execute(
-            "SELECT landed_cost_type_id FROM inventory_documents "
-            "WHERE id = (SELECT MAX(id) FROM inventory_documents)"
-        ).fetchone()[0]
-        == freight
-    )
 
 
 def test_unfinished_receipt_draft_is_saved_and_completed_before_posting(inventory_demo, conn):

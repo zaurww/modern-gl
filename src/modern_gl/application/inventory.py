@@ -24,13 +24,14 @@ from modern_gl.domain.errors import (
     ValidationError,
 )
 from modern_gl.domain.money import SCALE as MONEY_SCALE
-from modern_gl.domain.money import round_ratio, to_minor
+from modern_gl.domain.money import format_minor, round_ratio, to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 QUANTITY_SCALE = 6
 QUANTITY_FACTOR = 10**QUANTITY_SCALE
 _QUANTITY_QUANTUM = Decimal(1).scaleb(-QUANTITY_SCALE)
+ALLOCATION_METHODS = ("value", "quantity", "manual")
 # VAT rates are in hundredths of a percent; a receipt starts with the standard rate.
 VAT_RATE_SCALE = 10_000
 STANDARD_VAT_RATE = 1800
@@ -81,6 +82,45 @@ class TransferLine:
 
 
 @dataclass(frozen=True)
+class LandedCostTarget:
+    """A receipt line of the batch; `amount` is its share in the manual allocation."""
+
+    receipt_line_id: int
+    amount: str | int | Decimal | None = None
+    line_id: int | None = None
+
+
+@dataclass(frozen=True)
+class LandedCostCharge:
+    """An expense of the batch: typed in the document (the broker's or customs' account,
+    amount, VAT) or an existing GL posting (its document and line number) whose debit is
+    moved to stock."""
+
+    amount: str | int | Decimal | None
+    account_id: int | None = None
+    subconto: Sequence[int | None] = ()
+    vat_amount: str | int | Decimal | None = None
+    cost_type_id: int | None = None
+    source_document_id: int | None = None
+    source_line_no: int | None = None
+    memo: str = ""
+
+
+@dataclass(frozen=True)
+class LandedCostChargeData:
+    id: int
+    line_no: int
+    cost_type_id: int | None
+    account_id: int | None
+    subconto: tuple[int | None, int | None, int | None]
+    amount: int
+    vat_amount: int
+    source_document_id: int | None
+    source_line_no: int | None
+    memo: str
+
+
+@dataclass(frozen=True)
 class InventoryLineData:
     id: int
     line_no: int
@@ -111,13 +151,13 @@ class InventoryDocumentData:
     lines: tuple[InventoryLineData, ...]
     closed: bool = False  # dated in a closed period: cannot be changed
     vat_rate: int | None = None  # a receipt's VAT rate (1800 = 18%); None: without VAT
+    allocation_method: str | None = None  # landed cost: value / quantity / manual
+    charges: tuple[LandedCostChargeData, ...] = ()  # landed cost: its expenses
 
     @property
     def editable(self) -> bool:
-        """A draft, or a posted document edited in place (landed cost: not yet)."""
-        if self.status != "posted":
-            return True
-        return not self.closed and self.doc_type != "landed_cost"
+        """A draft, or a posted document edited in place in an open period."""
+        return self.status != "posted" or not self.closed
 
 
 def to_quantity(value: str | int | Decimal) -> int:
@@ -160,7 +200,7 @@ def _money(minor: int) -> Decimal:
     return Decimal(minor).scaleb(-MONEY_SCALE)
 
 
-def _allocate_minor(total: int, weights: Sequence[tuple[int, int]]) -> dict[int, int]:
+def allocate_minor(total: int, weights: Sequence[tuple[int, int]]) -> dict[int, int]:
     """Allocate every minor unit deterministically by largest remainder."""
     if total <= 0:
         raise ValidationError(tr("сумма должна быть положительной"))
@@ -179,6 +219,57 @@ def _allocate_minor(total: int, weights: Sequence[tuple[int, int]]) -> dict[int,
         remainders.append((remainder, key))
     for _, key in sorted(remainders, key=lambda pair: (-pair[0], pair[1]))[: total - assigned]:
         result[key] += 1
+    return result
+
+
+def split_charges(
+    charges: Sequence[tuple[int, int]], targets: Mapping[int, int]
+) -> dict[tuple[int, int], int]:
+    """(charge, target) -> share: every charge is spread over the targets so that each
+    charge and each target total come out exact (charges and targets sum to the same).
+
+    Each charge goes in proportion to what the targets can still take, so the last one
+    takes exactly the rest."""
+    capacity = dict(targets)
+    result: dict[tuple[int, int], int] = {}
+    for charge_id, amount in charges:
+        if amount <= 0:
+            continue
+        weights = [(key, left) for key, left in capacity.items() if left > 0]
+        for key, share in allocate_minor(amount, weights).items():
+            if share:
+                result[(charge_id, key)] = share
+                capacity[key] -= share
+    return result
+
+
+def _pair(
+    debits: Sequence[tuple[int, Sequence[int | None], int]],
+    credits: Sequence[tuple[int, Sequence[int | None], int, str]],
+) -> list[PostingInput]:
+    """Postings from debit pieces (account, subconto, amount) and credit pieces of the same
+    total (account, subconto, amount, memo), matched in order."""
+    result: list[PostingInput] = []
+    d_left = [amount for _, _, amount in debits]
+    c_left = [credit[2] for credit in credits]
+    i = j = 0
+    while i < len(debits) and j < len(credits):
+        amount = min(d_left[i], c_left[j])
+        if amount:
+            result.append(
+                PostingInput(
+                    debits[i][0],
+                    credits[j][0],
+                    _money(amount),
+                    tuple(debits[i][1]),
+                    tuple(credits[j][1]),
+                    credits[j][3],
+                )
+            )
+        d_left[i] -= amount
+        c_left[j] -= amount
+        i += d_left[i] == 0
+        j += c_left[j] == 0
     return result
 
 
@@ -361,6 +452,22 @@ class Inventory:
             ),
             closed=self._closed(doc),
             vat_rate=doc["vat_rate"],
+            allocation_method=doc["allocation_method"],
+            charges=tuple(
+                LandedCostChargeData(
+                    row["id"],
+                    row["line_no"],
+                    row["cost_type_id"],
+                    row["account_id"],
+                    (row["sc1"], row["sc2"], row["sc3"]),
+                    row["amount"],
+                    row["vat_amount"],
+                    row["source_document_id"],
+                    row["source_line_no"],
+                    row["memo"],
+                )
+                for row in self._charges(document_id)
+            ),
         )
 
     def _closed(self, doc: sqlite3.Row) -> bool:
@@ -507,9 +614,7 @@ class Inventory:
         A draft dated before already posted documents goes into its place in the sequence:
         the later documents are recalculated (their cost may change)."""
         with transaction(self.conn):
-            doc = self._require_inventory_draft(company_id, document_id)
-            if doc["doc_type"] == "landed_cost":
-                raise ValidationError(tr("дополнительные расходы проводятся через распределение"))
+            self._require_inventory_draft(company_id, document_id)
             self._post_in_sequence(company_id, document_id)
 
     @contextmanager
@@ -523,8 +628,6 @@ class Inventory:
             doc = self._document(company_id, document_id)
             if doc["status"] != "posted":
                 raise ValidationError(tr("складской документ не проведён"))
-            if doc["doc_type"] == "landed_cost":
-                raise ValidationError(tr("редактирование дополнительных расходов пока недоступно"))
             self._require_open_period(doc)
             snapshot = self._snapshot(doc)
             later = self._withdraw_after(company_id, doc)
@@ -543,8 +646,6 @@ class Inventory:
             doc = self._document(company_id, document_id)
             if doc["status"] != "posted":
                 raise ValidationError(tr("складской документ уже является черновиком"))
-            if doc["doc_type"] == "landed_cost":
-                raise ValidationError(tr("редактирование дополнительных расходов пока недоступно"))
             snapshot = self._snapshot(doc)
             self._unpost(company_id, doc)
             self._audit(company_id, "inventory_document", document_id, "unpost", snapshot)
@@ -609,6 +710,55 @@ class Inventory:
             self._post_in_sequence(company_id, inv_id)
         return inv_id
 
+    def create_landed_cost_draft(
+        self,
+        company_id: int,
+        doc_date: date | str,
+        targets: Sequence[LandedCostTarget],
+        charges: Sequence[LandedCostCharge],
+        method: str = "value",
+        memo: str = "",
+        *,
+        cost_type_id: int | None = None,
+    ) -> int:
+        """Save a «Расходы по партии» document: the receipt lines of a batch, its expenses
+        and how they are allocated (by value, by quantity or by hand). A draft may be
+        unfinished; posting checks everything."""
+        with transaction(self.conn):
+            if cost_type_id is not None:
+                self._cost_type(company_id, cost_type_id)
+            document_id = self._insert_document(
+                company_id, doc_date, "landed_cost", memo, cost_type_id=cost_type_id
+            )
+            self._write_landed_cost_draft(company_id, document_id, targets, charges, method)
+            self._audit(
+                company_id,
+                "inventory_document",
+                document_id,
+                "create_draft",
+                {"type": "landed_cost"},
+            )
+        return document_id
+
+    def update_landed_cost_draft(
+        self,
+        company_id: int,
+        document_id: int,
+        doc_date: date | str,
+        targets: Sequence[LandedCostTarget],
+        charges: Sequence[LandedCostCharge],
+        method: str = "value",
+        memo: str = "",
+    ) -> None:
+        with transaction(self.conn):
+            doc = self._require_inventory_draft(company_id, document_id)
+            if doc["doc_type"] != "landed_cost":
+                raise ValidationError(tr("тип складского документа нельзя изменить"))
+            self._update_draft_header(company_id, document_id, doc_date, memo)
+            self._release_lines(company_id, document_id, targets)
+            self._write_landed_cost_draft(company_id, document_id, targets, charges, method)
+            self._audit(company_id, "inventory_document", document_id, "update_draft", {})
+
     def post_landed_cost(
         self,
         company_id: int,
@@ -623,47 +773,32 @@ class Inventory:
         manual_amounts: Mapping[int, str | int | Decimal] | None = None,
         cost_type_id: int | None = None,
     ) -> int:
-        """Allocate landed cost to receipt lines and split it into stock/expense parts.
-
-        `method` is `value`, `quantity`, or `manual`. If part of a receipt has already
-        been issued, that share is posted to the original issue expense account.
-        """
+        """Post one expense allocated to receipt lines (a «Расходы по партии» document
+        with a single charge). If part of a receipt has already been issued, that share
+        is posted to the original issue expense account."""
         ids = list(dict.fromkeys(receipt_line_ids))
         if not ids:
             raise ValidationError(tr("не выбраны поступления для распределения"))
-        amount = self._positive_amount(total_amount, 0)
-        if method not in {"value", "quantity", "manual"}:
-            raise ValidationError(tr("неизвестный способ распределения"))
+        if method == "manual" and (manual_amounts is None or set(manual_amounts) != set(ids)):
+            raise ValidationError(tr("ручные суммы заданы не для всех поступлений"))
+        manual = manual_amounts or {}
         with transaction(self.conn):
-            if cost_type_id is not None:
-                self._cost_type(company_id, cost_type_id)
-            receipts = [self._receipt_line(company_id, line_id) for line_id in ids]
-            allocations = self._landed_cost_allocations(receipts, amount, method, manual_amounts)
-            inv_id = self._insert_document(
-                company_id, doc_date, "landed_cost", memo, cost_type_id=cost_type_id
+            inv_id = self.create_landed_cost_draft(
+                company_id,
+                doc_date,
+                [LandedCostTarget(i, manual.get(i)) for i in ids],
+                [
+                    LandedCostCharge(
+                        total_amount,
+                        credit_account_id,
+                        credit_subconto,
+                        cost_type_id=cost_type_id,
+                    )
+                ],
+                method,
+                memo,
+                cost_type_id=cost_type_id,
             )
-            credit_sc = pad_subconto(credit_subconto)
-            line_no = 0
-            for receipt in receipts:
-                if allocations[receipt["id"]] == 0:
-                    continue
-                line_no += 1
-                self._insert_line(
-                    inv_id,
-                    company_id,
-                    line_no,
-                    receipt["item_id"],
-                    receipt["warehouse_id"],
-                    None,
-                    0,
-                    allocations[receipt["id"]],
-                    0,
-                    0,
-                    credit_account_id,
-                    credit_sc,
-                    receipt["id"],
-                    "",
-                )
             self._post_in_sequence(company_id, inv_id)
         return inv_id
 
@@ -716,7 +851,12 @@ class Inventory:
         self.conn.execute(
             "UPDATE inventory_documents SET status = 'draft' WHERE id = ?", (document_id,)
         )
-        for table in ("landed_cost_expense_allocations", "stock_consumptions", "stock_movements"):
+        for table in (
+            "landed_cost_expense_allocations",
+            "landed_cost_shares",
+            "stock_consumptions",
+            "stock_movements",
+        ):
             self.conn.execute(f"DELETE FROM {table} WHERE document_id = ?", (document_id,))
         if doc["doc_type"] in {"issue", "transfer"}:
             self.conn.execute(
@@ -768,7 +908,17 @@ class Inventory:
         else:
             postings = [self._apply_line(company_id, doc, line) for line in lines]
             if doc["doc_type"] == "receipt":
-                postings += self._vat_postings(company_id, lines)
+                postings += self._vat_postings(
+                    company_id,
+                    [
+                        (
+                            line["offset_account_id"],
+                            (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]),
+                            line["vat_amount"],
+                        )
+                        for line in lines
+                    ],
+                )
         self._finish(doc["id"], company_id, doc["doc_date"], postings, doc["memo"])
 
     def _apply_line(self, company_id: int, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
@@ -869,17 +1019,17 @@ class Inventory:
             line["memo"],
         )
 
-    def _vat_postings(self, company_id: int, lines: Sequence[sqlite3.Row]) -> list[PostingInput]:
-        """Dr input VAT / Cr the settlement account: one posting per supplier (the same
-        account and subconto). The VAT account takes the supplier's subconto by kind."""
+    def _vat_postings(
+        self, company_id: int, items: Sequence[tuple[int, tuple[int | None, ...], int]]
+    ) -> list[PostingInput]:
+        """Dr input VAT / Cr the settlement account for (account, subconto, VAT) items: one
+        posting per supplier (the same account and subconto). The VAT account takes the
+        supplier's subconto by kind."""
         totals: dict[tuple[int, tuple[int | None, ...]], int] = {}
-        for line in lines:
-            if line["vat_amount"]:
-                key = (
-                    line["offset_account_id"],
-                    (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]),
-                )
-                totals[key] = totals.get(key, 0) + line["vat_amount"]
+        for account_id, subconto, vat in items:
+            if vat:
+                key = (account_id, tuple(subconto))
+                totals[key] = totals.get(key, 0) + vat
         if not totals:
             return []
         vat_account_id = self.ledger.account_role(company_id, INPUT_VAT)
@@ -910,54 +1060,288 @@ class Inventory:
     def _apply_landed_cost(
         self, company_id: int, doc: sqlite3.Row, lines: Sequence[sqlite3.Row]
     ) -> list[PostingInput]:
-        """Split each allocated amount between the stock still on hand and the expense
-        accounts of what has already been issued from that receipt."""
+        """Allocate the charges over the batch, then split each receipt line's share between
+        the stock still on hand and the expense accounts of what was already issued."""
+        charges = self._charges(doc["id"])
+        if not charges:
+            raise ValidationError(tr("в документе нет расходов"))
+        for charge in charges:
+            self._require_charge_complete(company_id, doc, charge)
+        total = sum(charge["amount"] for charge in charges)
+        receipts = {
+            line["id"]: self._landed_cost_source(company_id, line["source_receipt_line_id"])
+            for line in lines
+        }
+        targets = self._landed_cost_targets(doc, lines, receipts, total)
+        shares = split_charges([(c["id"], c["amount"]) for c in charges], targets)
+        for (charge_id, line_id), share in shares.items():
+            self.conn.execute(
+                "INSERT INTO landed_cost_shares "
+                "(company_id, document_id, charge_id, line_id, amount) VALUES (?, ?, ?, ?, ?)",
+                (company_id, doc["id"], charge_id, line_id, share),
+            )
         postings: list[PostingInput] = []
         for line in lines:
-            receipt = self._landed_cost_source(company_id, line["source_receipt_line_id"])
-            allocated = line["amount"]
-            credit_account_id = line["offset_account_id"]
-            credit_subconto = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
-            consumptions = self._receipt_consumptions(company_id, receipt["id"])
-            consumed_quantity = sum(row["quantity"] for row in consumptions)
-            remaining_quantity = receipt["quantity"] - consumed_quantity
-            inventory_amount = round_ratio(allocated * remaining_quantity, receipt["quantity"])
-            expense_amount = allocated - inventory_amount
-            if inventory_amount:
-                stock_postings = self._landed_cost_to_stock(
-                    company_id,
-                    doc["id"],
-                    line["id"],
-                    doc["doc_date"],
-                    self._item(company_id, receipt["item_id"]),
-                    inventory_amount,
-                    credit_account_id,
-                    credit_subconto,
-                    doc["memo"],
+            allocated = targets[line["id"]]
+            debits, inventory_amount, expense_amount = (
+                self._landed_cost_debits(company_id, doc, line, receipts[line["id"]], allocated)
+                if allocated
+                else ([], 0, 0)
+            )
+            credits = [
+                (
+                    charge["account_id"],
+                    (charge["sc1"], charge["sc2"], charge["sc3"]),
+                    shares[(charge["id"], line["id"])],
+                    self._charge_memo(company_id, doc, charge),
                 )
-                if stock_postings is None:  # nothing left in stock: all of it is expense
-                    expense_amount += inventory_amount
-                    inventory_amount = 0
-                else:
-                    postings.extend(stock_postings)
-            if expense_amount:
-                postings.extend(
-                    self._landed_cost_to_expense(
-                        company_id,
-                        doc["id"],
-                        line["id"],
-                        consumptions,
-                        expense_amount,
-                        credit_account_id,
-                        credit_subconto,
-                        doc["memo"],
+                for charge in charges
+                if (charge["id"], line["id"]) in shares
+            ]
+            postings += _pair(debits, credits)
+            self.conn.execute(
+                "UPDATE inventory_lines SET amount = ?, inventory_amount = ?, "
+                "expense_amount = ? WHERE id = ?",
+                (allocated, inventory_amount, expense_amount, line["id"]),
+            )
+        return postings + self._vat_postings(
+            company_id,
+            [
+                (charge["account_id"], (charge["sc1"], charge["sc2"], charge["sc3"]), vat)
+                for charge in charges
+                if (vat := charge["vat_amount"])
+            ],
+        )
+
+    def _landed_cost_targets(
+        self,
+        doc: sqlite3.Row,
+        lines: Sequence[sqlite3.Row],
+        receipts: Mapping[int, sqlite3.Row],
+        total: int,
+    ) -> dict[int, int]:
+        """Line id -> its share of all the charges."""
+        if not lines:
+            raise ValidationError(tr("не выбраны поступления для распределения"))
+        method = doc["allocation_method"] or "value"
+        if method == "manual":
+            allocated = sum(line["amount"] for line in lines)
+            if allocated != total:
+                raise ValidationError(
+                    tr(
+                        "распределено {allocated}, а расходов {total}",
+                        allocated=format_minor(allocated),
+                        total=format_minor(total),
                     )
                 )
-            self.conn.execute(
-                "UPDATE inventory_lines SET inventory_amount = ?, expense_amount = ? WHERE id = ?",
-                (inventory_amount, expense_amount, line["id"]),
+            return {line["id"]: line["amount"] for line in lines}
+        field = "amount" if method == "value" else "quantity"
+        return allocate_minor(total, [(line["id"], receipts[line["id"]][field]) for line in lines])
+
+    def _landed_cost_debits(
+        self,
+        company_id: int,
+        doc: sqlite3.Row,
+        line: sqlite3.Row,
+        receipt: sqlite3.Row,
+        allocated: int,
+    ) -> tuple[list[tuple[int, Sequence[int | None], int]], int, int]:
+        """Where a receipt line's share goes: (debit pieces, to stock, to expense)."""
+        consumptions = self._receipt_consumptions(company_id, receipt["id"])
+        consumed_quantity = sum(row["quantity"] for row in consumptions)
+        remaining_quantity = receipt["quantity"] - consumed_quantity
+        inventory_amount = round_ratio(allocated * remaining_quantity, receipt["quantity"])
+        expense_amount = allocated - inventory_amount
+        debits: list[tuple[int, Sequence[int | None], int]] = []
+        if inventory_amount:
+            stock = self._landed_cost_to_stock(
+                company_id,
+                doc["id"],
+                line["id"],
+                doc["doc_date"],
+                self._item(company_id, receipt["item_id"]),
+                inventory_amount,
             )
-        return postings
+            if stock is None:  # nothing left in stock: all of it is expense
+                expense_amount += inventory_amount
+                inventory_amount = 0
+            else:
+                debits += stock
+        if expense_amount:
+            debits += self._landed_cost_to_expense(
+                company_id, doc["id"], line["id"], consumptions, expense_amount
+            )
+        return debits, inventory_amount, expense_amount
+
+    def _charges(self, document_id: int) -> list[sqlite3.Row]:
+        return self.conn.execute(
+            "SELECT * FROM landed_cost_charges WHERE document_id = ? ORDER BY line_no",
+            (document_id,),
+        ).fetchall()
+
+    def _charge_memo(self, company_id: int, doc: sqlite3.Row, charge: sqlite3.Row) -> str:
+        if charge["memo"]:
+            return charge["memo"]
+        if charge["cost_type_id"] is not None:
+            return self._cost_type(company_id, charge["cost_type_id"])["name"]
+        return doc["memo"]
+
+    def _require_charge_complete(
+        self, company_id: int, doc: sqlite3.Row, charge: sqlite3.Row
+    ) -> None:
+        n = charge["line_no"]
+        if charge["amount"] <= 0:
+            raise ValidationError(tr("расход {n}: не указана сумма", n=n))
+        if charge["account_id"] is None:
+            raise ValidationError(tr("расход {n}: не указан счёт", n=n))
+        if charge["source_document_id"] is None:
+            return
+        posting = self._cost_source(
+            company_id, charge["source_document_id"], charge["source_line_no"]
+        )
+        used = self.conn.execute(
+            "SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c "
+            "JOIN inventory_documents d ON d.id = c.document_id "
+            "WHERE c.company_id = ? AND c.source_document_id = ? AND c.source_line_no = ? "
+            "AND d.status = 'posted' AND c.document_id <> ?",
+            (company_id, charge["source_document_id"], charge["source_line_no"], doc["id"]),
+        ).fetchone()[0]
+        if used + charge["amount"] > posting["amount"]:
+            raise ValidationError(
+                tr(
+                    "расход {n}: проводка документа №{number} — {amount}, уже распределено "
+                    "{used}, осталось {left}",
+                    n=n,
+                    number=posting["number"],
+                    amount=format_minor(posting["amount"]),
+                    used=format_minor(used),
+                    left=format_minor(max(posting["amount"] - used, 0)),
+                )
+            )
+
+    def _cost_source(self, company_id: int, document_id: int, line_no: int) -> sqlite3.Row:
+        """A GL posting an expense line takes: posted, in the common book, not one the
+        warehouse made itself, with a positive amount."""
+        row = self.conn.execute(
+            """
+            SELECT p.*, d.number, d.status, l.code AS layer,
+                   EXISTS (SELECT 1 FROM inventory_documents i
+                           WHERE i.gl_document_id = d.id) AS from_inventory
+            FROM postings p
+            JOIN documents d ON d.id = p.document_id
+            JOIN layers l ON l.id = d.layer_id
+            WHERE p.company_id = ? AND p.document_id = ? AND p.line_no = ?
+            """,
+            (company_id, document_id, line_no),
+        ).fetchone()
+        if row is None or row["status"] != "posted":
+            raise ValidationError(tr("проводка-источник расхода не найдена или не проведена"))
+        if row["from_inventory"]:
+            raise ValidationError(tr("проводку складского документа нельзя взять как расход"))
+        if row["layer"] != "common" or row["amount"] <= 0:
+            raise ValidationError(
+                tr("как расход можно взять только обычную проводку с положительной суммой")
+            )
+        return row
+
+    def _write_landed_cost_draft(
+        self,
+        company_id: int,
+        document_id: int,
+        targets: Sequence[LandedCostTarget],
+        charges: Sequence[LandedCostCharge],
+        method: str,
+    ) -> None:
+        if method not in ALLOCATION_METHODS:
+            raise ValidationError(tr("неизвестный способ распределения"))
+        if not targets:
+            raise ValidationError(tr("не выбраны поступления для распределения"))
+        self.conn.execute(
+            "UPDATE inventory_documents SET allocation_method = ? WHERE id = ?",
+            (method, document_id),
+        )
+        seen: set[int] = set()
+        for line_no, target in enumerate(targets, 1):
+            receipt = self._receipt_line(company_id, target.receipt_line_id)
+            if receipt["id"] in seen:
+                raise ValidationError(tr("строка поступления выбрана дважды"))
+            seen.add(receipt["id"])
+            amount = (
+                0
+                if target.amount is None or _blank(target.amount)
+                else self._nonnegative_amount(target.amount)
+            )
+            self._insert_line(
+                document_id,
+                company_id,
+                line_no,
+                receipt["item_id"],
+                receipt["warehouse_id"],
+                None,
+                0,
+                amount,
+                0,
+                0,
+                None,
+                (),
+                receipt["id"],
+                "",
+                line_id=target.line_id,
+            )
+        self.conn.execute("DELETE FROM landed_cost_charges WHERE document_id = ?", (document_id,))
+        for line_no, charge in enumerate(charges, 1):
+            self._insert_charge(company_id, document_id, line_no, charge)
+
+    def _insert_charge(
+        self, company_id: int, document_id: int, line_no: int, charge: LandedCostCharge
+    ) -> None:
+        amount = (
+            0
+            if charge.amount is None or _blank(charge.amount)
+            else self._positive_amount(charge.amount, line_no)
+        )
+        vat = (
+            0
+            if charge.vat_amount is None or _blank(charge.vat_amount)
+            else self._nonnegative_amount(charge.vat_amount)
+        )
+        if charge.cost_type_id is not None:
+            self._cost_type(company_id, charge.cost_type_id)
+        if charge.source_document_id is not None:
+            if charge.source_line_no is None:
+                raise ValidationError(tr("не указана строка проводки-источника"))
+            if vat:
+                raise ValidationError(
+                    tr("расход {n}: НДС уже учтён в документе-источнике", n=line_no)
+                )
+            posting = self._cost_source(
+                company_id, charge.source_document_id, charge.source_line_no
+            )
+            account_id = posting["debit_account_id"]
+            subconto = (posting["dt_sc1"], posting["dt_sc2"], posting["dt_sc3"])
+        else:
+            account_id = charge.account_id
+            if account_id is not None:
+                self._account(company_id, account_id)
+            subconto = pad_subconto(charge.subconto)
+        self.conn.execute(
+            "INSERT INTO landed_cost_charges (company_id, document_id, line_no, cost_type_id, "
+            "account_id, sc1, sc2, sc3, amount, vat_amount, source_document_id, "
+            "source_line_no, memo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                company_id,
+                document_id,
+                line_no,
+                charge.cost_type_id,
+                account_id,
+                *subconto,
+                amount,
+                vat,
+                charge.source_document_id,
+                charge.source_line_no if charge.source_document_id is not None else None,
+                charge.memo.strip(),
+            ),
+        )
 
     def _landed_cost_source(self, company_id: int, line_id: int) -> sqlite3.Row:
         row = self.conn.execute(
@@ -977,26 +1361,6 @@ class Inventory:
             )
         return row
 
-    def _landed_cost_allocations(
-        self,
-        receipts: list[sqlite3.Row],
-        amount: int,
-        method: str,
-        manual_amounts: Mapping[int, str | int | Decimal] | None,
-    ) -> dict[int, int]:
-        """Receipt line id -> its share of the landed cost (qəpik)."""
-        if method != "manual":
-            field = "amount" if method == "value" else "quantity"
-            return _allocate_minor(amount, [(row["id"], row[field]) for row in receipts])
-        if manual_amounts is None or set(manual_amounts) != {row["id"] for row in receipts}:
-            raise ValidationError(tr("ручные суммы заданы не для всех поступлений"))
-        allocations = {
-            line_id: self._nonnegative_amount(value) for line_id, value in manual_amounts.items()
-        }
-        if sum(allocations.values()) != amount:
-            raise ValidationError(tr("сумма ручного распределения не равна расходу"))
-        return allocations
-
     def _landed_cost_to_stock(
         self,
         company_id: int,
@@ -1005,17 +1369,14 @@ class Inventory:
         doc_date: date | str,
         item: sqlite3.Row,
         amount: int,
-        credit_account_id: int,
-        credit_subconto: Sequence[int | None],
-        memo: str,
-    ) -> list[PostingInput] | None:
+    ) -> list[tuple[int, Sequence[int | None], int]] | None:
         """Add `amount` to the item's stock value in each warehouse in proportion to its
         quantity there. None when no warehouse has the item any more."""
         balances = self._item_warehouse_quantities(company_id, item["id"])
         if not balances:
             return None
         postings = []
-        for warehouse_id, share in _allocate_minor(amount, balances).items():
+        for warehouse_id, share in allocate_minor(amount, balances).items():
             if not share:
                 continue
             warehouse = self._warehouse(company_id, warehouse_id)
@@ -1031,13 +1392,10 @@ class Inventory:
                 share,
             )
             postings.append(
-                PostingInput(
+                (
                     item["inventory_account_id"],
-                    credit_account_id,
-                    _money(share),
                     self._inventory_subconto(company_id, item, warehouse),
-                    credit_subconto,
-                    memo,
+                    share,
                 )
             )
         return postings
@@ -1049,15 +1407,12 @@ class Inventory:
         line_id: int,
         consumptions: list[sqlite3.Row],
         amount: int,
-        credit_account_id: int,
-        credit_subconto: Sequence[int | None],
-        memo: str,
-    ) -> list[PostingInput]:
+    ) -> list[tuple[int, Sequence[int | None], int]]:
         """Charge `amount` to the expense accounts of the issues that consumed the receipt,
         in proportion to the quantity each took."""
         if not consumptions:
             raise ValidationError(tr("не найдены списания для распределения расхода"))
-        by_issue = _allocate_minor(
+        by_issue = allocate_minor(
             amount, [(row["issue_line_id"], row["quantity"]) for row in consumptions]
         )
         issues = {row["issue_line_id"]: row for row in consumptions}
@@ -1073,13 +1428,10 @@ class Inventory:
                 (company_id, inv_id, line_id, issue_line_id, share),
             )
             postings.append(
-                PostingInput(
+                (
                     issue["offset_account_id"],
-                    credit_account_id,
-                    _money(share),
                     (issue["offset_sc1"], issue["offset_sc2"], issue["offset_sc3"]),
-                    credit_subconto,
-                    memo,
+                    share,
                 )
             )
         return postings
@@ -1211,7 +1563,10 @@ class Inventory:
         self,
         company_id: int,
         document_id: int,
-        lines: Sequence[ReceiptLine] | Sequence[IssueLine] | Sequence[TransferLine],
+        lines: Sequence[ReceiptLine]
+        | Sequence[IssueLine]
+        | Sequence[TransferLine]
+        | Sequence[LandedCostTarget],
     ) -> None:
         """Before a draft is rewritten: drop the lines that are gone, renumber the rest
         out of the way (line numbers are unique within a document)."""
@@ -1798,7 +2153,12 @@ class Inventory:
             "landed_cost_type_id": doc["landed_cost_type_id"],
             "gl_document_id": doc["gl_document_id"],
             "vat_rate": doc["vat_rate"],
+            "allocation_method": doc["allocation_method"],
             "lines": lines,
+            "charges": [
+                {key: row[key] for key in row.keys() if key not in {"company_id", "document_id"}}
+                for row in self._charges(doc["id"])
+            ],
         }
 
     def _audit(

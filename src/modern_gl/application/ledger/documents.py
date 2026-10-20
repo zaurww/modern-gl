@@ -226,6 +226,21 @@ class DocumentCommands(SubcontoCommands):
                 + ". "
                 + tr("Исправьте его сторно в открытом периоде.")
             )
+        landed = self.conn.execute(
+            "SELECT d.number FROM landed_cost_charges c "
+            "JOIN inventory_documents d ON d.id = c.document_id "
+            "WHERE c.source_document_id = ? ORDER BY d.number LIMIT 1",
+            (doc["id"],),
+        ).fetchone()
+        if landed is not None:
+            raise ValidationError(
+                tr(
+                    "документ №{n} взят как расход партии в складском документе №{m}: "
+                    "сначала уберите его оттуда",
+                    n=doc["number"],
+                    m=landed["number"],
+                )
+            )
         storno = self.conn.execute(
             "SELECT number FROM documents WHERE reversal_of = ?", (doc["id"],)
         ).fetchone()

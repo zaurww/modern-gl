@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
-
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -16,8 +14,6 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
-    QListWidget,
-    QListWidgetItem,
     QMessageBox,
     QStackedLayout,
     QTableView,
@@ -28,9 +24,6 @@ from PySide6.QtWidgets import (
 from modern_gl.application.inventory import (
     QUANTITY_FACTOR,
     Inventory,
-    IssueLine,
-    ReceiptLine,
-    TransferLine,
     format_quantity,
 )
 from modern_gl.desktop.reports_page import Column, ReportModel
@@ -40,8 +33,6 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
     button,
-    date_edit,
-    edited_date,
     money,
     more_button,
     ru_date,
@@ -53,78 +44,11 @@ from modern_gl.reporting.inventory import (
     InventoryDocumentSummary,
     code_label,
     has_units,
-    item_choices,
-    landed_cost_type_choices,
     list_inventory_documents,
-    receipt_line_choices,
     stock_account_choices,
     stock_balances,
     unit_choices,
-    warehouse_choices,
 )
-
-
-class AccountPicker(QWidget):
-    """An account and the subconto values required by that account."""
-
-    def __init__(self, session: Session, parent=None) -> None:
-        super().__init__(parent)
-        self.s = session
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(5)
-        self.account = QComboBox()
-        for account in session.catalog.leaf_accounts:
-            self.account.addItem(account.label, account.id)
-        layout.addWidget(self.account)
-        self.dimensions: list[QComboBox] = []
-        for _ in range(3):
-            combo = QComboBox()
-            combo.hide()
-            layout.addWidget(combo)
-            self.dimensions.append(combo)
-        self.account.currentIndexChanged.connect(self._account_changed)
-        self._account_changed()
-
-    def select_code(self, code: str) -> None:
-        account = self.s.catalog.by_code.get(code)
-        if account is not None:
-            index = self.account.findData(account.id)
-            if index >= 0:
-                self.account.setCurrentIndex(index)
-
-    def account_id(self) -> int:
-        return int(self.account.currentData())
-
-    def subconto(self) -> list[int | None]:
-        account = self.s.catalog.accounts[self.account_id()]
-        result: list[int | None] = []
-        for kind_id, combo in zip(account.sc_kinds, self.dimensions, strict=True):
-            if kind_id is not None and combo.currentData() is None:
-                raise LedgerError(
-                    tr("Заполните субконто «{kind}»", kind=self.s.catalog.kinds[kind_id])
-                )
-            result.append(int(combo.currentData()) if kind_id is not None else None)
-        while result and result[-1] is None:
-            result.pop()
-        return result
-
-    def _account_changed(self) -> None:
-        account_id = self.account.currentData()
-        if account_id is None:
-            return
-        account = self.s.catalog.accounts[int(account_id)]
-        for kind_id, combo in zip(account.sc_kinds, self.dimensions, strict=True):
-            combo.clear()
-            if kind_id is None:
-                combo.hide()
-                continue
-            combo.setPlaceholderText(self.s.catalog.kinds[kind_id])
-            for value in self.s.catalog.values(kind_id):
-                combo.addItem(value.name, value.id)
-            if combo.count():
-                combo.setCurrentIndex(0)
-            combo.show()
 
 
 class ItemDialog(QDialog):
@@ -217,168 +141,6 @@ class InventorySettingsDialog(QDialog):
         self.accept()
 
 
-class OperationDialog(QDialog):
-    def __init__(self, session: Session, inventory: Inventory, operation: str, parent=None) -> None:
-        super().__init__(parent)
-        self.s, self.inventory, self.operation = session, inventory, operation
-        titles = {
-            "opening": tr("Начальные остатки"),
-            "receipt": tr("Поступление"),
-            "issue": tr("Списание"),
-            "transfer": tr("Перемещение"),
-            "landed_cost": tr("Дополнительные расходы"),
-        }
-        self.setWindowTitle(titles[operation])
-        self.setMinimumWidth(470)
-        self.form = QFormLayout(self)
-        self.when = date_edit(session.working_date, self)
-        self.form.addRow(tr("Дата"), self.when)
-        self.item = QComboBox()
-        self.warehouse = QComboBox()
-        self.to_warehouse = QComboBox()
-        self.receipt_lines = QListWidget()
-        self.receipt_lines.setSelectionMode(QAbstractItemView.SelectionMode.MultiSelection)
-        self.receipt_lines.setMinimumHeight(130)
-        self.allocation_method = QComboBox()
-        self.allocation_method.addItem(tr("По стоимости"), "value")
-        self.allocation_method.addItem(tr("По количеству"), "quantity")
-        self.cost_type = QComboBox()
-        self.cost_type.addItem(tr("Без статьи"), None)
-        for cost_type in landed_cost_type_choices(session.conn, session.company_id):
-            self.cost_type.addItem(cost_type.label, cost_type.id)
-        self.quantity = QLineEdit()
-        self.quantity.setPlaceholderText("0")
-        self.amount = QLineEdit()
-        self.amount.setPlaceholderText("0.00")
-        self.offset = AccountPicker(session)
-        self.memo = QLineEdit()
-
-        for item in item_choices(session.conn, session.company_id):
-            self.item.addItem(item.label, item.id)
-        for warehouse in warehouse_choices(session.conn, session.company_id):
-            self.warehouse.addItem(warehouse.label, warehouse.id)
-            self.to_warehouse.addItem(warehouse.label, warehouse.id)
-
-        if operation == "landed_cost":
-            for line in receipt_line_choices(session.conn, session.company_id):
-                entry = QListWidgetItem(
-                    tr(
-                        "{date} №{number} · {item} · {quantity} · {amount}",
-                        date=line.doc_date,
-                        number=line.number,
-                        item=line.item_name,
-                        quantity=format_quantity(line.quantity, line.precision),
-                        amount=money(line.amount, blank_zero=False),
-                    )
-                )
-                entry.setData(Qt.ItemDataRole.UserRole, line.id)
-                self.receipt_lines.addItem(entry)
-            if self.receipt_lines.count():
-                self.receipt_lines.item(0).setSelected(True)
-            self.form.addRow(tr("Статья расходов"), self.cost_type)
-            self.form.addRow(tr("Поступления"), self.receipt_lines)
-            self.form.addRow(tr("Способ распределения"), self.allocation_method)
-            self.form.addRow(tr("Сумма расходов"), self.amount)
-            self.form.addRow(tr("Счёт расчётов"), self.offset)
-            self.offset.select_code("60")
-        else:
-            self.form.addRow(tr("Товар"), self.item)
-            self.form.addRow(tr("Склад"), self.warehouse)
-            if operation == "transfer":
-                self.form.addRow(tr("Склад-получатель"), self.to_warehouse)
-            self.form.addRow(tr("Количество"), self.quantity)
-            if operation in {"opening", "receipt"}:
-                self.form.addRow(tr("Сумма"), self.amount)
-                self.form.addRow(tr("Счёт расчётов"), self.offset)
-                self.offset.select_code("60")
-            elif operation == "issue":
-                self.form.addRow(tr("Счёт затрат"), self.offset)
-                self.offset.select_code("46")
-        self.form.addRow(tr("Комментарий"), self.memo)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
-        )
-        buttons.accepted.connect(self._save)
-        buttons.rejected.connect(self.reject)
-        self.form.addRow(buttons)
-
-    def _save(self) -> None:
-        try:
-            self._post()
-        except (LedgerError, ValueError) as exc:
-            QMessageBox.warning(self, self.windowTitle(), str(exc))
-            return
-        self.accept()
-
-    def _post(self) -> None:
-        company_id = self.s.company_id
-        doc_date: date = edited_date(self.when)
-        memo = self.memo.text().strip()
-        if self.operation == "landed_cost":
-            receipt_line_ids = [
-                int(item.data(Qt.ItemDataRole.UserRole))
-                for item in self.receipt_lines.selectedItems()
-            ]
-            if not receipt_line_ids:
-                raise ValueError(tr("Нет проведённых поступлений"))
-            self.inventory.post_landed_cost(
-                company_id,
-                doc_date,
-                receipt_line_ids,
-                self.amount.text(),
-                self.offset.account_id(),
-                self.offset.subconto(),
-                memo,
-                method=str(self.allocation_method.currentData()),
-                cost_type_id=(
-                    int(self.cost_type.currentData()) if self.cost_type.currentData() else None
-                ),
-            )
-            return
-        if self.item.currentData() is None or self.warehouse.currentData() is None:
-            raise ValueError(tr("Сначала добавьте товар и склад"))
-        item_id, warehouse_id = int(self.item.currentData()), int(self.warehouse.currentData())
-        if self.operation in {"opening", "receipt"}:
-            self.inventory.post_receipt(
-                company_id,
-                doc_date,
-                [ReceiptLine(item_id, warehouse_id, self.quantity.text(), self.amount.text())],
-                self.offset.account_id(),
-                self.offset.subconto(),
-                memo,
-                opening=self.operation == "opening",
-            )
-        elif self.operation == "issue":
-            self.inventory.post_issue(
-                company_id,
-                doc_date,
-                [
-                    IssueLine(
-                        item_id,
-                        warehouse_id,
-                        self.quantity.text(),
-                        self.offset.account_id(),
-                        self.offset.subconto(),
-                    )
-                ],
-                memo,
-            )
-        else:
-            self.inventory.post_transfer(
-                company_id,
-                doc_date,
-                [
-                    TransferLine(
-                        item_id,
-                        warehouse_id,
-                        int(self.to_warehouse.currentData()),
-                        self.quantity.text(),
-                    )
-                ],
-                memo,
-            )
-
-
 class InventoryPage(QWidget):
     key = ("inventory",)
     open_inventory_document = Signal(int)
@@ -415,7 +177,7 @@ class InventoryPage(QWidget):
             ("Поступление", "receipt", "primary"),
             ("Списание", "issue", "flat"),
             ("Перемещение", "transfer", "flat"),
-            ("Доп. расходы", "landed_cost", "flat"),
+            ("Расходы по партии", "landed_cost", "flat"),
         ):
             control = button(tr(title), kind)
             control.clicked.connect(lambda _=False, op=operation: self.operation(op))
@@ -610,13 +372,7 @@ class InventoryPage(QWidget):
             self.s.notify(tr("Настройки склада сохранены"))
 
     def operation(self, operation: str) -> None:
-        if operation != "landed_cost":
-            self.new_inventory_document.emit(operation)
-            return
-        dialog = OperationDialog(self.s, self.inventory, operation, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.s.notify(tr("Складской документ проведён"))
-            self.refresh()
+        self.new_inventory_document.emit(operation)
 
     @staticmethod
     def _document_type(doc_type: str) -> str:

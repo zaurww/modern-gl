@@ -53,6 +53,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.inventory import Inventory
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_name, load_document, load_template
 from modern_gl.desktop import icons, theme
@@ -63,6 +64,7 @@ from modern_gl.desktop.import_page import ImportPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
+from modern_gl.desktop.landed_cost_page import LandedCostPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
@@ -672,24 +674,34 @@ class MainWindow(QMainWindow):
     def open_inventory_document(self, document_id: int) -> None:
         key = ("inventory_doc", document_id)
         if key not in self.pages:
-            page = InventoryDocumentPage(self.open_session, document_id=document_id)
+            session = self.open_session
+            doc = Inventory(session.conn).load_document(session.company_id, document_id)
+            page: InventoryDocumentPage | LandedCostPage = (
+                LandedCostPage(session, document_id)
+                if doc.doc_type == "landed_cost"
+                else InventoryDocumentPage(session, document_id=document_id)
+            )
             self._wire_inventory_document(page)
             self._add_page(key, page, open_item=True)
         self._activate(key)
 
     def new_inventory_document(self, doc_type: str) -> None:
-        page = InventoryDocumentPage(self.open_session, doc_type=doc_type)
+        page: InventoryDocumentPage | LandedCostPage = (
+            LandedCostPage(self.open_session)
+            if doc_type == "landed_cost"
+            else InventoryDocumentPage(self.open_session, doc_type=doc_type)
+        )
         self._wire_inventory_document(page)
         self._add_page(page.key, page, open_item=True)
         self._activate(page.key)
 
-    def _wire_inventory_document(self, page: InventoryDocumentPage) -> None:
+    def _wire_inventory_document(self, page: InventoryDocumentPage | LandedCostPage) -> None:
         page.saved.connect(lambda _id, p=page: self._inventory_document_saved(p))
         page.open_gl_document.connect(self.show_document)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
         page.title_changed.connect(lambda p=page: self._retitle(p))
 
-    def _inventory_document_saved(self, page: InventoryDocumentPage) -> None:
+    def _inventory_document_saved(self, page: InventoryDocumentPage | LandedCostPage) -> None:
         old_key = self._key_of(page)
         if old_key is not None and old_key != page.key and page.doc is not None:
             self.pages[page.key] = self.pages.pop(old_key)

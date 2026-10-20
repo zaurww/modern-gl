@@ -188,6 +188,57 @@ def main() -> None:
     loop.exec()
     settings_dialog.grab().save(str(out / "8c3_inventory_settings.png"))
     settings_dialog.close()
+    from modern_gl.application.inventory import Inventory, LandedCostCharge, LandedCostTarget
+    from modern_gl.application.ledger import PostingInput
+    from modern_gl.desktop.landed_cost_page import cost_source_picker
+    from modern_gl.reporting.inventory import receipt_line_choices
+
+    cid, catalog = session.company_id, session.catalog
+    partner = catalog.values(catalog.by_code["60"].sc_kinds[0])[1]
+    contract = catalog.values(catalog.by_code["60"].sc_kinds[1], partner.id)[0]
+    cost_item = catalog.values(catalog.by_code["44"].sc_kinds[0])[0]
+    broker = ledger.post_new(
+        cid,
+        "2026-02-04",
+        [
+            PostingInput(
+                catalog.by_code["44"].id,
+                catalog.by_code["60"].id,
+                "40",
+                (cost_item.id,),
+                (partner.id, contract.id),
+                i18n.tr("Брокерские услуги"),
+            )
+        ],
+    )
+    stock = Inventory(session.conn, actor="screenshots")
+    freight = stock.add_landed_cost_type(cid, i18n.tr("Доставка"))
+    batch = stock.create_landed_cost_draft(
+        cid,
+        "2026-02-05",
+        [
+            LandedCostTarget(r.id)
+            for r in sorted(receipt_line_choices(session.conn, cid), key=lambda r: r.id)
+        ],
+        [
+            LandedCostCharge(
+                "85", catalog.by_code["60"].id, (partner.id, contract.id), "15.30", freight
+            ),
+            LandedCostCharge("30", source_document_id=broker, source_line_no=1),
+        ],
+        "value",
+        i18n.tr("Партия"),
+    )
+    stock.post_document(cid, batch)
+    win.open_inventory_document(batch)
+    shot("8c4_landed_cost")
+    picker = cost_source_picker(session, None, win)
+    picker.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    picker.grab().save(str(out / "8c5_cost_source_picker.png"))
+    picker.close()
     win.show_place(("templates",))
     shot("8d_templates")
     from modern_gl.application.queries import list_templates

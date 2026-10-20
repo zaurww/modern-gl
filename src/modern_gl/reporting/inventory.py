@@ -39,6 +39,34 @@ class ReceiptLineChoice:
     quantity: int
     amount: int
     precision: int
+    document_id: int = 0
+    warehouse_name: str = ""
+    memo: str = ""  # of the receipt document
+    unit: str = ""
+
+
+@dataclass(frozen=True)
+class CostSource:
+    """A GL posting that can be taken as an expense of a batch (a broker's or customs
+    invoice): what is left of it after other «Расходы по партии» documents."""
+
+    document_id: int
+    line_no: int
+    doc_date: str
+    number: int
+    debit: str
+    credit: str
+    subconto: str  # the debit side's values, the credit side's if it has none
+    memo: str
+    amount: int
+    used: int
+    debit_account_id: int = 0
+    debit_subconto: tuple[int | None, int | None, int | None] = (None, None, None)
+    debit_class: str | None = None  # an expense posting is what a batch usually takes
+
+    @property
+    def left(self) -> int:
+        return self.amount - self.used
 
 
 @dataclass(frozen=True)
@@ -273,12 +301,15 @@ def receipt_line_choices(conn: sqlite3.Connection, company_id: int) -> list[Rece
     rows = conn.execute(
         """
         SELECT l.id, d.doc_date, d.number, v.name AS item_name, l.quantity, l.amount,
-               u.precision
+               u.precision, d.id AS document_id, wv.name AS warehouse_name, d.memo,
+               u.code AS unit
         FROM inventory_lines l
         JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
         JOIN inventory_items i ON i.company_id = l.company_id AND i.id = l.item_id
         JOIN subconto_values v ON v.company_id = i.company_id AND v.id = i.subconto_value_id
         JOIN inventory_units u ON u.company_id = i.company_id AND u.id = i.unit_id
+        JOIN warehouses w ON w.company_id = l.company_id AND w.id = l.warehouse_id
+        JOIN subconto_values wv ON wv.company_id = w.company_id AND wv.id = w.subconto_value_id
         WHERE l.company_id = ? AND d.status = 'posted'
           AND d.doc_type IN ('opening', 'receipt')
         ORDER BY d.doc_date DESC, d.id DESC, l.line_no
@@ -321,3 +352,58 @@ def inventory_document_of(
         (company_id, gl_document_id),
     ).fetchone()
     return row[0] if row else None
+
+
+def cost_sources(
+    conn: sqlite3.Connection,
+    company_id: int,
+    exclude_document_id: int | None = None,
+    *,
+    only_left: bool = True,
+) -> list[CostSource]:
+    """Posted GL postings of the common book, not made by the warehouse, with something
+    left to allocate (other landed cost documents than `exclude_document_id` count),
+    newest first. `only_left=False`: also those allocated in full."""
+    rows = conn.execute(
+        """
+        SELECT p.document_id, p.line_no, d.doc_date, d.number, p.amount,
+               p.debit_account_id, p.dt_sc1, p.dt_sc2, p.dt_sc3, da.account_class,
+               COALESCE(NULLIF(p.memo, ''), d.memo) AS memo,
+               COALESCE(da.code, da.name) AS debit, COALESCE(ca.code, ca.name) AS credit,
+               (SELECT GROUP_CONCAT(v.name, ', ') FROM subconto_values v
+                WHERE v.id IN (p.dt_sc1, p.dt_sc2, p.dt_sc3)) AS dt_names,
+               (SELECT GROUP_CONCAT(v.name, ', ') FROM subconto_values v
+                WHERE v.id IN (p.ct_sc1, p.ct_sc2, p.ct_sc3)) AS ct_names,
+               (SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c
+                WHERE c.company_id = p.company_id AND c.source_document_id = p.document_id
+                  AND c.source_line_no = p.line_no AND c.document_id IS NOT ?) AS used
+        FROM postings p
+        JOIN documents d ON d.id = p.document_id
+        JOIN layers l ON l.id = d.layer_id
+        JOIN accounts da ON da.id = p.debit_account_id
+        JOIN accounts ca ON ca.id = p.credit_account_id
+        WHERE p.company_id = ? AND d.status = 'posted' AND l.code = 'common' AND p.amount > 0
+          AND NOT EXISTS (SELECT 1 FROM inventory_documents i WHERE i.gl_document_id = d.id)
+        ORDER BY d.doc_date DESC, d.number DESC, p.line_no
+        """,
+        (exclude_document_id, company_id),
+    )
+    return [
+        CostSource(
+            r["document_id"],
+            r["line_no"],
+            r["doc_date"],
+            r["number"],
+            r["debit"],
+            r["credit"],
+            r["dt_names"] or r["ct_names"] or "",
+            r["memo"],
+            r["amount"],
+            r["used"],
+            r["debit_account_id"],
+            (r["dt_sc1"], r["dt_sc2"], r["dt_sc3"]),
+            r["account_class"],
+        )
+        for r in rows
+        if r["amount"] > r["used"] or not only_left
+    ]
