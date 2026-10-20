@@ -143,7 +143,7 @@ RECEIPT_HEADERS = {ITEM: "Товар / услуга / ОС", MEMO: "Содерж
 
 DOCUMENT_TYPES = {
     "opening": "Начальные остатки",
-    "receipt": "Поступление",
+    "receipt": "Покупка",
     "issue": "Списание",
     "sale": "Продажа",
     "transfer": "Перемещение",

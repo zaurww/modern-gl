@@ -80,6 +80,7 @@ from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportPa
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import LANGUAGES, language, set_language, tr
 from modern_gl.infrastructure import backup
@@ -89,6 +90,7 @@ from modern_gl.reporting.inventory import inventory_document_of
 KEY_ROLE = Qt.ItemDataRole.UserRole
 PLACES = [  # key, title (translated on display), icon color (a palette name: themes change it)
     (("journal",), "Журнал", "accent"),
+    (("trade",), "Покупки и продажи", "green"),
     (("osv",), "ОСВ", "green"),
     (("opening",), "Начальные остатки", "accent"),
     (("chart",), "План счетов", "violet"),
@@ -288,6 +290,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+7", lambda: self.show_place(("currencies",))),
             ("Ctrl+8", lambda: self.show_place(("invoices",))),
             ("Ctrl+9", lambda: self.show_place(("opening",))),
+            ("Ctrl+0", lambda: self.show_place(("trade",))),
             ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
@@ -557,6 +560,11 @@ class MainWindow(QMainWindow):
             page.open_inventory_document.connect(self.open_inventory_document)
             page.new_inventory_document.connect(self.new_inventory_document)
             return page
+        if key == ("trade",):
+            page = TradePage(s)
+            page.open_inventory_document.connect(self.open_inventory_document)
+            page.new_inventory_document.connect(self.new_inventory_document)
+            return page
         if key == ("templates",):
             page = TemplatesPage(s)
             page.use_template.connect(
@@ -814,6 +822,9 @@ class MainWindow(QMainWindow):
         inventory = self._page(("inventory",), InventoryPage)
         if inventory is not None:
             inventory.refresh()
+        trade = self._page(("trade",), TradePage)
+        if trade is not None:
+            trade.refresh()
 
     def open_template(self, template_id: int | None) -> None:
         """The template editor; a saved (or deleted) template returns to the list."""
