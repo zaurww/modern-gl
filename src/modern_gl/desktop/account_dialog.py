@@ -1,7 +1,9 @@
-"""Add or edit an account: code, name, parent, kind, group, class, subconto."""
+"""Add or edit an account: code, name, parent, group, type (and so class), subconto."""
 
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -17,13 +19,14 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import AccountInfo
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import ACCOUNT_CLASSES, button, class_icon
+from modern_gl.desktop.widgets import button, class_icon, type_choices
+from modern_gl.domain.accounts import TYPE_CLASS
 from modern_gl.domain.currency import CURRENCY_ONLY, CURRENCY_OPTIONAL, NO_CURRENCY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
-AUTO = "auto"  # class combobox: let the ledger decide (parent's class or from kind)
+AUTO = "auto"  # type combobox: let the ledger decide (the parent's type and class)
 CURRENCY_CHOICES = (
     (NO_CURRENCY, "Только в манатах"),
     (CURRENCY_OPTIONAL, "В манатах и в валюте"),
@@ -83,15 +86,26 @@ class AccountDialog(QDialog):
                 "переоцениваются по курсу"
             )
         )
-        self.account_class = QComboBox()
+        # Type picker grouped by class: a class alone in bold, then its types. Item data is
+        # the type, or the class for a class alone ("" — not set); see _choice()
+        self.account_type = QComboBox()
+        self.account_type.setMaxVisibleItems(20)
+        bold = QFont(self.account_type.font())
+        bold.setBold(True)
+        self.account_type.setToolTip(
+            tr("Тип говорит программе, что это за счёт, при любом коде: по нему строятся отчёты")
+        )
         if account is None:
-            self.account_class.addItem(tr("Автоматически"), AUTO)
-        for code, name, _ in ACCOUNT_CLASSES:
-            self.account_class.addItem(class_icon(code), tr(name), code)
-        self.account_class.addItem(class_icon(None), tr("Не задан"), None)
+            self.account_type.addItem(tr("Автоматически"), AUTO)
+        for cls, t, text in type_choices():
+            self.account_type.addItem(class_icon(cls), text, t or cls or "")
+            if cls and not t:
+                self.account_type.setItemData(
+                    self.account_type.count() - 1, bold, Qt.ItemDataRole.FontRole
+                )
         self.contra = QCheckBox(tr("Контрсчёт"))
         class_row = QHBoxLayout()
-        class_row.addWidget(self.account_class, 1)
+        class_row.addWidget(self.account_type, 1)
         class_row.addWidget(self.contra)
         self.subconto = []
         for _ in range(3):
@@ -105,7 +119,7 @@ class AccountDialog(QDialog):
         form.addRow(tr("Наименование"), self.name)
         form.addRow(tr("Родитель"), self.parent_box)
         form.addRow("", self.group)
-        form.addRow(tr("Класс"), class_row)
+        form.addRow(tr("Тип"), class_row)
         form.addRow("", self.two_sided)
         form.addRow(tr("Валюта"), self.currency)
         for i, box in enumerate(self.subconto, start=1):
@@ -149,7 +163,7 @@ class AccountDialog(QDialog):
         self.two_sided.setChecked(a.two_sided)
         self._select(self.currency, a.currency)
         self.group.setChecked(a.is_group)
-        self._select(self.account_class, a.account_class)
+        self._select(self.account_type, a.account_type or a.account_class or "")
         self.contra.setChecked(a.contra)
         for box, kind_id in zip(self.subconto, a.sc_kinds, strict=True):
             self._select(box, kind_id)
@@ -173,6 +187,13 @@ class AccountDialog(QDialog):
         for box in self.subconto:
             box.setEnabled(not on)
 
+    def _choice(self) -> tuple[str | None, str | None]:
+        """(class, type) picked; (None, None) for "automatically" and "not set"."""
+        key = self.account_type.currentData()
+        if key in TYPE_CLASS:
+            return TYPE_CLASS[key], key
+        return (None, None) if key in (AUTO, "") else (key, None)
+
     # ---- save ------------------------------------------------------------------------
 
     def save(self) -> None:
@@ -183,7 +204,7 @@ class AccountDialog(QDialog):
         subconto = [] if group else [b.currentData() for b in self.subconto]
         while subconto and subconto[-1] is None:
             subconto.pop()
-        account_class = self.account_class.currentData()
+        account_class, account_type = self._choice()
         try:
             with transaction(self.s.conn):
                 if self.account is None:
@@ -199,7 +220,8 @@ class AccountDialog(QDialog):
                         parent=parent_id,
                         is_group=group,
                         subconto=subconto,
-                        account_class=None if account_class == AUTO else account_class,
+                        account_class=account_class,
+                        account_type=account_type,
                         contra=self.contra.isChecked(),
                         currency=self.currency.currentData(),
                     )
@@ -218,6 +240,8 @@ class AccountDialog(QDialog):
                     )
                     if account_class != a.account_class or self.contra.isChecked() != a.contra:
                         led.set_account_class(cid, a.id, account_class, self.contra.isChecked())
+                    if account_type != a.account_type:
+                        led.set_account_type(cid, a.id, account_type)
         except (LedgerError, KeyError) as e:
             self.error.setText(str(e).strip("'\""))
             self.error.show()

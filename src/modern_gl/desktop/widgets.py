@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop.theme import P, dot_icon, fonts
+from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_NAMES
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
@@ -198,6 +199,22 @@ _CLASS_ICONS: dict[str | None, QIcon] = {}
 def class_name(account_class: str | None) -> str:
     names = {code: name for code, name, _ in ACCOUNT_CLASSES}
     return tr(names[account_class]) if account_class in names else tr("Без класса")
+
+
+def type_name(account_class: str | None, account_type: str | None) -> str:
+    """An account's type, or its class when the type is not set."""
+    return tr(TYPE_NAMES[account_type]) if account_type else class_name(account_class)
+
+
+def type_choices() -> list[tuple[str | None, str | None, str]]:
+    """(class, type, name) for a type picker, grouped by class: each class first (the class
+    alone, without a type), then its types; last "not set"."""
+    choices: list[tuple[str | None, str | None, str]] = []
+    for cls, name, _ in ACCOUNT_CLASSES:
+        choices.append((cls, None, tr(name)))
+        choices += [(cls, t, tr(n)) for t, c, n in ACCOUNT_TYPES if c == cls]
+    choices.append((None, None, tr("Не задан")))
+    return choices
 
 
 def class_icon(account_class: str | None) -> QIcon:

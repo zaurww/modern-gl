@@ -28,6 +28,7 @@ class AccountInfo:
     active: bool = True
     two_sided: bool = False
     currency: int = 0  # domain.currency mode: 0 manat, 1 only in currency, 2 either
+    account_type: str | None = None  # domain.accounts.ACCOUNT_TYPES
 
     @property
     def currency_optional(self) -> bool:
@@ -79,6 +80,7 @@ class Catalog:
                 bool(r["active"]),
                 bool(r["two_sided"]),
                 r["currency"],
+                r["account_type"],
             )
             for r in self.conn.execute(
                 "SELECT * FROM accounts WHERE company_id = ? ORDER BY code IS NULL, code",
