@@ -57,6 +57,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.opening_balances import is_opening_document
 from modern_gl.application.queries import company_name, load_document, load_template
 from modern_gl.desktop import icons, theme
 from modern_gl.desktop.currencies_page import CurrenciesPage
@@ -68,6 +69,7 @@ from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.invoices_page import InvoicesPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.landed_cost_page import LandedCostPage
+from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
@@ -82,6 +84,7 @@ KEY_ROLE = Qt.ItemDataRole.UserRole
 PLACES = [  # key, title (translated on display), icon color
     (("journal",), "Журнал", P.accent),
     (("osv",), "ОСВ", P.green),
+    (("opening",), "Начальные остатки", P.accent),
     (("chart",), "План счетов", P.violet),
     (("inventory",), "Склад", P.amber),
     (("directories",), "Справочники", P.teal),
@@ -277,6 +280,7 @@ class MainWindow(QMainWindow):
             ("Ctrl+6", lambda: self.show_place(("inventory",))),
             ("Ctrl+7", lambda: self.show_place(("currencies",))),
             ("Ctrl+8", lambda: self.show_place(("invoices",))),
+            ("Ctrl+9", lambda: self.show_place(("opening",))),
             ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
@@ -526,14 +530,16 @@ class MainWindow(QMainWindow):
             page.open_document.connect(self.open_document)
             page.new_document.connect(self.new_document)
             page.deleted.connect(lambda doc_id: self.close_page(("doc", doc_id), ask=False))
-            page.copy_document.connect(
-                lambda doc_id: self.new_document(load_document(s.conn, s.company_id, doc_id))
-            )
+            page.copy_document.connect(self.copy_document)
             page.prefill_document.connect(self.new_document)
             page.import_requested.connect(self.show_import)
             return page
         if key == ("directories",):
             return DirectoriesPage(s)
+        if key == ("opening",):
+            page = OpeningBalancesPage(s)
+            page.saved.connect(self._opening_saved)
+            return page
         if key == ("currencies",):
             page = CurrenciesPage(s)
             page.open_document.connect(self.open_document)
@@ -624,6 +630,8 @@ class MainWindow(QMainWindow):
             page.refresh()
         if isinstance(page, InventoryPage):
             page.refresh()
+        if isinstance(page, OpeningBalancesPage):
+            page.refresh()
         if isinstance(page, FocusablePage):
             page.focus_table()
 
@@ -667,7 +675,28 @@ class MainWindow(QMainWindow):
         if source is not None:
             self.open_inventory_document(source)
             return
+        if is_opening_document(s.conn, s.company_id, doc_id):
+            self.show_place(("opening",))
+            return
         self.show_document(doc_id)
+
+    def copy_document(self, doc_id: int) -> None:
+        """Opening balances are a singleton, so F9 opens them instead of cloning them."""
+        s = self.open_session
+        if is_opening_document(s.conn, s.company_id, doc_id):
+            self.show_place(("opening",))
+            self.notify(tr("Начальные остатки вводятся один раз"))
+            return
+        self.new_document(load_document(s.conn, s.company_id, doc_id))
+
+    def _opening_saved(self, doc_id: int) -> None:
+        journal = self._page(("journal",), JournalPage)
+        if journal is not None:
+            journal.refresh(select_id=doc_id)
+        for key in (("osv",), ("chart",), ("invoices",)):
+            page = self.pages.get(key)
+            if isinstance(page, (OsvPage, ChartPage, InvoicesPage)):
+                page.refresh()
 
     def show_document(self, doc_id: int) -> None:
         """The GL document itself, even when a warehouse document made it."""

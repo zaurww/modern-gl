@@ -18,6 +18,7 @@ from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
+from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
 from modern_gl.desktop.reports_page import OsvPage, SectionRow
 from modern_gl.infrastructure.db import connect
@@ -74,6 +75,32 @@ def test_opens_on_journal_with_demo_documents(window):
     assert page.title() == "Журнал"
     assert page.model.rowCount() == 13
     assert window.windowTitle().startswith("ДЕМО ООО")
+
+
+def test_opening_balances_have_their_own_page(window):
+    window.show_place(("opening",))
+    page = current_page(window)
+    assert isinstance(page, OpeningBalancesPage)
+    cat = window.session.catalog
+
+    page.debit_model.setData(page.debit_model.index(0, DT), cat.by_code["50"].id)
+    page.debit_model.setData(page.debit_model.index(0, AMOUNT), 100_000)
+    page.credit_model.setData(page.credit_model.index(0, CT), cat.by_code["80"].id)
+    page.credit_model.setData(page.credit_model.index(0, AMOUNT), 100_000)
+
+    assert page.save(post=True)
+    assert page.status.text() == "Проведён"
+    rows = {
+        row.code: row
+        for row in trial_balance(
+            window.session.conn, window.session.company_id, "2026-01-01", "2026-01-31"
+        ).rows
+    }
+    assert rows["50"].opening_dt == 100_000
+    assert rows["80"].opening_ct == 100_000
+    assert page.doc_id is not None
+    window.copy_document(page.doc_id)
+    assert current_page(window) is page
 
 
 def test_keyboard_entry_skips_subconto_cells_that_do_not_apply(window, qtbot):

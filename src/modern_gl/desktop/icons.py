@@ -32,6 +32,14 @@ def _osv(p: QPainter) -> None:  # scales: debit and credit in balance
         p.drawPath(path)
 
 
+def _opening(p: QPainter) -> None:  # a starting line with balances entering the ledger
+    p.drawLine(QPointF(3, 4), QPointF(3, 14))
+    p.drawLine(QPointF(6, 6), QPointF(15, 6))
+    p.drawLine(QPointF(6, 12), QPointF(15, 12))
+    p.drawLine(QPointF(11.5, 3.5), QPointF(15, 6))
+    p.drawLine(QPointF(11.5, 8.5), QPointF(15, 6))
+
+
 def _chart(p: QPainter) -> None:  # a tree: account and its subaccounts
     p.drawRoundedRect(QRectF(2.5, 2.5, 6, 4), 1.2, 1.2)
     p.drawLine(QPointF(5.5, 6.5), QPointF(5.5, 13.5))
@@ -126,6 +134,7 @@ def _import(p: QPainter) -> None:  # an arrow into a tray
 GLYPHS: dict[str, Callable[[QPainter], None]] = {
     "journal": _journal,
     "osv": _osv,
+    "opening": _opening,
     "chart": _chart,
     "inventory": _inventory,
     "directories": _directories,

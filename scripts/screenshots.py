@@ -29,6 +29,7 @@ from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window import MainWindow
+from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import OsvPage
 from modern_gl.infrastructure.workspace import Workspace
 
@@ -138,6 +139,13 @@ def main() -> None:
         option.setChecked(True)
         shot(name)
         option.setChecked(False)
+    win.show_place(("opening",))
+    opening = cast(OpeningBalancesPage, win.pages[("opening",)])
+    opening.debit_model.setData(opening.debit_model.index(0, 0), session.catalog.by_code["50"].id)
+    opening.debit_model.setData(opening.debit_model.index(0, 11), 175_000)
+    opening.credit_model.setData(opening.credit_model.index(0, 4), session.catalog.by_code["85"].id)
+    opening.credit_model.setData(opening.credit_model.index(0, 11), 175_000)
+    shot("5e_opening_balances")
     win.open_report("subconto", session.catalog.by_code["60"].id, osv.params)
     shot("6_subconto")
     win.open_report("card", session.catalog.by_code["51"].id, osv.params)

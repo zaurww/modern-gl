@@ -60,6 +60,7 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import PostingData
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain import formula
+from modern_gl.domain.accounts import SETTLEMENT_TYPES
 from modern_gl.domain.currency import (
     CURRENCY_ONLY,
     format_unit_rate,
@@ -220,6 +221,7 @@ class PostingRow:
     rate_auto: bool = True  # taken from the rates of the document date (not typed)
     invoice: str = ""  # e-qaimə number
     invoice_kind: str = ""  # "customs": a customs declaration (from a warehouse receipt)
+    invoice_auto: bool = False  # inherited from a related line, safe to refresh
 
     def is_empty(self) -> bool:
         return (
@@ -258,12 +260,14 @@ class PostingsModel(QAbstractTableModel):
         rows: list[PostingRow] | None = None,
         read_only: bool = False,
         formulas: bool = False,
+        inherit_invoices: bool = True,
     ) -> None:
         super().__init__()
         self.catalog = catalog
         self.rows = rows or [PostingRow()]
         self.read_only = read_only
         self.formulas = formulas  # template editing: the amount column holds formulas
+        self.inherit_invoices = inherit_invoices
         # currency id -> manat per unit on the document date (set by the document page)
         self.rate_for: Callable[[int], Fraction | None] = lambda _currency_id: None
 
@@ -367,6 +371,9 @@ class PostingsModel(QAbstractTableModel):
         r = self.rows[row]
         side, pos = column_role(col)
         if side in ("debit", "credit"):
+            if r.invoice_auto:
+                r.invoice = ""
+                r.invoice_auto = False
             if pos is None:
                 account_id = getattr(r, side)
                 return self.catalog.accounts[account_id].short if account_id else ""
@@ -422,10 +429,15 @@ class PostingsModel(QAbstractTableModel):
                 getattr(r, f"{side}_sc")[pos - 1] = value
                 self._fit_owned(r, side)
             self._fit_currency(row)
+            if self.inherit_invoices:
+                self._sync_invoice(row)
         elif side in ("currency", "currency_amount", "rate"):
             self._set_currency_field(r, side, value)
         elif side == "invoice":
             r.invoice = value or ""
+            r.invoice_auto = False
+            if r.invoice and self.inherit_invoices:
+                self._spread_invoice(row)
         elif side == "amount":
             if self.formulas:
                 r.formula = value
@@ -444,6 +456,73 @@ class PostingsModel(QAbstractTableModel):
             self._row_changed(row)
         self.changed.emit()
         return True
+
+    def _invoice_keys(self, row: int) -> set[tuple[int, tuple[int | None, ...]]]:
+        """Settlement account + its dimensions identify lines of the same invoice.
+
+        Thus Dt 26 / Ct 60 and Dt 19 / Ct 60 meet on the same supplier/contract,
+        while two suppliers in one document do not borrow each other's number.
+        """
+        r = self.rows[row]
+        result: set[tuple[int, tuple[int | None, ...]]] = set()
+        for side in ("debit", "credit"):
+            account_id = getattr(r, side)
+            if account_id is None:
+                continue
+            account = self.catalog.accounts[account_id]
+            fallback = any(
+                self.catalog.kind_codes.get(kind or 0) == "counterparty"
+                for kind in account.sc_kinds
+            )
+            if account.account_type not in SETTLEMENT_TYPES and not fallback:
+                continue
+            values = tuple(getattr(r, f"{side}_sc"))
+            incomplete = any(
+                kind is not None and values[i] is None for i, kind in enumerate(account.sc_kinds)
+            )
+            if incomplete:
+                continue
+            result.add((account_id, values))
+        return result
+
+    def _sync_invoice(self, row: int) -> None:
+        if self.rows[row].invoice:
+            self._spread_invoice(row)
+        else:
+            self._inherit_invoice(row)
+
+    def _spread_invoice(self, source: int) -> None:
+        """Fill blank related lines; an explicitly different number is never touched."""
+        keys = self._invoice_keys(source)
+        if not keys:
+            return
+        invoice = self.rows[source].invoice
+        for row, item in enumerate(self.rows):
+            if (
+                row == source
+                or (item.invoice and not item.invoice_auto)
+                or not keys.intersection(self._invoice_keys(row))
+            ):
+                continue
+            item.invoice = invoice
+            item.invoice_auto = True
+            self.dataChanged.emit(self.index(row, INVOICE), self.index(row, INVOICE))
+
+    def _inherit_invoice(self, row: int) -> None:
+        """A line completed after its companion takes that companion's e-qaimə."""
+        item = self.rows[row]
+        keys = self._invoice_keys(row)
+        if item.invoice or not keys:
+            return
+        numbers = {
+            other.invoice
+            for i, other in enumerate(self.rows)
+            if i != row and other.invoice and keys.intersection(self._invoice_keys(i))
+        }
+        if len(numbers) == 1:
+            item.invoice = numbers.pop()
+            item.invoice_auto = True
+            self.dataChanged.emit(self.index(row, INVOICE), self.index(row, INVOICE))
 
     def _set_account(self, r: PostingRow, side: str, account_id: int | None) -> None:
         """Set an account and drop subconto values its positions no longer accept."""
@@ -1132,11 +1211,18 @@ class PostingsTable(QTableView):
         ):
             super().closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
             row = m.insert_row()
-            new = m.index(row, DT)
+            new = m.index(row, self._first_enabled_column(row))
             self.setCurrentIndex(new)
             self.edit(new)
             return
         super().closeEditor(editor, hint)
+
+    def _first_enabled_column(self, row: int) -> int:
+        return next(
+            c
+            for c in range(len(HEADERS))
+            if not self.isColumnHidden(c) and self.model().applies(row, c)
+        )
 
     def keyPressEvent(self, event):
         if (

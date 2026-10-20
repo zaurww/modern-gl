@@ -208,6 +208,28 @@ def test_grid_column_only_on_settlement_and_vat_lines(firm, qtbot):
     assert [p.invoice for p in model.to_inputs()] == ["MT1", "", ""]
 
 
+def test_invoice_number_fills_related_postings_without_overwriting(firm):
+    from modern_gl.desktop.postings import INVOICE, PostingRow, PostingsModel
+
+    conn, _, cid, acc, v = firm
+    cat = Catalog(conn, cid)
+    alfa = [v["Альфа"], v["Д-1"]]
+    model = PostingsModel(
+        cat,
+        [
+            PostingRow(acc["26"], [v["Аренда"], None, None], acc["60"], alfa),
+            PostingRow(acc["19"], [v["Альфа"], None, None], acc["60"], alfa),
+        ],
+    )
+
+    model.setData(model.index(0, INVOICE), model.parse(0, INVOICE, " mt 77 "))
+    assert [row.invoice for row in model.rows] == ["MT77", "MT77"]
+
+    model.setData(model.index(1, INVOICE), "OTHER")
+    model.setData(model.index(0, INVOICE), "MT88")
+    assert [row.invoice for row in model.rows] == ["MT88", "OTHER"]
+
+
 def test_page_finds_an_invoice_by_vöen(firm, qtbot):
     from PySide6.QtWidgets import QApplication
 

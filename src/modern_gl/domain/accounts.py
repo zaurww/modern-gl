@@ -6,7 +6,8 @@ ACCOUNT_CLASSES = ("asset", "liability", "equity", "revenue", "expense")
 DEBIT_NORMAL = {"asset", "expense"}  # liability, equity, revenue: credit-normal
 # Accounts that automatic postings use, chosen per company (table account_roles)
 INPUT_VAT = "input_vat"  # ƏDV к возмещению: a warehouse receipt debits it
-ACCOUNT_ROLES = (INPUT_VAT,)
+OPENING_BALANCE = "opening_balance"  # technical counter-account for opening balances
+ACCOUNT_ROLES = (INPUT_VAT, OPENING_BALANCE)
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {INPUT_VAT: "input_vat"}
 

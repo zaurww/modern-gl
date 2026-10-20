@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from modern_gl.application.currencies import CurrencyInfo, list_currencies
-from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
+from modern_gl.domain.accounts import OPENING_BALANCE, SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import fold, sort_key, tr
 
@@ -72,6 +72,13 @@ class Catalog:
         self.reload()
 
     def reload(self) -> None:
+        self.system_account_ids = {
+            r["account_id"]
+            for r in self.conn.execute(
+                "SELECT account_id FROM account_roles WHERE company_id = ? AND role = ?",
+                (self.company_id, OPENING_BALANCE),
+            )
+        }
         self.accounts: dict[int, AccountInfo] = {
             r["id"]: AccountInfo(
                 r["id"],
@@ -166,7 +173,11 @@ class Catalog:
     @property
     def leaf_accounts(self) -> list[AccountInfo]:
         """Accounts that can be posted to (hidden accounts are not offered)."""
-        return [a for a in self.accounts.values() if not a.is_group and a.active]
+        return [
+            a
+            for a in self.accounts.values()
+            if not a.is_group and a.active and a.id not in self.system_account_ids
+        ]
 
     def group_named(self, text: str) -> AccountInfo | None:
         """The group whose code, name or label is exactly the text ("68", "68  Vergilər")."""
