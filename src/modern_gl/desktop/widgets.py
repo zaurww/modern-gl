@@ -21,15 +21,13 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop.theme import P, dot_icon, fonts
+from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 
 DATE_FORMAT = "dd.MM.yyyy"
 
-
-def ru_date(iso: str) -> str:
-    y, m, d = iso.split("-")
-    return f"{d}.{m}.{y}"
+__all__ = ["ru_date"]  # re-exported for the pages
 
 
 def money(minor: int | None, blank_zero: bool = True) -> str:

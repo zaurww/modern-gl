@@ -71,6 +71,7 @@ from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import LANGUAGES, language, set_language, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.workspace import TRASH, Workspace
+from modern_gl.reporting.inventory import inventory_document_of
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 PLACES = [  # key, title (translated on display), icon color
@@ -634,6 +635,17 @@ class MainWindow(QMainWindow):
         menu.exec(self.sidebar.nav.viewport().mapToGlobal(pos))
 
     def open_document(self, doc_id: int) -> None:
+        """From the journal or a report: the primary document, as in 1C. Postings made by
+        a warehouse document open that document, where they are corrected."""
+        s = self.open_session
+        source = inventory_document_of(s.conn, s.company_id, doc_id)
+        if source is not None:
+            self.open_inventory_document(source)
+            return
+        self.show_document(doc_id)
+
+    def show_document(self, doc_id: int) -> None:
+        """The GL document itself, even when a warehouse document made it."""
         key = ("doc", doc_id)
         if key not in self.pages:
             page = DocumentPage(self.open_session, doc_id=doc_id)
@@ -651,6 +663,7 @@ class MainWindow(QMainWindow):
         page.saved.connect(lambda _id, p=page: self._document_saved(p))
         page.open_document.connect(self.open_document)
         page.copy_requested.connect(self.new_document)
+        page.open_inventory_document.connect(self.open_inventory_document)
         page.new_requested.connect(lambda: self.new_document())
         page.template_saved.connect(self.open_template)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
@@ -672,7 +685,7 @@ class MainWindow(QMainWindow):
 
     def _wire_inventory_document(self, page: InventoryDocumentPage) -> None:
         page.saved.connect(lambda _id, p=page: self._inventory_document_saved(p))
-        page.open_gl_document.connect(self.open_document)
+        page.open_gl_document.connect(self.show_document)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
         page.title_changed.connect(lambda p=page: self._retitle(p))
 

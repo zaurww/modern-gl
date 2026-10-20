@@ -679,4 +679,11 @@ AZ: dict[str, str] = {
     "Оформление": "Görünüş",
     "Things — один белый лист": "Things — bir ağ vərəq",
     "Craft — серый фон, белые листы": "Craft — boz fon, ağ vərəqlər",
+    "расходы распределены на поступление №{n}, которое не проведено": "xərclər keçirilməmiş №{n} mədaxilinə bölüşdürülüb",
+    "строка {line}: на неё распределены дополнительные расходы (документ №{n}) — сначала удалите их": "sətir {line}: ona əlavə xərclər bölüşdürülüb (sənəd №{n}) — əvvəlcə onları silin",
+    "складской документ не проведён": "anbar sənədi keçirilməyib",
+    "после изменения не проводится складской документ №{n} от {date}: {error}": "dəyişiklikdən sonra {date} tarixli №{n} anbar sənədi keçirilmir: {error}",
+    "Проводки сформированы складским документом": "Yazılışlar anbar sənədi ilə yaradılıb",
+    "Складской документ №{n}": "Anbar sənədi №{n}",
+    "сторно №{n} нельзя изменить, его можно только удалить": "storno №{n} dəyişdirilə bilməz, onu yalnız silmək olar",
 }

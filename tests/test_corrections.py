@@ -57,6 +57,40 @@ def test_unpost_edit_and_post_again(demo, conn):
     assert audit(conn, doc, "unpost")["postings"][0]["amount"] == 30000  # what it was
 
 
+def test_posted_document_is_edited_in_place(demo, conn):
+    """1C way: open, change, post again — one step, the number stays."""
+    led, cid = demo.ledger, demo.company_id
+    doc = demo.docs[5]  # Dt 721 Ct 201 300
+    number = conn.execute("SELECT number FROM documents WHERE id = ?", (doc,)).fetchone()[0]
+    led.repost(cid, doc, "2026-02-21", [demo.p("721", "201", "250")], memo="исправлено")
+    assert osv_721(conn, cid) == 25000
+    row = conn.execute("SELECT number, status, memo FROM documents WHERE id = ?", (doc,)).fetchone()
+    assert tuple(row) == (number, "posted", "исправлено")
+    assert audit(conn, doc, "repost")["postings"][0]["amount"] == 30000  # what it was
+
+
+def test_failed_repost_keeps_the_posted_document(demo, conn):
+    led, cid = demo.ledger, demo.company_id
+    doc = demo.docs[5]
+    with pytest.raises(ValidationError):
+        led.repost(cid, doc, "2026-02-21", [demo.p("721", "201", "0")])
+    assert osv_721(conn, cid) == 30000
+    status = conn.execute("SELECT status FROM documents WHERE id = ?", (doc,)).fetchone()[0]
+    assert status == "posted"
+
+
+def test_storno_and_closed_period_cannot_be_edited_in_place(demo):
+    led, cid = demo.ledger, demo.company_id
+    storno = led.reverse(cid, demo.docs[5], "2026-02-25")
+    with pytest.raises(ValidationError, match="сначала удалите сторно"):
+        led.repost(cid, demo.docs[5], "2026-02-21", [demo.p("721", "201", "250")])
+    with pytest.raises(ValidationError, match="нельзя изменить"):
+        led.repost(cid, storno, "2026-02-25", [demo.p("721", "201", "-250")])
+    led.set_closed_through(cid, "2026-02-28")
+    with pytest.raises(PeriodClosedError):
+        led.repost(cid, demo.docs[0], "2026-03-05", [demo.p("721", "201", "250")])
+
+
 def test_closed_period_still_allows_only_storno(demo):
     led, cid = demo.ledger, demo.company_id
     led.set_closed_through(cid, "2026-02-28")

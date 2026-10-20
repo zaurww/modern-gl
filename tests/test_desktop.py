@@ -146,7 +146,8 @@ def test_post_from_form_updates_journal_and_reports(window):
     ]
     assert page.save(post=True)
     assert page.status.text() == "Проведён"
-    assert page.model.read_only
+    assert not page.model.read_only  # edited in place, as in 1C
+    assert page.btn_save.isHidden()  # no "draft" for a posted document
     assert window.sidebar.item_for(("doc", page.doc_id)).text() == "Документ №14"
 
     journal = window.pages[("journal",)]
@@ -518,7 +519,7 @@ def test_unpost_from_page_makes_it_editable(window):
     doc = window.pages[("journal",)].model.docs[0]
     window.open_document(doc.id)
     page = current_page(window)
-    assert page.model.read_only
+    assert not page.model.read_only  # posted, but editable in place
     page.unpost()
     assert not page.model.read_only
     assert page.status.text() == "Черновик"
@@ -740,3 +741,29 @@ def test_theme_switches_at_once_and_keeps_the_company(window):
     finally:
         theme.set_theme(theme.DEFAULT_THEME)
     assert theme.P.canvas == "#FFFFFF"
+
+
+def test_posted_document_is_corrected_in_place(window):
+    """From the journal (or a report) a posted document opens editable; posting it again
+    keeps its number."""
+    doc = window.pages[("journal",)].model.docs[0]
+    window.open_document(doc.id)
+    page = current_page(window)
+    number = page.doc.number
+    page.memo.setText("Исправлено")
+    assert page.save(post=True)
+    assert (page.doc.number, page.doc.status, page.doc.memo) == (number, "posted", "Исправлено")
+
+
+def test_warehouse_postings_open_the_warehouse_document(window):
+    s = window.session
+    linked = s.conn.execute(
+        "SELECT id, gl_document_id FROM inventory_documents WHERE gl_document_id IS NOT NULL"
+    ).fetchone()
+    if linked is None:
+        pytest.skip("demo company has no warehouse documents")
+    window.open_document(linked["gl_document_id"])
+    assert current_page(window).key == ("inventory_doc", linked["id"])
+    window.show_document(linked["gl_document_id"])
+    page = current_page(window)
+    assert page.model.read_only and not page.btn_source.isHidden()

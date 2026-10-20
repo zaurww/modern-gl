@@ -263,7 +263,7 @@ class QuickEntryBar(QWidget):
             )
             for ln in entry.lines
         ]
-        doc = DocumentData(0, 0, "", entry.memo, "common", "draft", None, None, postings)
+        doc = DocumentData(0, 0, "", entry.memo, "common", "draft", None, None, postings=postings)
         self.history.append(self.edit.text())
         self.edit.clear()
         self.open_form.emit(doc)

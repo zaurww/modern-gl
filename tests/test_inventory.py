@@ -272,23 +272,39 @@ def test_issue_and_transfer_drafts_calculate_cost_when_posted(inventory_demo, co
     assert balances[demo.reserve].amount == 4_000
 
 
-def test_unpost_preserves_receipt_lineage_dependencies(inventory_demo):
+def test_unpost_recalculates_later_issue(inventory_demo, conn):
     demo = inventory_demo
-    first = receipt(demo, "5", "50")
-    demo.inventory.post_receipt(
+    first = receipt(demo, "5", "50")  # 01-10: 5 pcs for 50.00
+    second = demo.inventory.post_receipt(
         demo.company_id,
         "2026-01-11",
-        [ReceiptLine(demo.item, demo.main, "10", "100")],
+        [ReceiptLine(demo.item, demo.main, "10", "300")],
         demo.payable_account,
         [demo.supplier],
     )
-    demo.inventory.post_issue(
+    issue = demo.inventory.post_issue(
         demo.company_id,
         "2026-01-12",
         [IssueLine(demo.item, demo.main, "4", demo.expense_account)],
     )
-    with pytest.raises(ValidationError, match="последующими"):
-        demo.inventory.unpost_document(demo.company_id, first)
+    before = demo.inventory.load_document(demo.company_id, issue)
+    assert before.lines[0].amount == 9_333  # 350.00 * 4 / 15 = 93.33
+
+    demo.inventory.unpost_document(demo.company_id, first)
+
+    after = demo.inventory.load_document(demo.company_id, issue)
+    assert after.lines[0].amount == 12_000  # only the second receipt is left: 300.00 * 4 / 10
+    assert after.gl_document_id == before.gl_document_id  # the GL document keeps its number
+    gl_amount = conn.execute(
+        "SELECT amount FROM postings WHERE document_id = ?", (after.gl_document_id,)
+    ).fetchone()[0]
+    assert gl_amount == 12_000
+    source = conn.execute(
+        "SELECT l.document_id FROM stock_consumptions c "
+        "JOIN inventory_lines l ON l.id = c.receipt_line_id WHERE c.issue_line_id = ?",
+        (after.lines[0].id,),
+    ).fetchall()
+    assert [row[0] for row in source] == [second]
 
 
 def test_catalogs_share_subconto_values(inventory_demo, conn):
@@ -374,17 +390,30 @@ def test_issue_cannot_make_negative_stock_and_is_atomic(inventory_demo, conn):
     assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == before_gl
 
 
-def test_backdated_inventory_document_is_rejected(inventory_demo):
+def test_backdated_receipt_recalculates_later_issue(inventory_demo, conn):
     demo = inventory_demo
-    receipt(demo)
-    with pytest.raises(ValidationError, match="по порядку дат"):
-        demo.inventory.post_receipt(
-            demo.company_id,
-            "2026-01-09",
-            [ReceiptLine(demo.item, demo.main, "1", "10")],
-            demo.payable_account,
-            [demo.supplier],
-        )
+    receipt(demo, "10", "100")  # 01-10: 10.00 a piece
+    issue = demo.inventory.post_issue(
+        demo.company_id,
+        "2026-01-12",
+        [IssueLine(demo.item, demo.main, "5", demo.expense_account)],
+    )
+    gl_document_id = demo.inventory.load_document(demo.company_id, issue).gl_document_id
+    assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 5_000
+
+    demo.inventory.post_receipt(  # entered later, dated before the issue
+        demo.company_id,
+        "2026-01-09",
+        [ReceiptLine(demo.item, demo.main, "10", "300")],
+        demo.payable_account,
+        [demo.supplier],
+    )
+
+    reissued = demo.inventory.load_document(demo.company_id, issue)
+    assert reissued.lines[0].amount == 10_000  # (300.00 + 100.00) / 20 * 5
+    assert reissued.gl_document_id == gl_document_id
+    balance = stock_balances(conn, demo.company_id)[0]
+    assert (balance.quantity, balance.amount) == (15 * QUANTITY_FACTOR, 30_000)
 
 
 def test_transfer_preserves_total_and_moves_value(inventory_demo, conn):
@@ -583,7 +612,7 @@ def test_inventory_document_delete_is_atomic_and_respects_dependencies(inventory
         "2026-01-12",
         [IssueLine(demo.item, demo.main, "1", demo.expense_account)],
     )
-    with pytest.raises(ValidationError, match="последующими"):
+    with pytest.raises(ValidationError, match="не проводится складской документ №"):
         demo.inventory.delete_document(demo.company_id, inv_doc)
     assert (
         conn.execute("SELECT status FROM inventory_documents WHERE id = ?", (inv_doc,)).fetchone()[
@@ -606,7 +635,7 @@ def test_transfer_cannot_be_deleted_after_destination_stock_was_used(inventory_d
         "2026-01-12",
         [IssueLine(demo.item, demo.reserve, "2", demo.expense_account)],
     )
-    with pytest.raises(ValidationError, match="последующими"):
+    with pytest.raises(ValidationError, match="недостаточно товара"):
         demo.inventory.delete_document(demo.company_id, transfer)
 
 
@@ -774,7 +803,7 @@ def test_draft_may_be_dated_before_last_posted_document(inventory_demo):
         "2026-01-05",
         [IssueLine(demo.item, demo.main, "1", demo.expense_account)],
     )
-    with pytest.raises(ValidationError, match="по порядку дат"):
+    with pytest.raises(ValidationError, match="недостаточно товара"):  # nothing yet on 01-05
         demo.inventory.post_document(demo.company_id, issue)
     demo.inventory.update_issue_draft(
         demo.company_id,
@@ -982,3 +1011,162 @@ def test_inventory_lines_copy_for_excel_and_back(inventory_demo, receipt_page, q
         original.quantity,
         original.amount,
     )
+
+
+def test_posted_receipt_is_edited_in_place_and_later_documents_follow(inventory_demo, conn):
+    """1C way: change the price of a posted receipt; the issue and the landed cost after
+    it are recalculated, every document keeps its number and the receipt line its id."""
+    demo = inventory_demo
+    inv_doc = receipt(demo, "10", "100")  # 01-10: 10 pcs for 100.00
+    receipt_doc = demo.inventory.load_document(demo.company_id, inv_doc)
+    line = receipt_doc.lines[0]
+    issue = demo.inventory.post_issue(
+        demo.company_id,
+        "2026-01-12",
+        [IssueLine(demo.item, demo.main, "4", demo.expense_account)],
+    )
+    landed = demo.inventory.post_landed_cost(
+        demo.company_id, "2026-01-15", [line.id], "20", demo.payable_account, [demo.supplier]
+    )
+    gl_numbers = {
+        doc: demo.inventory.load_document(demo.company_id, doc).gl_document_id
+        for doc in (inv_doc, issue, landed)
+    }
+
+    with demo.inventory.reposting(demo.company_id, inv_doc):
+        demo.inventory.update_receipt_draft(
+            demo.company_id,
+            inv_doc,
+            "2026-01-10",
+            [ReceiptLine(demo.item, demo.main, "10", "150", line_id=line.id)],
+            demo.payable_account,
+            [demo.supplier],
+        )
+
+    edited = demo.inventory.load_document(demo.company_id, inv_doc)
+    assert edited.status == "posted"
+    assert edited.lines[0].id == line.id
+    # issue: 150.00 * 4 / 10 = 60.00
+    assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 6_000
+    # landed cost 20.00: 6 of 10 still in stock -> 12.00 to stock, 8.00 to expense
+    lc_line = demo.inventory.load_document(demo.company_id, landed).lines[0]
+    assert (lc_line.inventory_amount, lc_line.expense_amount) == (1_200, 800)
+    balance = stock_balances(conn, demo.company_id)[0]
+    assert (balance.quantity, balance.amount) == (6 * QUANTITY_FACTOR, 10_200)  # 90.00 + 12.00
+    for doc, gl_id in gl_numbers.items():
+        assert demo.inventory.load_document(demo.company_id, doc).gl_document_id == gl_id
+    totals = {
+        r["document_id"]: r["total"]
+        for r in conn.execute(
+            "SELECT document_id, SUM(amount) AS total FROM postings GROUP BY document_id"
+        )
+    }
+    assert totals[gl_numbers[inv_doc]] == 15_000
+    assert totals[gl_numbers[issue]] == 6_000
+    assert totals[gl_numbers[landed]] == 2_000
+    actions = [
+        r[0]
+        for r in conn.execute(
+            "SELECT action FROM audit_events WHERE entity = 'inventory_document' "
+            "AND entity_id = ? ORDER BY id",
+            (inv_doc,),
+        )
+    ]
+    assert actions[-1] == "repost"
+
+
+def test_failed_repost_changes_nothing(inventory_demo, conn):
+    demo = inventory_demo
+    inv_doc = receipt(demo, "10", "100")
+    line = demo.inventory.load_document(demo.company_id, inv_doc).lines[0]
+    demo.inventory.post_issue(
+        demo.company_id,
+        "2026-01-12",
+        [IssueLine(demo.item, demo.main, "8", demo.expense_account)],
+    )
+    with (
+        pytest.raises(ValidationError, match="не проводится складской документ №"),
+        demo.inventory.reposting(demo.company_id, inv_doc),
+    ):
+        demo.inventory.update_receipt_draft(  # 5 pieces cannot cover the issue of 8
+            demo.company_id,
+            inv_doc,
+            "2026-01-10",
+            [ReceiptLine(demo.item, demo.main, "5", "100", line_id=line.id)],
+            demo.payable_account,
+            [demo.supplier],
+        )
+    doc = demo.inventory.load_document(demo.company_id, inv_doc)
+    assert (doc.status, doc.lines[0].quantity) == ("posted", 10 * QUANTITY_FACTOR)
+    balance = stock_balances(conn, demo.company_id)[0]
+    assert (balance.quantity, balance.amount) == (2 * QUANTITY_FACTOR, 2_000)
+
+
+def test_receipt_line_with_landed_cost_cannot_be_removed(inventory_demo):
+    demo = inventory_demo
+    inv_doc = demo.inventory.post_receipt(
+        demo.company_id,
+        "2026-01-10",
+        [
+            ReceiptLine(demo.item, demo.main, "10", "100"),
+            ReceiptLine(demo.other_item, demo.main, "5", "50"),
+        ],
+        demo.payable_account,
+        [demo.supplier],
+    )
+    first, second = demo.inventory.load_document(demo.company_id, inv_doc).lines
+    demo.inventory.post_landed_cost(
+        demo.company_id, "2026-01-15", [first.id], "20", demo.payable_account, [demo.supplier]
+    )
+    with (
+        pytest.raises(ValidationError, match="распределены дополнительные расходы"),
+        demo.inventory.reposting(demo.company_id, inv_doc),
+    ):
+        demo.inventory.update_receipt_draft(
+            demo.company_id,
+            inv_doc,
+            "2026-01-10",
+            [ReceiptLine(demo.other_item, demo.main, "5", "50", line_id=second.id)],
+            demo.payable_account,
+            [demo.supplier],
+        )
+    # removing the other line is fine
+    with demo.inventory.reposting(demo.company_id, inv_doc):
+        demo.inventory.update_receipt_draft(
+            demo.company_id,
+            inv_doc,
+            "2026-01-10",
+            [ReceiptLine(demo.item, demo.main, "10", "100", line_id=first.id)],
+            demo.payable_account,
+            [demo.supplier],
+        )
+    assert [ln.id for ln in demo.inventory.load_document(demo.company_id, inv_doc).lines] == [
+        first.id
+    ]
+
+
+def test_issue_moved_to_an_earlier_date_takes_its_place(inventory_demo):
+    demo = inventory_demo
+    receipt(demo, "10", "100")  # 01-10: 10.00 a piece
+    demo.inventory.post_receipt(
+        demo.company_id,
+        "2026-01-20",
+        [ReceiptLine(demo.item, demo.main, "10", "300")],  # 30.00 a piece
+        demo.payable_account,
+        [demo.supplier],
+    )
+    issue = demo.inventory.post_issue(
+        demo.company_id,
+        "2026-01-25",
+        [IssueLine(demo.item, demo.main, "5", demo.expense_account)],
+    )
+    assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 10_000
+    line = demo.inventory.load_document(demo.company_id, issue).lines[0]
+    with demo.inventory.reposting(demo.company_id, issue):
+        demo.inventory.update_issue_draft(
+            demo.company_id,
+            issue,
+            "2026-01-15",  # before the expensive receipt
+            [IssueLine(demo.item, demo.main, "5", demo.expense_account, line_id=line.id)],
+        )
+    assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 5_000

@@ -10,3 +10,9 @@ def iso_date(value: date | str) -> str:
     if isinstance(value, date):
         return value.isoformat()
     return date.fromisoformat(value).isoformat()
+
+
+def ru_date(iso: str) -> str:
+    """'2026-03-05' -> '05.03.2026', as dates are shown to the user."""
+    y, m, d = iso.split("-")
+    return f"{d}.{m}.{y}"
