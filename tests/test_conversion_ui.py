@@ -148,3 +148,28 @@ def test_journal_opens_the_conversion_and_its_postings_are_read_only(qtbot, tmp_
         assert load_conversion(win.open_session.conn, win.open_session.company_id, doc.id)
     finally:
         win.shutdown()
+
+
+def test_missing_account_is_asked_for_and_the_conversion_posts(qtbot, session, monkeypatch):
+    from modern_gl.desktop.conversion_page import ConversionAccountsDialog
+    from modern_gl.domain.accounts import FX_TRANSIT
+
+    transit = session.ledger.account_role(session.company_id, FX_TRANSIT)
+    session.ledger.set_account_role(session.company_id, FX_TRANSIT, None)
+    session.ledger.set_account_type(session.company_id, transit, "other_asset")
+    asked: list[bool] = []
+
+    def choose_transit(dialog: ConversionAccountsDialog) -> int:
+        asked.append(True)
+        box = dialog.boxes[FX_TRANSIT]
+        box.setCurrentIndex(box.findData(transit))
+        dialog.accept()
+        return 1
+
+    monkeypatch.setattr(ConversionAccountsDialog, "exec", choose_transit)
+    page = ConversionPage(session)
+    qtbot.addWidget(page)
+    fill_sale(page)
+    assert page.save(post=True)
+    assert page.doc is not None and page.doc.status == "posted"
+    assert len(asked) == 1

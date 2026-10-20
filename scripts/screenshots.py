@@ -403,19 +403,9 @@ def main() -> None:
     shot("10e_document_rate_note")
     page.dirty = False
     win.close_current()
-    # Currency conversion (D37): the classic chart has no 57 and 91, so they are added here
+    # Currency conversion (D37): 57 and 80 of the classic chart
     from modern_gl.desktop.conversion_page import ConversionPage
-    from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 
-    transit = ledger.add_account(cid, "57", i18n.tr("Переводы в пути"), account_class="asset")
-    other = ledger.add_account(
-        cid, "91", i18n.tr("Прочие доходы и расходы"), account_class="revenue", two_sided=True
-    )
-    ledger.set_account_role(cid, FX_TRANSIT, transit)
-    ledger.set_account_role(cid, FX_GAIN, other)
-    ledger.set_account_role(cid, FX_LOSS, other)
-    ledger.set_account_role(cid, BANK_FEE, other)
-    session.catalog.reload()
     session.working_date = date(2026, 2, 27)
     win.new_conversion()
     conversion = cast(ConversionPage, win.stack.currentWidget())

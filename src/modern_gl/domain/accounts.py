@@ -16,6 +16,7 @@ ACCOUNT_ROLES = (INPUT_VAT, OPENING_BALANCE, FX_TRANSIT, FX_GAIN, FX_LOSS, BANK_
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {
     INPUT_VAT: "input_vat",
+    FX_TRANSIT: "transit",
     FX_GAIN: "other_income",
     FX_LOSS: "other_expense",
     BANK_FEE: "other_expense",
@@ -27,6 +28,7 @@ ROLE_TYPES = {
 ACCOUNT_TYPES = (
     ("cash", "asset", "Касса"),
     ("bank", "asset", "Банковские счета"),
+    ("transit", "asset", "Переводы в пути"),
     ("receivable", "asset", "Покупатели и заказчики"),
     ("advance_paid", "asset", "Авансы выданные"),
     ("other_receivable", "asset", "Прочая дебиторская задолженность"),

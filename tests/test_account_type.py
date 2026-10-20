@@ -20,7 +20,7 @@ def kinds(conn, cid):
 
 
 def test_every_type_has_a_class_and_a_translation():
-    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 28
+    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 29
     assert {cls for _, cls, _ in ACCOUNT_TYPES} == {
         "asset",
         "liability",
@@ -138,4 +138,7 @@ def test_migration_types_old_companies_like_the_template(ledger, conn, template)
     conn.execute("UPDATE accounts SET account_type = NULL")
     sql = (MIGRATIONS_DIR / "0012_account_type.sql").read_text(encoding="utf-8")
     conn.executescript(sql[sql.index("CREATE TEMP TABLE") :])
+    # 0019: the transit account of conversions (a role since 0018) becomes "transit"
+    sql = (MIGRATIONS_DIR / "0019_transit_type.sql").read_text(encoding="utf-8")
+    conn.executescript(sql[sql.index("UPDATE accounts") :])
     assert kinds(conn, cid) == expected

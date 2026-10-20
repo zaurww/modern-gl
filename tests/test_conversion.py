@@ -242,3 +242,24 @@ def test_chart_template_sets_conversion_accounts(ledger):
         for role in (FX_TRANSIT, FX_GAIN, FX_LOSS, BANK_FEE)
     }
     assert roles == {FX_TRANSIT: "57", FX_GAIN: "91.1", FX_LOSS: "91.2", BANK_FEE: "91.2"}
+
+
+def test_classic_chart_posts_conversions_to_57_and_80(ledger):
+    cid = ledger.create_company("Шаблон classic")
+    apply_chart_template(ledger, cid, "classic")
+    roles = {
+        role: ledger._account(cid, ledger.account_role(cid, role) or 0)["code"]
+        for role in (FX_TRANSIT, FX_GAIN, FX_LOSS, BANK_FEE)
+    }
+    assert roles == {FX_TRANSIT: "57", FX_GAIN: "80", FX_LOSS: "80", BANK_FEE: "80"}
+    assert ledger._account(cid, "57")["account_type"] == "transit"
+
+
+def test_transit_account_is_found_by_its_type(ledger, conn, firm):
+    """Any chart: the only account of the type "money in transit" plays the role."""
+    cid, acc = firm["cid"], firm["acc"]
+    ledger.set_account_role(cid, FX_TRANSIT, None)
+    assert ledger.account_role(cid, FX_TRANSIT) is None
+    ledger.set_account_type(cid, acc["57"], "transit")
+    assert ledger.account_role(cid, FX_TRANSIT) == acc["57"]
+    ledger.save_conversion(cid, sale(firm), post=True)
