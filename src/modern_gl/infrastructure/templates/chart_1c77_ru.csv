@@ -53,7 +53,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 67;Расчёты по долгосрочным кредитам и займам;;;liability;;;counterparty,contract;
 68;Расчёты по налогам и сборам;;1;liability;;1;;
 68.1;Налог на доходы физических лиц;68;;liability;;1;;
-68.2;Налог на добавленную стоимость;68;;liability;;1;;
+68.2;Налог на добавленную стоимость;68;;liability;;1;;;output_vat
 68.4;Налог на прибыль;68;;liability;;1;;
 68.8;Прочие налоги и сборы;68;;liability;;1;;
 69;Расчёты по социальному страхованию и обеспечению;;;liability;;1;;
@@ -78,9 +78,9 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 84;Нераспределённая прибыль (непокрытый убыток);;;equity;;1;;
 86;Целевое финансирование;;;liability;;;counterparty;
 90;Продажи;;1;revenue;;1;;
-90.1;Выручка;90;;revenue;;;;
-90.2;Себестоимость продаж;90;;expense;;;;
-90.3;Налог на добавленную стоимость;90;;revenue;1;;;
+90.1;Выручка;90;;revenue;;;;;sales_revenue
+90.2;Себестоимость продаж;90;;expense;;;;;cost_of_sales
+90.3;Налог на добавленную стоимость;90;;revenue;1;;;;sales_vat
 90.9;Прибыль / убыток от продаж;90;;equity;;1;;
 91;Прочие доходы и расходы;;1;revenue;;1;;
 91.1;Прочие доходы;91;;revenue;;;other_income;;fx_gain

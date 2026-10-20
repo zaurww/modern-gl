@@ -45,6 +45,7 @@ from modern_gl.application.inventory import (
     InventoryDocumentData,
     IssueLine,
     ReceiptLine,
+    SaleLine,
     TransferLine,
     format_quantity,
     to_quantity,
@@ -61,7 +62,7 @@ from modern_gl.desktop.postings import (
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, money, to_qdate
-from modern_gl.domain.accounts import INPUT_VAT
+from modern_gl.domain.accounts import INPUT_VAT, OUTPUT_VAT
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
@@ -91,7 +92,15 @@ ACCOUNT = "account"
 SC1 = "sc1"
 SC2 = "sc2"
 SC3 = "sc3"
+# a receipt's line without an item (a service, a fixed asset): the account it goes to
+EXPENSE = "expense"
+ESC1 = "esc1"
+ESC2 = "esc2"
+ESC3 = "esc3"
 MEMO = "memo"
+SC_KEYS = {SC1, SC2, SC3}  # the subconto of the line's offset (supplier, customer) account
+ESC_KEYS = {ESC1, ESC2, ESC3}
+SUBCONTO_KEYS = SC_KEYS | ESC_KEYS
 # cells that store the edited value as is
 STORED_FIELDS = {
     ITEM: "item_id",
@@ -101,10 +110,11 @@ STORED_FIELDS = {
     AMOUNT: "amount",
     MEMO: "memo",
 }
-LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, SC1, SC2, SC3}
+LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE} | SUBCONTO_KEYS
 NUMBER_KEYS = {QUANTITY, PRICE, AMOUNT, CURRENCY_AMOUNT, VAT}
-# the VAT of a receipt: rate in hundredths of a percent, None = without VAT
+# the VAT of a receipt or a sale: rate in hundredths of a percent, None = without VAT
 VAT_RATES = [(STANDARD_VAT_RATE, "18%"), (None, "Без НДС")]
+VAT_DOCUMENTS = {"receipt", "sale"}
 
 HEADERS = {
     ITEM: "Товар",
@@ -120,13 +130,22 @@ HEADERS = {
     SC1: "Субконто",
     SC2: "",
     SC3: "",
+    EXPENSE: "Счёт затрат",
+    ESC1: "Субконто затрат",
+    ESC2: "",
+    ESC3: "",
     MEMO: "Комментарий",
 }
+# a sale line is goods or a service: a line without an item, its memo says what it is
+SALE_HEADERS = {ITEM: "Товар / услуга", MEMO: "Содержание"}
+# a receipt line without an item: a service, a fixed asset or any expense bought
+RECEIPT_HEADERS = {ITEM: "Товар / услуга / ОС", MEMO: "Содержание"}
 
 DOCUMENT_TYPES = {
     "opening": "Начальные остатки",
     "receipt": "Поступление",
     "issue": "Списание",
+    "sale": "Продажа",
     "transfer": "Перемещение",
     "landed_cost": "Дополнительные расходы",
 }
@@ -221,6 +240,9 @@ class InventoryGridRow:
     vat_amount: int | None = None
     vat_typed: bool = False  # typed by hand: a new amount or rate no longer recalculates it
     currency_amount: int | None = None  # a receipt in a currency
+    # a receipt's line without an item: the account and subconto its value goes to
+    expense_account_id: int | None = None
+    expense_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""
@@ -246,6 +268,8 @@ class InventoryGridRow:
             vat_amount=self.vat_amount,
             vat_typed=self.vat_typed,
             currency_amount=self.currency_amount,
+            expense_account_id=self.expense_account_id,
+            expense_subconto=list(self.expense_subconto),
         )  # a copy is a new line: no line id
 
 
@@ -264,7 +288,7 @@ class InventoryLinesModel(QAbstractTableModel):
         self.s = session
         self.doc_type = doc_type
         self.read_only = read_only
-        self.vat_rate = vat_rate if doc_type == "receipt" else None
+        self.vat_rate = vat_rate if doc_type in VAT_DOCUMENTS else None
         self.rate: Fraction | None = None  # a receipt in a currency: manat per unit
         self.currency_code = ""
         self.items = self._items()
@@ -293,7 +317,8 @@ class InventoryLinesModel(QAbstractTableModel):
                 PRICE,
                 *([CURRENCY_AMOUNT] if doc_type == "receipt" else []),
                 AMOUNT,
-                *([VAT] if doc_type == "receipt" else []),
+                *([VAT] if doc_type in VAT_DOCUMENTS else []),
+                *([EXPENSE, ESC1, ESC2, ESC3] if doc_type == "receipt" else []),
                 ACCOUNT,
                 SC1,
                 SC2,
@@ -317,7 +342,7 @@ class InventoryLinesModel(QAbstractTableModel):
             return [(item.id, item.label) for item in self.items.values()]
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return [(warehouse.id, warehouse.label) for warehouse in self.warehouses.values()]
-        if key == ACCOUNT:
+        if key in {ACCOUNT, EXPENSE}:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         kind_id = self.kind_at(row_index, key)
         owner = self.owner_at(row_index, key)
@@ -329,14 +354,24 @@ class InventoryLinesModel(QAbstractTableModel):
 
     def owner_at(self, row_index: int, key: str) -> int | None:
         """The counterparty chosen on the line, for its contracts (None: any contract)."""
-        row = self.rows[row_index]
-        if key not in {SC1, SC2, SC3} or row.offset_account_id is None:
+        account_id = self._account_of(self.rows[row_index], key)
+        if key not in SUBCONTO_KEYS or account_id is None:
             return None
-        account = self.s.catalog.accounts[row.offset_account_id]
-        return self.s.catalog.owner_in(account, row.offset_subconto, int(key[-1]) - 1)
+        account = self.s.catalog.accounts[account_id]
+        subconto = self._subconto_of(self.rows[row_index], key)
+        return self.s.catalog.owner_in(account, subconto, int(key[-1]) - 1)
+
+    @staticmethod
+    def _account_of(row: InventoryGridRow, key: str) -> int | None:
+        """The account a subconto cell belongs to: the expense account's or the offset's."""
+        return row.expense_account_id if key in ESC_KEYS | {EXPENSE} else row.offset_account_id
+
+    @staticmethod
+    def _subconto_of(row: InventoryGridRow, key: str) -> list[int | None]:
+        return row.expense_subconto if key in ESC_KEYS else row.offset_subconto
 
     def default_row(self) -> InventoryGridRow:
-        code = "60" if self.doc_type in {"opening", "receipt"} else "46"
+        code = {"opening": "60", "receipt": "60", "sale": "62"}.get(self.doc_type, "46")
         account = self.s.catalog.by_code.get(code)
         if account is not None and account.is_group:
             account = next(
@@ -366,6 +401,10 @@ class InventoryLinesModel(QAbstractTableModel):
                     return tr("Сумма, {code}", code=self.currency_code)
                 if key == AMOUNT and self.rate is not None:
                     return tr("Сумма, ₼")
+                if self.doc_type == "sale" and key in SALE_HEADERS:
+                    return tr(SALE_HEADERS[key])
+                if self.doc_type == "receipt" and key in RECEIPT_HEADERS:
+                    return tr(RECEIPT_HEADERS[key])
                 return tr(HEADERS[key])
             return str(section + 1)
         if (
@@ -373,6 +412,8 @@ class InventoryLinesModel(QAbstractTableModel):
             and orientation == Qt.Orientation.Horizontal
             and self.columns[section] == ACCOUNT
         ):
+            if self.doc_type == "sale":
+                return tr("Счёт расчётов с покупателем")
             return tr("Счёт расчётов / затрат")
         if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
             numbers = self.columns[section] in NUMBER_KEYS  # like their cells
@@ -385,22 +426,50 @@ class InventoryLinesModel(QAbstractTableModel):
         return self.columns[index.column()]
 
     def kind_at(self, row_index: int, key: str) -> int | None:
-        if key not in {SC1, SC2, SC3}:
+        if key not in SUBCONTO_KEYS:
             return None
-        account_id = self.rows[row_index].offset_account_id
+        account_id = self._account_of(self.rows[row_index], key)
         if account_id is None:
             return None
         return self.s.catalog.accounts[account_id].sc_kinds[int(key[-1]) - 1]
 
     def applies(self, row: int, key: str) -> bool:
-        return key not in {SC1, SC2, SC3} or self.kind_at(row, key) is not None
+        if key in {WAREHOUSE, UNIT} and self.is_service(row):
+            return False
+        if key in ESC_KEYS | {EXPENSE} and not self.is_service(row):
+            return False
+        return key not in SUBCONTO_KEYS or self.kind_at(row, key) is not None
+
+    def is_service(self, row_index: int) -> bool:
+        """A sale or receipt line without an item: a service (a fixed asset, an expense
+        bought), from or to no warehouse. An empty new line is not one yet: it starts as goods."""
+        row = self.rows[row_index]
+        return self.doc_type in {"sale", "receipt"} and row.item_id is None and not row.is_empty()
+
+    def has_expenses(self) -> bool:
+        """A receipt with a line without an item shows the expense account columns."""
+        return self.doc_type == "receipt" and any(
+            row.item_id is None and not row.is_empty() for row in self.rows
+        )
+
+    def expense_positions(self) -> set[int]:
+        """The subconto positions (1-3) the expense accounts of the lines have."""
+        return {
+            position
+            for row in self.rows
+            if row.item_id is None and row.expense_account_id is not None
+            for position, kind in enumerate(
+                self.s.catalog.accounts[row.expense_account_id].sc_kinds, 1
+            )
+            if kind is not None
+        }
 
     def editable(self, key: str) -> bool:
         if key in {UNIT}:
             return False
-        if key in {PRICE, AMOUNT} and self.doc_type not in {"opening", "receipt"}:
+        if key in {PRICE, AMOUNT} and self.doc_type not in {"opening", "receipt", "sale"}:
             return False
-        if key == VAT and self.doc_type != "receipt":
+        if key == VAT and self.doc_type not in VAT_DOCUMENTS:
             return False
         if key == CURRENCY_AMOUNT:  # in a currency the manat amount follows from the rate
             return self.rate is not None
@@ -433,10 +502,9 @@ class InventoryLinesModel(QAbstractTableModel):
             return self._display_text(index.row(), key)
         if role == Qt.ItemDataRole.TextAlignmentRole and key in NUMBER_KEYS:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        if (
-            role == Qt.ItemDataRole.ForegroundRole
-            and key in {SC1, SC2, SC3}
-            and row.offset_subconto[int(key[-1]) - 1] is None
+        if role == Qt.ItemDataRole.ForegroundRole and (
+            (key in SUBCONTO_KEYS and self._subconto_of(row, key)[int(key[-1]) - 1] is None)
+            or (key == ITEM and self.is_service(index.row()) and not row.memo.strip())
         ):
             return QColor(P.tertiary)
         return None
@@ -448,10 +516,10 @@ class InventoryLinesModel(QAbstractTableModel):
             return row.item_id
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return row.warehouse_id if key == WAREHOUSE else row.to_warehouse_id
-        if key == ACCOUNT:
-            return row.offset_account_id
-        if key in {SC1, SC2, SC3}:
-            return row.offset_subconto[int(key[-1]) - 1]
+        if key in {ACCOUNT, EXPENSE}:
+            return self._account_of(row, key)
+        if key in SUBCONTO_KEYS:
+            return self._subconto_of(row, key)[int(key[-1]) - 1]
         if key == QUANTITY:
             return "" if row.quantity is None else format_quantity(row.quantity, 6)
         if key in {PRICE, AMOUNT, VAT, CURRENCY_AMOUNT}:
@@ -470,7 +538,7 @@ class InventoryLinesModel(QAbstractTableModel):
         row = self.rows[row_index]
         item = self.items.get(row.item_id) if row.item_id is not None else None
         if key == ITEM:
-            return item.label if item else ""
+            return self._item_text(row_index, item)
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             warehouse_id = row.warehouse_id if key == WAREHOUSE else row.to_warehouse_id
             warehouse = self.warehouses.get(warehouse_id) if warehouse_id is not None else None
@@ -488,17 +556,24 @@ class InventoryLinesModel(QAbstractTableModel):
             return "" if row.vat_amount is None else money(row.vat_amount, blank_zero=False)
         if key == CURRENCY_AMOUNT:
             return money(row.currency_amount)
-        if key == ACCOUNT:
-            account_id = row.offset_account_id
+        if key in {ACCOUNT, EXPENSE}:
+            account_id = self._account_of(row, key)
             account = self.s.catalog.accounts.get(account_id) if account_id is not None else None
             return account.label if account else ""
-        if key in {SC1, SC2, SC3}:
-            value_id = row.offset_subconto[int(key[-1]) - 1]
+        if key in SUBCONTO_KEYS:
+            value_id = self._subconto_of(row, key)[int(key[-1]) - 1]
             if value_id is not None:
                 return self.s.catalog.value(value_id).name
             kind_id = self.kind_at(row_index, key)
             return self.s.catalog.kinds[kind_id] if kind_id else ""
         return row.memo
+
+    def _item_text(self, row_index: int, item: ItemChoice | None) -> str:
+        """An item's name; a sale's service shows what it is (its memo)."""
+        row = self.rows[row_index]
+        if item is None and self.is_service(row_index):
+            return row.memo.strip() or tr("Услуга")
+        return item.label if item else ""
 
     def setData(self, index, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
         if self.read_only or role != Qt.ItemDataRole.EditRole:
@@ -525,10 +600,15 @@ class InventoryLinesModel(QAbstractTableModel):
             self._recalculate_vat(row)
         elif key == ACCOUNT:
             self._set_account(row, value)
-        elif key in {SC1, SC2, SC3}:
-            row.offset_subconto[int(key[-1]) - 1] = value
+        elif key == EXPENSE:
+            row.expense_account_id = value
+            self._drop_foreign(value, row.expense_subconto)
+        elif key in SUBCONTO_KEYS:
+            self._subconto_of(row, key)[int(key[-1]) - 1] = value
         else:
             setattr(row, STORED_FIELDS[key], value)
+            if key == ITEM and value is None:
+                row.warehouse_id = None  # a sale's service comes from no warehouse
         self.dataChanged.emit(
             self.index(index.row(), 0), self.index(index.row(), len(self.columns) - 1)
         )
@@ -565,7 +645,7 @@ class InventoryLinesModel(QAbstractTableModel):
 
     def _recalculate_vat(self, row: InventoryGridRow) -> None:
         """VAT follows the amount and the rate until it is typed by hand."""
-        if self.doc_type != "receipt" or row.vat_typed:
+        if self.doc_type not in VAT_DOCUMENTS or row.vat_typed:
             return
         row.vat_amount = (
             None
@@ -589,13 +669,17 @@ class InventoryLinesModel(QAbstractTableModel):
     def _set_account(self, row: InventoryGridRow, account_id: int | None) -> None:
         """Set the offset account and drop subconto values it no longer accepts."""
         row.offset_account_id = account_id
+        self._drop_foreign(account_id, row.offset_subconto)
+
+    def _drop_foreign(self, account_id: int | None, subconto: list[int | None]) -> None:
+        """Drop the subconto values the account does not accept."""
         kinds = self.s.catalog.accounts[account_id].sc_kinds if account_id else (None, None, None)
         for position, kind in enumerate(kinds):
-            current = row.offset_subconto[position]
+            current = subconto[position]
             if current is not None and (
                 kind is None or self.s.catalog.value(current).kind_id != kind
             ):
-                row.offset_subconto[position] = None
+                subconto[position] = None
 
     # ---- Excel ---------------------------------------------------------------------
 
@@ -607,9 +691,9 @@ class InventoryLinesModel(QAbstractTableModel):
             if value is None:
                 raise UnknownName(key, text)
             return value
-        if key == ACCOUNT:
+        if key in {ACCOUNT, EXPENSE}:
             return self.s.catalog.resolve_account(text).id
-        if key in {SC1, SC2, SC3}:
+        if key in SUBCONTO_KEYS:
             kind_id = self.kind_at(row_index, key)
             if kind_id is None:
                 raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
@@ -704,7 +788,10 @@ class InventoryLinesModel(QAbstractTableModel):
         columns = [c for c in range(len(self.columns)) if shown(c)]
 
         def title(key: str) -> str:
-            return f"{tr('Субконто')} {key[-1]}" if key in {SC1, SC2, SC3} else tr(HEADERS[key])
+            if key in SUBCONTO_KEYS:
+                caption = "Субконто" if key in SC_KEYS else "Субконто затрат"
+                return f"{tr(caption)} {key[-1]}"
+            return tr(HEADERS[key])
 
         lines = ["\t".join(title(self.columns[c]) for c in columns)]
         for r, row in enumerate(self.rows):
@@ -748,22 +835,40 @@ class InventoryLinesModel(QAbstractTableModel):
 
     def to_inputs(
         self, complete: bool = True
-    ) -> list[ReceiptLine] | list[IssueLine] | list[TransferLine]:
+    ) -> list[ReceiptLine] | list[IssueLine] | list[TransferLine] | list[SaleLine]:
         """Lines for saving. A draft (complete=False) needs only the item of each line."""
         rows = [row for row in self.rows if not row.is_empty()]
         if not rows:
             raise ValidationError(tr("складской документ без строк"))
         result = []
         for line_no, row in enumerate(rows, 1):
-            if row.item_id is None:
+            item_id = row.item_id
+            if item_id is None and self.doc_type not in {"sale", "receipt"}:  # a service
                 raise ValidationError(tr("строка {line}: не указан товар", line=line_no))
             if complete:
                 self._validate_complete(row, line_no)
             quantity = None if row.quantity is None else Decimal(row.quantity).scaleb(-6)
+            if self.doc_type == "sale":
+                result.append(
+                    SaleLine(
+                        item_id,
+                        row.warehouse_id,
+                        quantity,
+                        None if row.amount is None else Decimal(row.amount).scaleb(-MONEY_SCALE),
+                        None
+                        if row.vat_amount is None
+                        else Decimal(row.vat_amount).scaleb(-MONEY_SCALE),
+                        row.memo.strip(),
+                        row.offset_account_id,
+                        tuple(row.offset_subconto),
+                        row.line_id,
+                    )
+                )
+                continue
             if self.doc_type in {"opening", "receipt"}:
                 result.append(
                     ReceiptLine(
-                        row.item_id,
+                        item_id,
                         row.warehouse_id,
                         quantity,
                         None if row.amount is None else Decimal(row.amount).scaleb(-MONEY_SCALE),
@@ -777,12 +882,16 @@ class InventoryLinesModel(QAbstractTableModel):
                         None
                         if row.currency_amount is None
                         else Decimal(row.currency_amount).scaleb(-MONEY_SCALE),
+                        row.expense_account_id if item_id is None else None,
+                        tuple(row.expense_subconto) if item_id is None else (),
                     )
                 )
-            elif self.doc_type == "issue":
+                continue
+            assert item_id is not None  # only a sale's or receipt's line may have none
+            if self.doc_type == "issue":
                 result.append(
                     IssueLine(
-                        row.item_id,
+                        item_id,
                         row.warehouse_id,
                         quantity,
                         row.offset_account_id,
@@ -794,7 +903,7 @@ class InventoryLinesModel(QAbstractTableModel):
             elif self.doc_type == "transfer":
                 result.append(
                     TransferLine(
-                        row.item_id,
+                        item_id,
                         row.warehouse_id,
                         row.to_warehouse_id,
                         quantity,
@@ -805,23 +914,47 @@ class InventoryLinesModel(QAbstractTableModel):
         return result
 
     def _validate_complete(self, row: InventoryGridRow, line_no: int) -> None:
-        if row.warehouse_id is None:
-            raise ValidationError(tr("строка {line}: не указан склад", line=line_no))
-        if row.quantity is None or row.quantity <= 0:
-            raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
+        self._validate_what(row, line_no)
         if self.doc_type == "transfer":
             if row.to_warehouse_id is None:
                 raise ValidationError(tr("строка {line}: не указан склад-получатель", line=line_no))
             return
-        if self.doc_type in {"opening", "receipt"} and (row.amount is None or row.amount <= 0):
+        if self.doc_type in {"opening", "receipt", "sale"} and (
+            row.amount is None or row.amount <= 0
+        ):
             raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
         if self.rate is not None and not row.currency_amount:
             raise ValidationError(tr("строка {line}: не указана сумма в валюте", line=line_no))
         if row.offset_account_id is None:
             raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
-        account = self.s.catalog.accounts[row.offset_account_id]
+        self._require_subconto(row.offset_account_id, row.offset_subconto, line_no)
+
+    def _validate_what(self, row: InventoryGridRow, line_no: int) -> None:
+        """What the line is: an item from a warehouse, or a sale's service, or a receipt's
+        service or fixed asset with the account it goes to."""
+        if self.doc_type == "sale" and row.item_id is None:  # a service: no stock
+            if not row.memo.strip():
+                raise ValidationError(
+                    tr("строка {line}: укажите товар или что за услуга", line=line_no)
+                )
+        elif self.doc_type == "receipt" and row.item_id is None:  # a service, a fixed asset
+            if not row.memo.strip():
+                raise ValidationError(
+                    tr("строка {line}: укажите товар или что куплено (услуга, ОС)", line=line_no)
+                )
+            if row.expense_account_id is None:
+                raise ValidationError(tr("строка {line}: не указан счёт затрат", line=line_no))
+            self._require_subconto(row.expense_account_id, row.expense_subconto, line_no)
+        else:
+            if row.warehouse_id is None:
+                raise ValidationError(tr("строка {line}: не указан склад", line=line_no))
+            if row.quantity is None or row.quantity <= 0:
+                raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
+
+    def _require_subconto(self, account_id: int, subconto: list[int | None], line_no: int) -> None:
+        account = self.s.catalog.accounts[account_id]
         for position, kind_id in enumerate(account.sc_kinds):
-            if kind_id is not None and row.offset_subconto[position] is None:
+            if kind_id is not None and subconto[position] is None:
                 raise ValidationError(
                     tr(
                         "строка {line}: заполните субконто «{kind}»",
@@ -867,7 +1000,7 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         if key in LIST_KEYS:
             # Directory cells open with the whole list; the account list starts with typing.
             labels = [label for _, label in model.choices(index.row(), key)]
-            if key == ACCOUNT:
+            if key in {ACCOUNT, EXPENSE}:
                 attach_account_list(editor, labels, model.s.catalog, self._chosen)
             else:
                 attach_list(editor, labels, True, self._chosen)
@@ -893,9 +1026,9 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         key = model.key(index)
         text = editor.text().strip()
         try:
-            if key == ACCOUNT:
+            if key in {ACCOUNT, EXPENSE}:
                 value = model.s.catalog.resolve_account(text).id if text else None
-            elif key in {SC1, SC2, SC3}:
+            elif key in SUBCONTO_KEYS:
                 kind_id = model.kind_at(index.row(), key)
                 if kind_id is None:  # the account has no subconto at this position
                     return
@@ -973,17 +1106,22 @@ class InventoryLinesTable(QTableView):
             CURRENCY_AMOUNT: 104,
             VAT: 84,
             ACCOUNT: 130,
-            SC1: 100,
-            SC2: 100,
-            SC3: 100,
+            EXPENSE: 130,
         }
         used = model.s.catalog.used_positions()
+        expenses = model.has_expenses()
+        expense_positions = model.expense_positions()
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
         for column, key in enumerate(model.columns):
-            self.setColumnWidth(column, widths.get(key, 120))
-            if key in {SC1, SC2, SC3}:
+            self.setColumnWidth(column, widths.get(key, 100 if key in SUBCONTO_KEYS else 120))
+            self.setColumnHidden(column, False)  # a column of the previous model may be hidden
+            if key in SC_KEYS:
                 self.setColumnHidden(column, int(key[-1]) not in used)
+            if key == EXPENSE:
+                self.setColumnHidden(column, not expenses)
+            if key in ESC_KEYS:
+                self.setColumnHidden(column, not expenses or int(key[-1]) not in expense_positions)
             if key == VAT:
                 self.setColumnHidden(column, not model.has_vat())
             if key == CURRENCY_AMOUNT:
@@ -1135,6 +1273,9 @@ class InventoryDocumentPage(QWidget):
         self.basis.addItem(tr("Декларация"), CUSTOMS)
         self.basis.setToolTip(tr("Основание: e-qaimə или таможенная декларация (импорт)"))
         meta.addWidget(self.basis)
+        self.invoice_caption = QLabel(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
+        self.invoice_caption.setObjectName("secondary")
+        meta.addWidget(self.invoice_caption)
         self.invoice = QLineEdit()
         self.invoice.setFixedWidth(170)
         self.invoice.setPlaceholderText(tr("номер"))
@@ -1161,12 +1302,14 @@ class InventoryDocumentPage(QWidget):
         meta.addStretch(1)
         root.addLayout(meta)
 
-        # a new receipt has VAT when the company has an input VAT account to post it to
-        has_vat_account = session.ledger.account_role(session.company_id, INPUT_VAT) is not None
+        # a new receipt (sale) has VAT when the company has an account to post its VAT to
+        vat_role = OUTPUT_VAT if doc_type == "sale" else INPUT_VAT
+        has_vat_account = session.ledger.account_role(session.company_id, vat_role) is not None
         self._show_vat_rate(STANDARD_VAT_RATE if has_vat_account else None)
         self.model = InventoryLinesModel(session, doc_type, vat_rate=self._chosen_vat_rate())
         self.delegate = InventoryLinesDelegate(self)
         self.table = InventoryLinesTable(self.model, self.delegate)
+        self.expense_columns = self._expense_columns()  # shown for these
         root.addWidget(self.table, 1)
 
         self.error = QLabel()
@@ -1447,6 +1590,13 @@ class InventoryDocumentPage(QWidget):
     def _create_item(self, index: QPersistentModelIndex, text: str) -> None:
         if not index.isValid():
             return
+        if self.doc_type in {"sale", "receipt"}:
+            answer = self._service_or_item(text)
+            if answer is None:
+                return
+            if answer == "service":  # what was typed says what the service is
+                self._make_service(index.row(), text)
+                return
         dialog = ItemDialog(self.s, self.inventory, self, name=text)
         if dialog.units.count() == 0:
             self.show_error(tr("Сначала добавьте единицу измерения"))
@@ -1457,6 +1607,37 @@ class InventoryDocumentPage(QWidget):
         self.model.refresh_choices()
         self.model.setData(self.model.index(index.row(), index.column()), dialog.item_id)
         self.s.notify(tr("Товар добавлен"))
+
+    def _make_service(self, row: int, text: str) -> None:
+        """The line becomes a service with this text; a receipt's goes on to the account the
+        service (fixed asset) is charged to."""
+        self.model.setData(self.model.index(row, self.model.columns.index(MEMO)), text)
+        self.model.setData(self.model.index(row, self.model.columns.index(ITEM)), None)
+        self.table.configure_columns()
+        key = EXPENSE if self.doc_type == "receipt" else QUANTITY
+        index = self.model.index(row, self.model.columns.index(key))
+        self.table.setCurrentIndex(index)
+        self.table.edit(index)
+
+    def _service_or_item(self, text: str) -> str | None:
+        """A name the item list does not have: a service (fixed asset), or a new item?"""
+        sale = self.doc_type == "sale"
+        box = QMessageBox(self)
+        box.setWindowTitle(tr(DOCUMENT_TYPES[self.doc_type]))
+        box.setText(
+            tr("«{text}» нет среди товаров. Это услуга или новый товар?", text=text)
+            if sale
+            else tr("«{text}» нет среди товаров. Это услуга, ОС или новый товар?", text=text)
+        )
+        service = box.addButton(
+            tr("Услуга") if sale else tr("Услуга, ОС"), QMessageBox.ButtonRole.AcceptRole
+        )
+        item = box.addButton(tr("Новый товар…"), QMessageBox.ButtonRole.ActionRole)
+        box.addButton(QMessageBox.StandardButton.Cancel)
+        box.setDefaultButton(service)
+        box.exec()
+        clicked = box.clickedButton()
+        return "service" if clicked is service else "item" if clicked is item else None
 
     def _create_warehouse(self, index: QPersistentModelIndex, text: str) -> None:
         if not index.isValid() or not self._ask_add(text, tr("Склад")):
@@ -1477,12 +1658,12 @@ class InventoryDocumentPage(QWidget):
             self.vat_rate.addItem(f"{Decimal(rate or 0).scaleb(-2).normalize():f}%", rate)
             index = self.vat_rate.count() - 1
         self.vat_rate.setCurrentIndex(index)
-        receipt = self.doc_type == "receipt"
-        self.vat_caption.setVisible(receipt)
-        self.vat_rate.setVisible(receipt)
+        with_vat = self.doc_type in VAT_DOCUMENTS
+        self.vat_caption.setVisible(with_vat)
+        self.vat_rate.setVisible(with_vat)
 
     def _chosen_vat_rate(self) -> int | None:
-        return self.vat_rate.currentData() if self.doc_type == "receipt" else None
+        return self.vat_rate.currentData() if self.doc_type in VAT_DOCUMENTS else None
 
     def _vat_rate_changed(self, *_args) -> None:
         self.model.set_vat_rate(self._chosen_vat_rate())
@@ -1539,7 +1720,7 @@ class InventoryDocumentPage(QWidget):
             f"{money(self.model.currency_total(), blank_zero=False)} {self.model.currency_code}"
         )
         vat = self.model.vat_total()
-        shown = self.doc_type == "receipt" and self.model.has_vat()
+        shown = self.doc_type in VAT_DOCUMENTS and self.model.has_vat()
         self.vat_total_caption.setVisible(shown)
         self.vat_total.setVisible(shown)
         self.vat_total.setText(money(vat, blank_zero=False))
@@ -1547,9 +1728,15 @@ class InventoryDocumentPage(QWidget):
 
     def _changed(self, *_args) -> None:
         self._show_totals()
+        if self._expense_columns() != self.expense_columns:  # a service line came or went
+            self.table.configure_columns()
+            self.expense_columns = self._expense_columns()
         if not self.model.read_only and not self.dirty:
             self.dirty = True
             self.title_changed.emit()
+
+    def _expense_columns(self) -> tuple[bool, set[int]]:
+        return self.model.has_expenses(), self.model.expense_positions()
 
     def _set_new(self) -> None:
         self.number.setText(tr("Новый"))
@@ -1561,15 +1748,19 @@ class InventoryDocumentPage(QWidget):
         self._show_totals()
 
     def _show_basis(self, kind: str, number: str) -> None:
-        """The e-qaimə / declaration of a receipt; other documents have none."""
+        """The e-qaimə / declaration of a receipt, the e-qaimə of a sale; other documents
+        have none."""
         self.basis.setCurrentIndex(max(self.basis.findData(kind), 0))
         self.invoice.setText(number)
-        for widget in (self.basis, self.invoice):
-            widget.setVisible(self.doc_type == "receipt")
+        self.basis.setVisible(self.doc_type == "receipt")
+        self.invoice_caption.setVisible(self.doc_type == "sale")
+        self.invoice.setVisible(self.doc_type in VAT_DOCUMENTS)
 
     def _invoice(self) -> dict[str, str]:
         """The basis for saving: number and kind (an empty number: none)."""
         number = self.invoice.text().strip()
+        if self.doc_type == "sale":
+            return {"invoice": number}
         return {"invoice": number, "invoice_kind": self.basis.currentData() if number else ""}
 
     def _show_currency(self, currency_id: int | None, rate: int | None) -> None:
@@ -1604,6 +1795,8 @@ class InventoryDocumentPage(QWidget):
                 vat_amount=line.vat_amount if vat_rate is not None or line.vat_amount else None,
                 vat_typed=line.vat_amount != vat_of(line.amount, vat_rate),
                 currency_amount=line.currency_amount,
+                expense_account_id=line.cost_account_id if self.doc_type == "receipt" else None,
+                expense_subconto=list(line.cost_subconto),
             )
             for line in self.doc.lines
         ] or [InventoryGridRow()]
@@ -1613,6 +1806,7 @@ class InventoryDocumentPage(QWidget):
         )
         self.table.setModel(self.model)
         self.table.configure_columns()
+        self.expense_columns = self._expense_columns()
         self.delegate = InventoryLinesDelegate(self)
         self._connect_delegate()
         self.table.setItemDelegate(self.delegate)
@@ -1716,6 +1910,18 @@ class InventoryDocumentPage(QWidget):
                 currency_id=self._chosen_currency(),
                 currency_rate=self._rate_text(),
                 **self._invoice(),
+            )
+            return self.doc.id
+        if self.doc_type == "sale":
+            first = inputs[0]
+            header = (first.customer_account_id, first.customer_subconto, memo)
+            extra = {"vat_rate": self._chosen_vat_rate(), **self._invoice()}
+            if self.doc is None:
+                return self.inventory.create_sale_draft(
+                    company_id, document_date, inputs, *header, **extra
+                )
+            self.inventory.update_sale_draft(
+                company_id, self.doc.id, document_date, inputs, *header, **extra
             )
             return self.doc.id
         if self.doc_type == "issue":

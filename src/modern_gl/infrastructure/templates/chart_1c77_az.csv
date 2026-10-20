@@ -53,7 +53,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 67;Uzunmüddətli kreditlər və borclar üzrə hesablaşmalar;;;liability;;;counterparty,contract;
 68;Vergi və rüsumlar üzrə hesablaşmalar;;1;liability;;1;;
 68.1;Fiziki şəxslərin gəlir vergisi;68;;liability;;1;;
-68.2;Əlavə dəyər vergisi;68;;liability;;1;;
+68.2;Əlavə dəyər vergisi;68;;liability;;1;;;output_vat
 68.4;Mənfəət vergisi;68;;liability;;1;;
 68.8;Digər vergi və rüsumlar;68;;liability;;1;;
 69;Sosial sığorta və təminat üzrə hesablaşmalar;;;liability;;1;;
@@ -78,9 +78,9 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 84;Bölüşdürülməmiş mənfəət (ödənilməmiş zərər);;;equity;;1;;
 86;Məqsədli maliyyələşdirmə;;;liability;;;counterparty;
 90;Satışlar;;1;revenue;;1;;
-90.1;Satışdan gəlir;90;;revenue;;;;
-90.2;Satışın maya dəyəri;90;;expense;;;;
-90.3;Əlavə dəyər vergisi;90;;revenue;1;;;
+90.1;Satışdan gəlir;90;;revenue;;;;;sales_revenue
+90.2;Satışın maya dəyəri;90;;expense;;;;;cost_of_sales
+90.3;Əlavə dəyər vergisi;90;;revenue;1;;;;sales_vat
 90.9;Satışdan mənfəət / zərər;90;;equity;;1;;
 91;Digər gəlir və xərclər;;1;revenue;;1;;
 91.1;Digər gəlirlər;91;;revenue;;;other_income;;fx_gain

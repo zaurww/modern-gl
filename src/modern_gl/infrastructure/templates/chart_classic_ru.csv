@@ -12,7 +12,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 40;Готовая продукция;;;asset;;;item,warehouse;
 41;Товары;;;asset;;;item,warehouse;
 44;Издержки обращения;;;expense;;;cost_item;
-46;Реализация продукции (работ, услуг);;;revenue;;1;;
+46;Реализация продукции (работ, услуг);;;revenue;;1;;;sales_revenue,cost_of_sales,sales_vat
 47;Реализация и прочее выбытие основных средств;;;revenue;;1;fixed_asset;
 48;Реализация прочих активов;;;revenue;;1;;
 50;Касса;;;asset;;;;
@@ -25,7 +25,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 64;Расчёты по авансам полученным;;;liability;;1;counterparty,contract;
 68;Расчёты с бюджетом;;1;liability;;1;;
 68.1;Подоходный налог;68;;liability;;1;;
-68.2;Налог на добавленную стоимость;68;;liability;;1;;
+68.2;Налог на добавленную стоимость;68;;liability;;1;;;output_vat
 68.3;Налог на прибыль;68;;liability;;1;;
 68.9;Прочие налоги и сборы;68;;liability;;1;;
 69;Расчёты по социальному страхованию;;;liability;;1;;
