@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.inventory import (
     QUANTITY_FACTOR,
+    SALE_ROLE_NAMES,
     Inventory,
     format_quantity,
 )
@@ -37,7 +38,7 @@ from modern_gl.desktop.widgets import (
     more_button,
     ru_date,
 )
-from modern_gl.domain.accounts import INPUT_VAT
+from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -109,20 +110,29 @@ class InventorySettingsDialog(QDialog):
         super().__init__(parent)
         self.s = session
         self.setWindowTitle(tr("Настройки склада"))
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(500)
         form = QFormLayout(self)
-        self.input_vat = QComboBox()
-        self.input_vat.addItem(tr("— не указан —"), None)
-        for account in session.catalog.leaf_accounts:
-            self.input_vat.addItem(account.label, account.id)
-        current = session.ledger.account_role(session.company_id, INPUT_VAT)
-        self.input_vat.setCurrentIndex(max(self.input_vat.findData(current), 0))
+        self.input_vat = self._account_list(INPUT_VAT, tr("— не указан —"))
         form.addRow(tr("Счёт НДС к возмещению"), self.input_vat)
-        hint = QLabel(tr("Поступление с НДС: Дт этот счёт [поставщик] / Кт счёт расчётов."))
-        hint.setObjectName("tertiary")
-        hint.setFont(fonts().small)
-        hint.setWordWrap(True)
-        form.addRow(hint)
+        form.addRow(self._hint("Поступление с НДС: Дт этот счёт [поставщик] / Кт счёт расчётов."))
+        sale = QLabel(tr("Продажа"))
+        sale.setFont(fonts().heading)
+        form.addRow(sale)
+        self.sale_roles = {
+            role: self._account_list(
+                role, tr("— счёт покупателя —") if role == SALES_VAT else tr("— не указан —")
+            )
+            for role in SALE_ROLE_NAMES
+        }
+        for role, combo in self.sale_roles.items():
+            form.addRow(tr(SALE_ROLE_NAMES[role]), combo)
+        form.addRow(
+            self._hint(
+                "Продажа: Дт счёт покупателя / Кт выручка (с НДС, если НДС начисляется "
+                "с другого счёта); НДС — Дт счёт начисления / Кт НДС к уплате; "
+                "товар — Дт себестоимость / Кт счёт товара."
+            )
+        )
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -130,11 +140,31 @@ class InventorySettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
+    def _account_list(self, role: str, empty: str) -> QComboBox:
+        combo = QComboBox()
+        # long account names do not squeeze the labels
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(28)
+        combo.addItem(empty, None)
+        for account in self.s.catalog.leaf_accounts:
+            combo.addItem(account.label, account.id)
+        current = self.s.ledger.account_role(self.s.company_id, role)
+        combo.setCurrentIndex(max(combo.findData(current), 0))
+        return combo
+
+    @staticmethod
+    def _hint(text: str) -> QLabel:
+        hint = QLabel(tr(text))
+        hint.setObjectName("tertiary")
+        hint.setFont(fonts().small)
+        hint.setWordWrap(True)
+        return hint
+
     def _save(self) -> None:
         try:
-            self.s.ledger.set_account_role(
-                self.s.company_id, INPUT_VAT, self.input_vat.currentData()
-            )
+            for role, combo in {INPUT_VAT: self.input_vat, **self.sale_roles}.items():
+                if combo.currentData() != self.s.ledger.account_role(self.s.company_id, role):
+                    self.s.ledger.set_account_role(self.s.company_id, role, combo.currentData())
         except LedgerError as exc:
             QMessageBox.warning(self, tr("Настройки склада"), str(exc))
             return
@@ -175,6 +205,7 @@ class InventoryPage(QWidget):
         for title, operation, kind in (
             ("Начальные остатки", "opening", "flat"),
             ("Поступление", "receipt", "primary"),
+            ("Продажа", "sale", "flat"),
             ("Списание", "issue", "flat"),
             ("Перемещение", "transfer", "flat"),
             ("Расходы по партии", "landed_cost", "flat"),
@@ -381,6 +412,7 @@ class InventoryPage(QWidget):
             "opening": tr("Начальные остатки"),
             "receipt": tr("Поступление"),
             "issue": tr("Списание"),
+            "sale": tr("Продажа"),
             "transfer": tr("Перемещение"),
             "landed_cost": tr("Дополнительные расходы"),
         }.get(doc_type, doc_type)

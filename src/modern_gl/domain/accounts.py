@@ -12,7 +12,24 @@ FX_TRANSIT = "fx_transit"
 FX_GAIN = "fx_gain"
 FX_LOSS = "fx_loss"
 BANK_FEE = "bank_fee"
-ACCOUNT_ROLES = (INPUT_VAT, OPENING_BALANCE, FX_TRANSIT, FX_GAIN, FX_LOSS, BANK_FEE)
+# A sale: the revenue, the cost of the goods sold, the VAT to pay, and the account the VAT
+# is charged from (none: straight from the customer's account)
+SALES_REVENUE = "sales_revenue"
+COST_OF_SALES = "cost_of_sales"
+OUTPUT_VAT = "output_vat"
+SALES_VAT = "sales_vat"
+ACCOUNT_ROLES = (
+    INPUT_VAT,
+    OPENING_BALANCE,
+    FX_TRANSIT,
+    FX_GAIN,
+    FX_LOSS,
+    BANK_FEE,
+    SALES_REVENUE,
+    COST_OF_SALES,
+    OUTPUT_VAT,
+    SALES_VAT,
+)
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {
     INPUT_VAT: "input_vat",
@@ -20,6 +37,8 @@ ROLE_TYPES = {
     FX_GAIN: "other_income",
     FX_LOSS: "other_expense",
     BANK_FEE: "other_expense",
+    SALES_REVENUE: "sales",
+    COST_OF_SALES: "cost_of_sales",
 }
 
 # Account types: what an account means, whatever its code (D35). The list is fixed by the

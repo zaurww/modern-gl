@@ -905,4 +905,30 @@ AZ: dict[str, str] = {
     "Комиссия, которую удержал банк": "Bankın tutduğu komissiya",
     "Комиссии, {code}": "Komissiyalar, {code}",
     "комиссия должна быть больше нуля": "komissiya sıfırdan böyük olmalıdır",
+    # Продажа / Satış (сессия 12)
+    "Продажа": "Satış",
+    "Товар / услуга": "Mal / xidmət",
+    "Услуга": "Xidmət",
+    "«{text}» нет среди товаров. Это услуга или новый товар?": (
+        "«{text}» mallar arasında yoxdur. Bu xidmətdir, yoxsa yeni mal?"
+    ),
+    "Новый товар…": "Yeni mal…",
+    "Счёт расчётов с покупателем": "Alıcı ilə hesablaşma hesabı",
+    "НДС к уплате": "Ödəniləcək ƏDV",
+    "НДС начисляется со счёта": "ƏDV hesablanan hesab",
+    "— счёт покупателя —": "— alıcının hesabı —",
+    "Продажа: Дт счёт покупателя / Кт выручка (с НДС, если НДС начисляется с другого счёта); "
+    "НДС — Дт счёт начисления / Кт НДС к уплате; товар — Дт себестоимость / Кт счёт товара.": (
+        "Satış: Dt alıcının hesabı / Kt satışdan gəlir (ƏDV başqa hesabdan hesablanırsa — "
+        "ƏDV ilə); ƏDV — Dt hesablanan hesab / Kt ödəniləcək ƏDV; mal — Dt maya dəyəri / "
+        "Kt malın hesabı."
+    ),
+    "не указан счёт «{role}» — выберите его в настройках склада": (
+        "«{role}» hesabı göstərilməyib — onu anbar parametrlərində seçin"
+    ),
+    "строка {line}: укажите товар или что за услуга": (
+        "sətir {line}: malı və ya xidmətin nə olduğunu göstərin"
+    ),
+    "строка {line}: не указан счёт покупателя": "sətir {line}: alıcının hesabı göstərilməyib",
+    "строка {line}: у услуги нет склада": "sətir {line}: xidmətin anbarı olmur",
 }

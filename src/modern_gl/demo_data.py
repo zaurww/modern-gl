@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from modern_gl.application.inventory import STANDARD_VAT_RATE, Inventory, IssueLine, ReceiptLine
+from modern_gl.application.inventory import (
+    STANDARD_VAT_RATE,
+    Inventory,
+    IssueLine,
+    ReceiptLine,
+    SaleLine,
+)
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.chart_csv import apply_chart_template
@@ -102,14 +108,15 @@ def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
         ],
         tr("Списание материалов"),
     )
-    post(
+    inventory.post_sale(  # a service: Dt 62 / Kt 46 1 180.00, Dt 46 / Kt 68.2 180.00
         cid,
         "2026-02-25",
-        [
-            p("62", "46", "1180", [beta, c2], [], tr("Услуги оказаны"), "MT2602004571"),
-            p("46", "68.2", "180", [], [], tr("НДС 18%"), "MT2602004571"),
-        ],
+        [SaleLine(None, None, "1", "1000", "180", tr("Услуги оказаны"))],
+        ledger.account_id(cid, "62"),
+        [beta, c2],
         tr("Реализация услуг"),
+        vat_rate=STANDARD_VAT_RATE,
+        invoice="MT2602004571",
     )
     post(
         cid,

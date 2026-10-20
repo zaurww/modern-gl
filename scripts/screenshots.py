@@ -221,6 +221,10 @@ def main() -> None:
     win.open_inventory_document(inventory_document.id)
     assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
     shot("8c2_inventory_document")
+    sale = next(row for row in inventory.documents_model.rows if row.doc_type == "sale")
+    win.open_inventory_document(sale.id)
+    assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
+    shot("8c8_sale")
     from modern_gl.desktop.inventory_page import InventorySettingsDialog
 
     settings_dialog = InventorySettingsDialog(session, win)
