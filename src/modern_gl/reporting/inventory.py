@@ -322,7 +322,8 @@ def receipt_line_choices(conn: sqlite3.Connection, company_id: int) -> list[Rece
 def list_inventory_documents(
     conn: sqlite3.Connection, company_id: int, limit: int = 100
 ) -> list[InventoryDocumentSummary]:
-    """The latest inventory documents with their total amount, newest first."""
+    """The latest inventory documents with their total amount, newest first. Purchases and
+    sales without goods are left to «Покупки и продажи»."""
     rows = conn.execute(
         """
         SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.status,
@@ -338,6 +339,10 @@ def list_inventory_documents(
         LEFT JOIN landed_cost_types ct
           ON ct.company_id = d.company_id AND ct.id = d.landed_cost_type_id
         WHERE d.company_id = ?
+          AND (d.doc_type NOT IN ('receipt', 'sale') OR EXISTS (
+              SELECT 1 FROM inventory_lines g
+              WHERE g.document_id = d.id AND g.item_id IS NOT NULL
+          ))  -- a purchase or sale of services only does not touch the warehouse
         GROUP BY d.id
         ORDER BY d.doc_date DESC, d.id DESC
         LIMIT ?

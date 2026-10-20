@@ -400,7 +400,10 @@ AZ: dict[str, str] = {
     "+ Склад": "+ Anbar",
     "+ Вид расходов": "+ Xərc növü",
     "На складе пока пусто": "Anbar hələ boşdur",
-    "Добавьте товар и склад, затем введите поступление.": "Mal və anbar əlavə edin, sonra daxilolmanı daxil edin.",
+    "Добавьте товар и склад, затем введите покупку в «Покупках и продажах».": (
+        "Mal və anbar əlavə edin, sonra alışı «Alış və satış» bölməsində daxil edin."
+    ),
+    "Документов: {n}": "Sənəd: {n}",
     "Количество и стоимость рассчитаны по проведённым складским документам; проводки создаются автоматически.": "Miqdar və dəyər keçirilmiş anbar sənədlərinə əsasən hesablanır; mühasibat yazılışları avtomatik yaradılır.",
     "Ед.": "Ölçü v.",
     "Средняя цена": "Orta qiymət",
@@ -944,4 +947,20 @@ AZ: dict[str, str] = {
     "Ноутбук": "Noutbuk",
     "Ноутбук Dell": "Noutbuk Dell",
     "Ремонт и ноутбук": "Təmir və noutbuk",
+    # Покупки и продажи / Alış və satış (сессия 12)
+    "Покупки и продажи": "Alış və satış",
+    "Покупка": "Alış",
+    "Покупки": "Alışlar",
+    "Продажи": "Satışlar",
+    "Все": "Hamısı",
+    "+ Покупка": "+ Alış",
+    "+ Продажа": "+ Satış",
+    "Контрагент, VÖEN или e-qaimə": "Kontragent, VÖEN və ya e-qaimə",
+    "Покупок и продаж пока нет": "Hələ alış və satış yoxdur",
+    "Покупка — товары, услуги и ОС от поставщика; продажа — товары и услуги.": (
+        "Alış — təchizatçıdan mal, xidmət və ƏV; satış — mal və xidmət."
+    ),
+    "Проведено: покупки {bought}   ·   продажи {sold}": (
+        "Keçirilib: alış {bought}   ·   satış {sold}"
+    ),
 }

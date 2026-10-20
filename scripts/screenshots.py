@@ -350,6 +350,8 @@ def main() -> None:
     session.catalog.reload()  # the new cost item and fixed asset
     win.open_inventory_document(purchase)
     shot("8c9_purchase_services")
+    win.show_place(("trade",))
+    shot("8c0_trade")
     picker = cost_source_picker(session, None, win)
     picker.show()
     loop = QEventLoop()

@@ -96,6 +96,15 @@ def _invoices(p: QPainter) -> None:  # a receipt with a torn edge
     p.drawLine(QPointF(6.5, 9), QPointF(11.5, 9))
 
 
+def _trade(p: QPainter) -> None:  # two arrows: bought in, sold out
+    p.drawLine(QPointF(3, 6), QPointF(15, 6))
+    p.drawLine(QPointF(12, 3), QPointF(15, 6))
+    p.drawLine(QPointF(12, 9), QPointF(15, 6))
+    p.drawLine(QPointF(3, 12), QPointF(15, 12))
+    p.drawLine(QPointF(6, 9), QPointF(3, 12))
+    p.drawLine(QPointF(6, 15), QPointF(3, 12))
+
+
 def _document(p: QPainter) -> None:  # a sheet with a folded corner
     path = QPainterPath(QPointF(4, 2.5))
     path.lineTo(10.5, 2.5)
@@ -137,6 +146,7 @@ GLYPHS: dict[str, Callable[[QPainter], None]] = {
     "opening": _opening,
     "chart": _chart,
     "inventory": _inventory,
+    "trade": _trade,
     "directories": _directories,
     "templates": _templates,
     "currencies": _currencies,

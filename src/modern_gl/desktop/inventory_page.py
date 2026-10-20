@@ -204,9 +204,7 @@ class InventoryPage(QWidget):
         operations.setSpacing(6)
         for title, operation, kind in (
             ("Начальные остатки", "opening", "flat"),
-            ("Поступление", "receipt", "primary"),
-            ("Продажа", "sale", "flat"),
-            ("Списание", "issue", "flat"),
+            ("Списание", "issue", "primary"),
             ("Перемещение", "transfer", "flat"),
             ("Расходы по партии", "landed_cost", "flat"),
         ):
@@ -228,7 +226,7 @@ class InventoryPage(QWidget):
         self.empty = EmptyState(
             "□",
             tr("На складе пока пусто"),
-            tr("Добавьте товар и склад, затем введите поступление."),
+            tr("Добавьте товар и склад, затем введите покупку в «Покупках и продажах»."),
         )
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
@@ -410,7 +408,7 @@ class InventoryPage(QWidget):
     def _document_type(doc_type: str) -> str:
         return {
             "opening": tr("Начальные остатки"),
-            "receipt": tr("Поступление"),
+            "receipt": tr("Покупка"),
             "issue": tr("Списание"),
             "sale": tr("Продажа"),
             "transfer": tr("Перемещение"),
