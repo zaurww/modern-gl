@@ -121,7 +121,8 @@ def _references(conn: sqlite3.Connection, table: str) -> list[tuple[str, list[st
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
     ).fetchall():
         for key in conn.execute(f'PRAGMA foreign_key_list("{referrer}")'):
-            if key["table"] == table and key["to"] == "id":
+            # a cascaded row is a part of the referred one (an element's tags), no use
+            if key["table"] == table and key["to"] == "id" and key["on_delete"] != "CASCADE":
                 found.setdefault(referrer, []).append(key["from"])
     # the clearest reason first: a document by its number
     first = {"postings": 0, "inventory_lines": 1}

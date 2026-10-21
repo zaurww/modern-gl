@@ -12,6 +12,9 @@ Contracts belong to counterparties: their list shows whose each one is, the dial
 contract asks for its counterparty, and a counterparty's menu adds a contract to it.
 A counterparty has a VÖEN; a non-resident has none, but a country and a tax number of
 its own country instead.
+
+Tags («Связанная сторона», «Арендодатель») are of the company: an element has any number
+of them, and ОСВ по субконто shows only the elements with a tag (D64).
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QMessageBox,
+    QPushButton,
     QStackedLayout,
     QTableView,
     QVBoxLayout,
@@ -47,13 +51,128 @@ from modern_gl.desktop.inventory_page import open_item
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button
+from modern_gl.desktop.widgets import EmptyState, FlowLayout, PageHeader, button
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import transaction
 from modern_gl.reporting.inventory import item_details
 
 KIND_ROLE = Qt.ItemDataRole.UserRole
+
+
+class TagPicker(QWidget):
+    """The tags of an element as pills: a click puts one on or off; «+ Метка» makes a new
+    one (it is on at once); the menu of a pill renames or deletes it for the company."""
+
+    def __init__(self, session: Session, chosen: frozenset[int] = frozenset()) -> None:
+        super().__init__()
+        self.s = session
+        self._chosen = set(chosen)
+        self.flow = FlowLayout(self)
+        self.pills: dict[int, QPushButton] = {}
+        self.add = button(tr("+ Метка"), "flat", tr("Новая метка, например «Связанная сторона»"))
+        self.add.clicked.connect(self.new_tag)
+        self._fill()
+
+    def chosen(self) -> set[int]:
+        return {tag_id for tag_id, pill in self.pills.items() if pill.isChecked()}
+
+    def _fill(self) -> None:
+        while self.flow.count():
+            item = self.flow.takeAt(0)
+            widget = item.widget() if item else None
+            if widget is not None and widget is not self.add:
+                widget.deleteLater()
+        self.pills = {}
+        for tag_id, name in self.s.catalog.sorted_tags():
+            pill = button(name, "tag")
+            pill.setCheckable(True)
+            pill.setChecked(tag_id in self._chosen)
+            pill.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            pill.customContextMenuRequested.connect(
+                lambda pos, tag_id=tag_id, pill=pill: self._menu(tag_id, pill, pos)
+            )
+            self.pills[tag_id] = pill
+            self.flow.addWidget(pill)
+        self.flow.addWidget(self.add)
+        self.updateGeometry()
+
+    def _ask(self, title: str, text: str = "") -> str | None:
+        name, ok = QInputDialog.getText(self, title, tr("Название метки:"), text=text)
+        return name.strip() if ok and name.strip() else None
+
+    def new_tag(self) -> None:
+        name = self._ask(tr("Новая метка"))
+        if name is None:
+            return
+        try:
+            tag_id = self.s.ledger.add_tag(self.s.company_id, name)
+        except LedgerError as e:
+            self.s.notify(str(e))
+            return
+        self._chosen = self.chosen() | {tag_id}
+        self.s.catalog.reload()
+        self._fill()
+
+    def _menu(self, tag_id: int, pill: QPushButton, pos) -> None:
+        menu = QMenu(self)
+        menu.addAction(tr("Переименовать…")).triggered.connect(lambda: self._rename(tag_id))
+        menu.addAction(tr("Удалить метку…")).triggered.connect(lambda: self._delete(tag_id))
+        menu.exec(pill.mapToGlobal(pos))
+
+    def _rename(self, tag_id: int) -> None:
+        name = self._ask(tr("Переименовать"), self.s.catalog.tags[tag_id])
+        if name is None:
+            return
+        self._change(lambda: self.s.ledger.rename_tag(self.s.company_id, tag_id, name))
+
+    def _delete(self, tag_id: int) -> None:
+        name = self.s.catalog.tags[tag_id]
+        question = tr("Удалить метку «{name}»? Она снимется со всех элементов.", name=name)
+        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+            return
+        self._change(lambda: self.s.ledger.delete_tag(self.s.company_id, tag_id))
+
+    def _change(self, action) -> None:
+        try:
+            action()
+        except LedgerError as e:
+            self.s.notify(str(e))
+            return
+        self._chosen = self.chosen()
+        self.s.catalog.reload()
+        self._fill()
+
+
+class TagsDialog(QDialog):
+    """The tags of an element of a directory that has no window of its own (cost items)."""
+
+    def __init__(self, session: Session, value: SubcontoInfo, parent: QWidget | None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(tr("Метки"))
+        self.setMinimumWidth(420)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(28, 24, 28, 20)
+        lay.setSpacing(16)
+        heading = QLabel(value.name)
+        heading.setFont(fonts().heading)
+        lay.addWidget(heading)
+        self.picker = TagPicker(session, value.tags)
+        lay.addWidget(self.picker)
+        note = QLabel(tr("По метке отбирается ОСВ по субконто: например, все связанные стороны."))
+        note.setObjectName("secondary")
+        note.setWordWrap(True)
+        lay.addWidget(note)
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = button(tr("Отмена"))
+        save = button(tr("Сохранить"), "primary")
+        save.setDefault(True)
+        cancel.clicked.connect(self.reject)
+        save.clicked.connect(self.accept)
+        buttons.addWidget(cancel)
+        buttons.addWidget(save)
+        lay.addLayout(buttons)
 
 
 class ValueDialog(QDialog):
@@ -110,6 +229,8 @@ class ValueDialog(QDialog):
             self.currency.setCurrentIndex(max(self.currency.findData(currency_id), 0))
             form.addRow(tr("Валюта"), self.currency)
             notes.append(tr("С валютой строка сама берёт её, и проводка проверяется по ней."))
+        self.tags = TagPicker(session, value.tags if value else frozenset())
+        form.addRow(tr("Метки"), self.tags)
         lay.addLayout(form)
         for text in notes:
             note = QLabel(text)
@@ -254,6 +375,8 @@ def new_value(
                 session.ledger.set_subconto_value_currency(cid, value_id, currency)
             if tax != (None, False, None):
                 session.ledger.set_subconto_value_tax(cid, value_id, *tax)
+            if dlg.tags.chosen():
+                session.ledger.set_subconto_value_tags(cid, value_id, dlg.tags.chosen())
     except LedgerError as e:
         session.notify(str(e))
         return None
@@ -447,6 +570,9 @@ class DirectoriesPage(QWidget):
         if any(a.currency for a in accounts):
             columns.append(Column(tr("Валюта"), self._currency_code, width=120))
             widths.append(120)
+        if any(v.tags for v in values):
+            columns.append(Column(tr("Метки"), cat.tag_text, width=260))
+            widths.append(260)
         if grouped:  # each group followed by what it holds
             values = [value for _, value in tree]
         self.model.set(columns, values, emphasis=lambda v: v.is_group, muted=lambda v: not v.active)
@@ -644,6 +770,7 @@ class DirectoriesPage(QWidget):
                     self.s.ledger.set_subconto_value_currency(cid, value.id, currency)
                 if tax != old_tax:
                     self.s.ledger.set_subconto_value_tax(cid, value.id, *tax)
+                self.s.ledger.set_subconto_value_tags(cid, value.id, dlg.tags.chosen())
 
         self._apply(save, tr("Сохранено: {text}", text=name), value.id)
 
@@ -692,6 +819,20 @@ class DirectoriesPage(QWidget):
         self._apply(
             lambda: inventory.delete_value(self.s.company_id, value.id),
             tr("«{name}» удалён", name=value.name),
+        )
+
+    def edit_tags(self, value: SubcontoInfo) -> None:
+        dlg = TagsDialog(self.s, value, self)
+        accepted = dlg.exec() == QDialog.DialogCode.Accepted
+        chosen = dlg.picker.chosen()
+        self.s.catalog.reload()  # a tag made, renamed or deleted in the window stays
+        if not accepted:
+            self.refresh_values(value.id)
+            return
+        self._apply(
+            lambda: self.s.ledger.set_subconto_value_tags(self.s.company_id, value.id, chosen),
+            tr("Метки «{name}» сохранены", name=value.name),
+            value.id,
         )
 
     def choose_currency(self, value: SubcontoInfo) -> None:
@@ -745,6 +886,8 @@ class DirectoriesPage(QWidget):
             (tr("В группу…"), lambda: self.move_value(value)),
             (tr("Удалить"), lambda: self.delete_value(value)),
         ]
+        if not value.is_group:
+            actions.insert(1, (tr("Метки…"), lambda: self.edit_tags(value)))
         if any(a.currency for a in self.s.catalog.accounts_using(value.kind_id)):
             actions.append((tr("Валюта…"), lambda: self.choose_currency(value)))
         for owned, owner in self.s.catalog.owner_kinds.items():  # a counterparty
