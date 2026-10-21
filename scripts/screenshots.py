@@ -585,13 +585,54 @@ def main() -> None:
     payment = cast(BankOperationPage, win.stack.currentWidget())
     payment.counterparty_edit.setText(i18n.tr("Альфа Трейд"))
     payment.counterparty_edit.editingFinished.emit()
-    payment.line_rows[0].amount.setText("590")
-    payment.line_rows[0].invoice.setText("MT2602000777")
+    payment.amount.setText("590")
+    payment.amount.textEdited.emit("590")
+    payment.invoice.setText("MT2602000777")
+    payment.invoice.textEdited.emit("MT2602000777")
+    shot("12b_bank_payment")  # one line, folded: who, e-qaimə, amount
     payment.add_fee()
     payment.line_rows[1].amount.setText("1.20")
     payment._changed()
-    shot("12b_bank_payment")
+    shot("12b2_bank_payment_lines")
+    shoot_vat_deposit(session, win, ledger, shot)
     shoot_sale_groups(session, win, ledger, shot)
+
+
+def shoot_vat_deposit(session, win, ledger, shot) -> None:
+    """D69: Alfa's MT2601001842 (1 200.00 + ƏDV 216.00) paid from the bank and the ƏDV
+    deposit account (55, with money on it) in one form."""
+    from modern_gl.application.ledger import PostingInput
+    from modern_gl.desktop.bank_operation_page import BankOperationPage
+    from modern_gl.desktop.bank_page import BankPage
+
+    cid, catalog = session.company_id, session.catalog
+    banks = catalog.by_code["51"].sc_kinds[0]
+    assert banks is not None
+    ledger.add_account(
+        cid, "55", i18n.tr("Депозитный счёт НДС"), account_type="vat_deposit", subconto=[banks]
+    )
+    catalog.reload()
+    deposit = ledger.add_subconto_value(cid, banks, "ƏDV depozit")
+    deposit_account, capital = catalog.by_code["55"].id, catalog.by_code["80"].id
+    ledger.post_new(
+        cid, "2026-02-01", [PostingInput(deposit_account, capital, "2000", [deposit], [])]
+    )
+    catalog.reload()
+    bank = cast(BankPage, win.pages[("bank",)])
+    win.show_place(("bank",))
+    bank.refresh()
+    bank.new_operation("out")
+    payment = cast(BankOperationPage, win.stack.currentWidget())
+    payment.counterparty_edit.setText(i18n.tr("Альфа Трейд"))
+    payment.counterparty_edit.editingFinished.emit()
+    index = next(
+        i
+        for i in range(payment.invoice.count())
+        if payment.invoice.itemText(i).startswith("MT2601001842")
+    )
+    payment.invoice.setCurrentIndex(index)
+    payment.invoice.activated.emit(index)
+    shot("12b3_bank_vat_deposit")
 
 
 def shoot_sale_groups(session, win, ledger, shot) -> None:

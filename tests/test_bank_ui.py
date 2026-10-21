@@ -112,7 +112,7 @@ def new_page(qtbot, session: Session, prefill=None) -> BankOperationPage:
 
 def pay_alfa(page: BankOperationPage) -> None:
     """1 180.00 to ALFA found by its VÖEN, e-qaimə MT001."""
-    choose(page.bank, "Kapital AZN · 51 · AZN")
+    choose(page.sc[0], "Kapital AZN")
     type_text(page.counterparty_edit, "1234567890")
     page.counterparty_edit.editingFinished.emit()
     line = page.line_rows[0]
@@ -185,7 +185,7 @@ def test_tax_has_no_counterparty(qtbot, session):
     assert page.line_rows[0].account_info is not None
     assert page.line_rows[0].account_info.code == "68.1"
     assert page.memo.placeholderText() == "Уплата налогов"
-    choose(page.bank, "Kapital AZN · 51 · AZN")
+    choose(page.sc[0], "Kapital AZN")
     type_text(page.line_rows[0].amount, "180")
     assert page.save(post=True)
     assert page.doc is not None and page.doc.kind == TAX and page.doc.counterparty_id is None
@@ -225,7 +225,7 @@ def test_bank_settings_choose_the_fee_account(qtbot, session):
 
 def test_operation_in_dollars_offers_the_rate(qtbot, session):
     page = new_page(qtbot, session)
-    choose(page.bank, "Kapital USD · 52 · USD")
+    choose(page.account, "52  Валютные счета")
     assert page.currency.currentText() == "USD" and not page.currency.isEnabled()
     # the rate is of 01.03, not of the date itself: the official one can be loaded
     assert page.rate_note.isVisibleTo(page)
@@ -238,7 +238,7 @@ def test_vat_deposit_offers_only_what_it_may_pay(qtbot, session):
     session.ledger.set_account_type(session.company_id, acc(session, "55"), "vat_deposit")
     session.catalog.reload()
     page = new_page(qtbot, session)
-    choose(page.bank, "Kapital AZN · 55 · AZN")  # never used there yet
+    choose(page.account, "55  Специальные счета в банках")
     kind = page.kind
     hidden = {kind.itemText(i) for i in range(kind.count()) if kind.isItemHidden(i)}
     assert hidden == {"Зарплата", "Комиссия банка", "Прочее"}
@@ -246,34 +246,38 @@ def test_vat_deposit_offers_only_what_it_may_pay(qtbot, session):
 
 def test_the_bank_account_is_one_field(qtbot, session, monkeypatch):
     """The GL account, the bank and its currency are chosen at once: «Kapital USD · 52 ·
-    USD» puts 52, the bank and USD; the currency is not asked. A bank not in the list is
+    USD» puts 52, the bank and USD; the currency is not asked. A bank never used on an
+    account is offered there too (a new ƏDV deposit on 55). A bank not in the list is
     added right in the field, under the chosen account, and taken."""
     from modern_gl.desktop.directories_page import ValueDialog
 
+    session.ledger.set_account_type(session.company_id, acc(session, "55"), "vat_deposit")
+    session.catalog.reload()
     page = new_page(qtbot, session)
-    assert page.bank.currentText() == "Kapital AZN · 51 · AZN"  # the first bank account
+    assert page.bank.currentText() == "Kapital AZN  ·  51  ·  AZN"  # the first bank account
     assert page.currency.isHidden()
-    choose(page.bank, "Kapital USD · 52 · USD")
+    choose(page.bank, "Kapital USD  ·  52  ·  USD")
     assert page.bank_info is not None and page.bank_info.code == "52"
     assert page.bank_subconto()[0] == value(session, "Kapital USD")
     assert page.total.text() == "0.00 USD"
+    assert page.deposit.currentText() == "Kapital AZN  ·  55  ·  AZN"  # never used there
 
     def exec_(dialog):
         dialog.name.setText("Paşa Bank")
         return QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(ValueDialog, "exec", exec_)
-    choose(page.bank, "Kapital AZN · 51 · AZN")
+    choose(page.bank, "Kapital AZN  ·  51  ·  AZN")
     page.bank.unknown.emit("Paşa")
     paşa = value(session, "Paşa Bank")
     assert page.bank_info is not None and page.bank_info.code == "51"
     assert page.bank_subconto()[0] == paşa
-    assert page.bank.currentText() == "Paşa Bank · 51 · AZN"
+    assert page.bank.currentText() == "Paşa Bank  ·  51  ·  AZN"
 
 
 def test_errors_stay_on_the_page_and_a_draft_is_saved(qtbot, session):
     page = new_page(qtbot, session)
-    choose(page.bank, "Kapital AZN · 51 · AZN")
+    choose(page.sc[0], "Kapital AZN")
     assert not page.save(post=True)
     assert page.error.text() == "строка 1: нулевая сумма"  # the supplier's line
     type_text(page.line_rows[0].amount, "abc")
@@ -388,54 +392,47 @@ def shown_page(qtbot, session: Session) -> BankOperationPage:
 
 
 def test_an_operation_is_typed_and_posted_without_the_mouse(qtbot, session):
-    """D49: name → Enter → the line as last time → e-qaimə → amount → Ctrl+Enter."""
+    """D49: name → Enter → e-qaimə → Enter → amount → Enter → «Провести» → Enter; the
+    bank, day and kind are set before, the line as last time is folded into one."""
     page = shown_page(qtbot, session)
-    choose(page.bank, "Kapital AZN · 51 · AZN")
+    choose(page.sc[0], "Kapital AZN")
+    assert page.bank.currentText().startswith("Kapital AZN")
     page.counterparty_edit.setFocus()
     typed("alfa")
-    key(qtbot, Qt.Key.Key_Return)  # the highlighted one is taken, on to the line
+    key(qtbot, Qt.Key.Key_Return)  # the highlighted one is taken, on to the e-qaimə
     assert page.counterparty == value(session, "ALFA MMC")
     line = page.line_rows[0]
-    assert line.account.hasFocus() and line.account_info is not None
-    assert line.account_info.code == "60.1"
-    key(qtbot, Qt.Key.Key_Return)  # the account as suggested
-    assert line.sc[1].hasFocus() and line.sc[1].currentText() == "Договор 1"
-    key(qtbot, Qt.Key.Key_Return)
-    assert line.invoice.hasFocus()
+    assert line.account_info is not None and line.account_info.code == "60.1"
+    assert page.folded and not line.isVisible()
+    assert "Договор 1" in page.summary_text.text()
+    assert page.invoice.hasFocus()
     typed("MT005")
     key(qtbot, Qt.Key.Key_Return)
-    assert line.amount.hasFocus()
+    assert page.amount.hasFocus()
     typed("500")
-    key(qtbot, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    key(qtbot, Qt.Key.Key_Return)
+    assert page.btn_post.hasFocus()
+    key(qtbot, Qt.Key.Key_Return)
     assert page.doc is not None and page.doc.status == "posted"
     assert [(x.amount, x.invoice) for x in page.doc.lines] == [(50_000, "MT005")]
 
 
-def test_enter_walks_the_header_in_the_order_it_is_read(qtbot, session):
-    """Date → bank → kind → to whom → the line, one Enter each (the currency, given by
-    the bank, is not asked)."""
+def test_the_lines_unfold_with_a_fee_or_by_hand(qtbot, session):
+    """One line is folded; F6 adds the fee line and shows both with their columns."""
     page = shown_page(qtbot, session)
-    page.date.setFocus()
-    walked = []
-    for _ in range(4):
-        key(qtbot, Qt.Key.Key_Return)
-        focused = QApplication.focusWidget()
-        walked.append(
-            next(
-                (
-                    name
-                    for name, w in (
-                        ("bank", page.bank),
-                        ("kind", page.kind),
-                        ("whom", page.counterparty_edit),
-                        ("line", page.line_rows[0].account),
-                    )
-                    if focused is w or (focused is not None and w.isAncestorOf(focused))
-                ),
-                type(focused).__name__,
-            )
-        )
-    assert walked == ["bank", "kind", "whom", "line"]
+    assert page.folded and page.summary.isVisible() and not page.lines_header.isVisible()
+    page.amount.setFocus()
+    typed("100")
+    assert page.line_rows[0].amount.text() == "100"
+    key(qtbot, Qt.Key.Key_F6)
+    assert len(page.line_rows) == 2 and not page.folded
+    assert page.lines_header.isVisible() and page.line_rows[0].amount.text() == "100"
+    assert page.line_rows[1].amount.hasFocus()
+    key(qtbot, Qt.Key.Key_Delete, Qt.KeyboardModifier.ControlModifier)
+    assert len(page.line_rows) == 1 and not page.folded  # unfolded by hand: stays
+    other = shown_page(qtbot, session)
+    other.btn_unfold.click()
+    assert not other.folded and other.line_rows[0].account.hasFocus()
 
 
 def test_lines_with_keys_insert_copy_and_remove(qtbot, session):
@@ -477,7 +474,7 @@ def test_a_new_counterparty_is_added_right_in_the_operation(qtbot, session, monk
     assert page.counterparty == beta
     assert session.catalog.value(beta).tax_id == "9876543210"
     assert page.tax_id.text() == "VÖEN 9876543210"
-    assert page.line_rows[0].account.hasFocus()  # on with the payment
+    assert page.invoice.hasFocus()  # on with the payment
 
 
 def test_a_name_nothing_is_called_stays_in_the_field(qtbot, session):
@@ -543,7 +540,7 @@ def test_the_unpaid_e_qaime_of_the_counterparty_are_offered(qtbot, session):
     not the sale MT9; ↓ Enter takes MT1 with what is left on it."""
     owe_alfa(session)
     page = shown_page(qtbot, session)
-    choose(page.bank, "Kapital AZN · 51 · AZN")
+    choose(page.sc[0], "Kapital AZN")
     typed("alfa")
     key(qtbot, Qt.Key.Key_Return)
     assert [(i.invoice, i.amount) for i in page.open_invoices] == [
@@ -551,12 +548,13 @@ def test_the_unpaid_e_qaime_of_the_counterparty_are_offered(qtbot, session):
         ("MT2", 123_900),
     ]
     line = page.line_rows[0]
-    line.invoice.setFocus()
+    assert page.invoice.hasFocus()  # the list opens by itself
     qtbot.waitUntil(lambda: QApplication.activePopupWidget() is not None)
     key(qtbot, Qt.Key.Key_Down)
     key(qtbot, Qt.Key.Key_Return)
     assert line.invoice.text() == "MT1" and line.amount.text() == "1 000.00"
-    assert line.amount.hasFocus()
+    assert page.invoice.text() == "MT1" and page.amount.text() == "1 000.00"
+    assert page.amount.hasFocus()
 
 
 def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
@@ -570,14 +568,13 @@ def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
         InvoicePicker, "exec", lambda dialog: (dialog._done(), QDialog.DialogCode.Accepted)[1]
     )
     page = shown_page(qtbot, session)
-    choose(page.bank, "Kapital AZN · 51 · AZN")
+    choose(page.sc[0], "Kapital AZN")
     typed("alfa")
     key(qtbot, Qt.Key.Key_Return)
-    line = page.line_rows[0]
-    type_text(line.amount, "2000")
-    several = line.invoice.findText("Несколько e-qaimə…")
-    assert several == line.invoice.count() - 1  # after the e-qaimə themselves
-    line.invoice._choose(several)
+    type_text(page.amount, "2000")
+    several = page.invoice.findText("Несколько e-qaimə…")
+    assert several == page.invoice.count() - 1  # after the e-qaimə themselves
+    page.invoice._choose(several)
     qtbot.waitUntil(lambda: len(page.line_rows) == 2)
     assert [(r.invoice.text(), r.amount.text()) for r in page.line_rows] == [
         ("MT1", "1 000.00"),
@@ -590,3 +587,70 @@ def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
         session.conn, session.company_id, value(session, "ALFA MMC"), True, "2026-03-05"
     )
     assert [(i.invoice, i.amount) for i in left] == [("MT2", 23_900)]
+
+
+def test_the_vat_part_goes_from_the_deposit_account(qtbot, session):
+    """D69. MT7 of 02.03 to ALFA: 1 000.00 + ƏDV 180.00. Paying on 05.03: the e-qaimə
+    from the list puts 1 000.00 from the bank and 180.00 from the ƏDV deposit (55,
+    500.00 on it since 01.03); «Провести» makes two operations, MT7 is paid in full."""
+    from modern_gl.reporting.invoices import open_invoices
+
+    ledger, cid = session.ledger, session.company_id
+    ledger.set_account_type(cid, acc(session, "55"), "vat_deposit")
+    banks = ledger.subconto_kind_id(cid, "bank_account")
+    deposit = ledger.add_subconto_value(cid, banks, "ƏDV depozit")
+    alfa, contract = value(session, "ALFA MMC"), value(session, "Договор 1")
+    owner = value(session, "Учредитель")
+    rent = (ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "cost_item"), "Аренда"),)
+    ledger.post_new(
+        cid,
+        "2026-03-01",
+        [PostingInput(acc(session, "55"), acc(session, "80"), "500", [deposit], [owner])],
+    )
+    ledger.post_new(
+        cid,
+        "2026-03-02",
+        [
+            PostingInput(
+                acc(session, "26"),
+                acc(session, "60.1"),
+                "1000",
+                rent,
+                (alfa, contract),
+                invoice="MT7",
+            ),
+            PostingInput(
+                acc(session, "19.4"),
+                acc(session, "60.1"),
+                "180",
+                (alfa,),
+                (alfa, contract),
+                invoice="MT7",
+            ),
+        ],
+    )
+    session.catalog.reload()
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    assert page.deposit_shown and page.deposit.currentText().startswith("ƏDV depozit")
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)
+    assert page.invoice.hasFocus()
+    qtbot.waitUntil(lambda: QApplication.activePopupWidget() is not None)
+    key(qtbot, Qt.Key.Key_Down)
+    key(qtbot, Qt.Key.Key_Return)
+    assert (page.amount.text(), page.vat_amount.text()) == ("1 000.00", "180.00")
+    assert page.amount_caption.text() == "Из банка"
+    assert page.check.text().endswith("e-qaimə оплачивается полностью")
+    assert page.save(post=True), page.error.text()
+    bank_lines = [(x.account_id, x.amount, x.invoice) for x in page.doc.lines]
+    assert bank_lines == [(acc(session, "60.1"), 100_000, "MT7")]
+    on_deposit = session.conn.execute(
+        "SELECT p.credit_account_id, p.amount, p.invoice FROM postings p "
+        "JOIN documents d ON d.id = p.document_id "
+        "WHERE d.status = 'posted' AND p.debit_account_id = ? AND p.credit_account_id = ?",
+        (acc(session, "60.1"), acc(session, "55")),
+    ).fetchall()
+    assert [tuple(r) for r in on_deposit] == [(acc(session, "55"), 18_000, "MT7")]
+    left = open_invoices(session.conn, cid, alfa, True, "2026-03-05")
+    assert [i.invoice for i in left] == []
