@@ -33,7 +33,7 @@ from modern_gl.application.queries import (
     load_document,
     recent_subconto,
 )
-from modern_gl.desktop.postings import PickWithKeys, fit_popup
+from modern_gl.desktop.cell_editing import PickWithKeys, fit_popup
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.domain.errors import LedgerError
