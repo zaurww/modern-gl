@@ -4,6 +4,7 @@ The numbers are worked out by hand in each test's docstring."""
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import date
@@ -36,6 +37,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.accounts import COST_OF_SALES, OUTPUT_VAT, SALES_REVENUE, SALES_VAT
 from modern_gl.domain.errors import ValidationError
+from modern_gl.infrastructure import chart_csv
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
 from modern_gl.reporting.inventory import stock_balances
@@ -362,7 +364,7 @@ def test_chart_templates_set_the_sale_accounts(ledger, template, codes):
         assert ledger.account_role(company_id, role) == ledger.account_id(company_id, code)
 
 
-def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path):
+def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path, monkeypatch):
     """A file of version 21 with a classic chart and a receipt draft (written as the old
     program did): after 0022-0023 the draft and its line keep their ids, the sale accounts
     are set, a sale posts, and posted documents are protected as before."""
@@ -376,6 +378,13 @@ def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path):
         sql = migration.read_text(encoding="utf-8")
         old.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;")
     old.execute("PRAGMA foreign_keys = ON")
+    # today's chart template without 76H, whose account type came later (D63, 0029)
+    templates = tmp_path / "templates"
+    shutil.copytree(chart_csv.TEMPLATES_DIR, templates)
+    for csv in templates.glob("chart_classic_*.csv"):
+        lines = csv.read_text(encoding="utf-8").splitlines(keepends=True)
+        csv.write_text("".join(x for x in lines if not x.startswith("76H;")), encoding="utf-8")
+    monkeypatch.setattr(chart_csv, "TEMPLATES_DIR", templates)
     shop = make_shop(old, "classic")
     old.execute("DELETE FROM account_roles WHERE role NOT IN ('input_vat', 'fx_transit')")
     old.execute(

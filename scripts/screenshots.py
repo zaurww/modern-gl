@@ -348,6 +348,7 @@ def main() -> None:
         i18n.tr("Ремонт и ноутбук"),
         vat_rate=STANDARD_VAT_RATE,
         invoice="MT2602007788",
+        expense_date="2026-01-31",  # the repair was January's (D63)
     )
     session.catalog.reload()  # the new cost item and fixed asset
     win.open_inventory_document(purchase)

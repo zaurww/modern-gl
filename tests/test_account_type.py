@@ -20,7 +20,7 @@ def kinds(conn, cid):
 
 
 def test_every_type_has_a_class_and_a_translation():
-    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 30
+    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 31
     assert {cls for _, cls, _ in ACCOUNT_TYPES} == {
         "asset",
         "liability",
@@ -153,4 +153,7 @@ def test_migration_types_old_companies_like_the_template(ledger, conn, template)
     # 0019: the transit account of conversions (a role since 0018) becomes "transit"
     sql = (MIGRATIONS_DIR / "0019_transit_type.sql").read_text(encoding="utf-8")
     conn.executescript(sql[sql.index("UPDATE accounts") :])
-    assert kinds(conn, cid) == expected
+    # 76H came with D63 (0029): files typed by 0012 had no such account
+    assert {code: k for code, k in kinds(conn, cid).items() if code != "76H"} == {
+        code: k for code, k in expected.items() if code != "76H"
+    }

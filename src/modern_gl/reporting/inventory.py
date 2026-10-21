@@ -417,10 +417,11 @@ def list_inventory_documents(
 def inventory_document_of(
     conn: sqlite3.Connection, company_id: int, gl_document_id: int
 ) -> int | None:
-    """The warehouse document whose postings these are, if any."""
+    """The warehouse document whose postings these are (or its accrual's, D63), if any."""
     row = conn.execute(
-        "SELECT id FROM inventory_documents WHERE company_id = ? AND gl_document_id = ?",
-        (company_id, gl_document_id),
+        "SELECT id FROM inventory_documents WHERE company_id = ? "
+        "AND (gl_document_id = ? OR accrual_document_id = ?)",
+        (company_id, gl_document_id, gl_document_id),
     ).fetchone()
     return row[0] if row else None
 
@@ -456,7 +457,8 @@ def cost_sources(
         JOIN accounts da ON da.id = p.debit_account_id
         JOIN accounts ca ON ca.id = p.credit_account_id
         WHERE p.company_id = ? AND d.status = 'posted' AND l.code = 'common' AND p.amount > 0
-          AND NOT EXISTS (SELECT 1 FROM inventory_documents i WHERE i.gl_document_id = d.id)
+          AND NOT EXISTS (SELECT 1 FROM inventory_documents i
+                          WHERE i.gl_document_id = d.id OR i.accrual_document_id = d.id)
         ORDER BY d.doc_date DESC, d.number DESC, p.line_no
         """,
         (exclude_document_id, company_id),

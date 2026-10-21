@@ -136,7 +136,8 @@ def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> Doc
         FROM documents d
         JOIN layers l ON l.id = d.layer_id
         JOIN companies c ON c.id = d.company_id
-        LEFT JOIN inventory_documents i ON i.gl_document_id = d.id
+        LEFT JOIN inventory_documents i
+            ON i.gl_document_id = d.id OR i.accrual_document_id = d.id
         WHERE d.company_id = ? AND d.id = ?
         """,
         (company_id, doc_id),

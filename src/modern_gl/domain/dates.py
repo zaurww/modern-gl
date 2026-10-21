@@ -39,3 +39,10 @@ _MONTHS = (
 def month_name(month: str) -> str:
     """'2026-03' -> 'март 2026' (in the interface's language)."""
     return f"{tr(_MONTHS[int(month[5:7]) - 1])} {month[:4]}"
+
+
+def month_end(value: date | str) -> str:
+    """The last day of the month of `value`: '2026-09-14' -> '2026-09-30'."""
+    day = date.fromisoformat(iso_date(value))
+    first_of_next = date(day.year + day.month // 12, day.month % 12 + 1, 1)
+    return date.fromordinal(first_of_next.toordinal() - 1).isoformat()

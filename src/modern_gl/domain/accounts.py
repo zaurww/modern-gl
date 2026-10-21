@@ -18,6 +18,8 @@ SALES_REVENUE = "sales_revenue"
 COST_OF_SALES = "cost_of_sales"
 OUTPUT_VAT = "output_vat"
 SALES_VAT = "sales_vat"
+# A purchase whose expense belongs to an earlier month (D63): the accrual is credited here
+ACCRUED_EXPENSES = "accrued_expenses"
 ACCOUNT_ROLES = (
     INPUT_VAT,
     OPENING_BALANCE,
@@ -29,6 +31,7 @@ ACCOUNT_ROLES = (
     COST_OF_SALES,
     OUTPUT_VAT,
     SALES_VAT,
+    ACCRUED_EXPENSES,
 )
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {
@@ -39,6 +42,7 @@ ROLE_TYPES = {
     BANK_FEE: "other_expense",
     SALES_REVENUE: "sales",
     COST_OF_SALES: "cost_of_sales",
+    ACCRUED_EXPENSES: "accrued_expenses",
 }
 
 # Account types: what an account means, whatever its code (D35). The list is fixed by the
@@ -61,6 +65,8 @@ ACCOUNT_TYPES = (
     ("other_asset", "asset", "Прочие активы"),
     ("payable", "liability", "Поставщики и подрядчики"),
     ("advance_received", "liability", "Авансы полученные"),
+    # not a settlement by e-qaimə: Dt 76H / Kt 60 is no payment of the invoice (D63)
+    ("accrued_expenses", "liability", "Начисленные расходы"),
     ("tax_payable", "liability", "Налоги и обязательные платежи"),
     ("payroll", "liability", "Оплата труда"),
     ("short_term_loan", "liability", "Краткосрочные кредиты"),
