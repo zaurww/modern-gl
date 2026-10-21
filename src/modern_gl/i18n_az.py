@@ -216,10 +216,10 @@ AZ: dict[str, str] = {
         "Del — sətri sil   ·   # — şablon   ·   Ctrl+V — Excel-dən yapışdır   ·   "
         "Ctrl+S — saxla   ·   Ctrl+Enter — keçir   ·   Ctrl+Shift+Enter — keçir və yenisi"
     ),
-    "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   Ctrl+S — сохранить   ·   "
     "Ctrl+Enter — провести": (
-        "Enter / Tab — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
+        "Enter, Tab — irəli   ·   Shift+Tab — geri   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
         "Del — sətri sil   ·   Ctrl+V — Excel-dən yapışdır   ·   Ctrl+S — saxla   ·   "
         "Ctrl+Enter — keçir"
     ),
@@ -375,7 +375,7 @@ AZ: dict[str, str] = {
     "Добавить строку, которая закрывает разницу, — останется выбрать счёт": "Fərqi bağlayan sətir əlavə et — yalnız hesabı seçmək qalır",
     "Разница начальных остатков": "İlkin qalıqlar üzrə fərq",
     "Сохранено. Разница {amount} осталась на счёте {code}": "Saxlanıldı. {amount} fərq {code} hesabında qaldı",
-    "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия   ·   Del — удалить   ·   Ctrl+V — вставить из Excel   ·   Ctrl+Enter — провести": "Enter / Tab — növbəti sahə   ·   Ins — sətir   ·   F9 — surət   ·   Del — sətri sil   ·   Ctrl+V — Excel-dən əlavə et   ·   Ctrl+Enter — keçir",
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия   ·   Del — удалить   ·   Ctrl+V — вставить из Excel   ·   Ctrl+Enter — провести": "Enter, Tab — irəli   ·   Shift+Tab — geri   ·   Ins — sətir   ·   F9 — surət   ·   Del — sətri sil   ·   Ctrl+V — Excel-dən əlavə et   ·   Ctrl+Enter — keçir",
     "Документ №{n} · остатки на {date}": "Sənəd №{n} · {date} tarixinə qalıqlar",
     "Начальные остатки на {date}": "{date} tarixinə ilkin qalıqlar",
     "Начальные остатки проведены": "İlkin qalıqlar keçirildi",
@@ -803,7 +803,7 @@ AZ: dict[str, str] = {
     "Проводка: {label}": "Yazılış: {label}",
     "«{text}» подходит к нескольким": "«{text}» bir neçəsinə uyğun gəlir",
     "Добавьте поступления партии": "Partiyanın daxilolmalarını əlavə edin",
-    "Enter / Tab — следующее поле   ·   Ins — расход   ·   Del — удалить строку   ·   Сумма «30 USD» — в валюте   ·   НДС «18%» — посчитать   ·   Ctrl+Enter — провести": "Enter / Tab — növbəti xana   ·   Ins — xərc   ·   Del — sətri sil   ·   Məbləğ «30 USD» — valyutada   ·   ƏDV «18%» — hesabla   ·   Ctrl+Enter — keçir",
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — расход   ·   Del — удалить строку   ·   Сумма «30 USD» — в валюте   ·   НДС «18%» — посчитать   ·   Ctrl+Enter — провести": "Enter, Tab — irəli   ·   Shift+Tab — geri   ·   Ins — xərc   ·   Del — sətri sil   ·   Məbləğ «30 USD» — valyutada   ·   ƏDV «18%» — hesabla   ·   Ctrl+Enter — keçir",
     "в документе нет расходов": "sənəddə xərc yoxdur",
     "расход {n}: не указана сумма": "xərc {n}: məbləğ göstərilməyib",
     "расход {n}: не указан счёт": "xərc {n}: hesab göstərilməyib",

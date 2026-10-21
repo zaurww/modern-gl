@@ -1,6 +1,8 @@
 """A choice typed, not clicked (D49): a field where typing finds the element (by name,
-code or VÖEN, `fold`), Enter takes it and goes on to the next field, and a name the
-list does not have is reported, so the page can offer to add it there and then.
+code or VÖEN, `fold`), Enter takes it and goes on to the next field. A name the list
+does not have is offered last as "+ Добавить «…»" (`can_add`, as in the journal, D54):
+picking it reports `added`; one left typed with the list closed is reported as `unknown`,
+so the page can ask.
 
 It keeps `QComboBox`'s interface (`addItem`, `currentData`, `findData`, `activated`…),
 so a form of combo boxes turns into one typed from the keyboard without new logic."""
@@ -13,11 +15,12 @@ from PySide6.QtCore import QEvent, QModelIndex, QObject, QStringListModel, Qt, Q
 from PySide6.QtWidgets import QAbstractItemView, QCompleter, QLineEdit, QWidget
 
 from modern_gl.application.catalog import search
-from modern_gl.desktop.postings import fit_popup
+from modern_gl.desktop.postings import adding_label, fit_popup, names_it
 from modern_gl.i18n import fold
 
 ENTER = (Qt.Key.Key_Return, Qt.Key.Key_Enter)
 OPEN = (Qt.Key.Key_Down, Qt.Key.Key_F4)
+ADD = -2  # the list row "+ Добавить «…»"
 
 
 class PickBox(QLineEdit):
@@ -25,6 +28,7 @@ class PickBox(QLineEdit):
 
     activated = Signal(int)  # chosen by the user (typed, picked, or added)
     unknown = Signal(str)  # typed text names nothing in the list
+    added = Signal(str)  # "+ Добавить «…»" picked: the name to add (see `can_add`)
 
     def __init__(self, placeholder: str = "", parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -33,7 +37,9 @@ class PickBox(QLineEdit):
         self._hidden: set[int] = set()
         self._index = -1
         self._held = False  # Enter took nothing: the field keeps the cursor
-        self._shown: list[int] = []  # the list's rows → item indexes
+        self._shown: list[int] = []  # the list's rows → item indexes (ADD: a new name)
+        self._adding = ""  # the name "+ Добавить «…»" in the list adds
+        self.can_add = False  # a name the list lacks is offered to add
         self._model = QStringListModel(self)
         self._completer = QCompleter(self._model, self)
         self._completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
@@ -125,6 +131,11 @@ class PickBox(QLineEdit):
         for i in offered:
             by_label.setdefault(self._items[i][0], []).append(i)
         self._shown = [by_label[label].pop(0) for label in found]
+        name = text.strip()
+        if self.can_add and typed and not any(names_it(label, name) for label in found):
+            self._adding = name
+            found = [*found, adding_label(name)]
+            self._shown.append(ADD)
         self._model.setStringList(found)
         popup = self._popup()
         if not found:
@@ -140,7 +151,14 @@ class PickBox(QLineEdit):
 
     def _clicked(self, row: int) -> None:
         if 0 <= row < len(self._shown):
-            self._choose(self._shown[row])
+            self._take(self._shown[row])
+
+    def _take(self, index: int) -> None:
+        if index != ADD:
+            self._choose(index)
+            return
+        self._set_index(self._index)  # until the page has added it and chosen it
+        self.added.emit(self._adding)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         """On the open list, Enter or Tab takes the highlighted element and goes on (Qt
@@ -150,7 +168,7 @@ class PickBox(QLineEdit):
             row = self._popup().currentIndex().row()
             if (key in ENTER or key == Qt.Key.Key_Tab) and 0 <= row < len(self._shown):
                 self._popup().hide()
-                self._choose(self._shown[row])
+                self._take(self._shown[row])
                 self.focusNextChild()
                 return True
         return super().eventFilter(watched, event)
