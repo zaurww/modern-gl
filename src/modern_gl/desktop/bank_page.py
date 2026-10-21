@@ -165,18 +165,19 @@ class BankPage(ReportPage):
 
     def __init__(self, session: Session) -> None:
         super().__init__(session, tr("Банк"))
+        # the three ways money moves, alike, the most frequent first
+        for title, direction, tip in (
+            ("+ Расход денег", OUT, "Оплата поставщику, налоги, зарплата…"),
+            ("+ Приход денег", IN, "Деньги пришли на счёт"),
+        ):
+            control = button(tr(title), "", tr(tip))
+            control.clicked.connect(lambda _=False, d=direction: self.new_operation(d))
+            self.header.add_action(control)
         conversion = button(
-            tr("Конвертация валюты"), "flat", tr("Продажа, покупка или обмен валюты в банке")
+            tr("Конвертация валюты"), "", tr("Продажа, покупка или обмен валюты в банке")
         )
         conversion.clicked.connect(self.new_conversion.emit)
         self.header.add_action(conversion)
-        for title, direction, kind, tip in (
-            ("+ Приход денег", IN, "flat", "Деньги пришли на счёт"),
-            ("+ Расход денег", OUT, "", "Оплата поставщику, налоги, зарплата…"),
-        ):
-            control = button(tr(title), kind, tr(tip))
-            control.clicked.connect(lambda _=False, d=direction: self.new_operation(d))
-            self.header.add_action(control)
         self.header.add_action(  # set up once, rarely
             more_button(lambda: [(tr("Настройки банка…"), self.settings)])
         )
