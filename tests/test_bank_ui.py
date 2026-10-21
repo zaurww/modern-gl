@@ -22,7 +22,7 @@ from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import load_document
 from modern_gl.desktop import theme
 from modern_gl.desktop.bank_operation_page import BankOperationPage
-from modern_gl.desktop.bank_page import BankPage
+from modern_gl.desktop.bank_page import BankPage, BankSettingsDialog
 from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import MainWindow
@@ -206,6 +206,21 @@ def test_bank_fee_line_and_a_receipt(qtbot, session):
     assert page.total.text() == "1 181.50 AZN"
     page.line_rows[1].remove.click()
     assert page.total.text() == "1 180.00 AZN"
+
+
+def test_bank_settings_choose_the_fee_account(qtbot, session):
+    """The template puts the fee on 91.2; the user makes 26 the default in «Настройки
+    банка», and «+ Комиссия банка» takes 26 from then on."""
+    dialog = BankSettingsDialog(session)
+    qtbot.addWidget(dialog)
+    assert dialog.fee.currentData() == acc(session, "91.2")
+    dialog.fee.setCurrentIndex(dialog.fee.findData(acc(session, "26")))
+    dialog._save()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    page = new_page(qtbot, session)
+    page.add_fee()
+    fee = page.line_rows[-1]
+    assert fee.account_info is not None and fee.account_info.code == "26"
 
 
 def test_operation_in_dollars_offers_the_rate(qtbot, session):
