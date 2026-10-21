@@ -10,11 +10,15 @@ from PySide6.QtCore import QDate, QEvent, QObject, QSize, Qt
 from PySide6.QtGui import QFontMetrics, QHelpEvent, QIcon, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QAbstractSpinBox,
+    QApplication,
+    QComboBox,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMenu,
     QPushButton,
     QToolTip,
@@ -60,6 +64,32 @@ class DateEdit(QDateEdit):
 
     def focusNextPrevChild(self, next: bool) -> bool:
         return QWidget.focusNextPrevChild(self, next)
+
+
+ENTER_KEYS = (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+
+
+def enter_goes_on(page: QWidget, event) -> bool:
+    """Enter in a field of a form goes on to the next field, as Tab does (D54) — the same
+    in every form: a document, a bank operation, a conversion, a stock document.
+    Cell editors of a table keep their own Enter. True if the key was used."""
+    focused = QApplication.focusWidget()
+    field = isinstance(focused, QLineEdit | QAbstractSpinBox | QComboBox)
+    if (
+        event.key() not in ENTER_KEYS
+        or event.modifiers() & ~Qt.KeyboardModifier.KeypadModifier
+        or not field
+        or focused is None
+        or not page.isAncestorOf(focused)
+    ):
+        return False
+    parent = focused.parentWidget()
+    while parent is not None and parent is not page:
+        if isinstance(parent, QAbstractItemView):  # a cell editor
+            return False
+        parent = parent.parentWidget()
+    page.focusNextChild()
+    return True
 
 
 def date_edit(value: date, parent: QWidget | None = None) -> QDateEdit:

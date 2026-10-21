@@ -912,6 +912,35 @@ def edit_current(view: QTableView) -> None:
         view.edit(index)
 
 
+def edit_next(view: QAbstractItemView, index: QModelIndex | QPersistentModelIndex) -> None:
+    """From this cell on to the next one, open for typing, after a question that kept
+    the cursor in the cell — as Enter would have gone (the view's `closeEditor` adds a
+    row after the last cell)."""
+    if not index.isValid():
+        return
+    idx = view.model().index(index.row(), index.column())
+    view.setCurrentIndex(idx)
+    view.edit(idx)
+    editor = view.indexWidget(idx)
+    if editor is not None:
+        view.closeEditor(editor, QAbstractItemDelegate.EndEditHint.EditNextItem)
+
+
+def edit_again(
+    view: QAbstractItemView, index: QModelIndex | QPersistentModelIndex, text: str
+) -> None:
+    """Back into the cell with what was typed, to correct it."""
+    if not index.isValid():
+        return
+    idx = view.model().index(index.row(), index.column())
+    view.setCurrentIndex(idx)
+    view.edit(idx)
+    editor = view.indexWidget(idx)
+    if isinstance(editor, QLineEdit):
+        editor.setText(text)
+        editor.selectAll()
+
+
 def tabbed_in(event) -> bool:
     return event.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
 
@@ -1336,16 +1365,7 @@ class PostingsTable(QTableView):
         self.edit(new)
 
     def edit_again(self, index: QModelIndex | QPersistentModelIndex, text: str) -> None:
-        """Back into the cell with what was typed, to correct it."""
-        if not index.isValid():
-            return
-        idx = self.model().index(index.row(), index.column())
-        self.setCurrentIndex(idx)
-        self.edit(idx)
-        for editor in self.viewport().findChildren(CellEditor):
-            if editor.isVisible() and not editor.property("gl_done"):  # the one just opened
-                editor.setText(text)
-                editor.selectAll()
+        edit_again(self, index, text)
 
     def focusInEvent(self, event) -> None:
         super().focusInEvent(event)

@@ -254,6 +254,36 @@ def new_value(
     return value_id
 
 
+def added_value(
+    session: Session,
+    parent: QWidget,
+    kind_id: int,
+    typed: str,
+    owner_id: int | None = None,
+    currency_id: int | None = None,
+) -> int | None:
+    """ "+ Добавить «…»" picked from a list: the name goes in at once, no window, as in the
+    journal (D54). Digits are a VÖEN, not a name: those still open the window."""
+    name = typed.strip()
+    if not name:
+        return None
+    if name.replace(" ", "").isdigit():
+        return new_value(session, parent, kind_id, name, owner_id, currency_id)
+    cid = session.company_id
+    try:
+        with transaction(session.conn):
+            value_id = session.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner_id)
+            if currency_id is not None:
+                session.ledger.set_subconto_value_currency(cid, value_id, currency_id)
+    except LedgerError as e:
+        session.notify(str(e))
+        return None
+    session.catalog.reload()
+    kind = session.catalog.kinds[kind_id]
+    session.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=name))
+    return value_id
+
+
 class DirectoriesPage(QWidget):
     key = ("directories",)
 

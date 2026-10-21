@@ -48,6 +48,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    enter_goes_on,
     money,
     ru_date,
     to_qdate,
@@ -57,7 +58,7 @@ from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import tr
 
 HINT = (
-    "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия   ·   "
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия   ·   "
     "Del — удалить   ·   Ctrl+V — вставить из Excel   ·   Ctrl+Enter — провести"
 )
 CREDIT_AMOUNT = len(HEADERS)  # the second amount column, after "Дебет" (AMOUNT)
@@ -357,6 +358,11 @@ class OpeningBalancesPage(QWidget):
 
     def focus_table(self) -> None:
         self.table.setFocus()
+
+    def keyPressEvent(self, event) -> None:
+        """Enter in the date goes on as Tab does: into the table."""
+        if not enter_goes_on(self, event):
+            super().keyPressEvent(event)
 
     def _shortcut(self, keys: str, fn) -> None:
         shortcut = QShortcut(QKeySequence(keys), self)

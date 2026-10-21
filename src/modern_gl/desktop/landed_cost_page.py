@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QCheckBox,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -51,6 +50,7 @@ from modern_gl.application.inventory import (
     format_quantity,
     vat_of,
 )
+from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.postings import (
     TABS,
     CellEditor,
@@ -70,6 +70,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    enter_goes_on,
     money,
     to_qdate,
 )
@@ -135,7 +136,8 @@ METHODS = [
 ]
 
 HINT = (
-    "Enter / Tab — следующее поле   ·   Ins — расход   ·   Del — удалить строку   ·   "
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   "
+    "Ins — расход   ·   Del — удалить строку   ·   "
     "Сумма «30 USD» — в валюте   ·   НДС «18%» — посчитать   ·   Ctrl+Enter — провести"
 )
 
@@ -659,6 +661,9 @@ class CellDelegate(QStyledItemDelegate):
     """A line editor with a list for directory cells; Enter or Tab commits and moves on."""
 
     error = Signal(str)
+    # (kind_id, name, owner_id) -> the new element's id: a subconto list offers
+    # "+ Добавить «…»", as in the journal (see `attach_list`)
+    add_value: Callable[[int, str, int | None], int] | None = None
 
     def createEditor(self, parent, option, index):
         model = index.model()
@@ -670,7 +675,9 @@ class CellDelegate(QStyledItemDelegate):
             labels = [label for _, label in choices]
             attach_account_list(editor, labels, model.s.catalog, self._chosen)
         elif choices is not None:
-            attach_list(editor, [label for _, label in choices], True, self._chosen)
+            can_add = key in {SC1, SC2, SC3} and self.add_value is not None
+            labels = [label for _, label in choices]
+            attach_list(editor, labels, True, self._chosen, can_add=can_add)
         elif key in NUMBER_KEYS:
             editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         editor.returnPressed.connect(lambda widget=editor: self._commit_and_next(widget))
@@ -685,6 +692,11 @@ class CellDelegate(QStyledItemDelegate):
         editor.selectAll()
 
     def setModelData(self, editor, model, index):
+        key, text = model.key(index), editor.text().strip()
+        kind = model.kind_at(index.row(), key) if key in {SC1, SC2, SC3} else None
+        if editor.property("gl_add") and self.add_value is not None and kind is not None:
+            model.setData(index, self.add_value(kind, text, model.owner_at(index.row(), key)))
+            return
         try:
             value = model.parse(index.row(), model.key(index), editor.text())
             model.setData(index, value)
@@ -699,16 +711,19 @@ class CellDelegate(QStyledItemDelegate):
         ):
             self._commit_and_next(editor)  # Tab as Enter: a group holds the cell
             return True
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Backtab:
+            self._commit_and_next(editor, QAbstractItemDelegate.EndEditHint.EditPreviousItem)
+            return True
         return super().eventFilter(editor, event)
 
-    def _commit_and_next(self, editor) -> None:
+    def _commit_and_next(self, editor, hint=QAbstractItemDelegate.EndEditHint.EditNextItem) -> None:
         if editor.property("done"):
             return
         if holds_on_group(editor, self.error):
             return
         editor.setProperty("done", True)
         self.commitData.emit(editor)
-        self.closeEditor.emit(editor, QAbstractItemDelegate.EndEditHint.EditNextItem)
+        self.closeEditor.emit(editor, hint)
 
 
 class LinesTable(QTableView):
@@ -1077,9 +1092,11 @@ class LandedCostPage(QWidget):
         meta = QHBoxLayout()
         self.date = date_edit(session.working_date)
         self.date.setFixedWidth(130)
-        self.method = QComboBox()
+        self.method = PickBox()
+        self.method.setFixedWidth(170)
         for method, title in METHODS:
             self.method.addItem(tr(title), method)
+        self.method.setCurrentIndex(0)
         for caption, widget in ((tr("Дата"), self.date), (tr("Распределение"), self.method)):
             label = QLabel(caption)
             label.setObjectName("secondary")
@@ -1091,6 +1108,7 @@ class LandedCostPage(QWidget):
 
         self.delegate = CellDelegate(self)
         self.delegate.error.connect(self.show_error)
+        self.delegate.add_value = self._add_value
 
         charges_bar = QHBoxLayout()
         charges_title = QLabel(tr("Расходы"))
@@ -1342,6 +1360,20 @@ class LandedCostPage(QWidget):
             current = self.targets_table.currentIndex()
             if current.isValid() and not self.targets.read_only:
                 self.targets.remove_row(current.row())
+
+    def _add_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
+        value_id = self.s.ledger.add_subconto_value(
+            self.s.company_id, kind_id, text, owner_id=owner_id
+        )
+        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
+        kind = self.s.catalog.kinds[kind_id]
+        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
+        return value_id
+
+    def keyPressEvent(self, event) -> None:
+        """Enter in the title, date or method goes on as Tab does."""
+        if not enter_goes_on(self, event):
+            super().keyPressEvent(event)
 
     def show_error(self, message: str) -> None:
         self.error.setText(message)
