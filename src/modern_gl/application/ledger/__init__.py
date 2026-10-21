@@ -12,6 +12,7 @@ from modern_gl.application.ledger.companies import CompanyCommands
 from modern_gl.application.ledger.conversion import ConversionCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
 from modern_gl.application.ledger.documents import DocumentCommands
+from modern_gl.application.ledger.eqaime import EqaimeCommands
 from modern_gl.application.ledger.inputs import (
     DEFAULT_LAYERS,
     SIDES,
@@ -40,6 +41,7 @@ class Ledger(
     CurrencyCommands,
     BankCommands,
     ConversionCommands,
+    EqaimeCommands,
     OpeningBalanceCommands,
     ChartCommands,
     TemplateCommands,

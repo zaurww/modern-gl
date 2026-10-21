@@ -3,7 +3,9 @@ what each line would become, then imported as purchase and sale drafts (D45)."""
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
@@ -36,14 +38,17 @@ from modern_gl.application.eqaime_import import (
     plan_import,
     renamed_counterparties,
 )
+from modern_gl.application.eqaime_portal import read_again, rechecks
 from modern_gl.application.inventory import Inventory, format_quantity, to_quantity
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import button, date_edit, edited_date, money
-from modern_gl.domain.dates import ru_date
+from modern_gl.domain.dates import month_name, ru_date
+from modern_gl.domain.eqaime import IMPORTED, PortalInvoice
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
+from modern_gl.reporting.eqaime_reconciliation import changed_after_reconciliation
 
 COLUMNS = ["Дата", "E-qaimə", "Контрагент / строка", "VÖEN / код", "Вид", "Сумма", "ƏDV", "Станет"]
 
@@ -61,7 +66,7 @@ def fetch_invoices(
     for outgoing, wanted in ((False, purchases), (True, sales)):
         if not wanted:
             continue
-        rows = list(client.invoices(outgoing, date_from, date_to))
+        rows = list(client.invoices(outgoing, date_from, date_to, IMPORTED))
         for n, row in enumerate(rows, 1):
             progress(tr("Загружено e-qaimə: {n} из {total}", n=n, total=len(rows)))
             detail = client.detail(str(row.get("id")), str(row.get("sourceSystem") or "avis"))
@@ -69,12 +74,41 @@ def fetch_invoices(
     return result
 
 
-class _Loader(QObject):
+@dataclass
+class Fetched:
+    invoices: list[EInvoice]
+    rechecked: list[PortalInvoice]  # the reconciled months read again
+
+
+def changes_warning(conn: sqlite3.Connection, company_id: int) -> str:
+    """'' or what changed on the portal in the months marked reconciled."""
+    changed = changed_after_reconciliation(conn, company_id)
+    if not changed:
+        return ""
+    months = [
+        tr(
+            "{month}, {direction}: {n}",
+            month=month_name(c.month),
+            direction=tr("продажи") if c.outgoing else tr("покупки"),
+            n=len(c.numbers),
+        )
+        for c in changed
+    ]
+    return tr(
+        "После сверки на портале изменились e-qaimə — {months}. "
+        "Откройте «Сверку с порталом» за этот месяц.",
+        months="; ".join(months),
+    )
+
+
+class PortalLoader(QObject):
+    """Runs a job that talks to the portal off the window's thread."""
+
     progress = Signal(str)
-    loaded = Signal(list)
+    loaded = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, job: Callable[[Callable[[str], None]], list[EInvoice]]) -> None:
+    def __init__(self, job: Callable[[Callable[[str], None]], object]) -> None:
         super().__init__()
         self.job = job
 
@@ -237,6 +271,12 @@ class EqaimeImportDialog(QDialog):
         self.renamed: list[RenamedCounterparty] = []
         self._show_renames()
 
+        self.warning = QLabel()
+        self.warning.setObjectName("warning")
+        self.warning.setWordWrap(True)
+        self.warning.hide()
+        root.addWidget(self.warning)
+
         self.status = QLabel(
             tr(
                 "Выберите период и нажмите «Загрузить с портала»: откроется вход через ASAN İmza. "
@@ -264,7 +304,7 @@ class EqaimeImportDialog(QDialog):
         from modern_gl.desktop import portal_login
 
         token = self.token
-        if token is None or not portal_login.token_alive(token):
+        if token is None or not portal_login.token_alive(token):  # 10 minutes
             sign_in = self.sign_in or portal_login.sign_in
             token = sign_in(self)
             if not token:
@@ -276,20 +316,24 @@ class EqaimeImportDialog(QDialog):
         client = EtaxesClient(token)
         date_from, date_to = edited_date(self.date_from), edited_date(self.date_to)
         purchases, sales = self.purchases.isChecked(), self.sales.isChecked()
+        checks = rechecks(self.s.conn, self.s.company_id, date.today())
         self._start(
-            lambda progress: fetch_invoices(client, date_from, date_to, purchases, sales, progress)
+            lambda progress: Fetched(
+                fetch_invoices(client, date_from, date_to, purchases, sales, progress),
+                read_again(client, checks, progress),
+            )
         )
 
-    def _start(self, job: Callable[[Callable[[str], None]], list[EInvoice]]) -> None:
+    def _start(self, job: Callable[[Callable[[str], None]], Fetched]) -> None:
         """Talk to the portal off the window's thread: the window stays alive."""
         self.load_button.setEnabled(False)
         self.status.setText(tr("Загрузка с портала…"))
         self.worker = QThread(self)
-        self.loader = _Loader(job)
+        self.loader = PortalLoader(job)
         self.loader.moveToThread(self.worker)
         self.worker.started.connect(self.loader.run)
         self.loader.progress.connect(self.status.setText)
-        self.loader.loaded.connect(self.show_invoices)
+        self.loader.loaded.connect(self._loaded)
         self.loader.failed.connect(self._failed)
         for signal in (self.loader.loaded, self.loader.failed):
             signal.connect(self.worker.quit)
@@ -299,6 +343,18 @@ class EqaimeImportDialog(QDialog):
         self.load_button.setEnabled(True)
         self.status.setText(message)
         self.token = None  # a new sign-in next time
+
+    def _loaded(self, fetched: Fetched) -> None:
+        """Remember what the portal shows (D53), warn of changes in reconciled months."""
+        listed = [i.listed for i in fetched.invoices if i.listed is not None]
+        try:
+            self.s.ledger.remember_portal(self.s.company_id, [*fetched.rechecked, *listed])
+        except LedgerError as exc:
+            self.status.setText(str(exc))
+        warning = changes_warning(self.s.conn, self.s.company_id)
+        self.warning.setText(warning)
+        self.warning.setVisible(bool(warning))
+        self.show_invoices(fetched.invoices)
 
     def show_invoices(self, invoices: list[EInvoice]) -> None:
         self.load_button.setEnabled(True)
@@ -357,7 +413,7 @@ class EqaimeImportDialog(QDialog):
             return tr("уже есть: документ №{n}", n=plan.existing)
         if plan.skip_reason:
             return plan.skip_reason
-        parts = []
+        parts = [tr("ожидает подтверждения")] if plan.invoice.pending else []
         if plan.counterparty_id is None:
             parts.append(tr("новый контрагент"))
         if plan.unresolved:

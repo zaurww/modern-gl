@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from modern_gl.i18n import tr
+
 
 def iso_date(value: date | str) -> str:
     """Normalize a date or 'YYYY-MM-DD' string; rejects datetimes and garbage."""
@@ -16,3 +18,24 @@ def ru_date(iso: str) -> str:
     """'2026-03-05' -> '05.03.2026', as dates are shown to the user."""
     y, m, d = iso.split("-")
     return f"{d}.{m}.{y}"
+
+
+_MONTHS = (
+    "январь",
+    "февраль",
+    "март",
+    "апрель",
+    "май",
+    "июнь",
+    "июль",
+    "август",
+    "сентябрь",
+    "октябрь",
+    "ноябрь",
+    "декабрь",
+)
+
+
+def month_name(month: str) -> str:
+    """'2026-03' -> 'март 2026' (in the interface's language)."""
+    return f"{tr(_MONTHS[int(month[5:7]) - 1])} {month[:4]}"

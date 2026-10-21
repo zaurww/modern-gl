@@ -27,6 +27,7 @@ from modern_gl.application.inventory import (
     vat_of,
 )
 from modern_gl.application.ledger import Ledger
+from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, portal_invoice
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import fold, tr
@@ -64,6 +65,13 @@ class EInvoice:
     party_tin: str
     party_name: str
     lines: tuple[EInvoiceLine, ...]
+    listed: PortalInvoice | None = None  # as the portal's list shows it: kept, reconciled
+
+    @property
+    def pending(self) -> bool:
+        """Təsdiq gözləyir: not yet approved by the buyer (the list's status first: the
+        list was asked for it)."""
+        return (self.listed.status if self.listed else self.status) == ON_APPROVAL
 
     @property
     def doc_type(self) -> str:
@@ -135,6 +143,7 @@ def parse_invoice(row: Mapping[str, Any], detail: Mapping[str, Any], outgoing: b
         str(party.get("tin") or row.get(f"{party_key}Tin") or "").strip(),
         str(party.get("name") or row.get(f"{party_key}Name") or "").strip(),
         tuple(lines),
+        portal_invoice(row, outgoing),
     )
 
 

@@ -16,6 +16,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from modern_gl.domain.eqaime import TURNOVER
 from modern_gl.i18n import tr
 
 BASE_URL = "https://new.e-taxes.gov.az"
@@ -24,8 +25,7 @@ INBOX = "/api/po/invoice/public/v2/invoice/find.inbox"  # received: purchases
 OUTBOX = "/api/po/invoice/public/v2/invoice/find.outbox"  # sent: sales
 DETAIL = "/api/po/invoice/public/v2/invoice/"
 PAGE_SIZE = 50
-# statuses that count in turnover (etaxes-ext DOVRIYYE_STATUSES); the API takes one at a time
-APPROVED = ("approved", "approvedBySystem", "cancelationRefused", "correctionRefused")
+APPROVED = TURNOVER  # the API takes one status at a time
 
 
 class PortalError(Exception):

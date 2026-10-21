@@ -76,12 +76,14 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.accounts import INPUT_VAT, OUTPUT_VAT
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
+from modern_gl.domain.eqaime import status_group, status_label
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.i18n_az import AZ
+from modern_gl.reporting.eqaime_reconciliation import portal_status
 from modern_gl.reporting.inventory import (
     Choice,
     ItemChoice,
@@ -1379,6 +1381,10 @@ class InventoryDocumentPage(QWidget):
         self.invoice.setFixedWidth(170)
         self.invoice.setPlaceholderText(tr("номер"))
         meta.addWidget(self.invoice)
+        # what the portal said of it when last read: awaiting approval, cancelled… (D53)
+        self.portal_status = Chip()
+        self.portal_status.hide()
+        meta.addWidget(self.portal_status)
         meta.addSpacing(12)
         self.currency_caption = QLabel(tr("Валюта"))
         self.currency_caption.setObjectName("secondary")
@@ -1864,6 +1870,20 @@ class InventoryDocumentPage(QWidget):
         self.basis.setVisible(self.doc_type == "receipt")
         self.invoice_caption.setVisible(self.doc_type == "sale")
         self.invoice.setVisible(self.doc_type in VAT_DOCUMENTS)
+        self._show_portal_status(kind, number)
+
+    def _show_portal_status(self, kind: str, number: str) -> None:
+        """Only what is worth a look: an approved e-qaimə shows nothing."""
+        status = None
+        if kind == EQAIME and self.doc_type in ("receipt", "sale"):
+            status = portal_status(self.s.conn, self.s.company_id, self.doc_type == "sale", number)
+        group = status_group(status or "")
+        if status is None or group == "turnover":
+            self.portal_status.hide()
+            return
+        self.portal_status.set(status_label(status), "red" if group == "void" else "neutral")
+        self.portal_status.setToolTip(tr("Статус на портале при последней загрузке"))
+        self.portal_status.show()
 
     def _invoice(self) -> dict[str, str]:
         """The basis for saving: number and kind (an empty number: none)."""

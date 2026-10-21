@@ -516,6 +516,10 @@ QLabel#tertiary {{ color: {P.tertiary}; }}
 QLabel#error {{
     color: {P.red}; background: {P.red_soft}; border-radius: 7px; padding: 7px 10px;
 }}
+/* something to look at, not an error: changes on the portal after a reconciliation */
+QLabel#warning {{
+    color: {P.text}; background: {P.amber_soft}; border-radius: 7px; padding: 7px 10px;
+}}
 QFrame#note {{ background: {P.accent_soft}; border: none; border-radius: 8px; }}
 QFrame#card {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 12px;

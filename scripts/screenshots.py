@@ -426,6 +426,7 @@ def main() -> None:
     loop.exec()
     importer.grab().save(str(out / "8c10_eqaime_import.png"))
     importer.close()
+    shoot_reconciliation(session, win, out)
     picker = cost_source_picker(session, None, win)
     picker.show()
     loop = QEventLoop()
@@ -577,6 +578,70 @@ def main() -> None:
     payment.line_rows[1].amount.setText("1.20")
     payment._changed()
     shot("12b_bank_payment")
+
+
+def shoot_reconciliation(session, win, out: Path) -> None:
+    """«Сверка с порталом» over the demo's purchases: one e-qaimə agrees, one differs in
+    amount, two are only on the portal, one is cancelled there (D53)."""
+    from modern_gl.application.eqaime_portal import month_bounds
+    from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
+    from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice
+    from modern_gl.reporting.eqaime_reconciliation import book_invoices, reconcile
+
+    books = sorted(
+        book_invoices(session.conn, session.company_id, False).values(), key=lambda b: b.doc_date
+    )
+    month = books[0].doc_date[:7] if books else f"{session.working_date:%Y-%m}"
+    first, last = month_bounds(month)
+    day = first.isoformat()
+    portal = [
+        PortalInvoice(
+            b.number,
+            False,
+            b.doc_date,
+            "approved",
+            "1700000001",
+            "",
+            b.total + (11_800 if n == 1 else 0),
+            b.vat + (1_800 if n == 1 else 0),
+        )
+        for n, b in enumerate(books[:3])
+        if b.doc_date[:7] == month
+    ]
+    portal += [
+        PortalInvoice(
+            "MT2603000777",
+            False,
+            day,
+            "approved",
+            "1700000001",
+            "KOMPYUTER DÜNYASI MMC",
+            23_600,
+            3_600,
+        ),
+        PortalInvoice(
+            "MT2603000801",
+            False,
+            last.isoformat(),
+            ON_APPROVAL,
+            "1500000005",
+            "ALFA TREYD MMC",
+            47_200,
+            7_200,
+        ),
+    ]
+    dialog = EqaimeReconciliationDialog(session, win)
+    dialog.company.setText("Portal: DEMO MMC · VÖEN 1402375141")
+    dialog.date_from.setDate(first)
+    dialog.date_to.setDate(last)
+    dialog.show_result(reconcile(session.conn, session.company_id, False, first, last, portal))
+    dialog.resize(1180, 760)
+    dialog.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    dialog.grab().save(str(out / "8c11_eqaime_reconciliation.png"))
+    dialog.close()
 
 
 if __name__ == "__main__":

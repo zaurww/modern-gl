@@ -10,6 +10,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QLineEdit
 
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import EmptyState, button, status_icon
@@ -75,6 +76,10 @@ class TradePage(ReportPage):
         load.setToolTip(tr("Вход через ASAN İmza, e-qaimə за период — черновиками"))
         load.clicked.connect(self.import_eqaime)
         self.header.add_action(load)
+        check = button(tr("Сверка с порталом…"), "flat")
+        check.setToolTip(tr("E-qaimə месяца на портале против книги: что забыто, что изменилось"))
+        check.clicked.connect(self.reconcile)
+        self.header.add_action(check)
         self.new_button = button(tr(self.kind.new))
         self.new_button.clicked.connect(lambda: self.new_inventory_document.emit(doc_type))
         self.header.add_action(self.new_button)
@@ -129,6 +134,14 @@ class TradePage(ReportPage):
             self.s.notify(
                 tr("Создано черновиков: {n} — проверьте и проведите", n=len(dialog.created))
             )
+
+    def reconcile(self) -> None:
+        dialog = EqaimeReconciliationDialog(self.s, self, direction=self.kind.doc_type)
+        dialog.exec()
+        self.refresh()  # drafts may have been made from it
+        self.imported.emit()
+        if dialog.chosen_document is not None:
+            self.open_document.emit(dialog.chosen_document)
 
     def drill(self, row: TradeDocument | None) -> None:
         if row is not None:
