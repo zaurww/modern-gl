@@ -3,15 +3,15 @@ one request per status and page, fast enough for a month."""
 
 from __future__ import annotations
 
-import calendar
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
-from modern_gl.domain.eqaime import ALL, PortalInvoice, portal_invoice
+from modern_gl.domain.eqaime import ALL, IMPORTED, PortalInvoice, portal_invoice
+from modern_gl.domain.periods import MONTH, span_of
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.etaxes import EtaxesClient
+from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
 
 
 def fetch_list(
@@ -21,58 +21,42 @@ def fetch_list(
     date_to: date,
     progress: Callable[[str], None] = lambda _text: None,
     statuses: Sequence[str] = ALL,
+    skipped: list[str] | None = None,
 ) -> list[PortalInvoice]:
-    """The e-qaimə of a period in every status, received (purchases) or sent (sales)."""
+    """The e-qaimə of a period in every status, received (purchases) or sent (sales).
+    A status the portal refuses to filter by (400) is left out and named in `skipped`:
+    one unknown status must not stop the whole list; the imported ones must not fail."""
     result = []
     for n, status in enumerate(statuses, 1):
         progress(tr("Портал: статус {n} из {total}", n=n, total=len(statuses)))
-        for row in client.invoices(outgoing, date_from, date_to, (status,)):
+        try:
+            rows = list(client.invoices(outgoing, date_from, date_to, (status,)))
+        except PortalError as exc:
+            if exc.code != 400 or status in IMPORTED:
+                raise
+            if skipped is not None:
+                skipped.append(status)
+            continue
+        for row in rows:
             invoice = portal_invoice({"status": status, **row}, outgoing)
             if invoice is not None:
                 result.append(invoice)
     return result
 
 
-def month_bounds(month: str) -> tuple[date, date]:
-    """'2026-09' -> 1 and 30 September 2026."""
-    year, number = int(month[:4]), int(month[5:7])
-    return date(year, number, 1), date(year, number, calendar.monthrange(year, number)[1])
-
-
-def full_month(date_from: date, date_to: date) -> str | None:
-    """'YYYY-MM' when the period is exactly one calendar month, else None."""
-    month = f"{date_from:%Y-%m}"
-    return month if (date_from, date_to) == month_bounds(month) else None
-
-
-DAY, WEEK, MONTH = "day", "week", "month"
-
-
-def quick_period(span: str, today: date) -> tuple[date, date]:
-    """What a morning check looks at. «Вчера»: yesterday, on a Monday Friday to Sunday;
-    «Неделя»: from Monday of yesterday's week to yesterday (on a Monday: the last week);
-    «Месяц»: yesterday's month, whole (on the 1st: the month just ended)."""
-    yesterday = today - timedelta(days=1)
-    if span == DAY:
-        return (today - timedelta(days=3) if today.weekday() == 0 else yesterday), yesterday
-    if span == WEEK:
-        return yesterday - timedelta(days=yesterday.weekday()), yesterday
-    return month_bounds(f"{yesterday:%Y-%m}")
-
-
 def usual_span(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> str:
-    """How this company is usually reconciled: like its last mark (a month if none)."""
+    """How this company is usually reconciled: like its last mark, judged on the day it
+    was made (this month if none, or if that period was chosen by hand)."""
     row = conn.execute(
-        "SELECT date_from, date_to FROM eqaime_reconciled WHERE company_id = ? AND outgoing = ? "
-        "ORDER BY reconciled_at DESC LIMIT 1",
+        "SELECT date_from, date_to, reconciled_at FROM eqaime_reconciled "
+        "WHERE company_id = ? AND outgoing = ? ORDER BY reconciled_at DESC LIMIT 1",
         (company_id, int(outgoing)),
     ).fetchone()
     if row is None:
         return MONTH
-    days = (date.fromisoformat(row["date_to"]) - date.fromisoformat(row["date_from"])).days + 1
-    if full_month(date.fromisoformat(row["date_from"]), date.fromisoformat(row["date_to"])):
-        return MONTH
-    return DAY if days <= 3 else WEEK if days <= 7 else MONTH
+    marked = datetime.fromisoformat(row["reconciled_at"]).date()
+    span = span_of(date.fromisoformat(row["date_from"]), date.fromisoformat(row["date_to"]), marked)
+    return span or MONTH
 
 
 @dataclass(frozen=True)

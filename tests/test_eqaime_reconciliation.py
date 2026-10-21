@@ -3,28 +3,30 @@ books against it, the months marked reconciled. Figures worked out by hand in co
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import pytest
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.application.eqaime_portal import (
-    DAY,
-    MONTH,
-    WEEK,
-    fetch_list,
-    full_month,
-    month_bounds,
-    quick_period,
-    rechecks,
-    usual_span,
-)
+from modern_gl.application.eqaime_portal import fetch_list, rechecks, usual_span
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.eqaime import ALL, ON_APPROVAL, PortalInvoice, portal_invoice
+from modern_gl.domain.periods import (
+    DAY,
+    LAST_MONTH,
+    LAST_WEEK,
+    MONTH,
+    WEEK,
+    full_month,
+    month_bounds,
+    quick_period,
+    span_of,
+)
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.etaxes import EtaxesClient
+from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError, Response
 from modern_gl.reporting.eqaime_reconciliation import (
     AMOUNTS,
     MATCHED,
@@ -146,7 +148,34 @@ def test_the_list_is_read_in_every_status():
         ("MT1", "approved", 1_000),
         ("MT2", "canceled", 500),
     ]
-    assert len(portal.calls) == len(ALL) == 14
+    assert len(portal.calls) == len(ALL) == 13  # not «rejected»: the portal refuses it
+
+
+def test_a_status_the_portal_refuses_is_skipped_and_named():
+    """The portal answers 400 «Sorğu məlumatları yanlışdır» to a status its filter does not
+    know: the rest of the list still comes, the status is named. An imported status (here
+    «approved») refused is an error, the error in the interface language."""
+    refusal = (
+        '{"applicationErrorCode":"User error","message":{"az":"Sorğu məlumatları yalnışdır"}}'
+    ).encode()
+
+    def portal(method, url, headers, body):
+        status = json.loads(body)["statuses"][0]
+        if status in ("canceled", "approved"):
+            return Response(400, refusal)
+        rows = [{"id": "1", "serialNumber": "MT1", "amount": 10}] if status == "deleted" else []
+        return Response(200, json.dumps({"invoices": rows, "hasMore": False}).encode())
+
+    client = EtaxesClient("good", send=portal)
+    skipped: list[str] = []
+    statuses = ("deleted", "canceled")
+    got = fetch_list(
+        client, False, date(2026, 3, 1), date(2026, 3, 31), statuses=statuses, skipped=skipped
+    )
+    assert [(p.number, p.status) for p in got] == [("MT1", "deleted")]
+    assert skipped == ["canceled"]
+    with pytest.raises(PortalError, match="портал ответил 400: Sorğu məlumatları yalnışdır"):
+        fetch_list(client, False, date(2026, 3, 1), date(2026, 3, 31), statuses=("approved",))
 
 
 def test_book_invoice_is_the_accrual_not_the_payment(firm):
@@ -403,7 +432,11 @@ def test_reconciliation_dialog(firm, qtbot, monkeypatch):
         session, sign_in=lambda parent: fake_token(), today=date(2026, 4, 1)
     )
     qtbot.addWidget(dialog)
-    assert dialog.span_buttons[MONTH].isChecked()  # nothing marked yet: a month
+    bar = dialog.period_bar
+    assert bar.span_buttons[MONTH].isChecked()  # nothing marked yet: this month
+    bar.span_buttons[LAST_MONTH].click()
+    assert bar.period() == (date(2026, 3, 1), date(2026, 3, 31))
+    assert bar.dates.text() == "01.03–31.03.2026" and not bar.date_from.isVisibleTo(bar)
     dialog.load()
     qtbot.waitUntil(lambda: dialog.outcome is not None, timeout=5000)
     heads = [dialog.tree.topLevelItem(i) for i in range(dialog.tree.topLevelItemCount())]
@@ -522,13 +555,41 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
         (date(2026, 10, 21), DAY, (date(2026, 10, 20), date(2026, 10, 20))),  # Wednesday
         (date(2026, 10, 19), DAY, (date(2026, 10, 16), date(2026, 10, 18))),  # Monday: Fri-Sun
         (date(2026, 10, 21), WEEK, (date(2026, 10, 19), date(2026, 10, 20))),
-        (date(2026, 10, 19), WEEK, (date(2026, 10, 12), date(2026, 10, 18))),  # the last week
-        (date(2026, 11, 1), MONTH, (date(2026, 10, 1), date(2026, 10, 31))),
-        (date(2026, 10, 21), MONTH, (date(2026, 10, 1), date(2026, 10, 31))),
+        (date(2026, 10, 19), WEEK, (date(2026, 10, 19), date(2026, 10, 19))),  # Monday: today
+        (date(2026, 10, 21), LAST_WEEK, (date(2026, 10, 12), date(2026, 10, 18))),
+        (date(2026, 10, 19), LAST_WEEK, (date(2026, 10, 12), date(2026, 10, 18))),
+        (date(2026, 10, 21), MONTH, (date(2026, 10, 1), date(2026, 10, 20))),
+        (date(2026, 11, 1), MONTH, (date(2026, 11, 1), date(2026, 11, 1))),  # the 1st: today
+        (date(2026, 10, 21), LAST_MONTH, (date(2026, 9, 1), date(2026, 9, 30))),
+        (date(2026, 1, 15), LAST_MONTH, (date(2025, 12, 1), date(2025, 12, 31))),
     ],
 )
 def test_quick_periods_of_a_morning_check(today, span, period):
     assert quick_period(span, today) == period
+
+
+def test_quick_periods_of_the_import_take_today():
+    today = date(2026, 10, 21)
+    assert quick_period(WEEK, today, through_today=True) == (date(2026, 10, 19), today)
+    assert quick_period(MONTH, today, through_today=True) == (date(2026, 10, 1), today)
+    assert quick_period(DAY, today, through_today=True) == (date(2026, 10, 20),) * 2
+
+
+@pytest.mark.parametrize(
+    ("first", "last", "span"),
+    [
+        (date(2026, 10, 20), date(2026, 10, 20), DAY),
+        (date(2026, 10, 16), date(2026, 10, 18), DAY),  # Friday to Sunday
+        (date(2026, 10, 19), date(2026, 10, 20), WEEK),
+        (date(2026, 10, 12), date(2026, 10, 18), LAST_WEEK),
+        (date(2026, 10, 1), date(2026, 10, 20), MONTH),
+        (date(2026, 10, 1), date(2026, 10, 31), MONTH),  # the month, still going
+        (date(2026, 9, 1), date(2026, 9, 30), LAST_MONTH),
+        (date(2026, 10, 5), date(2026, 10, 25), None),  # by hand
+    ],
+)
+def test_the_span_a_mark_was_made_with(first, last, span):
+    assert span_of(first, last, date(2026, 10, 21)) == span
 
 
 def test_a_day_is_reconciled_by_the_portal_date(firm):
@@ -592,3 +653,20 @@ def test_period_text():
     assert period_text("2026-10-20", "2026-10-20") == "20.10.2026"
     assert period_text("2026-10-12", "2026-10-18") == "12.10–18.10.2026"
     assert period_text("2025-12-29", "2026-01-04") == "29.12.2025–04.01.2026"
+
+
+def test_period_bar_quick_and_custom(qtbot):
+    """A quick period shows its dates as text; «Произвольный» opens the dates with the
+    period chosen so far; dates from another window choose the quick period they are."""
+    from modern_gl.desktop.period_bar import CUSTOM, PeriodBar
+
+    bar = PeriodBar(date(2026, 10, 21), LAST_WEEK, through_today=True)
+    qtbot.addWidget(bar)
+    assert bar.dates.text() == "12.10–18.10.2026"
+    bar.span_buttons[CUSTOM].click()
+    assert bar.date_from.isVisibleTo(bar) and not bar.dates.isVisibleTo(bar)
+    assert bar.period() == (date(2026, 10, 12), date(2026, 10, 18))
+    bar.set_period(date(2026, 10, 19), date(2026, 10, 21))
+    assert bar.span() == WEEK and not bar.date_from.isVisibleTo(bar)
+    bar.set_period(date(2026, 10, 5), date(2026, 10, 9))
+    assert bar.span() == CUSTOM and bar.period() == (date(2026, 10, 5), date(2026, 10, 9))

@@ -18,7 +18,10 @@ ON_APPROVAL = "onApproval"  # Təsdiq gözləyir: the buyer has five days, then 
 IN_PROGRESS = ("updateApproval", "updateRequested", "cancelRequested", "onApprovalEdited")
 VOID = ("canceled", "deleted", "deletedBySystem", "deactivated", "rejected")
 IMPORTED = (*TURNOVER, ON_APPROVAL)  # what the import makes drafts of
-ALL = (*IMPORTED, *IN_PROGRESS, *VOID)  # "draft" is only the sender's: never asked for
+# what the reconciliation asks the portal for: "draft" is only the sender's; "rejected" is
+# shown in a row, but the portal's filter does not take it (400 «Sorğu məlumatları
+# yanlışdır», live 2026-10-21; etaxes-ext never asks for it either)
+ALL = (*IMPORTED, *IN_PROGRESS, *(s for s in VOID if s != "rejected"))
 
 # the portal's own names (Azerbaijani); the Russian ones are for the Russian interface
 _LABELS = {

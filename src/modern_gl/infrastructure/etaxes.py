@@ -17,7 +17,7 @@ from decimal import Decimal
 from typing import Any
 
 from modern_gl.domain.eqaime import TURNOVER
-from modern_gl.i18n import tr
+from modern_gl.i18n import language, tr
 
 BASE_URL = "https://new.e-taxes.gov.az"
 PORTAL_TOKEN_KEY = "aztax-jwt"  # where the portal page keeps the token
@@ -30,6 +30,10 @@ APPROVED = TURNOVER  # the API takes one status at a time
 
 class PortalError(Exception):
     """The portal did not answer as expected; the message is for the user."""
+
+    def __init__(self, message: str, code: int = 0) -> None:
+        super().__init__(message)
+        self.code = code  # the HTTP status, 0 if the portal was not reached
 
 
 class TokenExpired(PortalError):
@@ -60,6 +64,20 @@ def portal_date(day: date, time: str) -> str:
     return f"{day:%d-%m-%Y} {time}"
 
 
+def _said(body: bytes) -> str:
+    """What the portal says in an error: its message in the interface language
+    ({"message": {"az": "Sorğu məlumatları yalnışdır…"}}), else the start of the body."""
+    try:
+        message = json.loads(body).get("message")
+    except (ValueError, AttributeError):
+        message = None
+    if isinstance(message, dict):
+        message = message.get(language()) or message.get("az") or next(iter(message.values()), "")
+    if isinstance(message, str) and message:
+        return message
+    return body[:120].decode(errors="replace")
+
+
 class EtaxesClient:
     def __init__(self, token: str, send: Send = urllib_send) -> None:
         self.token = token
@@ -79,8 +97,10 @@ class EtaxesClient:
         if answer.status == 401:
             raise TokenExpired(tr("вход на портал истёк — войдите ещё раз"))
         if answer.status >= 400:
-            text = answer.body[:120].decode(errors="replace")
-            raise PortalError(tr("портал ответил {code}: {text}", code=answer.status, text=text))
+            raise PortalError(
+                tr("портал ответил {code}: {text}", code=answer.status, text=_said(answer.body)),
+                answer.status,
+            )
         return json.loads(answer.body, parse_float=Decimal)
 
     def invoices(

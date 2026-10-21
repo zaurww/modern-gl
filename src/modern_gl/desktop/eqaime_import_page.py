@@ -40,12 +40,14 @@ from modern_gl.application.eqaime_import import (
 )
 from modern_gl.application.eqaime_portal import read_again, rechecks
 from modern_gl.application.inventory import Inventory, format_quantity, to_quantity
+from modern_gl.desktop.period_bar import PeriodBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import button, date_edit, edited_date, money
+from modern_gl.desktop.widgets import button, money
 from modern_gl.domain.dates import month_name, ru_date
 from modern_gl.domain.eqaime import IMPORTED, PortalInvoice
 from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
 from modern_gl.reporting.eqaime_reconciliation import changed_after_reconciliation
@@ -128,6 +130,7 @@ class EqaimeImportDialog(QDialog):
         parent: QWidget | None = None,
         sign_in: Callable[[QWidget], str | None] | None = None,
         direction: str | None = None,  # "receipt" / "sale": one direction only, from its section
+        today: date | None = None,
     ) -> None:
         super().__init__(parent)
         self.s = session
@@ -152,33 +155,30 @@ class EqaimeImportDialog(QDialog):
 
         bar = QHBoxLayout()
         bar.setSpacing(8)
-        first = session.working_date.replace(day=1)
-        self.date_from = date_edit(first)
-        self.date_to = date_edit(session.working_date)
-        for caption, widget in ((tr("Период с"), self.date_from), (tr("по"), self.date_to)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
-            widget.setFixedWidth(130)
-            bar.addWidget(label)
-            bar.addWidget(widget)
-        bar.addSpacing(10)
+        self.period_bar = PeriodBar(today or date.today(), MONTH, through_today=True)
+        bar.addWidget(self.period_bar)
+        bar.addStretch(1)
+        self.load_button = button(tr("Загрузить с портала"), "primary")
+        self.load_button.clicked.connect(self.load)
+        bar.addWidget(self.load_button)
+        root.addLayout(bar)
+
+        both = QHBoxLayout()  # the directions, when not opened from one section
+        both.setSpacing(16)
         self.purchases = QCheckBox(tr("Полученные (покупки)"))
         self.purchases.setChecked(True)
         self.sales = QCheckBox(tr("Отправленные (продажи)"))
         self.sales.setChecked(True)
-        bar.addWidget(self.purchases)
-        bar.addWidget(self.sales)
+        both.addWidget(self.purchases)
+        both.addWidget(self.sales)
+        both.addStretch(1)
         if direction is not None:
             self.purchases.setChecked(direction == "receipt")
             self.sales.setChecked(direction == "sale")
             self.purchases.hide()
             self.sales.hide()
-        bar.addSpacing(10)
-        self.load_button = button(tr("Загрузить с портала"), "primary")
-        self.load_button.clicked.connect(self.load)
-        bar.addWidget(self.load_button)
-        bar.addStretch(1)
-        root.addLayout(bar)
+        else:
+            root.addLayout(both)
 
         self.tree = QTreeWidget()
         self.tree.setColumnCount(len(COLUMNS))
@@ -314,7 +314,7 @@ class EqaimeImportDialog(QDialog):
         tin = portal_login.company_tin(token)
         self.company.setText(tr("Портал: {name} · VÖEN {tin}", name=name, tin=tin))
         client = EtaxesClient(token)
-        date_from, date_to = edited_date(self.date_from), edited_date(self.date_to)
+        date_from, date_to = self.period_bar.period()
         purchases, sales = self.purchases.isChecked(), self.sales.isChecked()
         checks = rechecks(self.s.conn, self.s.company_id, date.today())
         self._start(

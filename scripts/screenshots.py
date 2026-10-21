@@ -583,9 +583,9 @@ def main() -> None:
 def shoot_reconciliation(session, win, out: Path) -> None:
     """«Сверка с порталом» over the demo's purchases: one e-qaimə agrees, one differs in
     amount, two are only on the portal, one is cancelled there (D53)."""
-    from modern_gl.application.eqaime_portal import month_bounds
     from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
     from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice
+    from modern_gl.domain.periods import month_bounds
     from modern_gl.reporting.eqaime_reconciliation import book_invoices, reconcile
 
     books = sorted(
@@ -632,8 +632,7 @@ def shoot_reconciliation(session, win, out: Path) -> None:
     ]
     dialog = EqaimeReconciliationDialog(session, win)
     dialog.company.setText("Portal: DEMO MMC · VÖEN 1402375141")
-    dialog.date_from.setDate(QDate(first.year, first.month, first.day))
-    dialog.date_to.setDate(QDate(last.year, last.month, last.day))
+    dialog.period_bar.set_period(first, last)
     dialog.show_result(reconcile(session.conn, session.company_id, False, first, last, portal))
     dialog.resize(1180, 760)
     dialog.show()
@@ -641,6 +640,8 @@ def shoot_reconciliation(session, win, out: Path) -> None:
     QTimer.singleShot(300, loop.quit)
     loop.exec()
     dialog.grab().save(str(out / "8c11_eqaime_reconciliation.png"))
+    dialog.period_bar.choose("custom")
+    dialog.grab().save(str(out / "8c12_eqaime_reconciliation_custom.png"))
     dialog.close()
 
 

@@ -1,6 +1,7 @@
 """«Сверка с порталом»: the e-qaimə of a period on the tax portal against the books (D53) —
 what is forgotten, cancelled, different; the totals on top; the period marked reconciled.
-Made for a morning check too: «Вчера», «Неделя», «Месяц» set the period at a click."""
+Made for a morning check too: «Вчера», «Эта неделя», «Прошлый месяц»… set the period at
+a click (`period_bar`)."""
 
 from __future__ import annotations
 
@@ -11,37 +12,27 @@ from datetime import date
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QButtonGroup,
     QDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from modern_gl.application.eqaime_portal import (
-    DAY,
-    MONTH,
-    WEEK,
-    fetch_list,
-    full_month,
-    quick_period,
-    read_again,
-    rechecks,
-    usual_span,
-)
+from modern_gl.application.eqaime_portal import fetch_list, read_again, rechecks, usual_span
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog, PortalLoader, changes_warning
+from modern_gl.desktop.period_bar import PeriodBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import button, date_edit, edited_date, money, to_qdate
+from modern_gl.desktop.widgets import button, money
 from modern_gl.domain.dates import month_name, ru_date
 from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, status_label
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
+from modern_gl.domain.periods import full_month
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
 from modern_gl.reporting.eqaime_reconciliation import (
@@ -78,6 +69,7 @@ AMOUNT_COLUMNS = (4, 5, 6)
 @dataclass
 class PortalLists:
     listed: list[PortalInvoice]  # the period, every status
+    skipped: list[str]  # statuses the portal refused to filter by
     rechecked: list[PortalInvoice]  # the reconciled months read again
 
 
@@ -118,42 +110,26 @@ class EqaimeReconciliationDialog(QDialog):
             tr("Все e-qaimə периода с портала против проведённых документов с их номерами")
         )
         self.company.setObjectName("secondary")
-        root.addWidget(self.company)
+        line = QHBoxLayout()
+        line.addWidget(self.company)
+        line.addStretch(1)
+        self.through = QLabel()  # «Сверено по 20.10.2026»
+        self.through.setObjectName("secondary")
+        line.addWidget(self.through)
+        root.addLayout(line)
 
         bar = QHBoxLayout()
         bar.setSpacing(8)
-        self.span_buttons: dict[str, QPushButton] = {}
-        # the usual period at a click; the one this company was last marked with is chosen
-        self.spans = QButtonGroup(self)
-        for span, caption in ((DAY, tr("Вчера")), (WEEK, tr("Неделя")), (MONTH, tr("Месяц"))):
-            choice = button(caption, "segment")
-            choice.setCheckable(True)
-            choice.clicked.connect(lambda _checked=False, span=span: self.choose(span))
-            self.spans.addButton(choice)
-            self.span_buttons[span] = choice
-            bar.addWidget(choice)
-        bar.addSpacing(10)
-        first, last = quick_period(MONTH, self.today)
-        self.date_from = date_edit(first)
-        self.date_to = date_edit(last)
-        for caption, widget in ((tr("Период с"), self.date_from), (tr("по"), self.date_to)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
-            widget.setFixedWidth(130)
-            bar.addWidget(label)
-            bar.addWidget(widget)
-        bar.addSpacing(10)
+        # the usual period at a click: the one this company was last marked with
+        self.period_bar = PeriodBar(
+            self.today, usual_span(session.conn, session.company_id, self.outgoing)
+        )
+        bar.addWidget(self.period_bar)
+        bar.addStretch(1)
         self.load_button = button(tr("Сверить с порталом"), "primary")
         self.load_button.clicked.connect(self.load)
         bar.addWidget(self.load_button)
-        bar.addStretch(1)
-        self.through = QLabel()  # «Сверено по 20.10.2026»
-        self.through.setObjectName("secondary")
-        bar.addWidget(self.through)
         root.addLayout(bar)
-        for edit in (self.date_from, self.date_to):
-            edit.dateChanged.connect(self._dates_edited)
-        self.choose(usual_span(session.conn, session.company_id, self.outgoing))
         self._show_through()
 
         self.warning = QLabel()
@@ -211,7 +187,7 @@ class EqaimeReconciliationDialog(QDialog):
 
         self.status = QLabel(
             tr(
-                "Выберите месяц и нажмите «Сверить с порталом»: откроется вход через ASAN İmza. "
+                "Выберите период и нажмите «Сверить с порталом»: откроется вход через ASAN İmza. "
                 "Программа сравнит e-qaimə портала с проведёнными документами по номеру."
             )
         )
@@ -256,16 +232,18 @@ class EqaimeReconciliationDialog(QDialog):
         if token is None:
             return
         client = EtaxesClient(token)
-        date_from, date_to = edited_date(self.date_from), edited_date(self.date_to)
+        date_from, date_to = self.period_bar.period()
         outgoing = self.outgoing
         checks = rechecks(self.s.conn, self.s.company_id, date.today())
         self.period = (date_from, date_to)
         self.load_button.setEnabled(False)
         self.status.setText(tr("Загрузка с портала…"))
+        skipped: list[str] = []
         self.worker = QThread(self)
         self.loader = PortalLoader(
             lambda progress: PortalLists(
-                fetch_list(client, outgoing, date_from, date_to, progress),
+                fetch_list(client, outgoing, date_from, date_to, progress, skipped=skipped),
+                skipped,
                 read_again(client, checks, progress),
             )
         )
@@ -296,6 +274,12 @@ class EqaimeReconciliationDialog(QDialog):
         self.show_result(
             reconcile(self.s.conn, self.s.company_id, self.outgoing, *self.period, lists.listed)
         )
+        if lists.skipped:
+            refused = ", ".join(status_label(status) for status in lists.skipped)
+            self.status.setText(
+                f"{self.status.text()} "
+                + tr("Портал не дал статусы: {statuses} — они не проверены.", statuses=refused)
+            )
 
     # ---- the result ----------------------------------------------------------------
 
@@ -437,21 +421,6 @@ class EqaimeReconciliationDialog(QDialog):
 
     # ---- the period ----------------------------------------------------------------
 
-    def choose(self, span: str) -> None:
-        first, last = quick_period(span, self.today)
-        for edit, day in ((self.date_from, first), (self.date_to, last)):
-            edit.blockSignals(True)
-            edit.setDate(to_qdate(day))
-            edit.blockSignals(False)
-        self.span_buttons[span].setChecked(True)
-
-    def _dates_edited(self) -> None:
-        """Dates typed by hand: none of the quick periods is chosen any more."""
-        self.spans.setExclusive(False)
-        for choice in self.span_buttons.values():
-            choice.setChecked(False)
-        self.spans.setExclusive(True)
-
     def _show_through(self) -> None:
         through = reconciled_through(self.s.conn, self.s.company_id, self.outgoing)
         self.through.setText(tr("Сверено по {date}", date=ru_date(through)) if through else "")
@@ -510,8 +479,7 @@ class EqaimeReconciliationDialog(QDialog):
             self.s, self, sign_in=self.sign_in, direction="sale" if self.outgoing else "receipt"
         )
         dialog.token = self.token
-        dialog.date_from.setDate(self.date_from.date())
-        dialog.date_to.setDate(self.date_to.date())
+        dialog.period_bar.set_period(*self.period_bar.period())
         if dialog.exec() and dialog.created:
             self.s.notify(
                 tr("Создано черновиков: {n} — проверьте и проведите", n=len(dialog.created))
