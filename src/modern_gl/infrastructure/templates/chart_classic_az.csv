@@ -33,6 +33,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 71;Təhtəlhesab şəxslərlə hesablaşmalar;;;asset;;1;employee;
 75;Təsisçilərlə hesablaşmalar;;;liability;;1;counterparty;
 76;Müxtəlif debitor və kreditorlarla hesablaşmalar;;;liability;;1;counterparty,contract;
+76H;Hesablanmış xərclər;;;liability;;;counterparty;;accrued_expenses
 80;Mənfəət və zərərlər;;;equity;;1;;;fx_gain,fx_loss,bank_fee
 85;Nizamnamə kapitalı;;;equity;;;counterparty;
 88;Bölüşdürülməmiş mənfəət (ödənilməmiş zərər);;;equity;;1;;

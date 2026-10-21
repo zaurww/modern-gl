@@ -9,7 +9,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -23,6 +23,7 @@ from modern_gl.application.common import (
 )
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.accounts import (
+    ACCRUED_EXPENSES,
     COST_OF_SALES,
     INPUT_VAT,
     OUTPUT_VAT,
@@ -30,7 +31,7 @@ from modern_gl.domain.accounts import (
     SALES_VAT,
 )
 from modern_gl.domain.currency import parse_rate, to_base, unit_rate
-from modern_gl.domain.dates import iso_date, ru_date
+from modern_gl.domain.dates import iso_date, month_end, month_name, ru_date
 from modern_gl.domain.errors import (
     LedgerError,
     NotFoundError,
@@ -50,6 +51,8 @@ ALLOCATION_METHODS = ("value", "quantity", "manual")
 # VAT rates are in hundredths of a percent; a receipt starts with the standard rate.
 VAT_RATE_SCALE = 10_000
 STANDARD_VAT_RATE = 1800
+# the account a receipt's accrual goes to when the chart has none (D65)
+ACCRUED_CODE = "76H"
 # the accounts a sale posts to (roles) as the settings name them
 SALE_ROLE_NAMES = {
     SALES_REVENUE: "Выручка",
@@ -227,6 +230,10 @@ class InventoryDocumentData:
     currency_rate: int | None = None  # millionths of a manat per unit
     invoice: str = ""  # a receipt's e-qaimə number (or customs declaration number)
     invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a declaration
+    # a receipt whose expense belongs to an earlier month (D65): the last day of that month,
+    # and the GL document of the accrual posted on it
+    expense_date: str | None = None
+    accrual_document_id: int | None = None
 
     @property
     def editable(self) -> bool:
@@ -629,6 +636,8 @@ class Inventory:
             currency_rate=doc["currency_rate"],
             invoice=doc["invoice"] or "",
             invoice_kind=doc["invoice_kind"] or "",
+            expense_date=doc["expense_date"],
+            accrual_document_id=doc["accrual_document_id"],
         )
 
     def _closed(self, doc: sqlite3.Row) -> bool:
@@ -650,6 +659,7 @@ class Inventory:
         currency_rate: str | int | Decimal | None = None,
         invoice: str = "",
         invoice_kind: str = "",
+        expense_date: date | str | None = None,
     ) -> int:
         """Save an editable receipt/opening document without affecting stock or GL.
 
@@ -665,6 +675,7 @@ class Inventory:
             self._set_vat_rate(document_id, None if opening else vat_rate)
             self._set_currency(company_id, document_id, currency_id, currency_rate)
             self._set_invoice(document_id, "" if opening else invoice, invoice_kind)
+            self._set_expense_date(document_id, None if opening else expense_date)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
             )
@@ -732,6 +743,7 @@ class Inventory:
         currency_rate: str | int | Decimal | None = None,
         invoice: str = "",
         invoice_kind: str = "",
+        expense_date: date | str | None = None,
     ) -> None:
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
@@ -742,6 +754,7 @@ class Inventory:
             self._set_currency(company_id, document_id, currency_id, currency_rate)
             receipt = doc["doc_type"] == "receipt"
             self._set_invoice(document_id, invoice if receipt else "", invoice_kind)
+            self._set_expense_date(document_id, expense_date if receipt else None)
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
@@ -921,9 +934,11 @@ class Inventory:
         currency_rate: str | int | Decimal | None = None,
         invoice: str = "",
         invoice_kind: str = "",
+        expense_date: date | str | None = None,
     ) -> int:
         """Post a receipt/opening balance and its Dr inventory / Cr offset entries
-        (and Dr input VAT / Cr offset for the lines' VAT)."""
+        (and Dr input VAT / Cr offset for the lines' VAT). With `expense_date` the
+        lines without an item are an expense of that earlier month (D65)."""
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
         with transaction(self.conn):
@@ -940,6 +955,7 @@ class Inventory:
                 currency_rate=currency_rate,
                 invoice=invoice,
                 invoice_kind=invoice_kind,
+                expense_date=expense_date,
             )
             self._post_in_sequence(company_id, inv_id)
         return inv_id
@@ -1086,6 +1102,8 @@ class Inventory:
         )
         if gl_document_id is not None:
             self.ledger.delete_document(company_id, gl_document_id)
+        if doc["accrual_document_id"] is not None:
+            self._drop_accrual(company_id, doc)
         self._apply_in_order(company_id, None, later)
 
     def _withdraw_after(self, company_id: int, doc: sqlite3.Row) -> list[int]:
@@ -1173,12 +1191,15 @@ class Inventory:
         ).fetchall()
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
+        accrual: list[PostingInput] = []
         if doc["doc_type"] == "landed_cost":
             postings = self._apply_landed_cost(company_id, doc, lines)
         elif doc["doc_type"] == "sale":
             postings = self._apply_sale(company_id, doc, lines)
         else:
             postings = [self._apply_line(company_id, doc, line) for line in lines]
+            if doc["doc_type"] == "receipt" and doc["expense_date"] is not None:
+                accrual = self._accrue(company_id, doc, lines, postings)
             if doc["doc_type"] == "receipt":
                 postings += self._vat_postings(
                     company_id,
@@ -1192,7 +1213,128 @@ class Inventory:
                         for line in lines
                     ],
                 )
+        if doc["doc_type"] == "receipt":  # while the document is still a draft
+            self._finish_accrual(company_id, doc["id"], accrual)
         self._finish(doc["id"], company_id, doc["doc_date"], postings, doc["memo"])
+
+    def _accrue(
+        self,
+        company_id: int,
+        doc: sqlite3.Row,
+        lines: Sequence[sqlite3.Row],
+        postings: list[PostingInput],
+    ) -> list[PostingInput]:
+        """A receipt whose expense belongs to an earlier month (D65). Each line without an
+        item is accrued on the last day of that month (Dr expense / Cr accrued expenses,
+        the supplier as subconto); the receipt closes the accrual (Dr accrued expenses /
+        Cr supplier) instead of debiting the expense. Rewrites `postings` in place and
+        returns the accrual's postings. Goods are not accrued: stock comes on its date."""
+        expense_date = doc["expense_date"]
+        if expense_date >= doc["doc_date"][:7] + "-01":
+            raise ValidationError(
+                tr(
+                    "расход за {month} должен быть раньше месяца документа",
+                    month=month_name(expense_date[:7]),
+                )
+            )
+        expense_lines = [i for i, line in enumerate(lines) if line["item_id"] is None]
+        if not expense_lines:
+            raise ValidationError(
+                tr(
+                    "месяц расхода указывается для услуг и расходов: в документе нет строк "
+                    "без товара"
+                )
+            )
+        account_id = self._accrual_account(company_id)
+        accrual = []
+        for i in expense_lines:
+            p = postings[i]
+            accrued_sc = self._by_kind(company_id, account_id, p.credit_subconto)
+            accrual.append(
+                PostingInput(
+                    p.debit_account_id,
+                    account_id,
+                    p.amount,
+                    p.debit_subconto,
+                    accrued_sc,
+                    p.memo,
+                )
+            )
+            postings[i] = replace(p, debit_account_id=account_id, debit_subconto=accrued_sc)
+        return accrual
+
+    def _accrual_account(self, company_id: int) -> int:
+        """The accrued expenses account (76H): the role's, the only account of its type,
+        or a new 76H with the counterparty directory when the chart has none."""
+        account_id = self.ledger.account_role(company_id, ACCRUED_EXPENSES)
+        if account_id is not None:
+            return account_id
+        if (
+            self.conn.execute(
+                "SELECT 1 FROM accounts WHERE company_id = ? AND account_type = ?",
+                (company_id, ACCRUED_EXPENSES),
+            ).fetchone()
+            or self.conn.execute(
+                "SELECT 1 FROM accounts WHERE company_id = ? AND code = ?",
+                (company_id, ACCRUED_CODE),
+            ).fetchone()
+        ):
+            raise ValidationError(
+                tr(
+                    "не определён счёт начисленных расходов: оставьте один активный счёт "
+                    "типа «Начисленные расходы» (например, {code})",
+                    code=ACCRUED_CODE,
+                )
+            )
+        kinds = self.conn.execute(
+            "SELECT id FROM subconto_kinds WHERE company_id = ? AND code = 'counterparty'",
+            (company_id,),
+        ).fetchall()
+        return self.ledger.add_account(
+            company_id,
+            ACCRUED_CODE,
+            tr("Начисленные расходы"),
+            subconto=[row["id"] for row in kinds],
+            account_type=ACCRUED_EXPENSES,
+        )
+
+    def _finish_accrual(
+        self, company_id: int, document_id: int, postings: Sequence[PostingInput]
+    ) -> None:
+        """Post, rewrite or remove the receipt's accrual document (D65). A recalculation
+        that changes nothing leaves an accrual in a closed period alone."""
+        doc = self._document(company_id, document_id)
+        accrual_id = doc["accrual_document_id"]
+        if not postings:
+            if accrual_id is not None:
+                self._drop_accrual(company_id, doc)
+            return
+        memo = tr("Начисление расхода по поступлению №{n}", n=doc["number"])
+        if accrual_id is not None:
+            self.ledger.rewrite_linked(company_id, accrual_id, doc["expense_date"], postings, memo)
+            return
+        closed = self._company(company_id)["closed_through"]
+        if closed is not None and doc["expense_date"] <= closed:
+            raise PeriodClosedError(
+                tr(
+                    "расход за {month} не отнести: период закрыт по {closed}. Выберите в "
+                    "«Расход за» месяц документа",
+                    month=month_name(doc["expense_date"][:7]),
+                    closed=ru_date(closed),
+                )
+            )
+        accrual_id = self.ledger.post_new(company_id, doc["expense_date"], postings, memo)
+        self.conn.execute(
+            "UPDATE inventory_documents SET accrual_document_id = ? WHERE id = ?",
+            (accrual_id, document_id),
+        )
+
+    def _drop_accrual(self, company_id: int, doc: sqlite3.Row) -> None:
+        accrual_id = doc["accrual_document_id"]
+        self.conn.execute(
+            "UPDATE inventory_documents SET accrual_document_id = NULL WHERE id = ?", (doc["id"],)
+        )
+        self.ledger.delete_document(company_id, accrual_id)
 
     def _apply_line(self, company_id: int, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
         document_id = doc["id"]
@@ -2344,6 +2486,13 @@ class Inventory:
             (number, (kind or None) if number else None, document_id),
         )
 
+    def _set_expense_date(self, document_id: int, expense_date: date | str | None) -> None:
+        """The month a receipt's expense belongs to (D65), kept as its last day."""
+        value = None if expense_date is None or expense_date == "" else month_end(expense_date)
+        self.conn.execute(
+            "UPDATE inventory_documents SET expense_date = ? WHERE id = ?", (value, document_id)
+        )
+
     def _set_vat_rate(self, document_id: int, rate: int | None) -> None:
         if rate is not None and not 0 <= rate <= VAT_RATE_SCALE:
             raise ValidationError(tr("ставка НДС должна быть от 0 до 100%"))
@@ -2913,6 +3062,8 @@ class Inventory:
             "currency_rate": doc["currency_rate"],
             "invoice": doc["invoice"],
             "invoice_kind": doc["invoice_kind"],
+            "expense_date": doc["expense_date"],
+            "accrual_document_id": doc["accrual_document_id"],
             "lines": lines,
             "charges": [
                 {key: row[key] for key in row.keys() if key not in {"company_id", "document_id"}}

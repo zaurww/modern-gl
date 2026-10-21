@@ -1,0 +1,298 @@
+"""«Расход за период» in a purchase (D65): a service of September invoiced in October.
+
+The expense is accrued on the last day of September (Dt expense / Kt 76H [supplier]) and
+the receipt of October closes the accrual (Dt 76H / Kt 60) instead of debiting the expense;
+the supplier's debt and the ƏDV stay on the e-qaimə's date. The numbers are worked out by
+hand in each test's docstring."""
+
+from __future__ import annotations
+
+import pytest
+
+from modern_gl.application.inventory import STANDARD_VAT_RATE, ReceiptLine
+from modern_gl.domain.accounts import ACCRUED_EXPENSES
+from modern_gl.domain.errors import LedgerError, PeriodClosedError, ValidationError
+from modern_gl.reporting.inventory import inventory_document_of, stock_balances
+from modern_gl.reporting.invoices import invoice_report
+from tests.test_sales import Shop, make_shop
+
+
+@pytest.fixture
+def shop(conn) -> Shop:
+    return make_shop(conn, "classic")
+
+
+def rent(shop: Shop, amount: str = "500", vat: str = "90") -> ReceiptLine:
+    kind = shop.ledger.subconto_kind_id(shop.company_id, "cost_item")
+    item = shop.ledger.add_subconto_value(shop.company_id, kind, "İcarə")
+    return ReceiptLine(
+        None,
+        None,
+        None,
+        amount,
+        "Ofisin icarəsi",
+        vat_amount=vat,
+        expense_account_id=shop.acc["26"],
+        expense_subconto=[item],
+    )
+
+
+def purchase(shop: Shop, lines: list[ReceiptLine], **kwargs) -> int:
+    return shop.inventory.post_receipt(
+        shop.company_id,
+        "2026-10-05",
+        lines,
+        shop.acc["60"],
+        shop.supplier,
+        "Alış",
+        vat_rate=STANDARD_VAT_RATE,
+        invoice="MT2610000777",
+        **kwargs,
+    )
+
+
+def accrual(shop: Shop, receipt: int) -> list[tuple]:
+    """(date, Dt code, Kt code, amount, memo) of the receipt's accrual document."""
+    doc = shop.inventory.load_document(shop.company_id, receipt)
+    code = {v: k for k, v in shop.acc.items()}
+    return [
+        (
+            r["doc_date"],
+            code[r["debit_account_id"]],
+            code[r["credit_account_id"]],
+            r["amount"],
+            r["memo"],
+        )
+        for r in shop.ledger.conn.execute(
+            "SELECT d.doc_date, p.* FROM postings p JOIN documents d ON d.id = p.document_id "
+            "WHERE d.id = ? ORDER BY p.line_no",
+            (doc.accrual_document_id,),
+        )
+    ]
+
+
+def turnover(shop: Shop, code: str, date_from: str, date_to: str) -> tuple[int, int]:
+    """(debit, credit) turnover of an account over posted documents in the dates."""
+    row = shop.ledger.conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN p.debit_account_id = :a THEN p.amount END), 0), "
+        "COALESCE(SUM(CASE WHEN p.credit_account_id = :a THEN p.amount END), 0) "
+        "FROM postings p JOIN documents d ON d.id = p.document_id "
+        "WHERE d.status = 'posted' AND d.doc_date BETWEEN :f AND :t",
+        {"a": shop.acc[code], "f": date_from, "t": date_to},
+    ).fetchone()
+    return row[0], row[1]
+
+
+def documents(shop: Shop) -> int:
+    return shop.ledger.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+
+
+def test_a_september_service_invoiced_in_october(shop, conn):
+    """Rent of September, e-qaimə of 05.10: 500.00 + ƏDV 90.00.
+      30.09  Dt 26 [İcarə] / Kt 76H [Təchizatçı]        500.00   — the expense of September
+      05.10  Dt 76H [Təchizatçı] / Kt 60 [Təchizatçı]   500.00   — the accrual is closed
+      05.10  Dt 19 / Kt 60                                90.00   — ƏDV on the e-qaimə's date
+    September: 26 has 500.00, 76H owes 500.00. October: 26 nothing, 76H nil, 60 owes 590.00.
+    The e-qaimə report sees 590.00 unpaid (76H is no settlement with the supplier)."""
+    receipt = purchase(shop, [rent(shop)], expense_date="2026-09-14")
+
+    doc = shop.inventory.load_document(shop.company_id, receipt)
+    assert doc.expense_date == "2026-09-30"  # any day names its month
+    assert accrual(shop, receipt) == [("2026-09-30", "26", "76H", 50_000, "Ofisin icarəsi")]
+    assert shop.postings(receipt) == [
+        ("76H", "60", 50_000, "Ofisin icarəsi", "MT2610000777"),
+        ("19", "60", 9_000, "НДС", "MT2610000777"),
+    ]
+    supplier = shop.supplier[0]
+    sides = conn.execute(
+        "SELECT ct_sc1 FROM postings WHERE credit_account_id = :a "
+        "UNION ALL SELECT dt_sc1 FROM postings WHERE debit_account_id = :a",
+        {"a": shop.acc["76H"]},
+    ).fetchall()
+    assert [row[0] for row in sides] == [supplier, supplier]
+
+    assert turnover(shop, "26", "2026-09-01", "2026-09-30") == (50_000, 0)
+    assert turnover(shop, "76H", "2026-09-01", "2026-09-30") == (0, 50_000)
+    assert turnover(shop, "26", "2026-10-01", "2026-10-31") == (0, 0)
+    assert turnover(shop, "76H", "2026-10-01", "2026-10-31") == (50_000, 0)
+    assert turnover(shop, "60", "2026-10-01", "2026-10-31") == (0, 59_000)
+
+    (row,) = invoice_report(conn, shop.company_id, "2026-10-01", "2026-10-31")
+    assert (row.balance, row.vat) == (-59_000, 9_000)
+
+    # the accrual belongs to the receipt: it opens it and is corrected only through it
+    assert inventory_document_of(conn, shop.company_id, doc.accrual_document_id) == receipt
+    with pytest.raises(ValidationError, match="складским документом"):
+        shop.ledger.delete_document(shop.company_id, doc.accrual_document_id)
+
+
+def test_only_the_lines_without_an_item_are_accrued(shop, conn):
+    """Printers 100.00 + ƏDV 18.00 come to stock on 05.10, as always; rent 500.00 + ƏDV
+    90.00 is September's. Accrual: Dt 26 / Kt 76H 500.00 on 30.09. Receipt: Dt 41 / Kt 60
+    100.00, Dt 76H / Kt 60 500.00, ƏDV Dt 19 / Kt 60 108.00 = 18.00 + 90.00."""
+    receipt = purchase(
+        shop,
+        [ReceiptLine(shop.item, shop.main, "5", "100", vat_amount="18"), rent(shop)],
+        expense_date="2026-09-30",
+    )
+    assert accrual(shop, receipt) == [("2026-09-30", "26", "76H", 50_000, "Ofisin icarəsi")]
+    assert shop.postings(receipt) == [
+        ("41", "60", 10_000, "", "MT2610000777"),
+        ("76H", "60", 50_000, "Ofisin icarəsi", "MT2610000777"),
+        ("19", "60", 10_800, "НДС", "MT2610000777"),
+    ]
+    (balance,) = stock_balances(conn, shop.company_id)
+    assert balance.amount == 10_000
+
+
+def test_editing_the_receipt_keeps_its_accrual_in_step(shop):
+    """Rent corrected to 600.00: the accrual becomes 600.00 and keeps its number. Without
+    «Расход за период» the accrual goes away and the rent is October's: Dt 26 / Kt 60.
+    Unposting removes the accrual; posting again brings a new one."""
+    line = rent(shop)
+    receipt = purchase(shop, [line], expense_date="2026-09-30")
+    first = shop.inventory.load_document(shop.company_id, receipt).accrual_document_id
+
+    def edit(amount: str, expense_date: str | None) -> None:
+        doc = shop.inventory.load_document(shop.company_id, receipt)
+        with shop.inventory.reposting(shop.company_id, receipt):
+            shop.inventory.update_receipt_draft(
+                shop.company_id,
+                receipt,
+                "2026-10-05",
+                [
+                    ReceiptLine(
+                        None,
+                        None,
+                        None,
+                        amount,
+                        line.memo,
+                        vat_amount="90",
+                        expense_account_id=line.expense_account_id,
+                        expense_subconto=line.expense_subconto,
+                        line_id=doc.lines[0].id,
+                    )
+                ],
+                shop.acc["60"],
+                shop.supplier,
+                "Alış",
+                vat_rate=STANDARD_VAT_RATE,
+                invoice="MT2610000777",
+                expense_date=expense_date,
+            )
+
+    edit("600", "2026-09-30")
+    assert shop.inventory.load_document(shop.company_id, receipt).accrual_document_id == first
+    assert accrual(shop, receipt) == [("2026-09-30", "26", "76H", 60_000, "Ofisin icarəsi")]
+
+    count = documents(shop)
+    edit("600", None)
+    doc = shop.inventory.load_document(shop.company_id, receipt)
+    assert (doc.expense_date, doc.accrual_document_id) == (None, None)
+    assert documents(shop) == count - 1
+    assert shop.postings(receipt)[0] == ("26", "60", 60_000, "Ofisin icarəsi", "MT2610000777")
+
+    edit("600", "2026-08-01")  # August now
+    assert accrual(shop, receipt)[0][:4] == ("2026-08-31", "26", "76H", 60_000)
+    count = documents(shop)
+    shop.inventory.unpost_document(shop.company_id, receipt)
+    assert shop.inventory.load_document(shop.company_id, receipt).accrual_document_id is None
+    assert documents(shop) == count - 2  # the receipt's and the accrual's GL documents
+    shop.inventory.post_document(shop.company_id, receipt)
+    assert accrual(shop, receipt)[0][:4] == ("2026-08-31", "26", "76H", 60_000)
+
+    shop.inventory.delete_document(shop.company_id, receipt)
+    assert documents(shop) == count - 2
+
+
+def test_the_expense_month_must_be_earlier_and_have_a_service(shop):
+    with pytest.raises(ValidationError, match="раньше месяца документа"):
+        purchase(shop, [rent(shop)], expense_date="2026-10-01")
+    with pytest.raises(ValidationError, match="нет строк без товара"):
+        purchase(
+            shop,
+            [ReceiptLine(shop.item, shop.main, "5", "100", vat_amount="18")],
+            expense_date="2026-09-30",
+        )
+    assert documents(shop) == 0  # nothing half-posted
+
+
+def test_a_closed_month_takes_no_new_accrual_but_keeps_the_one_it_has(shop):
+    """September closed: a new accrual there is refused. A receipt accrued before the close
+    may still be recalculated if its accrual does not change, but not unposted."""
+    receipt = purchase(shop, [rent(shop)], expense_date="2026-09-30")
+    shop.ledger.set_closed_through(shop.company_id, "2026-09-30")
+    with pytest.raises(PeriodClosedError, match=r"период закрыт по 30\.09\.2026"):
+        purchase(shop, [rent(shop, "100", "18")], expense_date="2026-09-30")
+
+    shop.receipt("2026-10-01", "2", "40")  # earlier: the receipt is recalculated after it
+    assert accrual(shop, receipt)[0][:4] == ("2026-09-30", "26", "76H", 50_000)
+    with pytest.raises(LedgerError, match="период закрыт"):
+        shop.inventory.unpost_document(shop.company_id, receipt)
+    assert shop.inventory.load_document(shop.company_id, receipt).status == "posted"
+
+
+def test_a_chart_without_76h_gets_it(shop, conn):
+    """A company created before D65 has no accrued expenses account: the first accrual adds
+    76H «Начисленные расходы» with the counterparty directory and takes it as the role."""
+    shop.ledger.set_account_role(shop.company_id, ACCRUED_EXPENSES, None)
+    shop.ledger.delete_account(shop.company_id, "76H")
+    receipt = purchase(shop, [rent(shop)], expense_date="2026-09-30")
+    account = conn.execute(
+        "SELECT a.*, k.code AS kind FROM accounts a "
+        "JOIN subconto_kinds k ON k.id = a.sc1_kind_id WHERE a.code = '76H'"
+    ).fetchone()
+    assert (account["name"], account["account_type"], account["kind"]) == (
+        "Начисленные расходы",
+        "accrued_expenses",
+        "counterparty",
+    )
+    assert shop.ledger.account_role(shop.company_id, ACCRUED_EXPENSES) == account["id"]
+    shop.acc["76H"] = account["id"]
+    assert accrual(shop, receipt)[0][:4] == ("2026-09-30", "26", "76H", 50_000)
+
+
+def test_receipt_page_asks_for_the_month_of_a_service(shop, conn, qtbot):
+    """The form shows «Расход за» once a service line is there: the document's month or one
+    of the twelve before it. Repair of September 50.00 + ƏDV 9.00 on 05.10: Dt 26 / Kt 76H
+    50.00 on 30.09, the receipt Dt 76H / Kt 60 50.00 and Dt 19 / Kt 60 9.00."""
+    from datetime import date
+
+    from modern_gl.application.catalog import Catalog
+    from modern_gl.desktop.inventory_document_page import (
+        ACCOUNT,
+        AMOUNT,
+        ESC1,
+        EXPENSE,
+        SC1,
+        InventoryDocumentPage,
+    )
+    from modern_gl.desktop.session import Session
+    from modern_gl.desktop.widgets import to_qdate
+
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    page.date.setDate(to_qdate(date(2026, 10, 5)))
+    assert page.expense_month.isHidden()  # goods only so far
+    page._make_service(0, "Təmir")
+    model = page.model
+    for key, value in ((EXPENSE, shop.acc["26"]), (AMOUNT, 5_000), (ACCOUNT, shop.acc["60"])):
+        assert model.setData(model.index(0, model.columns.index(key)), value)
+    assert model.setData(model.index(0, model.columns.index(SC1)), shop.supplier[0])
+    kind = shop.ledger.subconto_kind_id(shop.company_id, "cost_item")
+    repair = shop.ledger.add_subconto_value(shop.company_id, kind, "Təmir")
+    session.catalog.reload()
+    assert model.setData(model.index(0, model.columns.index(ESC1)), repair)
+    assert not page.expense_month.isHidden()
+    months = [page.expense_month.itemData(i) for i in range(page.expense_month.count())]
+    assert months[:3] == [None, "2026-09-30", "2026-08-31"]
+    assert (len(months), months[-1]) == (13, "2025-10-31")
+
+    page.expense_month.setCurrentIndex(1)
+    assert page.save(post=True), page.error.text()
+    assert page.doc is not None and page.doc.expense_date == "2026-09-30"
+    assert accrual(shop, page.doc.id) == [("2026-09-30", "26", "76H", 5_000, "Təmir")]
+    assert [p[:3] for p in shop.postings(page.doc.id)] == [("76H", "60", 5_000), ("19", "60", 900)]
+    assert page.expense_month.currentData() == "2026-09-30"  # loaded back
+    assert not page.btn_accrual.isHidden()

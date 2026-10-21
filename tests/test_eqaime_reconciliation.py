@@ -542,7 +542,7 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
     dialog.load()
     qtbot.waitUntil(lambda: dialog.tree.topLevelItemCount() == 1, timeout=5000)
     item = dialog.tree.topLevelItem(0)
-    assert item is not None and item.text(7).startswith("ожидает подтверждения")
+    assert item is not None and item.text(8).startswith("ожидает подтверждения")
     stored = conn.execute("SELECT status, total, vat FROM eqaime_portal").fetchone()
     assert tuple(stored) == (ON_APPROVAL, 20_060, 3_060)
     assert dialog.warning.isVisibleTo(dialog)
