@@ -34,6 +34,22 @@ from modern_gl.infrastructure.db import transaction
 
 
 class BankCommands(ModuleDocumentCommands):
+    def save_bank_payment(
+        self,
+        company_id: int,
+        data: BankOperationInput,
+        deposit: BankOperationInput | None,
+        *,
+        post: bool,
+    ) -> list[int]:
+        """A new payment and its ƏDV part on the ƏDV deposit account (D65): two
+        operations, each on its own account, saved both or neither."""
+        with transaction(self.conn):
+            saved = [self.save_bank_operation(company_id, data, post=post)]
+            if deposit is not None:
+                saved.append(self.save_bank_operation(company_id, deposit, post=post))
+        return saved
+
     def save_bank_operation(
         self,
         company_id: int,

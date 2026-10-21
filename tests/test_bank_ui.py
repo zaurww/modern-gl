@@ -556,3 +556,70 @@ def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
         session.conn, session.company_id, value(session, "ALFA MMC"), True, "2026-03-05"
     )
     assert [(i.invoice, i.amount) for i in left] == [("MT2", 23_900)]
+
+
+def test_the_vat_part_goes_from_the_deposit_account(qtbot, session):
+    """D65. MT7 of 02.03 to ALFA: 1 000.00 + ƏDV 180.00. Paying on 05.03: the e-qaimə
+    from the list puts 1 000.00 from the bank and 180.00 from the ƏDV deposit (55,
+    500.00 on it since 01.03); «Провести» makes two operations, MT7 is paid in full."""
+    from modern_gl.reporting.invoices import open_invoices
+
+    ledger, cid = session.ledger, session.company_id
+    ledger.set_account_type(cid, acc(session, "55"), "vat_deposit")
+    banks = ledger.subconto_kind_id(cid, "bank_account")
+    deposit = ledger.add_subconto_value(cid, banks, "ƏDV depozit")
+    alfa, contract = value(session, "ALFA MMC"), value(session, "Договор 1")
+    owner = value(session, "Учредитель")
+    rent = (ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "cost_item"), "Аренда"),)
+    ledger.post_new(
+        cid,
+        "2026-03-01",
+        [PostingInput(acc(session, "55"), acc(session, "80"), "500", [deposit], [owner])],
+    )
+    ledger.post_new(
+        cid,
+        "2026-03-02",
+        [
+            PostingInput(
+                acc(session, "26"),
+                acc(session, "60.1"),
+                "1000",
+                rent,
+                (alfa, contract),
+                invoice="MT7",
+            ),
+            PostingInput(
+                acc(session, "19.4"),
+                acc(session, "60.1"),
+                "180",
+                (alfa,),
+                (alfa, contract),
+                invoice="MT7",
+            ),
+        ],
+    )
+    session.catalog.reload()
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    assert page.deposit_shown and page.deposit.currentText().startswith("ƏDV depozit")
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)
+    assert page.invoice.hasFocus()
+    qtbot.waitUntil(lambda: QApplication.activePopupWidget() is not None)
+    key(qtbot, Qt.Key.Key_Down)
+    key(qtbot, Qt.Key.Key_Return)
+    assert (page.amount.text(), page.vat_amount.text()) == ("1 000.00", "180.00")
+    assert page.amount_caption.text() == "Из банка"
+    assert page.check.text().endswith("e-qaimə оплачивается полностью")
+    assert page.save(post=True), page.error.text()
+    bank_lines = [(x.account_id, x.amount, x.invoice) for x in page.doc.lines]
+    assert bank_lines == [(acc(session, "60.1"), 100_000, "MT7")]
+    on_deposit = session.conn.execute(
+        "SELECT p.credit_account_id, p.amount, p.invoice FROM postings p "
+        "JOIN documents d ON d.id = p.document_id "
+        "WHERE d.status = 'posted' AND p.debit_account_id = ? AND p.credit_account_id = ?",
+        (acc(session, "60.1"), acc(session, "55")),
+    ).fetchall()
+    assert [tuple(r) for r in on_deposit] == [(acc(session, "55"), 18_000, "MT7")]
+    left = open_invoices(session.conn, cid, alfa, True, "2026-03-05")
+    assert [i.invoice for i in left] == []

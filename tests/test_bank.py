@@ -332,6 +332,43 @@ def test_vat_deposit_pays_only_vat(ledger, firm):
     assert (p.debit_account_id, p.credit_account_id, p.amount) == (acc["68.1"], acc["55"], 18000)
 
 
+def test_a_payment_and_its_vat_from_the_deposit_are_two_operations(ledger, firm):
+    """D65: 1 180.00 owed to Alfa — 1 000.00 from Kapital AZN (Dt 60.1 / Kt 51) and the
+    ƏDV 180.00 from the deposit (Dt 60.1 / Kt 55) on 06.03, both on MT001; a deposit part
+    that may not be posted (kind «other») leaves the bank part unsaved too."""
+    f = firm
+    cid, acc = f["cid"], f["acc"]
+    ledger.set_account_type(cid, acc["55"], "vat_deposit")
+    deposit = ledger.add_subconto_value(cid, f["kind"]["bank_account"], "ƏDV depozit")
+    bank = pay_alfa(f, lines=(replace(pay_alfa(f).lines[0], amount=100000),))
+    vat = pay_alfa(
+        f,
+        doc_date="2026-03-06",
+        account_id=acc["55"],
+        subconto=(deposit,),
+        lines=(replace(pay_alfa(f).lines[0], amount=18000),),
+    )
+    with pytest.raises(ValidationError, match="депозитного счёта ƏDV"):
+        ledger.save_bank_payment(cid, bank, replace(vat, kind=OTHER), post=True)
+    assert ledger.conn.execute("SELECT COUNT(*) FROM bank_operations").fetchone()[0] == 0
+    first, second = ledger.save_bank_payment(cid, bank, vat, post=True)
+    [p] = postings(ledger, f, first)
+    assert (p.debit_account_id, p.credit_account_id, p.amount, p.invoice) == (
+        acc["60.1"],
+        acc["51"],
+        100000,
+        "MT001",
+    )
+    [p] = postings(ledger, f, second)
+    assert (p.debit_account_id, p.credit_account_id, p.amount, p.invoice) == (
+        acc["60.1"],
+        acc["55"],
+        18000,
+        "MT001",
+    )
+    assert load_bank_operation(ledger.conn, cid, second).doc_date == "2026-03-06"
+
+
 def test_last_lines_suggest_the_account_of_the_counterparty(ledger, firm):
     f = firm
     cid, acc, v = f["cid"], f["acc"], f["v"]

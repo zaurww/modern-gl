@@ -38,6 +38,7 @@ class InvoiceRow:
     debit: int = 0  # turnovers of the settlement accounts
     credit: int = 0
     vat: int = 0
+    deposit: int = 0  # paid from or to the ƏDV deposit account (D41)
     documents: list[tuple[int, int]] = field(default_factory=list)  # (id, number)
     in_period: bool = False
 
@@ -121,10 +122,11 @@ class _Chart:
 
     def add(self, row: InvoiceRow, p: sqlite3.Row) -> None:
         """One posting of the invoice: settlement turnovers, partner, contract, ƏDV."""
-        vat = False
+        vat = deposit = False
         for side, prefix in (("debit", "dt"), ("credit", "ct")):
             account = self.accounts[p[f"{side}_account_id"]]
             vat |= account["account_type"] in VAT_TYPES
+            deposit |= account["account_type"] == "vat_deposit"
             partner_at = self.slot(account, self.partner)
             kind = account["account_type"]
             if not (kind in SETTLEMENT_TYPES or (kind is None and partner_at is not None)):
@@ -141,6 +143,8 @@ class _Chart:
                 row.contract_id = p[f"{prefix}_sc{contract_at}"]
         if vat:
             row.vat += p["amount"]
+        if deposit:
+            row.deposit += p["amount"]
 
 
 DRAFT, PORTAL = "draft", "portal"  # where an open e-qaimə is known from, but the books
@@ -152,6 +156,7 @@ class OpenInvoice:
     doc_date: str
     amount: int  # still to pay (> 0)
     source: str = ""  # "": posted; DRAFT: only a draft has it; PORTAL: only the portal
+    vat: int = 0  # of it, the ƏDV still to pay from (or to) the deposit account
 
 
 def open_invoices(
@@ -181,25 +186,32 @@ def open_invoices(
 
     posted = {n: r for (k, n), r in _gathered(conn, company_id, params).items() if k == ""}
     paid = {n: settled(r) for n, r in posted.items()}
+    deposit = {n: r.deposit for n, r in posted.items()}
     known = {n for n, r in posted.items() if accrued(r)}
+
+    def still(number: str, doc_date: str, owed: int, vat: int, source: str) -> OpenInvoice:
+        left = owed - paid.get(number, 0)
+        vat_left = min(max(vat - deposit.get(number, 0), 0), max(left, 0))
+        return OpenInvoice(number, doc_date, left, source, vat_left)
+
     found = [
-        OpenInvoice(n, r.doc_date, accrued(r) - settled(r))
+        still(n, r.doc_date, accrued(r), r.vat, "")
         for n, r in posted.items()
         if n in known and parties & set(r.counterparties)
     ]
-    others: list[tuple[str, str, int, bool, str]] = [  # number, date, owed, whose, source
-        (n, r.doc_date, accrued(r), bool(parties & set(r.counterparties)), DRAFT)
+    others: list[tuple[str, str, int, int, bool, str]] = [  # number, date, owed, ƏDV, whose
+        (n, r.doc_date, accrued(r), r.vat, bool(parties & set(r.counterparties)), DRAFT)
         for (k, n), r in _gathered(conn, company_id, params, "draft").items()
         if k == "" and accrued(r)
     ]
     others += _trade_drafts(conn, company_id, params["date_to"], payable, parties)
     others += _portal(conn, company_id, params["date_to"], payable, tin)
-    for number, doc_date, owed, whose, source in others:
+    for number, doc_date, owed, vat, whose, source in others:
         if number in known:  # the books, or a source before this one, know it already
             continue
         known.add(number)
         if whose:
-            found.append(OpenInvoice(number, doc_date, owed - paid.get(number, 0), source))
+            found.append(still(number, doc_date, owed, vat, source))
     other_way = _other_way(conn, company_id, payable)  # a payment on a purchase is no sale
     found.sort(key=lambda i: (i.doc_date, i.invoice))
     return [i for i in found if i.amount > 0 and i.invoice not in other_way]
@@ -238,11 +250,12 @@ def _same_firm(
 
 def _trade_drafts(
     conn: sqlite3.Connection, company_id: int, on_date: str, payable: bool, parties: set[int]
-) -> list[tuple[str, str, int, bool, str]]:
-    """Purchase (sale) drafts with an e-qaimə number: their total with ƏDV."""
+) -> list[tuple[str, str, int, int, bool, str]]:
+    """Purchase (sale) drafts with an e-qaimə number: their total with ƏDV, and the ƏDV."""
     rows = conn.execute(
         """
         SELECT d.invoice, d.doc_date, SUM(l.amount + l.vat_amount) AS total,
+               SUM(l.vat_amount) AS vat,
                json_group_array(l.offset_sc1) AS sc1, json_group_array(l.offset_sc2) AS sc2,
                json_group_array(l.offset_sc3) AS sc3
         FROM inventory_documents d
@@ -258,24 +271,25 @@ def _trade_drafts(
     found = []
     for r in rows:
         values = {v for column in ("sc1", "sc2", "sc3") for v in json.loads(r[column])}
-        found.append((r["invoice"], r["doc_date"], r["total"], bool(parties & values), DRAFT))
+        whose = bool(parties & values)
+        found.append((r["invoice"], r["doc_date"], r["total"], r["vat"], whose, DRAFT))
     return found
 
 
 def _portal(
     conn: sqlite3.Connection, company_id: int, on_date: str, payable: bool, tin: str
-) -> list[tuple[str, str, int, bool, str]]:
+) -> list[tuple[str, str, int, int, bool, str]]:
     """E-qaimə the portal showed for the VÖEN (in turnover or awaiting approval)."""
     if not tin:
         return []
     statuses = (*TURNOVER, ON_APPROVAL)
     rows = conn.execute(
         f"""
-        SELECT number, doc_date, total FROM eqaime_portal
+        SELECT number, doc_date, total, vat FROM eqaime_portal
         WHERE company_id = ? AND outgoing = ? AND party_tin = ? AND doc_date <= ?
           AND status IN ({", ".join("?" * len(statuses))})
         ORDER BY doc_date, number
         """,
         (company_id, int(not payable), tin, on_date, *statuses),
     )
-    return [(r["number"], r["doc_date"], r["total"], True, PORTAL) for r in rows]
+    return [(r["number"], r["doc_date"], r["total"], r["vat"], True, PORTAL) for r in rows]

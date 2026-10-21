@@ -407,3 +407,56 @@ def test_a_payment_is_offered_the_e_qaime_of_drafts_and_of_the_portal(firm):
     ]
     owed = open_invoices(conn, cid, v["Альфа"], payable=False, on_date="2026-03-06")
     assert [(i.invoice, i.amount, i.source) for i in owed] == [("MT6", 7_000, PORTAL)]
+
+
+def test_the_vat_left_to_pay_from_the_deposit_account(firm):
+    """MT1 of 01.03: services 1 000.00 + ƏDV 180.00 = 1 180.00 owed to Alfa.
+    02.03 from the bank 500.00          -> left 680.00, of it ƏDV 180.00 (the deposit's)
+    03.03 from the ƏDV deposit 100.00   -> left 580.00, of it ƏDV 80.00
+    04.03 from the bank 500.00          -> left  80.00, of it ƏDV 80.00
+    05.03 from the bank another 50.00   -> left  30.00, of it ƏDV 30.00 (no more than left)
+    A portal e-qaimə: its own ƏDV (236.00 with 36.00)."""
+    from modern_gl.domain.eqaime import PortalInvoice
+    from modern_gl.reporting.invoices import open_invoices
+
+    conn, ledger, cid, acc, v = firm
+    acc["55"] = ledger.add_account(cid, "55", "ƏDV depozit", account_type="vat_deposit")
+    alfa, rent, bank = (v["Альфа"], v["Д-1"]), (v["Аренда"],), (v["Kapital"],)
+    ledger.post_new(
+        cid,
+        "2026-03-01",
+        [
+            PostingInput(acc["26"], acc["60"], "1000", rent, alfa, invoice="MT1"),
+            PostingInput(acc["19"], acc["60"], "180", (v["Альфа"],), alfa, invoice="MT1"),
+        ],
+    )
+
+    def left(day):
+        found = open_invoices(conn, cid, v["Альфа"], payable=True, on_date=day)
+        return [(i.invoice, i.amount, i.vat) for i in found]
+
+    ledger.post_new(
+        cid, "2026-03-02", [PostingInput(acc["60"], acc["51"], "500", alfa, bank, invoice="MT1")]
+    )
+    assert left("2026-03-02") == [("MT1", 68_000, 18_000)]
+    ledger.post_new(
+        cid, "2026-03-03", [PostingInput(acc["60"], acc["55"], "100", alfa, (), invoice="MT1")]
+    )
+    assert left("2026-03-03") == [("MT1", 58_000, 8_000)]
+    ledger.post_new(
+        cid, "2026-03-04", [PostingInput(acc["60"], acc["51"], "500", alfa, bank, invoice="MT1")]
+    )
+    assert left("2026-03-04") == [("MT1", 8_000, 8_000)]
+    ledger.post_new(
+        cid, "2026-03-05", [PostingInput(acc["60"], acc["51"], "50", alfa, bank, invoice="MT1")]
+    )
+    assert left("2026-03-05") == [("MT1", 3_000, 3_000)]
+    ledger.remember_portal(
+        cid,
+        [
+            PortalInvoice(
+                "MT4", False, "2026-03-05", "approved", "1234567890", total=23_600, vat=3_600
+            )
+        ],
+    )
+    assert left("2026-03-06") == [("MT1", 3_000, 3_000), ("MT4", 23_600, 3_600)]

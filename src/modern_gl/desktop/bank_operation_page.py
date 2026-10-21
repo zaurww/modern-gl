@@ -111,6 +111,8 @@ def offer_invoices(box: SuggestBox, invoices: Sequence[OpenInvoice]) -> None:
     box.clear()
     for i in invoices:
         label = f"{i.invoice} · {ru_date(i.doc_date)} · {format_minor(i.amount)}"
+        if i.vat:
+            label += f" · ƏDV {format_minor(i.vat)}"
         if i.source in SOURCES:
             label += f" · {tr(SOURCES[i.source])}"
         box.addItem(label, i, i.invoice)
@@ -497,13 +499,49 @@ class BankOperationPage(QWidget):
         self.amount.setFixedWidth(200)
         self.amount.textEdited.connect(self._amount_typed)
         self.amount_currency = caption("")
+        # a payment's ƏDV goes from (a receipt's to) the ƏDV deposit account (D65): its
+        # own operation on that account, typed here with the bank part
+        self.vat_caption = caption("")
+        self.vat_amount = QLineEdit()
+        self.vat_amount.setFont(fonts().total)
+        self.vat_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.vat_amount.setPlaceholderText("0.00")
+        self.vat_amount.setFixedWidth(170)
+        self.vat_amount.textEdited.connect(self._changed)
+        self.vat_currency = caption("AZN")
         amount_row = QHBoxLayout()
         amount_row.setSpacing(10)
         amount_row.addWidget(self.amount)
         amount_row.addWidget(self.amount_currency)
+        amount_row.addSpacing(26)
+        amount_row.addWidget(self.vat_caption)
+        amount_row.addWidget(self.vat_amount)
+        amount_row.addWidget(self.vat_currency)
         amount_row.addStretch(1)
         form.addWidget(self.amount_caption, 5, 0)
         form.addLayout(amount_row, 5, 1, 1, 2)
+        form.setRowMinimumHeight(6, 6)
+        self.deposit_caption = caption(tr("Депозит ƏDV"))
+        self.deposits = [p for p in self.places if p.account_type == "vat_deposit"]
+        self.deposit = PickBox(NONE)
+        for place in self.deposits:
+            self.deposit.addItem(place_label(place), place)
+        self.deposit.setCurrentIndex(0 if self.deposits else -1)
+        self.deposit.setFixedWidth(300)
+        self.deposit.unknown.connect(self._not_listed)
+        self.deposit_date = date_edit(session.working_date)
+        self.deposit_date.setFixedWidth(130)
+        self.deposit_date.setToolTip(tr("Дата операции на депозитном счёте"))
+        self._deposit_day_kept = True  # follows the date until changed by hand
+        deposit_row = QHBoxLayout()
+        deposit_row.setSpacing(10)
+        deposit_row.addWidget(self.deposit)
+        deposit_row.addWidget(self.deposit_date)
+        deposit_row.addStretch(1)
+        form.addWidget(self.deposit_caption, 7, 0)
+        form.addLayout(deposit_row, 7, 1, 1, 2)
+        self.check = caption("")  # how the amounts close the e-qaimə
+        form.addWidget(self.check, 8, 1, 1, 2)
         root.addLayout(form)
         root.addSpacing(8)
 
@@ -622,6 +660,8 @@ class BankOperationPage(QWidget):
         self.date.dateChanged.connect(self._changed)
         self.date.dateChanged.connect(self._refresh_invoices)
         self.date.dateChanged.connect(self._show_balance)
+        self.date.dateChanged.connect(self._follow_date)
+        self.deposit_date.dateChanged.connect(self._deposit_day_changed)
         self.kind.activated.connect(self._kind_changed)
         self._fill_counterparties()
 
@@ -817,13 +857,7 @@ class BankOperationPage(QWidget):
             return
         label = self.s.catalog.accounts[place.account_id].label
         select_data(self.account, place.account_id, label)
-        account = self.bank_info
-        chosen: list[int | None] = [None, None, None]
-        if account is not None and place.value_id is not None:
-            codes = [self.s.catalog.kind_codes.get(k or 0) for k in account.sc_kinds]
-            if "bank_account" in codes:
-                chosen[codes.index("bank_account")] = place.value_id
-        self._bank_account_changed(chosen=chosen)
+        self._bank_account_changed(chosen=self._place_subconto(place))
 
     def _show_bank(self) -> None:
         """The bank field shows the account and bank chosen, and its balance on the day."""
@@ -1137,10 +1171,10 @@ class BankOperationPage(QWidget):
         statement reference and the purpose after (the lines are made later than the
         buttons below them, so Qt's own order would put them last)."""
         fields: list[QWidget] = [self.btn_out, self.btn_in, self.bank, self.currency, self.date]
-        fields += [self.kind, self.counterparty_edit, self.invoice, self.amount]
+        fields += [self.kind, self.counterparty_edit, self.invoice, self.amount, self.vat_amount]
         for row in self.line_rows:
             fields += [row.account, *row.sc, row.invoice, row.amount]
-        fields += [self.btn_post, self.reference, self.memo]
+        fields += [self.btn_post, self.reference, self.deposit, self.deposit_date, self.memo]
         for first, second in pairwise(fields):
             QWidget.setTabOrder(first, second)
 
@@ -1203,6 +1237,18 @@ class BankOperationPage(QWidget):
         self.btn_unfold.setVisible(folded and not self.read_only)
         for w in (self.amount_caption, self.amount, self.amount_currency):
             w.setVisible(folded)
+        deposit = self.deposit_shown
+        for w in (self.vat_caption, self.vat_amount, self.vat_currency):
+            w.setVisible(deposit)
+        for w in (self.deposit_caption, self.deposit, self.deposit_date):
+            w.setVisible(deposit)
+        into = self.direction_value == IN
+        if deposit:
+            self.amount_caption.setText(tr("В банк") if into else tr("Из банка"))
+            self.vat_caption.setText(tr("На депозит ƏDV") if into else tr("С депозита ƏDV"))
+        else:
+            self.amount_caption.setText(tr("Сумма"))
+        self._show_check()
         row = self.line_rows[0] if folded else None
         takes = row is not None and not row.invoice.isHidden()  # its account takes e-qaimə
         self.invoice_caption.setVisible(takes)
@@ -1228,11 +1274,18 @@ class BankOperationPage(QWidget):
             QTimer.singleShot(0, lambda: self._pay_several(row))
             return
         i = row.invoice.findData(chosen) if chosen is not None else -1
-        if i >= 0:
-            row.invoice.setCurrentIndex(i)
-            row.invoice.activated.emit(i)
-        else:
+        if i < 0:
             self._invoice_typed(self.invoice.text())
+            return
+        empty = not row.amount.text().strip() and not self.vat_amount.text().strip()
+        if isinstance(chosen, OpenInvoice) and empty:
+            if self.deposit_shown:  # the ƏDV from the deposit, the rest from the bank
+                row.amount.setText(amount_text(chosen.amount - chosen.vat))
+                self.vat_amount.setText(amount_text(chosen.vat) if chosen.vat else "")
+            elif self._on_deposit():  # the deposit itself pays only the ƏDV
+                row.amount.setText(amount_text(chosen.vat or chosen.amount))
+        row.invoice.setCurrentIndex(i)
+        row.invoice.activated.emit(i)
 
     def _invoice_typed(self, text: str) -> None:
         if self.line_rows:
@@ -1243,6 +1296,104 @@ class BankOperationPage(QWidget):
         if self.line_rows:
             self.line_rows[0].amount.setText(text)
             self.line_rows[0].changed.emit()
+
+    # ---- the ƏDV deposit part ------------------------------------------------------------
+
+    @property
+    def deposit_shown(self) -> bool:
+        """A new payment to a supplier (from a customer) on a current account, folded,
+        with an ƏDV deposit account in the company: its ƏDV part is typed beside (D65)."""
+        return (
+            self.doc is None
+            and not self.read_only
+            and self.folded
+            and bool(self.deposits)
+            and self.kind.currentData() in (SUPPLIER, CUSTOMER)
+            and not self._on_deposit()
+        )
+
+    def _on_deposit(self) -> bool:
+        return self.bank_info is not None and self.bank_info.account_type == "vat_deposit"
+
+    def _follow_date(self, *_) -> None:
+        if self._deposit_day_kept:
+            self.deposit_date.blockSignals(True)
+            self.deposit_date.setDate(self.date.date())
+            self.deposit_date.blockSignals(False)
+
+    def _deposit_day_changed(self, *_) -> None:
+        self._deposit_day_kept = self.deposit_date.date() == self.date.date()
+        self._changed()
+
+    def _show_check(self) -> None:
+        """How the amounts typed close the e-qaimə chosen: in full, partly, or over."""
+        row = self.line_rows[0] if self.folded else None
+        number = row.invoice.text().strip().upper() if row is not None else ""
+        chosen = next((i for i in self.open_invoices if i.invoice == number), None)
+        if chosen is None or self.doc is not None:
+            self.check.hide()
+            return
+        try:
+            bank = to_minor(row.amount.text()) if row and row.amount.text().strip() else 0
+            vat = to_minor(self.vat_amount.text()) if self.vat_amount.text().strip() else 0
+        except ValueError:
+            self.check.hide()
+            return
+        vat = vat if self.deposit_shown else 0
+        paid = bank + vat
+        parts = (
+            tr(
+                "банк {bank} + депозит {vat} = {total}",
+                bank=format_minor(bank),
+                vat=format_minor(vat),
+                total=format_minor(paid),
+            )
+            if vat
+            else ""
+        )
+        if paid == chosen.amount:
+            text, tone = tr("✓ e-qaimə оплачивается полностью"), "success"
+        elif paid < chosen.amount:
+            left = format_minor(chosen.amount - paid)
+            text, tone = tr("по e-qaimə останется {left}", left=left), "tertiary"
+        else:
+            over = format_minor(paid - chosen.amount)
+            text, tone = tr("больше остатка по e-qaimə на {over}", over=over), "caution"
+        self.check.setText(f"{parts}   ·   {text}" if parts else text)
+        self.check.setObjectName(tone)
+        self.check.style().unpolish(self.check)  # the new name's color
+        self.check.style().polish(self.check)
+        self.check.show()
+
+    def _deposit_part(self, data: BankOperationInput) -> BankOperationInput | None:
+        """The operation on the ƏDV deposit account, if its amount is typed: the same
+        counterparty, line and e-qaimə, its own day."""
+        text = self.vat_amount.text().strip()
+        if not self.deposit_shown or not text or not data.lines:
+            return None
+        amount = to_minor(text)
+        place = self.deposit.currentData()
+        if amount == 0 or not isinstance(place, BankPlace):
+            return None
+        return replace(
+            data,
+            doc_date=edited_date(self.deposit_date).isoformat(),
+            account_id=place.account_id,
+            subconto=self._place_subconto(place),
+            currency_id=None,
+            reference="",
+            lines=(replace(data.lines[0], amount=amount),),
+        )
+
+    def _place_subconto(self, place: BankPlace) -> tuple[int | None, ...]:
+        """The element of the bank directory at its own position of the account."""
+        chosen: list[int | None] = [None, None, None]
+        account = self.s.catalog.accounts.get(place.account_id)
+        if account is not None and place.value_id is not None:
+            codes = [self.s.catalog.kind_codes.get(k or 0) for k in account.sc_kinds]
+            if "bank_account" in codes:
+                chosen[codes.index("bank_account")] = place.value_id
+        return tuple(chosen)
 
     def _line_edited(self) -> None:
         if not self._loading:
@@ -1348,19 +1499,36 @@ class BankOperationPage(QWidget):
         self.error.hide()
         try:
             data = self.collect()
-            operation_id = self.s.ledger.save_bank_operation(
-                self.s.company_id, data, self.doc.id if self.doc else None, post=post
-            )
+            if self.doc is None:  # a new one: with its ƏDV part on the deposit, if typed
+                deposit = self._deposit_part(data)
+                saved = self.s.ledger.save_bank_payment(self.s.company_id, data, deposit, post=post)
+            else:
+                saved = [
+                    self.s.ledger.save_bank_operation(
+                        self.s.company_id, data, self.doc.id, post=post
+                    )
+                ]
         except (LedgerError, ValueError) as e:
             self.show_error(str(e))
             return False
-        self.load(operation_id)
+        self.load(saved[0])
         assert self.doc is not None
-        self.s.notify(
-            tr("Операция №{n} проведена", n=self.doc.number)
-            if post
-            else tr("Черновик №{n} сохранён", n=self.doc.number)
-        )
+        numbers = [self.doc.number]
+        numbers += [
+            load_bank_operation(self.s.conn, self.s.company_id, i).number for i in saved[1:]
+        ]
+        if len(numbers) == 2:
+            first, second = numbers
+            message = (
+                tr("Операции №{a} и №{b} проведены", a=first, b=second)
+                if post
+                else tr("Черновики №{a} и №{b} сохранены", a=first, b=second)
+            )
+        elif post:
+            message = tr("Операция №{n} проведена", n=self.doc.number)
+        else:
+            message = tr("Черновик №{n} сохранён", n=self.doc.number)
+        self.s.notify(message)
         self.saved.emit(self.doc.document_id)
         if new and post:  # a statement is typed one operation after another
             self.next_requested.emit(self.next_of(data))

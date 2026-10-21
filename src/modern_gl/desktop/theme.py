@@ -514,6 +514,8 @@ QStatusBar {{ background: {P.window}; color: {P.secondary}; border-top: 1px soli
 QLabel#secondary {{ color: {P.secondary}; }}
 QLabel#tertiary {{ color: {P.tertiary}; }}
 QLabel#columnCaption {{ color: {P.header_text}; }}
+QLabel#success {{ color: {P.green}; }}
+QLabel#caution {{ color: {P.amber}; }}
 QFrame#rule {{ background: {P.hairline}; border: none; }}
 /* a form's lines folded into one: where the money goes */
 QFrame#summary {{ background: {P.subtle}; border: none; border-radius: 8px; }}
