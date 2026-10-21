@@ -208,3 +208,67 @@ def test_receipt_page_buys_a_service(shop, conn, qtbot, monkeypatch):
     assert [p[:3] for p in shop.postings(page.doc.id)] == [("26", "60", 5_000), ("19", "60", 900)]
     assert page.model.rows[0].expense_subconto[0] == repair  # loaded back
     assert not page.table.isColumnHidden(expense_column)
+
+
+def test_a_purchase_posts_without_a_contract(shop, conn, qtbot):
+    """Many suppliers have no contract, only the e-qaimə: the line posts with the
+    counterparty alone. Repair 50.00 + VAT 9.00: Dt 26 / Kt 60 50.00, Dt 19 / Kt 60 9.00,
+    so the supplier is owed 59.00 under «not given» in the ОСВ by contract. Without the
+    counterparty it still does not post."""
+    from modern_gl.reporting.reports import subconto_balance
+
+    (repair,) = values(shop, "cost_item", "Təmir")
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    page._make_service(0, "Printerin təmiri")
+    model = page.model
+
+    def put(key: str, value) -> None:
+        assert model.setData(model.index(0, model.columns.index(key)), value)
+
+    put(EXPENSE, shop.acc["26"])
+    put(ESC1, repair)
+    put(AMOUNT, 5_000)
+    put(ACCOUNT, shop.acc["60"])
+    assert not page.save(post=True)
+    assert "Kontragent" in page.error.text() or "Контрагент" in page.error.text()
+    put(SC1, shop.supplier[0])  # the contract (SC2) stays empty
+    assert page.save(post=True), page.error.text()
+    assert page.doc is not None
+    assert [p[:3] for p in shop.postings(page.doc.id)] == [("26", "60", 5_000), ("19", "60", 900)]
+    by_contract = subconto_balance(
+        conn, shop.company_id, "60", "2026-01-01", "2026-12-31", position=2
+    )
+    assert [(r.name, r.closing_ct) for r in by_contract] == [("<не указано>", 5_900)]
+
+
+def test_the_name_of_a_line_keeps_its_room_and_shows_whole_when_edited(shop, conn, qtbot):
+    """In a narrow window the name keeps ITEM_MIN px (the account and subconto give up
+    width); its editor grows over the next cells to show a long e-qaimə name whole."""
+    from PySide6.QtWidgets import QAbstractItemDelegate, QLineEdit
+
+    from modern_gl.desktop.inventory_document_page import ITEM_MIN
+
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    long_name = "2026-cı ilin yanvar ayı üçün mühasibat xidmətləri və hesabatların hazırlanması"
+    page._make_service(0, long_name)
+    page.resize(1100, 600)
+    page.show()
+    qtbot.waitExposed(page)
+    table, column = page.table, page.model.columns.index(ITEM)
+    assert table.columnWidth(column) >= ITEM_MIN
+    for open_editor in table.findChildren(QLineEdit):  # _make_service went on to the account
+        table.closeEditor(open_editor, QAbstractItemDelegate.EndEditHint.NoHint)
+    index = page.model.index(0, column)
+    table.setCurrentIndex(index)
+    table.edit(index)
+    editor = next(e for e in table.findChildren(QLineEdit) if e.isVisible())
+    assert editor is not None and editor.text() == long_name
+    assert editor.width() > table.columnWidth(column)
+    editor.setText("Mühasibat xidmətləri")
+    page.delegate.setModelData(editor, page.model, index)  # corrected: still a service
+    assert page.model.is_service(0)
+    assert page.model.rows[0].memo == "Mühasibat xidmətləri"

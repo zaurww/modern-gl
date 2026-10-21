@@ -119,6 +119,10 @@ STORED_FIELDS = {
     MEMO: "memo",
 }
 LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE} | SUBCONTO_KEYS
+# the name of a line keeps this much; these columns narrow first, down to NARROW_MIN
+ITEM_MIN = 300
+NARROW_MIN = 84
+SOFT_KEYS = {WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE} | SUBCONTO_KEYS
 NUMBER_KEYS = {QUANTITY, PRICE, AMOUNT, CURRENCY_AMOUNT, VAT}
 # the VAT of a receipt or a sale: rate in hundredths of a percent, None = without VAT
 VAT_RATES = [(STANDARD_VAT_RATE, "18%"), (None, "Без НДС")]
@@ -960,9 +964,13 @@ class InventoryLinesModel(QAbstractTableModel):
                 raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
 
     def _require_subconto(self, account_id: int, subconto: list[int | None], line_no: int) -> None:
-        account = self.s.catalog.accounts[account_id]
+        """Every subconto of the account but a contract: many suppliers have none, only the
+        e-qaimə; reports show such amounts as «not given»."""
+        catalog = self.s.catalog
+        account = catalog.accounts[account_id]
         for position, kind_id in enumerate(account.sc_kinds):
-            if kind_id is not None and subconto[position] is None:
+            optional = kind_id in catalog.owner_kinds  # a contract belongs to a counterparty
+            if kind_id is not None and subconto[position] is None and not optional:
                 raise ValidationError(
                     tr(
                         "строка {line}: заполните субконто «{kind}»",
@@ -992,6 +1000,17 @@ def _resolve_choice(choices: list[tuple[int, str]], text: str) -> int | None:
     return partial[0][0] if partial else None
 
 
+def _widen(editor: QLineEdit) -> None:
+    """The editor of a name grows over the next cells to show it whole (up to the
+    table's edge), and back to the cell as the text gets shorter."""
+    cell = editor.property("cell_width") or editor.width()
+    parent = editor.parentWidget()
+    room = parent.width() - editor.x() if parent is not None else cell
+    need = editor.fontMetrics().horizontalAdvance(editor.text()) + 24
+    editor.resize(max(cell, min(need, room)), editor.height())
+    editor.raise_()
+
+
 class InventoryLinesDelegate(QStyledItemDelegate):
     """Enter or Tab commits a cell; a name missing from a directory can be added on the spot."""
 
@@ -1014,8 +1033,16 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                 attach_list(editor, labels, True, self._chosen)
         elif key in NUMBER_KEYS:
             editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if key == ITEM:  # a long name of an e-qaimə line is seen whole while edited
+            editor.textChanged.connect(lambda _text, widget=editor: _widen(widget))
         editor.returnPressed.connect(lambda widget=editor: self._commit_and_next(widget))
         return editor
+
+    def updateEditorGeometry(self, editor, option, index):
+        super().updateEditorGeometry(editor, option, index)
+        if index.model().key(index) == ITEM:
+            editor.setProperty("cell_width", editor.width())
+            _widen(editor)
 
     def _chosen(self, editor: QLineEdit, text: str) -> None:
         editor.setText(text)
@@ -1024,7 +1051,9 @@ class InventoryLinesDelegate(QStyledItemDelegate):
     def setEditorData(self, editor, index):
         model: InventoryLinesModel = index.model()
         value = index.data(Qt.ItemDataRole.EditRole)
-        if model.key(index) in LIST_KEYS:
+        if model.key(index) == ITEM and model.is_service(index.row()):
+            value = model.rows[index.row()].memo  # what the service is, to read or correct
+        elif model.key(index) in LIST_KEYS:
             value = "" if value is None else index.data(Qt.ItemDataRole.DisplayRole)
         editor.setText(value or "")
         editor.selectAll()
@@ -1047,6 +1076,10 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                     return
             elif key in LIST_KEYS:
                 value = _resolve_choice(model.choices(index.row(), key), text) if text else None
+                if key == ITEM and text and value is None and model.is_service(index.row()):
+                    # the service's name corrected: it stays a service
+                    model.setData(model.index(index.row(), model.columns.index(MEMO)), text)
+                    return
                 if text and value is None:
                     signal = self.unknown_item if key == ITEM else self.unknown_warehouse
                     signal.emit(QPersistentModelIndex(index), text)
@@ -1122,8 +1155,11 @@ class InventoryLinesTable(QTableView):
         expense_positions = model.expense_positions()
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
+        self._widths = {
+            key: widths.get(key, 100 if key in SUBCONTO_KEYS else 120) for key in model.columns
+        }
         for column, key in enumerate(model.columns):
-            self.setColumnWidth(column, widths.get(key, 100 if key in SUBCONTO_KEYS else 120))
+            self.setColumnWidth(column, self._widths[key])
             self.setColumnHidden(column, False)  # a column of the previous model may be hidden
             if key in SC_KEYS:
                 self.setColumnHidden(column, int(key[-1]) not in used)
@@ -1137,6 +1173,31 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, not model.has_currency)
             if key == ITEM:
                 header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+        self._fit_columns()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._fit_columns()
+
+    def _fit_columns(self) -> None:
+        """The name keeps ITEM_MIN px: in a narrow window the account, subconto and
+        warehouse columns give up width first (their text gets «…»), down to NARROW_MIN."""
+        model = self.model()
+        widths = getattr(self, "_widths", None)
+        if not widths:
+            return
+        shown = [
+            (column, key)
+            for column, key in enumerate(model.columns)
+            if key != ITEM and not self.isColumnHidden(column)
+        ]
+        soft = [(column, key) for column, key in shown if key in SOFT_KEYS]
+        fixed = sum(widths[key] for _, key in shown if key not in SOFT_KEYS)
+        room = self.viewport().width() - fixed - ITEM_MIN
+        wanted = sum(widths[key] for _, key in soft)
+        scale = 1.0 if wanted <= 0 or room >= wanted else max(room, 0) / wanted
+        for column, key in soft:
+            self.setColumnWidth(column, max(NARROW_MIN, int(widths[key] * scale)))
 
     def model(self) -> InventoryLinesModel:
         return cast(InventoryLinesModel, super().model())
