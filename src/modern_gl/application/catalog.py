@@ -247,6 +247,12 @@ class Catalog:
             return account.account_type in SETTLEMENT_TYPES | VAT_TYPES
         return any(self.kind_codes.get(k or 0) == "counterparty" for k in account.sc_kinds)
 
+    def is_stock_account(self, account_id: int) -> bool:
+        """An account with the item and warehouse directories: goods reach it through the
+        warehouse (an item on the line), never as an expense."""
+        codes = {self.kind_codes.get(k or 0) for k in self.accounts[account_id].sc_kinds}
+        return {"item", "warehouse"} <= codes
+
     def has_tax_id(self, kind_id: int) -> bool:
         """Elements of the directory are counterparties: they have a VÖEN."""
         return self.kind_codes.get(kind_id) == "counterparty"

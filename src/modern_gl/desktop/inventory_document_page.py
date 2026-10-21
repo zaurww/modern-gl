@@ -364,8 +364,15 @@ class InventoryLinesModel(QAbstractTableModel):
             return [(item.id, item.label) for item in self.items.values()]
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return [(warehouse.id, warehouse.label) for warehouse in self.warehouses.values()]
-        if key in {ACCOUNT, EXPENSE}:
+        if key == ACCOUNT:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
+        if key == EXPENSE:  # goods come to a stock account through the warehouse only
+            catalog = self.s.catalog
+            return [
+                (account.id, account.label)
+                for account in catalog.leaf_accounts
+                if not catalog.is_stock_account(account.id)
+            ]
         kind_id = self.kind_at(row_index, key)
         owner = self.owner_at(row_index, key)
         return (
@@ -427,6 +434,8 @@ class InventoryLinesModel(QAbstractTableModel):
                     return tr(SALE_HEADERS[key])
                 if self.doc_type == "receipt" and key in RECEIPT_HEADERS:
                     return tr(RECEIPT_HEADERS[key])
+                if key in SUBCONTO_KEYS and key[-1] != "1":
+                    return self._kind_header(key)
                 return tr(HEADERS[key])
             return str(section + 1)
         if (
@@ -454,6 +463,27 @@ class InventoryLinesModel(QAbstractTableModel):
         if account_id is None:
             return None
         return self.s.catalog.accounts[account_id].sc_kinds[int(key[-1]) - 1]
+
+    def _kind_header(self, key: str) -> str:
+        """A second or third subconto column is named by its directory («Anbar»,
+        «Müqavilə»), when its lines agree on one; else it stays unnamed."""
+        kinds = {
+            self.kind_at(row, key)
+            for row in range(len(self.rows))
+            if self.applies(row, key) and not self.rows[row].is_empty()
+        }
+        if len(kinds) != 1:
+            return ""
+        (kind_id,) = kinds
+        return self.s.catalog.kinds[kind_id] if kind_id is not None else ""
+
+    def has_goods(self) -> bool:
+        """A purchase or sale of services only has no warehouse and unit columns; any
+        other document, or one not begun yet, has them."""
+        if self.doc_type not in {"sale", "receipt"}:
+            return True
+        lines = [i for i, row in enumerate(self.rows) if not row.is_empty()]
+        return not lines or not all(self.is_service(i) for i in lines)
 
     def applies(self, row: int, key: str) -> bool:
         if key in {WAREHOUSE, UNIT} and self.is_service(row):
@@ -622,9 +652,11 @@ class InventoryLinesModel(QAbstractTableModel):
             self._recalculate_vat(row)
         elif key == ACCOUNT:
             self._set_account(row, value)
+            self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
         elif key == EXPENSE:
             row.expense_account_id = value
             self._drop_foreign(value, row.expense_subconto)
+            self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
         elif key in SUBCONTO_KEYS:
             self._subconto_of(row, key)[int(key[-1]) - 1] = value
         else:
@@ -966,6 +998,16 @@ class InventoryLinesModel(QAbstractTableModel):
                 )
             if row.expense_account_id is None:
                 raise ValidationError(tr("строка {line}: не указан счёт затрат", line=line_no))
+            if self.s.catalog.is_stock_account(row.expense_account_id):
+                account = self.s.catalog.accounts[row.expense_account_id]
+                raise ValidationError(
+                    tr(
+                        "строка {line}: счёт {account} складской — выберите товар в колонке "
+                        "«Товар», тогда он придёт на склад",
+                        line=line_no,
+                        account=account.short,
+                    )
+                )
             self._require_subconto(row.expense_account_id, row.expense_subconto, line_no)
         else:
             if row.warehouse_id is None:
@@ -1195,6 +1237,7 @@ class InventoryLinesTable(QTableView):
         }
         used = model.s.catalog.used_positions()
         expenses = model.has_expenses()
+        goods = model.has_goods()
         expense_positions = model.expense_positions()
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
@@ -1206,6 +1249,8 @@ class InventoryLinesTable(QTableView):
             self.setColumnHidden(column, False)  # a column of the previous model may be hidden
             if key in SC_KEYS:
                 self.setColumnHidden(column, int(key[-1]) not in used)
+            if key in {WAREHOUSE, UNIT}:
+                self.setColumnHidden(column, not goods)
             if key == EXPENSE:
                 self.setColumnHidden(column, not expenses)
             if key in ESC_KEYS:
@@ -1889,8 +1934,8 @@ class InventoryDocumentPage(QWidget):
             self.dirty = True
             self.title_changed.emit()
 
-    def _expense_columns(self) -> tuple[bool, set[int]]:
-        return self.model.has_expenses(), self.model.expense_positions()
+    def _expense_columns(self) -> tuple[bool, set[int], bool]:
+        return self.model.has_expenses(), self.model.expense_positions(), self.model.has_goods()
 
     def _set_new(self) -> None:
         self.number.setText(tr("Новый"))

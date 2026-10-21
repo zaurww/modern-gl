@@ -206,7 +206,7 @@ class InventoryPage(QWidget):
             ("Начальные остатки", "opening", "flat"),
             ("Списание", "issue", "primary"),
             ("Перемещение", "transfer", "flat"),
-            ("Расходы по партии", "landed_cost", "flat"),
+            ("Дополнительные расходы", "landed_cost", "flat"),
         ):
             control = button(tr(title), kind)
             control.clicked.connect(lambda _=False, op=operation: self.operation(op))

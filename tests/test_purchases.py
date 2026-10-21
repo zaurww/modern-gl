@@ -5,7 +5,7 @@ The numbers are worked out by hand in each test's docstring."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPersistentModelIndex
+from PySide6.QtCore import QPersistentModelIndex, Qt
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import QUANTITY_FACTOR, STANDARD_VAT_RATE, ReceiptLine
@@ -253,7 +253,10 @@ def test_the_name_of_a_line_keeps_its_room_and_shows_whole_when_edited(shop, con
     session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
     page = InventoryDocumentPage(session, doc_type="receipt")
     qtbot.addWidget(page)
-    long_name = "2026-cı ilin yanvar ayı üçün mühasibat xidmətləri və hesabatların hazırlanması"
+    long_name = (
+        "2026-cı ilin yanvar ayı üçün mühasibat xidmətləri, vergi bəyannamələrinin "
+        "və statistika hesabatlarının hazırlanması"
+    )
     page._make_service(0, long_name)
     page.resize(1100, 600)
     page.show()
@@ -272,3 +275,60 @@ def test_the_name_of_a_line_keeps_its_room_and_shows_whole_when_edited(shop, con
     page.delegate.setModelData(editor, page.model, index)  # corrected: still a service
     assert page.model.is_service(0)
     assert page.model.rows[0].memo == "Mühasibat xidmətləri"
+
+
+def test_a_line_without_an_item_never_goes_to_a_stock_account(shop, conn):
+    """A service bought onto 41 [Printer, Əsas anbar] would show 50.00 of goods in the GL
+    that the warehouse does not have: it does not post, the message says to pick the item.
+    A draft (an e-qaimə taken «as last time») keeps it until then."""
+    printer = conn.execute(
+        "SELECT subconto_value_id FROM inventory_items WHERE id = ?", (shop.item,)
+    ).fetchone()[0]
+    main = conn.execute(
+        "SELECT subconto_value_id FROM warehouses WHERE id = ?", (shop.main,)
+    ).fetchone()[0]
+    line = ReceiptLine(
+        None,
+        None,
+        None,
+        "50",
+        "Statik İP",
+        expense_account_id=shop.acc["41"],
+        expense_subconto=[printer, main],
+    )
+    with pytest.raises(ValidationError, match="строка 1: счёт 41 складской — выберите товар"):
+        purchase(shop, [line])
+    draft = shop.inventory.create_receipt_draft(
+        shop.company_id, "2026-03-05", [line], shop.acc["60"], shop.supplier
+    )
+    with pytest.raises(ValidationError, match="счёт 41 складской"):
+        shop.inventory.post_document(shop.company_id, draft)
+    assert conn.execute("SELECT COUNT(*) FROM postings").fetchone()[0] == 0
+    assert stock_balances(conn, shop.company_id) == []
+
+
+def test_a_service_purchase_has_no_warehouse_column_and_names_its_subconto(shop, conn, qtbot):
+    """Services only: no «Склад» and «Ед.», they come back with a line of goods. The
+    expense list has no stock account (41). The supplier's second subconto column is
+    named by its directory, «Договоры»."""
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    model = page.model
+    warehouse = model.columns.index(WAREHOUSE)
+    assert not page.table.isColumnHidden(warehouse)  # a new document starts as goods
+    page._make_service(0, "Statik İP")
+    assert page.table.isColumnHidden(warehouse)
+    accounts = {account_id for account_id, _ in model.choices(0, EXPENSE)}
+    assert shop.acc["26"] in accounts and shop.acc["41"] not in accounts
+
+    assert model.setData(model.index(0, model.columns.index(ACCOUNT)), shop.acc["60"])
+    kind = shop.ledger.subconto_kind_id(shop.company_id, "contract")
+    assert (
+        model.headerData(model.columns.index(SC2), Qt.Orientation.Horizontal)
+        == (session.catalog.kinds[kind])
+    )
+
+    model.insert_row()
+    assert model.setData(model.index(1, model.columns.index(ITEM)), shop.item)
+    assert not page.table.isColumnHidden(warehouse)

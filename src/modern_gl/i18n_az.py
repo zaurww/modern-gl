@@ -782,7 +782,6 @@ AZ: dict[str, str] = {
     "неизвестная роль счёта: {role}": "naməlum hesab rolu: {role}",
     "счёт {code}: нужен активный счёт проводок": "hesab {code}: aktiv yazılış hesabı lazımdır",
     # «Расходы по партии» (session 7)
-    "Расходы по партии": "Partiya xərcləri",
     "Партия": "Partiya",
     "Статья": "Maddə",
     "Остаток": "Qalıq",
@@ -956,6 +955,7 @@ AZ: dict[str, str] = {
     "Услуга, ОС": "Xidmət, ƏV",
     "строка {line}: укажите товар или что куплено (услуга, ОС)": "sətir {line}: malı və ya nə alındığını göstərin (xidmət, ƏV)",
     "строка {line}: не указан счёт затрат": "sətir {line}: xərc hesabı göstərilməyib",
+    "строка {line}: счёт {account} складской — выберите товар в колонке «Товар», тогда он придёт на склад": "sətir {line}: {account} hesabı anbar hesabıdır — «Mal» sütununda malı seçin, onda o anbara düşəcək",
     "Товар / услуга / ОС": "Mal / xidmət / ƏV",
     "Субконто затрат": "Xərc subkontosu",
     "Ремонт принтера": "Printerin təmiri",

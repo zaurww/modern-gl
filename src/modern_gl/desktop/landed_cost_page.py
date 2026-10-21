@@ -1227,7 +1227,7 @@ class LandedCostPage(QWidget):
         return ("inventory_doc", self.document_id) if self.doc else ("new_inventory", id(self))
 
     def title(self) -> str:
-        operation = tr("Расходы по партии")
+        operation = tr("Дополнительные расходы")
         title = (
             f"{operation} №{self.doc.number}" if self.doc else tr("Новое: {type}", type=operation)
         )

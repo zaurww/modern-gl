@@ -1232,6 +1232,7 @@ class Inventory:
             raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
         if line["cost_account_id"] is None:
             raise ValidationError(tr("строка {line}: не указан счёт затрат", line=line_no))
+        self._check_not_stock(doc["company_id"], line["cost_account_id"], line_no)
         if line["offset_account_id"] is None:
             raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
         in_currency = doc["currency_id"] is not None
@@ -2550,6 +2551,20 @@ class Inventory:
         codes = {code for code in self._account_kind_codes(company_id, account) if code}
         if not {"item", "warehouse"}.issubset(codes):
             raise ValidationError(tr("на складском счёте нужны субконто Товар и Склад"))
+
+    def _check_not_stock(self, company_id: int, account_id: int, line_no: int) -> None:
+        """A line without an item never goes to a stock account: the GL would show goods
+        the warehouse does not have."""
+        account = self._account(company_id, account_id)
+        if {"item", "warehouse"} <= set(self._account_kind_codes(company_id, account)):
+            raise ValidationError(
+                tr(
+                    "строка {line}: счёт {account} складской — выберите товар в колонке "
+                    "«Товар», тогда он придёт на склад",
+                    line=line_no,
+                    account=account["code"] or account["name"],
+                )
+            )
 
     def _account_kind_ids(self, account: sqlite3.Row) -> tuple[int | None, ...]:
         return tuple(account[f"sc{position}_kind_id"] for position in range(1, 4))
