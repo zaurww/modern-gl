@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
     QFrame,
-    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -41,6 +40,7 @@ from modern_gl.application.bank import (
     BankLine,
     BankOperation,
     BankOperationInput,
+    BankPlace,
     bank_places,
     default_memo,
     last_lines,
@@ -82,6 +82,15 @@ TYPE_KINDS = {
 }
 WITH_COUNTERPARTY = (SUPPLIER, CUSTOMER, OTHER)
 SEVERAL = "several"  # the list item «several e-qaimə…»
+# the columns of the lines, the same in the header above them
+INVOICE_WIDTH = 160
+AMOUNT_WIDTH = 130
+REMOVE_WIDTH = 32
+
+
+def place_label(place: BankPlace) -> str:
+    """A bank account in one field: «Kapital Bank · 51 · AZN»."""
+    return f"{place.name} · {place.account_code} · {place.currency or 'AZN'}"
 
 
 def bank_accounts(session: Session) -> list[AccountInfo]:
@@ -150,6 +159,12 @@ class LineRow(QWidget):
             lambda text: self.error.emit(tr("«{text}» нет в списке", text=text))
         )
         lay.addWidget(self.account, 3)
+        # the subconto share one column, so the lines stand under the header
+        self.sc_area = QWidget()
+        sc_lay = QHBoxLayout(self.sc_area)
+        sc_lay.setContentsMargins(0, 0, 0, 0)
+        sc_lay.setSpacing(8)
+        lay.addWidget(self.sc_area, 4)
         self.sc: list[PickBox] = []
         for position in range(3):
             box = PickBox()
@@ -159,18 +174,21 @@ class LineRow(QWidget):
             box.added.connect(lambda text, p=position: self.added.emit(self, p, text))
             box.can_add = True
             self.sc.append(box)
-            lay.addWidget(box, 2)
+            sc_lay.addWidget(box, 1)
         self.invoice = SuggestBox(tr("E-qaimə"))  # the unpaid ones of the counterparty
-        self.invoice.setFixedWidth(160)
+        self.invoice.setFixedWidth(INVOICE_WIDTH)
+        keep = self.invoice.sizePolicy()  # hidden (a fee line): the amounts stay in a column
+        keep.setRetainSizeWhenHidden(True)
+        self.invoice.setSizePolicy(keep)
         self.invoice.activated.connect(self._invoice_chosen)
         lay.addWidget(self.invoice)
         self.amount = QLineEdit()
-        self.amount.setFixedWidth(130)
+        self.amount.setFixedWidth(AMOUNT_WIDTH)
         self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.amount.setPlaceholderText("0.00")
         lay.addWidget(self.amount)
         self.remove = button("×", "flat", tr("Убрать строку") + " (Ctrl+Del)")
-        self.remove.setFixedWidth(32)
+        self.remove.setFixedWidth(REMOVE_WIDTH)
         self.remove.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Ctrl+Del from the keyboard
         lay.addWidget(self.remove)
 
@@ -353,7 +371,8 @@ class BankOperationPage(QWidget):
         top.addWidget(more_button(self.menu_items))
         root.addLayout(top)
 
-        # which way the money goes, and the day
+        # in the order things are typed: which way and when, from which bank account,
+        # what kind and to whom, then the lines (D49)
         bar = QHBoxLayout()
         bar.setSpacing(6)
         self.direction = QButtonGroup(self)
@@ -364,14 +383,51 @@ class BankOperationPage(QWidget):
             b.setProperty("direction", direction)
             self.direction.addButton(b)
             bar.addWidget(b)
-        bar.addStretch(1)
-        caption = QLabel(tr("Дата"))
-        caption.setObjectName("secondary")
-        bar.addWidget(caption)
+        bar.addSpacing(18)
+        bar.addWidget(self._caption(tr("Дата")))
         self.date = date_edit(session.working_date)
         self.date.setFixedWidth(130)
         bar.addWidget(self.date)
+        bar.addSpacing(18)
+        bar.addWidget(self._caption(tr("Банк")))
+        # the bank account in one field: the GL account and the bank are one choice, the
+        # currency follows from them (asked only where it does not)
+        self.bank = PickBox(tr("Банковский счёт…"))
+        self.bank.setFixedWidth(360)
+        self.bank.unknown.connect(self._add_bank)
+        self.bank.added.connect(lambda text: self._add_bank(text, True))
+        self.bank.can_add = True
+        bar.addWidget(self.bank)
+        self.currency = PickBox()
+        self.currency.setFixedWidth(90)
+        self.currency.unknown.connect(self._not_listed)
+        bar.addWidget(self.currency)
+        bar.addStretch(1)
         root.addLayout(bar)
+
+        # what the bank account is made of: kept for the posting, chosen through the field
+        # above (hidden, they hold the choice)
+        self._parts = QWidget(self)
+        self._parts.hide()
+        parts = QHBoxLayout(self._parts)
+        self.account = PickBox(NONE)
+        for a in bank_accounts(session):
+            self.account.addItem(a.label, a.id)
+        self.account.unknown.connect(self._not_listed)
+        parts.addWidget(self.account)
+        self.sc_captions: list[QLabel] = []
+        self.sc: list[PickBox] = []
+        for position in range(3):
+            caption = QLabel()
+            box = PickBox(NONE)
+            box.activated.connect(self._bank_subconto_changed)
+            box.unknown.connect(lambda text, p=position: self._add_bank_value(p, text))
+            box.added.connect(lambda text, p=position: self._add_bank_value(p, text, True))
+            box.can_add = True
+            self.sc_captions.append(caption)
+            self.sc.append(box)
+            parts.addWidget(caption)
+            parts.addWidget(box)
 
         # No rate of the date: load the Central Bank's rates right from here.
         self.rate_note = QFrame()
@@ -387,44 +443,19 @@ class BankOperationPage(QWidget):
         self.rate_note.hide()
         root.addWidget(self.rate_note)
 
-        cards = QHBoxLayout()
-        cards.setSpacing(18)
-        bank_card, bank = self._card(tr("Банковский счёт"))
-        self.account = PickBox(NONE)
-        for a in bank_accounts(session):
-            self.account.addItem(a.label, a.id)
-        self.account.unknown.connect(self._not_listed)
-        self._row(bank, tr("Счёт"), self.account)
-        self.sc_captions: list[QLabel] = []
-        self.sc: list[PickBox] = []
-        for position in range(3):
-            caption = QLabel()
-            caption.setObjectName("secondary")
-            box = PickBox(NONE)
-            box.activated.connect(self._bank_subconto_changed)
-            box.unknown.connect(lambda text, p=position: self._add_bank_value(p, text))
-            box.added.connect(lambda text, p=position: self._add_bank_value(p, text, True))
-            box.can_add = True
-            self.sc_captions.append(caption)
-            self.sc.append(box)
-            self._row(bank, caption, box)
-        self.currency = PickBox()
-        self.currency.unknown.connect(self._not_listed)
-        self._row(bank, tr("Валюта"), self.currency)
-        self.reference = QLineEdit()
-        self.reference.setPlaceholderText(tr("из банковской выписки, необязательно"))
-        self._row(bank, tr("Референс"), self.reference)
-        cards.addWidget(bank_card, 1)
-
-        whom_card, whom = self._card(tr("Операция"))
+        whom = QHBoxLayout()
+        whom.setSpacing(6)
+        whom.addWidget(self._caption(tr("Вид")))
         self.kind = PickBox()
         for kind, name in KINDS:
             self.kind.addItem(tr(name), kind)
         self.kind.setCurrentIndex(0)
+        self.kind.setFixedWidth(230)
         self.kind.unknown.connect(self._not_listed)
-        self._row(whom, tr("Вид"), self.kind)
-        self.counterparty_caption = QLabel(tr("Контрагент"))
-        self.counterparty_caption.setObjectName("secondary")
+        whom.addWidget(self.kind)
+        whom.addSpacing(18)
+        self.counterparty_caption = self._caption(tr("Кому"))
+        whom.addWidget(self.counterparty_caption)
         self.counterparty_edit = PickBox(tr("Название или VÖEN"))
         self.counterparty_edit.activated.connect(
             lambda _: self._choose_counterparty(self.counterparty_edit.currentData())
@@ -432,42 +463,65 @@ class BankOperationPage(QWidget):
         self.counterparty_edit.unknown.connect(self._add_counterparty)
         self.counterparty_edit.added.connect(lambda text: self._add_counterparty(text, True))
         self.counterparty_edit.can_add = True
-        self._row(whom, self.counterparty_caption, self.counterparty_edit)
+        self.counterparty_edit.setFixedWidth(420)
+        whom.addWidget(self.counterparty_edit)
+        whom.addSpacing(8)
         self.tax_id = QLabel()
         self.tax_id.setObjectName("secondary")
-        self._row(whom, "", self.tax_id)
-        cards.addWidget(whom_card, 1)
-        root.addLayout(cards)
+        whom.addWidget(self.tax_id)
+        whom.addStretch(1)
+        root.addLayout(whom)
 
-        lines_head = QHBoxLayout()
-        lines_caption = QLabel(tr("Расшифровка платежа"))
-        lines_caption.setObjectName("secondary")
-        lines_head.addWidget(lines_caption)
+        # the lines under captions of their columns
+        lines = QVBoxLayout()
+        lines.setSpacing(8)
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 8, 0, 0)
+        head.setSpacing(8)
+        self.head_account = self._caption(tr("Счёт"))
+        head.addWidget(self.head_account, 3)
+        self.head_subconto = self._caption("")
+        head.addWidget(self.head_subconto, 4)
+        self.head_invoice = self._caption(tr("E-qaimə"))
+        self.head_invoice.setFixedWidth(INVOICE_WIDTH)
+        head.addWidget(self.head_invoice)
+        head_amount = self._caption(tr("Сумма"))
+        head_amount.setFixedWidth(AMOUNT_WIDTH)
+        head_amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        head.addWidget(head_amount)
+        head.addSpacing(REMOVE_WIDTH)
+        lines.addLayout(head)
+        self.line_rows: list[LineRow] = []
+        self.lines_box = QVBoxLayout()
+        self.lines_box.setSpacing(8)
+        lines.addLayout(self.lines_box)
+
+        below = QHBoxLayout()
         self.btn_add_line = button(
             tr("+ Строка"), "flat", tr("Ещё одна e-qaimə, договор или счёт") + " (Ins)"
         )
         self.btn_add_line.clicked.connect(lambda: self.add_line(focus=True))
-        lines_head.addWidget(self.btn_add_line)
+        below.addWidget(self.btn_add_line)
         self.btn_add_fee = button(tr("+ Комиссия банка"), "flat")
         self.btn_add_fee.clicked.connect(self.add_fee)
-        lines_head.addWidget(self.btn_add_fee)
-        lines_head.addStretch(1)
-        root.addLayout(lines_head)
-        self.line_rows: list[LineRow] = []
-        self.lines_box = QVBoxLayout()
-        self.lines_box.setSpacing(8)
-        root.addLayout(self.lines_box)
-
-        total = QHBoxLayout()
-        total.addStretch(1)
-        total_caption = QLabel(tr("Итого"))
-        total_caption.setObjectName("secondary")
-        total.addWidget(total_caption)
+        below.addWidget(self.btn_add_fee)
+        below.addStretch(1)
+        below.addWidget(self._caption(tr("Итого")))
         self.total = QLabel("0.00")
         self.total.setFont(fonts().total)
-        total.addWidget(self.total)
-        total.addSpacing(40)
-        root.addLayout(total)
+        below.addWidget(self.total)
+        below.addSpacing(REMOVE_WIDTH + 8)
+        lines.addLayout(below)
+        root.addLayout(lines)
+
+        reference = QHBoxLayout()
+        reference.addWidget(self._caption(tr("Референс")))
+        self.reference = QLineEdit()
+        self.reference.setPlaceholderText(tr("из банковской выписки, необязательно"))
+        self.reference.setFixedWidth(300)
+        reference.addWidget(self.reference)
+        reference.addStretch(1)
+        root.addLayout(reference)
 
         self.error = QLabel()
         self.error.setObjectName("error")
@@ -515,7 +569,9 @@ class BankOperationPage(QWidget):
         self.date.dateChanged.connect(self._changed)
         self.date.dateChanged.connect(self._refresh_invoices)
         self.kind.activated.connect(self._kind_changed)
+        self.bank.activated.connect(self._bank_chosen)
         self._fill_counterparties()
+        self._fill_banks()
 
         if operation_id is not None:
             self.load(operation_id)
@@ -525,31 +581,10 @@ class BankOperationPage(QWidget):
     # ---- layout helpers --------------------------------------------------------------
 
     @staticmethod
-    def _card(title: str) -> tuple[QFrame, QGridLayout]:
-        card = QFrame()
-        card.setObjectName("card")
-        lay = QVBoxLayout(card)
-        lay.setContentsMargins(22, 18, 22, 20)
-        lay.setSpacing(12)
-        heading = QLabel(title)
-        heading.setFont(fonts().heading)
-        lay.addWidget(heading)
-        form = QGridLayout()
-        form.setHorizontalSpacing(14)
-        form.setVerticalSpacing(10)
-        form.setColumnStretch(1, 1)
-        lay.addLayout(form)
-        lay.addStretch(1)
-        return card, form
-
-    @staticmethod
-    def _row(form: QGridLayout, caption: str | QLabel, widget: QWidget) -> None:
-        if isinstance(caption, str):
-            caption = QLabel(caption)
-            caption.setObjectName("secondary")
-        row = form.rowCount()
-        form.addWidget(caption, row, 0)
-        form.addWidget(widget, row, 1)
+    def _caption(text: str) -> QLabel:
+        caption = QLabel(text)
+        caption.setObjectName("secondary")
+        return caption
 
     # ---- state -----------------------------------------------------------------------
 
@@ -637,6 +672,7 @@ class BankOperationPage(QWidget):
             self.account.setCurrentIndex(-1)
         self._bank_account_changed(chosen=d.subconto)
         select_data(self.currency, d.currency_id)
+        self._show_bank()
         self.reference.setText(d.reference)
         select_data(self.kind, d.kind)
         self._set_counterparty(d.counterparty_id)
@@ -649,7 +685,7 @@ class BankOperationPage(QWidget):
 
     def _apply_mode(self) -> None:
         ro = self.read_only
-        for w in (self.date, self.account, self.kind, self.btn_in, self.btn_out, *self.sc):
+        for w in (self.date, self.bank, self.kind, self.btn_in, self.btn_out):
             w.setEnabled(not ro)
         if ro:
             self.currency.setEnabled(False)
@@ -721,7 +757,97 @@ class BankOperationPage(QWidget):
         self._changed()
 
     def _fit_currency(self) -> None:
+        """The currency is asked only when the bank account does not give it (a currency
+        account without the bank's currency)."""
         fit_currency(self.currency, self.s, self.bank_info, self.bank_subconto())
+        self.currency.setVisible(self.currency.isEnabled())
+
+    def _fill_banks(self) -> None:
+        """Every bank account of the company in one list: «Kapital Bank · 51 · AZN»."""
+        self.places: list[BankPlace] = bank_places(self.s.conn, self.s.company_id)
+        self.places += self._unused_places({p.key for p in self.places})
+        self.bank.clear()
+        for i, place in enumerate(self.places):
+            self.bank.addItem(place_label(place), i)
+        self._show_bank()
+
+    def _unused_places(self, listed: set[tuple[int, int | None]]) -> list[BankPlace]:
+        """A bank on a GL account it was never used with (a new ƏDV deposit account on 55
+        with the bank of 51): offered after the ones in use."""
+        catalog = self.s.catalog
+        result = []
+        for account in bank_accounts(self.s):
+            kind = next(
+                (k for k in account.sc_kinds if catalog.kind_codes.get(k or 0) == "bank_account"),
+                None,
+            )
+            if kind is None:
+                continue
+            for v in catalog.values(kind):
+                if (account.id, v.id) in listed or not fits(account, v):
+                    continue
+                currency = catalog.currencies[v.currency_id].code if v.currency_id else ""
+                code = account.code or account.name
+                result.append(
+                    BankPlace(
+                        account.id,
+                        v.id,
+                        v.name,
+                        code,
+                        v.currency_id,
+                        currency,
+                        account.account_type,
+                    )
+                )
+        return result
+
+    def _show_bank(self) -> None:
+        """The field shows the bank account the parts hold (one no longer listed — as
+        its account's name)."""
+        own = (self.account.currentData(), self.bank_subconto()[0])
+        at = next((i for i, p in enumerate(self.places) if p.key == own), None)
+        if at is not None:
+            self.bank.setCurrentIndex(self.bank.findData(at))
+        elif own[0] is not None:
+            select_data(self.bank, -1, self.account.currentText())
+        else:
+            self.bank.setCurrentIndex(-1)
+
+    def _bank_chosen(self, *_) -> None:
+        at = self.bank.currentData()
+        if at is None or not 0 <= at < len(self.places):
+            return
+        place = self.places[at]
+        select_data(self.account, place.account_id, self.s.catalog.accounts[place.account_id].label)
+        self._bank_account_changed(chosen=place.subconto)
+
+    def _add_bank(self, text: str, listed: bool = False) -> None:
+        """A bank not yet in the directory: added under the chosen GL account (or the first
+        one with the bank account directory), as an element of that directory."""
+        catalog = self.s.catalog
+        candidates = [self.bank_info, *bank_accounts(self.s)]
+        for account in candidates:
+            if account is None:
+                continue
+            position = next(
+                (
+                    i
+                    for i, kind in enumerate(account.sc_kinds)
+                    if catalog.kind_codes.get(kind or 0) == "bank_account"
+                ),
+                None,
+            )
+            if position is None:
+                continue
+            select_data(self.account, account.id, account.label)
+            self._bank_account_changed(chosen=self.bank_subconto())
+            self._add_bank_value(position, text, listed)
+            self._fill_banks()
+            if not listed:
+                self.bank.setFocus()
+                self.focusNextChild()
+            return
+        self._not_listed(text)
 
     def bank_subconto(self) -> tuple[int | None, ...]:
         return tuple(box.currentData() for box in self.sc)
@@ -734,6 +860,9 @@ class BankOperationPage(QWidget):
     def _kind_visibility(self) -> None:
         """A counterparty for payments to and from partners; the ƏDV deposit account
         offers only what it may pay (D41)."""
+        self.counterparty_caption.setText(
+            tr("От кого") if self.direction_value == IN else tr("Кому")
+        )
         kind = self.kind.currentData()
         shown = kind in WITH_COUNTERPARTY
         for w in (self.counterparty_caption, self.counterparty_edit, self.tax_id):
@@ -807,7 +936,6 @@ class BankOperationPage(QWidget):
         chosen = list(self.bank_subconto())
         chosen[position] = value
         self._bank_account_changed(chosen=chosen)
-        self._focus_after(self.sc[position], listed)
 
     def _add_line_value(self, row: LineRow, position: int, text: str, listed=False) -> None:
         """A contract (or any element of the line's account) added right here."""
@@ -1000,7 +1128,7 @@ class BankOperationPage(QWidget):
         """Enter and Tab go in the order things are typed: the header, then the lines,
         then the statement reference and the purpose (the lines are made later than the
         buttons below them, so Qt's own order would put them last)."""
-        fields: list[QWidget] = [self.btn_out, self.btn_in, self.date, self.account, *self.sc]
+        fields: list[QWidget] = [self.btn_out, self.btn_in, self.date, self.bank]
         fields += [self.currency, self.kind, self.counterparty_edit]
         for row in self.line_rows:
             fields += [row.account, *row.sc, row.invoice, row.amount]
@@ -1082,7 +1210,27 @@ class BankOperationPage(QWidget):
             with suppress(ValueError):  # a typo: counted once it is a number
                 total += to_minor(text) if text else 0
         self.total.setText(f"{format_minor(total)} {self.currency_code()}")
+        self._update_head()
         self._update_rate_note()
+
+    def _update_head(self) -> None:
+        """The captions over the lines: the subconto of the first line that has them (a
+        contract…), the e-qaimə where a line takes one."""
+        names: list[str] = []
+        for row in self.line_rows:
+            account = row.account_info
+            if account is None:
+                continue
+            names = [
+                self.s.catalog.kinds[kind]
+                for box, kind in zip(row.sc, account.sc_kinds, strict=True)
+                if kind is not None and not box.isHidden()
+            ]
+            if names:
+                break
+        self.head_subconto.setText(", ".join(names))
+        takes = any(not row.invoice.isHidden() for row in self.line_rows)
+        self.head_invoice.setText(tr("E-qaimə") if takes else "")
 
     def _update_rate_note(self) -> None:
         currency_id = self.currency.currentData()

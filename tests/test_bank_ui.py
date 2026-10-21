@@ -112,7 +112,7 @@ def new_page(qtbot, session: Session, prefill=None) -> BankOperationPage:
 
 def pay_alfa(page: BankOperationPage) -> None:
     """1 180.00 to ALFA found by its VÖEN, e-qaimə MT001."""
-    choose(page.sc[0], "Kapital AZN")
+    choose(page.bank, "Kapital AZN · 51 · AZN")
     type_text(page.counterparty_edit, "1234567890")
     page.counterparty_edit.editingFinished.emit()
     line = page.line_rows[0]
@@ -185,7 +185,7 @@ def test_tax_has_no_counterparty(qtbot, session):
     assert page.line_rows[0].account_info is not None
     assert page.line_rows[0].account_info.code == "68.1"
     assert page.memo.placeholderText() == "Уплата налогов"
-    choose(page.sc[0], "Kapital AZN")
+    choose(page.bank, "Kapital AZN · 51 · AZN")
     type_text(page.line_rows[0].amount, "180")
     assert page.save(post=True)
     assert page.doc is not None and page.doc.kind == TAX and page.doc.counterparty_id is None
@@ -225,7 +225,7 @@ def test_bank_settings_choose_the_fee_account(qtbot, session):
 
 def test_operation_in_dollars_offers_the_rate(qtbot, session):
     page = new_page(qtbot, session)
-    choose(page.account, "52  Валютные счета")
+    choose(page.bank, "Kapital USD · 52 · USD")
     assert page.currency.currentText() == "USD" and not page.currency.isEnabled()
     # the rate is of 01.03, not of the date itself: the official one can be loaded
     assert page.rate_note.isVisibleTo(page)
@@ -238,15 +238,42 @@ def test_vat_deposit_offers_only_what_it_may_pay(qtbot, session):
     session.ledger.set_account_type(session.company_id, acc(session, "55"), "vat_deposit")
     session.catalog.reload()
     page = new_page(qtbot, session)
-    choose(page.account, "55  Специальные счета в банках")
+    choose(page.bank, "Kapital AZN · 55 · AZN")  # never used there yet
     kind = page.kind
     hidden = {kind.itemText(i) for i in range(kind.count()) if kind.isItemHidden(i)}
     assert hidden == {"Зарплата", "Комиссия банка", "Прочее"}
 
 
+def test_the_bank_account_is_one_field(qtbot, session, monkeypatch):
+    """The GL account, the bank and its currency are chosen at once: «Kapital USD · 52 ·
+    USD» puts 52, the bank and USD; the currency is not asked. A bank not in the list is
+    added right in the field, under the chosen account, and taken."""
+    from modern_gl.desktop.directories_page import ValueDialog
+
+    page = new_page(qtbot, session)
+    assert page.bank.currentText() == "Kapital AZN · 51 · AZN"  # the first bank account
+    assert page.currency.isHidden()
+    choose(page.bank, "Kapital USD · 52 · USD")
+    assert page.bank_info is not None and page.bank_info.code == "52"
+    assert page.bank_subconto()[0] == value(session, "Kapital USD")
+    assert page.total.text() == "0.00 USD"
+
+    def exec_(dialog):
+        dialog.name.setText("Paşa Bank")
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ValueDialog, "exec", exec_)
+    choose(page.bank, "Kapital AZN · 51 · AZN")
+    page.bank.unknown.emit("Paşa")
+    paşa = value(session, "Paşa Bank")
+    assert page.bank_info is not None and page.bank_info.code == "51"
+    assert page.bank_subconto()[0] == paşa
+    assert page.bank.currentText() == "Paşa Bank · 51 · AZN"
+
+
 def test_errors_stay_on_the_page_and_a_draft_is_saved(qtbot, session):
     page = new_page(qtbot, session)
-    choose(page.sc[0], "Kapital AZN")
+    choose(page.bank, "Kapital AZN · 51 · AZN")
     assert not page.save(post=True)
     assert page.error.text() == "строка 1: нулевая сумма"  # the supplier's line
     type_text(page.line_rows[0].amount, "abc")
@@ -363,7 +390,7 @@ def shown_page(qtbot, session: Session) -> BankOperationPage:
 def test_an_operation_is_typed_and_posted_without_the_mouse(qtbot, session):
     """D49: name → Enter → the line as last time → e-qaimə → amount → Ctrl+Enter."""
     page = shown_page(qtbot, session)
-    choose(page.sc[0], "Kapital AZN")
+    choose(page.bank, "Kapital AZN · 51 · AZN")
     page.counterparty_edit.setFocus()
     typed("alfa")
     key(qtbot, Qt.Key.Key_Return)  # the highlighted one is taken, on to the line
@@ -382,6 +409,33 @@ def test_an_operation_is_typed_and_posted_without_the_mouse(qtbot, session):
     key(qtbot, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
     assert page.doc is not None and page.doc.status == "posted"
     assert [(x.amount, x.invoice) for x in page.doc.lines] == [(50_000, "MT005")]
+
+
+def test_enter_walks_the_header_in_the_order_it_is_read(qtbot, session):
+    """Date → bank → kind → to whom → the line, one Enter each (the currency, given by
+    the bank, is not asked)."""
+    page = shown_page(qtbot, session)
+    page.date.setFocus()
+    walked = []
+    for _ in range(4):
+        key(qtbot, Qt.Key.Key_Return)
+        focused = QApplication.focusWidget()
+        walked.append(
+            next(
+                (
+                    name
+                    for name, w in (
+                        ("bank", page.bank),
+                        ("kind", page.kind),
+                        ("whom", page.counterparty_edit),
+                        ("line", page.line_rows[0].account),
+                    )
+                    if focused is w or (focused is not None and w.isAncestorOf(focused))
+                ),
+                type(focused).__name__,
+            )
+        )
+    assert walked == ["bank", "kind", "whom", "line"]
 
 
 def test_lines_with_keys_insert_copy_and_remove(qtbot, session):
@@ -489,7 +543,7 @@ def test_the_unpaid_e_qaime_of_the_counterparty_are_offered(qtbot, session):
     not the sale MT9; ↓ Enter takes MT1 with what is left on it."""
     owe_alfa(session)
     page = shown_page(qtbot, session)
-    choose(page.sc[0], "Kapital AZN")
+    choose(page.bank, "Kapital AZN · 51 · AZN")
     typed("alfa")
     key(qtbot, Qt.Key.Key_Return)
     assert [(i.invoice, i.amount) for i in page.open_invoices] == [
@@ -516,7 +570,7 @@ def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
         InvoicePicker, "exec", lambda dialog: (dialog._done(), QDialog.DialogCode.Accepted)[1]
     )
     page = shown_page(qtbot, session)
-    choose(page.sc[0], "Kapital AZN")
+    choose(page.bank, "Kapital AZN · 51 · AZN")
     typed("alfa")
     key(qtbot, Qt.Key.Key_Return)
     line = page.line_rows[0]
