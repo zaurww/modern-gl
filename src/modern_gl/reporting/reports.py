@@ -422,7 +422,7 @@ def subconto_balance(
     in_currency = _subconto_currency(conn, params, position)
     result = []
     for r in raw:
-        row = SubcontoRow(value_id=r["sc"], name=r["name"] or "<не указано>")
+        row = SubcontoRow(value_id=r["sc"], name=r["name"] or tr("<не указано>"))
         row.add(Turnovers.from_net(r["opening"], r["dt"], r["ct"]))
         row.currency_closing = in_currency.get(r["sc"], {})
         if not row.is_zero() or row.currency_closing:

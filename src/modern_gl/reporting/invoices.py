@@ -128,3 +128,28 @@ class _Chart:
                 row.contract_id = p[f"{prefix}_sc{contract_at}"]
         if vat:
             row.vat += p["amount"]
+
+
+@dataclass
+class OpenInvoice:
+    invoice: str
+    doc_date: str
+    amount: int  # still to pay (> 0)
+
+
+def open_invoices(
+    conn: sqlite3.Connection,
+    company_id: int,
+    counterparty_id: int,
+    payable: bool,
+    on_date: date | str,
+    layers: Sequence[str] = COMMON,
+) -> list[OpenInvoice]:
+    """E-qaimə of the counterparty not yet settled on the day, oldest first: what is owed
+    to it (`payable`, a purchase: Kt balance) or what it owes (a sale: Dt balance)."""
+    sign = -1 if payable else 1
+    return [
+        OpenInvoice(r.invoice, r.doc_date, r.balance * sign)
+        for r in invoice_report(conn, company_id, on_date, on_date, layers, open_only=True)
+        if r.kind == "" and counterparty_id in r.counterparties and r.balance * sign > 0
+    ]

@@ -194,3 +194,30 @@ class PickBox(QLineEdit):
         if not found:
             # deferred: a dialog must not open while the field is still finishing
             QTimer.singleShot(0, lambda: self.unknown.emit(text))
+
+
+class SuggestBox(PickBox):
+    """Free text with suggestions: the list opens as the cursor comes to an empty field,
+    picking fills it in; anything else typed is kept as typed (an e-qaimə number that is
+    not in the list: an advance, one not loaded yet)."""
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        if not self.text() and not self.isReadOnly() and self._offered():
+            QTimer.singleShot(0, self._offer)
+
+    def _offer(self) -> None:
+        """The list, nothing highlighted: Enter goes on without one (an advance), ↓ takes
+        the first."""
+        if self.hasFocus():
+            self._open("", everything=True)
+            self._popup().setCurrentIndex(QModelIndex())
+
+    def _typed(self) -> None:
+        self._popup().hide()
+        text = self.text().strip()
+        found = next((i for i in self._offered() if text == self._items[i][2]), -1)
+        if found >= 0 and found != self._index:
+            self._choose(found)
+        elif found < 0:
+            self._index = -1  # typed: not one of the list, kept as it is

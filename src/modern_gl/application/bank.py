@@ -534,3 +534,15 @@ def default_memo(direction: str, kind: str, counterparty: str = "") -> str:
     else:
         text = tr("Прочий расход") if out else tr("Прочий приход")
     return text.strip()
+
+
+def allocate(total: int, owed: Sequence[int]) -> tuple[list[int], int]:
+    """One payment over several e-qaimə, oldest first: each is paid in full while the
+    money lasts, the last one partly. (Per e-qaimə, what is left over.) An overpayment
+    is left over: an advance, a line without an e-qaimə."""
+    paid = []
+    for amount in owed:
+        part = min(amount, total)
+        paid.append(part)
+        total -= part
+    return paid, total

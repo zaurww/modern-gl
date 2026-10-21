@@ -81,6 +81,7 @@ class Column:
     icon: Callable[[Any], Any] | None = None  # optional QIcon in front of the text
     warn: Callable[[Any], str | None] | None = None  # text -> red cell with a tooltip
     right: bool = False  # a number that is not money ("7 000.00 Dt"): aligned like one
+    tone: Callable[[Any], str | None] | None = None  # a palette color of the text (status)
 
 
 @dataclass
@@ -185,14 +186,20 @@ class ReportModel(QAbstractTableModel):
             if message and col.get(row):
                 return QColor(P.red) if role == Qt.ItemDataRole.ForegroundRole else message
         if role == Qt.ItemDataRole.ForegroundRole:
-            if self.muted(row):
-                return QColor(P.secondary)
-            if col.money and isinstance(v := col.get(row), int) and v < 0:
-                return QColor(P.red)
+            return self._foreground(row, col)
         if role == Qt.ItemDataRole.DecorationRole and col.icon is not None:
             return col.icon(row)
         if role == Qt.ItemDataRole.UserRole:
             return row
+        return None
+
+    def _foreground(self, row, col: Column) -> QColor | None:
+        if col.tone and (tone := col.tone(row)):
+            return QColor(getattr(P, tone))
+        if self.muted(row):
+            return QColor(P.secondary)
+        if col.money and isinstance(v := col.get(row), int) and v < 0:
+            return QColor(P.red)
         return None
 
 

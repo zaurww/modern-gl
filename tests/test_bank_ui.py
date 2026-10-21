@@ -419,3 +419,105 @@ def test_a_name_nothing_is_called_stays_in_the_field(qtbot, session):
     assert page.kind.hasFocus() and page.kind.currentData() == SUPPLIER
     qtbot.waitUntil(lambda: page.error.isVisible())
     assert page.error.text() == "«xyz» нет в списке"
+
+
+def owe_alfa(session: Session) -> None:
+    """ALFA's e-qaimə: MT1 of 02.03 1 416.00 (paid 416.00 on 03.03, so 1 000.00 left),
+    MT2 of 04.03 1 239.00; a sale MT9 to ALFA is owed the other way and is not offered."""
+    ledger, cid = session.ledger, session.company_id
+    alfa, contract = value(session, "ALFA MMC"), value(session, "Договор 1")
+    supplier = (alfa, contract)
+    rent = (ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "cost_item"), "Аренда"),)
+    for day, amount, number in (("2026-03-02", "1416", "MT1"), ("2026-03-04", "1239", "MT2")):
+        ledger.post_new(
+            cid,
+            day,
+            [
+                PostingInput(
+                    acc(session, "26"), acc(session, "60.1"), amount, rent, supplier, invoice=number
+                )
+            ],
+        )
+    ledger.post_new(
+        cid,
+        "2026-03-03",
+        [
+            PostingInput(
+                acc(session, "60.1"),
+                acc(session, "51"),
+                "416",
+                supplier,
+                (value(session, "Kapital AZN"),),
+                invoice="MT1",
+            )
+        ],
+    )
+    ledger.post_new(
+        cid,
+        "2026-03-04",
+        [
+            PostingInput(
+                acc(session, "62.1"),
+                acc(session, "90.1"),
+                "500",
+                (alfa, contract),
+                (),
+                invoice="MT9",
+            )
+        ],
+    )
+    session.catalog.reload()
+
+
+def test_the_unpaid_e_qaime_of_the_counterparty_are_offered(qtbot, session):
+    """Paying ALFA on 05.03: the list offers MT1 1 000.00 and MT2 1 239.00 (oldest first),
+    not the sale MT9; ↓ Enter takes MT1 with what is left on it."""
+    owe_alfa(session)
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)
+    assert [(i.invoice, i.amount) for i in page.open_invoices] == [
+        ("MT1", 100_000),
+        ("MT2", 123_900),
+    ]
+    line = page.line_rows[0]
+    line.invoice.setFocus()
+    qtbot.waitUntil(lambda: QApplication.activePopupWidget() is not None)
+    key(qtbot, Qt.Key.Key_Down)
+    key(qtbot, Qt.Key.Key_Return)
+    assert line.invoice.text() == "MT1" and line.amount.text() == "1 000.00"
+    assert line.amount.hasFocus()
+
+
+def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
+    """2 000.00 typed, then «several»: MT1 1 000.00 in full, MT2 the other 1 000.00
+    (of 1 239.00); posted, MT1 is closed and MT2 has 239.00 left."""
+    from modern_gl.desktop.invoice_picker import InvoicePicker
+    from modern_gl.reporting.invoices import open_invoices
+
+    owe_alfa(session)
+    monkeypatch.setattr(
+        InvoicePicker, "exec", lambda dialog: (dialog._done(), QDialog.DialogCode.Accepted)[1]
+    )
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)
+    line = page.line_rows[0]
+    type_text(line.amount, "2000")
+    several = line.invoice.findText("Несколько e-qaimə…")
+    assert several == line.invoice.count() - 1  # after the e-qaimə themselves
+    line.invoice._choose(several)
+    qtbot.waitUntil(lambda: len(page.line_rows) == 2)
+    assert [(r.invoice.text(), r.amount.text()) for r in page.line_rows] == [
+        ("MT1", "1 000.00"),
+        ("MT2", "1 000.00"),
+    ]
+    assert page.line_rows[1].account_info is not None
+    assert page.line_rows[1].account_info.code == "60.1"
+    assert page.save(post=True), page.error.text()
+    left = open_invoices(
+        session.conn, session.company_id, value(session, "ALFA MMC"), True, "2026-03-05"
+    )
+    assert [(i.invoice, i.amount) for i in left] == [("MT2", 23_900)]

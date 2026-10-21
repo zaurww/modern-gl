@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QLineEdit
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import EmptyState, button
+from modern_gl.desktop.widgets import EmptyState, button, status_icon
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
@@ -102,7 +102,14 @@ class TradePage(ReportPage):
                 Column(tr("Сумма"), lambda r: r.amount, money=True, width=120),
                 Column(tr("ƏDV"), lambda r: r.vat, money=True, width=100),
                 Column(tr("Итого"), lambda r: r.total, money=True, width=120),
-                Column(tr("Статус"), self._status, width=100),
+                Column(
+                    tr("Статус"),
+                    self._status,
+                    width=120,
+                    icon=lambda r: status_icon(r.status == "posted"),
+                    # what is left to check reads as usual; posted ones go quiet
+                    tone=lambda r: "secondary" if r.status == "posted" else None,
+                ),
             ],
             rows,
         )
