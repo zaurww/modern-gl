@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.desktop.theme import P, dot_icon, fonts
+from modern_gl.desktop.theme import P, check_icon, dot_icon, fonts
 from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_NAMES
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
@@ -266,6 +266,15 @@ def type_choices() -> list[tuple[str | None, str | None, str]]:
         choices += [(cls, t, tr(n)) for t, c, n in ACCOUNT_TYPES if c == cls]
     choices.append((None, None, tr("Не задан")))
     return choices
+
+
+def status_icon(posted: bool) -> QIcon:
+    """A document's status in a list, as Things marks a to-do: a hollow circle for a
+    draft, the accent circle with a check for a posted one."""
+    key = f"check-{posted}-{P.accent}-{P.tertiary}"  # themes change the colors
+    if key not in _CLASS_ICONS:
+        _CLASS_ICONS[key] = check_icon(posted)
+    return _CLASS_ICONS[key]
 
 
 def class_icon(account_class: str | None) -> QIcon:
