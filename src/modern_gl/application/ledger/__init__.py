@@ -11,6 +11,7 @@ from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.companies import CompanyCommands
 from modern_gl.application.ledger.conversion import ConversionCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
+from modern_gl.application.ledger.document_import import DocumentImportCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.eqaime import EqaimeCommands
 from modern_gl.application.ledger.inputs import (
@@ -22,6 +23,7 @@ from modern_gl.application.ledger.inputs import (
     TemplateLine,
 )
 from modern_gl.application.ledger.opening import OpeningBalanceCommands
+from modern_gl.application.ledger.revaluation import RevaluationCommands
 from modern_gl.application.ledger.subconto import SubcontoCommands
 from modern_gl.application.ledger.templates import TemplateCommands
 
@@ -45,6 +47,8 @@ class Ledger(
     OpeningBalanceCommands,
     ChartCommands,
     TemplateCommands,
+    DocumentImportCommands,
+    RevaluationCommands,
     DocumentCommands,
     SubcontoCommands,
 ):

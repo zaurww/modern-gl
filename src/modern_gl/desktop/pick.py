@@ -15,7 +15,7 @@ from PySide6.QtCore import QEvent, QModelIndex, QObject, QStringListModel, Qt, Q
 from PySide6.QtWidgets import QAbstractItemView, QCompleter, QLineEdit, QWidget
 
 from modern_gl.application.catalog import search
-from modern_gl.desktop.postings import adding_label, fit_popup, names_it
+from modern_gl.desktop.cell_editing import adding_label, fit_popup, names_it
 from modern_gl.i18n import fold
 
 ENTER = (Qt.Key.Key_Return, Qt.Key.Key_Enter)

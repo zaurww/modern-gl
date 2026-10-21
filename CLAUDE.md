@@ -2,7 +2,7 @@
 
 Бухгалтерская программа (главная книга) в стиле 1С 7.7: проводки Дт/Кт с субконто, несколько компаний, параллельные книги (общая / МСФО / налог). Пользователь общается по-русски.
 
-Начало сессии: прочитать `docs/STATUS.md` (что сделано, что дальше) и `docs/DECISIONS.md` (имеет приоритет над `SPEC.md` и `ARCHITECTURE.md`). В конце сессии — обновить `docs/STATUS.md`.
+Начало сессии: прочитать `docs/STATUS.md` (что сделано, что дальше) и `docs/DECISIONS.md` (имеет приоритет над `SPEC.md` и `ARCHITECTURE.md`). В конце сессии — обновить `docs/STATUS.md` и пройти проверки из `docs/CODE_QUALITY.md` (раздел 4); раз в ~5 сессий и перед слиянием большой ветки — полный обзор кода по чек-листу оттуда же.
 
 ## Команды
 - Тесты: `uv run pytest -q`
@@ -11,13 +11,15 @@
 - Программа: `uv run modern-gl` — компании это файлы `*.gl` в «Документы\Modern GL» (`--data <папка>` — другая папка, запоминается); `--demo` добавляет демо-компанию в пустую папку
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка>` — после любых изменений UI смотреть их
 - Демо в консоли: `uv run python scripts/demo.py`
+- Размеры кода (самые большие места): `uv run python tests/test_code_size.py`
 
 ## Структура
 - `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt.
-- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart`, `templates`, `documents`, `opening`, `conversion`, `bank`; общее модулей — `module.py`); общие помощники — `application/common.py`.
+- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart`, `templates`, `documents`, `validation`, `document_import`, `revaluation`, `opening`, `conversion`, `bank`; общее модулей — `module.py`); общие помощники — `application/common.py`.
+- `src/modern_gl/application/inventory/` — склад: `Inventory` собран так же из групп (`catalog`, `drafts`, `stock`, `movements`, `sales`, `landed_cost`, `accruals`, `posting`); `model` — константы и dataclass-строки, `amounts` — чистая арифметика.
 - `src/modern_gl/reporting/reports.py` — ОСВ, ОСВ по субконто, карточка, анализ счёта (агрегация в SQL).
 - `src/modern_gl/infrastructure` — SQLite, миграции (`migrations/NNNN_*.sql`), импорт CSV, `workspace.py` (файл на компанию).
-- `src/modern_gl/desktop` — интерфейс: `main_window` (боковая панель), `document_page`, `postings` (таблица ввода), `journal_page`, `trade_page` (покупки и продажи), `bank_page` + `bank_operation_page` (модуль «Банк»: выписка, приход/расход), `eqaime_import_page` + `portal_login` (e-qaimə с портала, клиент — `infrastructure/etaxes.py`), `inventory_document_page` (форма покупки, продажи и складских документов), `reports_page` (ОСВ, карточка, план счетов), `directories_page`, `account_dialog`, `theme` (все цвета и шрифты), `i18n_az.py` (переводы).
+- `src/modern_gl/desktop` — интерфейс: `main_window` (боковая панель), `document_page`, `postings/` (таблица ввода), `cell_editing` (редактирование ячеек как в 1С: списки с поиском, Enter/Tab — для всех таблиц), `journal_page`, `trade_page` (покупки и продажи), `bank_page` + `bank_operation_page` (модуль «Банк»: выписка, приход/расход), `eqaime_import_page` + `portal_login` (e-qaimə с портала, клиент — `infrastructure/etaxes.py`), `inventory_document_page/` (форма покупки, продажи и складских документов), `landed_cost_page/` (доп. расходы), `reports_page/` (ОСВ, карточка, план счетов), `directories_page`, `account_dialog`, `theme` (все цвета и шрифты), `i18n_az.py` (переводы).
 
 ## Правила
 - Деньги — только `int` в копейках; никаких `float`.
@@ -26,6 +28,7 @@
 - Схема меняется только новой миграцией; старые миграции не редактировать.
 - Любое изменение логики учёта — с тестом, в котором ожидаемые цифры посчитаны вручную.
 - Сообщения об ошибках для пользователя — по-русски.
+- **Размер кода** (D70, `docs/CODE_QUALITY.md`): модуль — одна задача; пределы — модуль 600 строк, класс 500, функция 80, их проверяет `tests/test_code_size.py`. Уже большое записано в `OVER_LIMIT` и не может расти — сначала разделить. Крупный модуль превращается в пакет с тем же именем, `__init__` реэкспортирует прежний API; перенос кода — отдельным коммитом, без изменения логики.
 - **Дизайн — главный приоритет** (ориентир: Things от Cultured Code): светло, много воздуха, боковая панель вместо вкладок, крупные заголовки, один акцентный синий, без сеток «как в Excel». Цвета и шрифты — только через `desktop/theme.py`.
 - UI: `src/modern_gl/desktop` (PySide6). Никакого SQL в виджетах — только `application/queries.py`, `application/catalog.py`, `reporting`.
 - В тестах UI модальные диалоги подменяются (`no_modal_dialogs`), иначе тест зависнет.
