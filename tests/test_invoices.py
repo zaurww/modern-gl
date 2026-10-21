@@ -339,3 +339,73 @@ def test_receipt_form_shows_and_saves_the_basis(firm, qtbot):
     assert page.save(post=False)
     doc = inventory.load_document(cid, draft)
     assert (doc.invoice, doc.invoice_kind) == ("AZ7", CUSTOMS)
+
+
+def test_a_payment_is_offered_the_e_qaime_of_drafts_and_of_the_portal(firm):
+    """Paying Alfa (VÖEN 1234567890) on 06.03. Hand-calculated:
+    MT1 posted 01.03 1 180.00, paid 1 000.00 on 02.03            -> 180.00
+    MT2 only in a journal draft 03.03 500.00 to «Альфа-2» (the same VÖEN),
+        paid 200.00 on 04.03                                       -> 300.00, a draft
+    MT3 only in a purchase draft 05.03: 100.00 + ƏDV 18.00         -> 118.00, a draft
+    MT4 only on the portal, 05.03, 236.00 with ƏDV                 -> 236.00, the portal
+    Not offered: MT1 again from the portal (the books have it), MT5 annulled on the portal,
+    MT6 a sale on the portal, MT7 dated after the payment, MT8 a draft of Beta."""
+    from modern_gl.application.inventory import Inventory, ReceiptLine
+    from modern_gl.domain.eqaime import PortalInvoice
+    from modern_gl.reporting.invoices import DRAFT, PORTAL, open_invoices
+
+    conn, ledger, cid, acc, v = firm
+    kind = ledger.subconto_kind_id(cid, "counterparty")
+    alfa2 = ledger.add_subconto_value(cid, kind, "Альфа-2")
+    ledger.set_subconto_value_tax(cid, alfa2, "1234567890")
+    rent, bank = (v["Аренда"],), (v["Kapital"],)
+    alfa = (v["Альфа"], v["Д-1"])
+
+    def bought(dt_sc, amount, number):
+        return PostingInput(acc["26"], acc["60"], amount, rent, dt_sc, invoice=number)
+
+    def paid(amount, number):
+        return PostingInput(acc["60"], acc["51"], amount, alfa, bank, invoice=number)
+
+    ledger.post_new(cid, "2026-03-01", [bought(alfa, "1180", "MT1")])
+    ledger.post_new(cid, "2026-03-02", [paid("1000", "MT1")])
+    ledger.create_draft(cid, "2026-03-03", [bought((alfa2,), "500", "MT2")])
+    ledger.post_new(cid, "2026-03-04", [paid("200", "MT2")])
+    ledger.create_draft(cid, "2026-03-05", [bought((v["Бета"],), "70", "MT8")])
+    inventory = Inventory(conn, actor="test")
+    unit = inventory.add_unit(cid, "шт", "Штука", precision=0)
+    item = inventory.add_item(cid, "Бумага", unit, acc["41"])
+    store = inventory.add_warehouse(cid, "Склад")
+    inventory.create_receipt_draft(
+        cid,
+        "2026-03-05",
+        [ReceiptLine(item, store, "10", "100", vat_amount="18")],
+        acc["60"],
+        alfa,
+        invoice="MT3",
+    )
+    tin = "1234567890"
+    ledger.remember_portal(
+        cid,
+        [
+            PortalInvoice("MT1", False, "2026-03-01", "approved", tin, total=118_000),
+            PortalInvoice("MT4", False, "2026-03-05", "approvedBySystem", tin, total=23_600),
+            PortalInvoice("MT5", False, "2026-03-05", "canceled", tin, total=5_000),
+            PortalInvoice("MT6", True, "2026-03-05", "approved", tin, total=7_000),
+            PortalInvoice("MT7", False, "2026-03-10", "approved", tin, total=9_000),
+        ],
+    )
+    found = open_invoices(conn, cid, v["Альфа"], payable=True, on_date="2026-03-06")
+    assert [(i.invoice, i.amount, i.source) for i in found] == [
+        ("MT1", 18_000, ""),
+        ("MT2", 30_000, DRAFT),
+        ("MT3", 11_800, DRAFT),
+        ("MT4", 23_600, PORTAL),
+    ]
+    # what Alfa owes us: the 200.00 paid on MT2 while its purchase is a draft (as before),
+    # and the sale MT6 on the portal
+    owed = open_invoices(conn, cid, v["Альфа"], payable=False, on_date="2026-03-06")
+    assert [(i.invoice, i.amount, i.source) for i in owed] == [
+        ("MT2", 20_000, ""),
+        ("MT6", 7_000, PORTAL),
+    ]

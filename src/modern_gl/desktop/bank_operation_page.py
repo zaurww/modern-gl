@@ -70,7 +70,7 @@ from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import OpenInvoice, open_invoices
+from modern_gl.reporting.invoices import DRAFT, PORTAL, OpenInvoice, open_invoices
 
 NONE = "—"
 # the line's account suggests the kind of a counterparty's operation
@@ -121,6 +121,10 @@ def select_data(box: PickBox, data, text: str = "") -> None:
         box.addItem(text or str(data), data)
         i = box.count() - 1
     box.setCurrentIndex(i)
+
+
+# an e-qaimə the books do not have yet: an imported draft, or only seen on the portal
+SOURCES = {DRAFT: "черновик", PORTAL: "с портала"}
 
 
 class LineRow(QWidget):
@@ -237,12 +241,15 @@ class LineRow(QWidget):
         self._fill_subconto(kept)
 
     def set_invoices(self, invoices: Sequence[OpenInvoice]) -> None:
-        """The e-qaimə the list offers: number, date, what is left to pay."""
+        """The e-qaimə the list offers: number, date, what is left to pay, and where it is
+        known from if not from the posted documents."""
         box = self.invoice
         typed = box.text()
         box.clear()
         for i in invoices:
             label = f"{i.invoice} · {ru_date(i.doc_date)} · {format_minor(i.amount)}"
+            if i.source in SOURCES:
+                label += f" · {tr(SOURCES[i.source])}"
             box.addItem(label, i, i.invoice)
         if len(invoices) > 1:
             box.addItem(tr("Несколько e-qaimə…"), SEVERAL, "")

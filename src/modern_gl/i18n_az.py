@@ -239,6 +239,8 @@ AZ: dict[str, str] = {
     "Новый документ": "Yeni sənəd",
     "Новый": "Yeni",
     "Черновик": "Qaralama",
+    "черновик": "qaralama",
+    "с портала": "portaldan",
     "Проведён": "Keçirilib",
     "Сторно": "Storno",
     "Сторнирован": "Stornolanıb",
