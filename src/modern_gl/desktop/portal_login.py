@@ -42,7 +42,6 @@ class PortalLoginDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         # imported here: the web engine is big and only this window needs it
-        from PySide6.QtWebEngineCore import QWebEnginePage
         from PySide6.QtWebEngineWidgets import QWebEngineView
 
         self.token: str | None = None
@@ -55,9 +54,9 @@ class PortalLoginDialog(QDialog):
         hint.setFont(fonts().small)
         root.addWidget(hint)
         self.view = QWebEngineView(self)
-        self.view.setPage(QWebEnginePage(_profile(), self.view))
+        self.view.setPage(_page_class()(_profile(), self.view))
         root.addWidget(self.view, 1)
-        self.view.load(QUrl(BASE_URL))
+        self.view.load(QUrl(LOGIN_URL))
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._look_for_token)
         self.timer.start(1000)
@@ -76,6 +75,33 @@ class PortalLoginDialog(QDialog):
             self.timer.stop()
             self.token = token
             self.accept()
+
+
+LOGIN_URL = f"{BASE_URL}/eportal/login"
+
+_PAGE: list = []
+
+
+def _page_class():
+    """A page that opens links meant for a new tab («Daxil ol» on the portal is one) in
+    itself: a built-in browser has no tabs, and without this such a click does nothing."""
+    if not _PAGE:
+        from PySide6.QtWebEngineCore import QWebEnginePage
+
+        class SingleTabPage(QWebEnginePage):
+            def createWindow(self, _type):
+                # the new page only learns where it goes: send that address here
+                popup = QWebEnginePage(self.profile(), self)
+                popup.urlChanged.connect(lambda url: self._take(popup, url))
+                return popup
+
+            def _take(self, popup, url: QUrl) -> None:
+                if url.isValid() and not url.isEmpty():
+                    self.setUrl(url)
+                    popup.deleteLater()
+
+        _PAGE.append(SingleTabPage)
+    return _PAGE[0]
 
 
 _PROFILE: list = []
