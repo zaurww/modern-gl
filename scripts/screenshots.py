@@ -570,7 +570,7 @@ def main() -> None:
     bank.new_operation("out")
     payment = cast(BankOperationPage, win.stack.currentWidget())
     payment.counterparty_edit.setText(i18n.tr("Альфа Трейд"))
-    payment._counterparty_typed()
+    payment.counterparty_edit.editingFinished.emit()
     payment.line_rows[0].amount.setText("590")
     payment.line_rows[0].invoice.setText("MT2602000777")
     payment.add_fee()

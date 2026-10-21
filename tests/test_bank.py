@@ -427,3 +427,14 @@ def test_names_of_kinds_and_memos_are_translated():
     assert default_memo(IN, OTHER) == "Digər mədaxil"
     set_language("ru")
     assert default_memo(OUT, TAX) == "Уплата налогов"
+
+
+def test_one_payment_over_several_e_qaime_oldest_first():
+    """2 000.00 over MT1 1 416.00 and MT2 1 239.00: MT1 in full, MT2 584.00
+    (2 000.00 - 1 416.00), nothing left. 3 000.00 pays both (2 655.00) and leaves
+    345.00 — an advance. Less than the first pays only part of it."""
+    from modern_gl.application.bank import allocate
+
+    assert allocate(200_000, [141_600, 123_900]) == ([141_600, 58_400], 0)
+    assert allocate(300_000, [141_600, 123_900]) == ([141_600, 123_900], 34_500)
+    assert allocate(100_000, [141_600, 123_900]) == ([100_000, 0], 0)

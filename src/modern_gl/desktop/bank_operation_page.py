@@ -15,6 +15,7 @@ from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
+    QDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -50,7 +51,8 @@ from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.conversion_page import amount_text, fit_currency
 from modern_gl.desktop.directories_page import new_value
-from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.invoice_picker import InvoicePicker
+from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
@@ -68,6 +70,7 @@ from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
+from modern_gl.reporting.invoices import OpenInvoice, open_invoices
 
 NONE = "—"
 # the line's account suggests the kind of a counterparty's operation
@@ -78,6 +81,7 @@ TYPE_KINDS = {
     "advance_received": CUSTOMER,
 }
 WITH_COUNTERPARTY = (SUPPLIER, CUSTOMER, OTHER)
+SEVERAL = "several"  # the list item «several e-qaimə…»
 
 
 def bank_accounts(session: Session) -> list[AccountInfo]:
@@ -128,6 +132,7 @@ class LineRow(QWidget):
     removed = Signal(object)
     unknown = Signal(object, int, str)  # the row, the subconto position, the typed name
     error = Signal(str)
+    several = Signal(object)  # the row: one payment over several e-qaimə
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -152,9 +157,9 @@ class LineRow(QWidget):
             box.unknown.connect(lambda text, p=position: self.unknown.emit(self, p, text))
             self.sc.append(box)
             lay.addWidget(box, 2)
-        self.invoice = QLineEdit()
-        self.invoice.setPlaceholderText(tr("E-qaimə"))
-        self.invoice.setFixedWidth(140)
+        self.invoice = SuggestBox(tr("E-qaimə"))  # the unpaid ones of the counterparty
+        self.invoice.setFixedWidth(160)
+        self.invoice.activated.connect(self._invoice_chosen)
         lay.addWidget(self.invoice)
         self.amount = QLineEdit()
         self.amount.setFixedWidth(130)
@@ -227,6 +232,27 @@ class LineRow(QWidget):
                 None if k == own else v for k, v in zip(account.sc_kinds, kept, strict=True)
             )
         self._fill_subconto(kept)
+
+    def set_invoices(self, invoices: Sequence[OpenInvoice]) -> None:
+        """The e-qaimə the list offers: number, date, what is left to pay."""
+        box = self.invoice
+        typed = box.text()
+        box.clear()
+        for i in invoices:
+            label = f"{i.invoice} · {ru_date(i.doc_date)} · {format_minor(i.amount)}"
+            box.addItem(label, i, i.invoice)
+        if len(invoices) > 1:
+            box.addItem(tr("Несколько e-qaimə…"), SEVERAL, "")
+        box.setText(typed)
+
+    def _invoice_chosen(self, index: int) -> None:
+        chosen = self.invoice.itemData(index) if index >= 0 else None
+        if chosen == SEVERAL:
+            self.several.emit(self)
+            return
+        if isinstance(chosen, OpenInvoice) and not self.amount.text().strip():
+            self.amount.setText(amount_text(chosen.amount))  # what is left to pay on it
+        self.changed.emit()
 
     def owner_of(self, position: int) -> int | None:
         """Whose a new element at this position is: a contract is the counterparty's."""
@@ -304,6 +330,7 @@ class BankOperationPage(QWidget):
         self._loading = False
         self._lines_edited = False  # by hand: a counterparty no longer suggests them
         self.counterparty: int | None = None
+        self.open_invoices: list[OpenInvoice] = []  # of the counterparty, for the lines
 
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 30, 40, 22)
@@ -479,6 +506,7 @@ class BankOperationPage(QWidget):
         self.reference.textEdited.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
+        self.date.dateChanged.connect(self._refresh_invoices)
         self.kind.activated.connect(self._kind_changed)
         self._fill_counterparties()
 
@@ -723,6 +751,7 @@ class BankOperationPage(QWidget):
             if self.kind.currentData() in (SUPPLIER, CUSTOMER):  # who usually pays which way
                 select_data(self.kind, SUPPLIER if self.direction_value == OUT else CUSTOMER)
             self._suggest()
+        self._refresh_invoices()
         self._kind_visibility()
         self._changed()
         self.title_changed.emit()
@@ -797,6 +826,45 @@ class BankOperationPage(QWidget):
         for row in self.line_rows:
             row.set_counterparty(value)
         self._show_counterparty()
+        self._refresh_invoices()
+
+    def _refresh_invoices(self, *_) -> None:
+        """The unpaid e-qaimə of the counterparty on the day: owed to it when paying out,
+        owed by it when money comes in."""
+        if self.counterparty is None:
+            self.open_invoices = []
+        else:
+            self.open_invoices = open_invoices(
+                self.s.conn,
+                self.s.company_id,
+                self.counterparty,
+                payable=self.direction_value == OUT,
+                on_date=edited_date(self.date),
+            )
+        for row in self.line_rows:
+            row.set_invoices(self.open_invoices)
+
+    def _pay_several(self, row: LineRow) -> None:
+        """One payment over several e-qaimə: a line for each, the same account; the
+        amount typed in the line is spread oldest first, what is left — an advance."""
+        typed = row.amount.text().strip()
+        try:
+            total = to_minor(typed) if typed else None
+        except ValueError:
+            total = None
+        picker = InvoicePicker(self.open_invoices, total, self)
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            row.invoice.setFocus()
+            return
+        line = row.value() or BankLine(row.account.currentData(), 0, row.subconto())
+        at = self.line_rows.index(row)
+        parts = [*picker.chosen, *([("", picker.left)] if picker.left else [])]
+        for n, (invoice, amount) in enumerate(parts):
+            target = row if n == 0 else self.add_line(at=at + n)
+            target.set_line(replace(line, amount=amount, invoice=invoice))
+        self._lines_edited = True
+        self._changed()
+        self.line_rows[at + len(parts) - 1].amount.setFocus()
 
     def _show_counterparty(self) -> None:
         value = self.counterparty
@@ -862,17 +930,20 @@ class BankOperationPage(QWidget):
         self.s.catalog.reload()
         return values
 
-    def add_line(self, focus: bool = False) -> LineRow:
+    def add_line(self, focus: bool = False, at: int | None = None) -> LineRow:
         row = LineRow(self.s)
         row.set_counterparty(self.counterparty)
+        row.set_invoices(self.open_invoices)
+        row.several.connect(lambda r: QTimer.singleShot(0, lambda: self._pay_several(r)))
         row.set_read_only(self.read_only)
         row.changed.connect(self._changed)
         row.edited.connect(self._line_edited)
         row.removed.connect(self._remove_line)
         row.unknown.connect(self._add_line_value)
         row.error.connect(self.show_error)
-        self.line_rows.append(row)
-        self.lines_box.addWidget(row)
+        at = len(self.line_rows) if at is None else at
+        self.line_rows.insert(at, row)
+        self.lines_box.insertWidget(at, row)
         self._chain()
         if focus:
             row.account.setFocus()
