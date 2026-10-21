@@ -46,3 +46,15 @@ def month_end(value: date | str) -> str:
     day = date.fromisoformat(iso_date(value))
     first_of_next = date(day.year + day.month // 12, day.month % 12 + 1, 1)
     return date.fromordinal(first_of_next.toordinal() - 1).isoformat()
+
+
+def earlier_months(value: date | str, count: int = 12) -> list[str]:
+    """The last days of the `count` months before the month of `value`, latest first:
+    the months a purchase's expense may belong to (D63)."""
+    first = date.fromisoformat(iso_date(value)).replace(day=1)
+    result = []
+    for _ in range(count):
+        last = date.fromordinal(first.toordinal() - 1)
+        result.append(last.isoformat())
+        first = last.replace(day=1)
+    return result

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from fractions import Fraction
 from typing import cast
@@ -81,7 +81,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.accounts import INPUT_VAT, OUTPUT_VAT
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
-from modern_gl.domain.dates import month_end, month_name
+from modern_gl.domain.dates import earlier_months, month_name
 from modern_gl.domain.eqaime import status_group, status_label
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
@@ -2125,10 +2125,8 @@ class InventoryDocumentPage(QWidget):
         accrued) or one of the twelve before it, each as its last day."""
         self.expense_month.clear()
         self.expense_month.addItem(tr("месяц документа"), None)
-        first = edited_date(self.date).replace(day=1)
-        for _ in range(12):
-            first = (first - timedelta(days=1)).replace(day=1)
-            self.expense_month.addItem(month_name(first.isoformat()[:7]), month_end(first))
+        for last in earlier_months(edited_date(self.date)):
+            self.expense_month.addItem(month_name(last[:7]), last)
         if chosen is not None and self.expense_month.findData(chosen) < 0:
             self.expense_month.addItem(month_name(chosen[:7]), chosen)  # saved earlier
         self.expense_month.setCurrentIndex(max(self.expense_month.findData(chosen), 0))

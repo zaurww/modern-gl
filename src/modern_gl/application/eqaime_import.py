@@ -164,10 +164,18 @@ class InvoicePlan:
     existing: int | None = None  # the number of a document that has this e-qaimə already
     lines: list[LinePlan] = field(default_factory=list)
     skip_reason: str = ""
+    # a purchase's services of an earlier month (D63): the last day of that month
+    expense_date: str | None = None
 
     @property
     def importable(self) -> bool:
         return self.existing is None and not self.skip_reason
+
+    @property
+    def has_expenses(self) -> bool:
+        """A purchase with a line that is no item (a service, a fixed asset, an expense):
+        its expense may belong to an earlier month (D63)."""
+        return not self.invoice.outgoing and any(p.item_id is None for p in self.lines)
 
     @property
     def unresolved(self) -> int:
@@ -525,6 +533,7 @@ def import_drafts(
                         tr("Покупка по e-qaimə {n}", n=invoice.number),
                         vat_rate=vat_rate,
                         invoice=invoice.number,
+                        expense_date=plan.expense_date if plan.has_expenses else None,
                     )
                 )
     return created

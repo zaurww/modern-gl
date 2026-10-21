@@ -280,12 +280,43 @@ def test_token_helpers():
     assert (company_tin(token), company_name(token)) == ("1402375141", "ДЕМО MMC")
 
 
+def test_a_purchase_imported_with_an_earlier_expense_month(shop, conn):
+    """The repair of February on the e-qaimə of 05.03 (D63): 50.00 + ƏDV 9.00 on 26.
+    Posted: 28.02 Dt 26 / Kt 76H 50.00; 05.03 Dt 41 / Kt 60 120.00, Dt 76H / Kt 60 50.00,
+    Dt 19 / Kt 60 30.60 = 21.60 + 9.00. A purchase of goods alone has no expense month."""
+    plan = plan_import(conn, shop.company_id, [parse_invoice(*received(), outgoing=False)])[0]
+    assert plan.has_expenses
+    kind = shop.ledger.subconto_kind_id(shop.company_id, "cost_item")
+    repair = shop.ledger.add_subconto_value(shop.company_id, kind, "Təmir")
+    plan.lines[1].account_id, plan.lines[1].subconto = shop.acc["26"], (repair,)
+    plan.expense_date = "2026-02-28"
+    (draft,) = import_drafts(shop.inventory, shop.company_id, [plan])
+    shop.inventory.post_document(shop.company_id, draft)
+    assert [p[:3] for p in shop.postings(draft)] == [
+        ("41", "60", 12_000),
+        ("76H", "60", 5_000),
+        ("19", "60", 3_060),
+    ]
+    accrual = shop.inventory.load_document(shop.company_id, draft).accrual_document_id
+    row = conn.execute(
+        "SELECT d.doc_date, p.debit_account_id, p.credit_account_id, p.amount "
+        "FROM postings p JOIN documents d ON d.id = p.document_id WHERE d.id = ?",
+        (accrual,),
+    ).fetchone()
+    assert tuple(row) == ("2026-02-28", shop.acc["26"], shop.acc["76H"], 5_000)
+
+    goods = plan_import(conn, shop.company_id, [parse_invoice(*received("MT2"), outgoing=False)])
+    goods[0].lines.pop()  # the printers alone
+    assert not goods[0].has_expenses
+
+
 def test_import_dialog_loads_shows_and_creates_drafts(shop, conn, qtbot, monkeypatch):
     """Signed in (a fake token), the dialog loads one received e-qaimə from a fake portal
     off the window's thread, shows it with its two lines, and makes one purchase draft."""
     from modern_gl.application.catalog import Catalog
     from modern_gl.desktop import eqaime_import_page
-    from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+    from modern_gl.desktop.eqaime_import_page import EXPENSE_MONTH, EqaimeImportDialog
+    from modern_gl.desktop.pick import PickBox
     from modern_gl.desktop.session import Session
 
     row, detail = received()
@@ -311,19 +342,28 @@ def test_import_dialog_loads_shows_and_creates_drafts(shop, conn, qtbot, monkeyp
     item = dialog.tree.topLevelItem(0)
     assert item is not None
     assert (item.text(1), item.text(2), item.childCount()) == ("MT2603000111", "Təchizatçı MMC", 2)
-    assert "новый контрагент" in item.text(7) and "проверить строк: 1" in item.text(7)
+    assert "новый контрагент" in item.text(8) and "проверить строк: 1" in item.text(8)
     printer, repair = item.child(0), item.child(1)
     assert printer is not None and repair is not None
-    assert printer.text(7).startswith("товар «Printer»") and printer.text(4) == "Товар"
-    assert (repair.text(4), repair.text(7)) == ("Услуга", "выберите товар или счёт")
+    assert printer.text(8).startswith("товар «Printer»") and printer.text(4) == "Товар"
+    assert (repair.text(4), repair.text(8)) == ("Услуга", "выберите товар или счёт")
     assert dialog.import_button.text() == "Создать черновики: 1"
+
+    # the repair may be February's: the e-qaimə's month or one of the twelve before (D63)
+    box = dialog.tree.itemWidget(item, EXPENSE_MONTH)
+    assert isinstance(box, PickBox)
+    months = [box.itemData(i) for i in range(box.count())]
+    assert (months[:3], len(months)) == ([None, "2026-02-28", "2026-01-31"], 13)
+    box.setCurrentIndex(1)
+    box.activated.emit(1)
 
     item.setCheckState(0, Qt.CheckState.Unchecked)
     assert not dialog.import_button.isEnabled()
     item.setCheckState(0, Qt.CheckState.Checked)
     dialog.create_drafts()
     assert len(dialog.created) == 1
-    assert shop.inventory.load_document(shop.company_id, dialog.created[0]).status == "draft"
+    draft = shop.inventory.load_document(shop.company_id, dialog.created[0])
+    assert (draft.status, draft.expense_date) == ("draft", "2026-02-28")
 
 
 @pytest.mark.parametrize(
@@ -417,7 +457,7 @@ def test_import_dialog_adds_counterparties_with_edited_names(shop, conn, qtbot):
     assert supplier["name"] == "Kompyuter Dünyası"
     assert dialog.parties.isHidden()
     first = dialog.tree.topLevelItem(0)
-    assert first is not None and "новый контрагент" not in first.text(7)
+    assert first is not None and "новый контрагент" not in first.text(8)
     assert conn.execute("SELECT COUNT(*) FROM inventory_documents").fetchone()[0] == 0
 
 
