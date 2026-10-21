@@ -224,10 +224,11 @@ class ChartCommands(LedgerBase):
 
         `new_code=""` removes the code. History is protected: an account with postings
         cannot become a group and its subconto kinds cannot change (old postings carry
-        values of those kinds). Currency accounting changes only as far as the old postings
-        fit: "in manat or in a currency" always does; "manat only" needs no posting in a
-        currency, "currency only" none in manat. Codes are
-        only labels — postings reference the account id, so re-coding is safe.
+        values of those kinds); a kind may only be added at a free position, where it
+        becomes optional (the old postings have no value there; D59). Currency accounting
+        changes only as far as the old postings fit: "in manat or in a currency" always
+        does; "manat only" needs no posting in a currency, "currency only" none in manat.
+        Codes are only labels — postings reference the account id, so re-coding is safe.
         """
         with transaction(self.conn):
             acc = self._account(company_id, account)
@@ -259,17 +260,28 @@ class ChartCommands(LedgerBase):
                     raise ValidationError(tr("счёт {code}: у группы есть субсчета", code=label))
             if group:
                 sc = (None, None, None)
+            optional = acc["sc_optional"] if used else 0
             if sc != current_sc and used:
-                raise ValidationError(
-                    tr("счёт {code}: по счёту есть проводки, субконто менять нельзя", code=label)
-                )
+                pairs = list(zip(current_sc, sc, strict=True))
+                if any(old is not None and new != old for old, new in pairs):
+                    raise ValidationError(
+                        tr(
+                            "счёт {code}: по счёту есть проводки, субконто можно только "
+                            "добавить на свободное место",
+                            code=label,
+                        )
+                    )
+                for position, (old, new) in enumerate(pairs):
+                    if old is None and new is not None:  # old postings have no value there
+                        optional |= 1 << position
             if mode != acc["currency"] and used:
                 self._check_currency_fits(acc, label, mode)
             try:
                 self.conn.execute(
                     "UPDATE accounts SET code = ?, name = ?, two_sided = ?, is_group = ?, "
-                    "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ?, currency = ? WHERE id = ?",
-                    (new_code, name, int(two_sided), int(group), *sc, mode, acc["id"]),
+                    "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ?, sc_optional = ?, "
+                    "currency = ? WHERE id = ?",
+                    (new_code, name, int(two_sided), int(group), *sc, optional, mode, acc["id"]),
                 )
             except sqlite3.IntegrityError as e:
                 raise ValidationError(tr("счёт {code} уже есть", code=new_code)) from e

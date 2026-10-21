@@ -6,7 +6,7 @@ import sqlite3
 from dataclasses import dataclass, field
 
 from modern_gl.domain.errors import NotFoundError
-from modern_gl.i18n import sort_key, tr
+from modern_gl.i18n import fold, sort_key, tr
 
 
 @dataclass(frozen=True)
@@ -278,3 +278,36 @@ def is_opening_document(conn: sqlite3.Connection, company_id: int, document_id: 
         ).fetchone()
         is not None
     )
+
+
+def remembered_sale_subconto(
+    conn: sqlite3.Connection,
+    company_id: int,
+    item_id: int | None,
+    memo: str = "",
+    counterparty: int | None = None,
+    *,
+    except_document: int | None = None,
+) -> tuple[int, ...]:
+    """The sale subconto (a sales group, a channel; D59) the item — a service: the line
+    with the same memo — had the last time it was sold to this counterparty, else to anyone.
+    () when it was never sold with any."""
+    rows = conn.execute(
+        """
+        SELECT l.memo, l.cost_sc1, l.cost_sc2, l.cost_sc3,
+               ? IN (l.offset_sc1, l.offset_sc2, l.offset_sc3) AS same_party
+        FROM inventory_lines l JOIN inventory_documents d ON d.id = l.document_id
+        WHERE l.company_id = ? AND d.doc_type = 'sale' AND d.id IS NOT ?
+          AND l.item_id IS ? AND (l.item_id IS NOT NULL OR l.memo <> '')
+          AND COALESCE(l.cost_sc1, l.cost_sc2, l.cost_sc3) IS NOT NULL
+        ORDER BY d.doc_date DESC, d.id DESC, l.line_no
+        """,
+        (counterparty, company_id, except_document, item_id),
+    ).fetchall()
+    if item_id is None:
+        wanted = fold(memo.strip())
+        rows = [row for row in rows if wanted and fold(row["memo"].strip()) == wanted]
+    row = next((row for row in rows if row["same_party"]), rows[0] if rows else None)
+    if row is None:
+        return ()
+    return tuple(v for v in (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"]) if v)

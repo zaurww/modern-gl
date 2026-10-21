@@ -27,6 +27,7 @@ from modern_gl.application.inventory import (
     vat_of,
 )
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.queries import remembered_sale_subconto
 from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, portal_invoice
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import to_minor
@@ -502,7 +503,10 @@ def import_drafts(
                     inventory.create_sale_draft(
                         company_id,
                         invoice.doc_date,
-                        [_sale_line(conn, p, warehouse) for p in plan.lines],
+                        [
+                            _sale_line(conn, company_id, p, warehouse, plan.counterparty_id)
+                            for p in plan.lines
+                        ],
                         account,
                         subconto,
                         tr("Продажа по e-qaimə {n}", n=invoice.number),
@@ -541,7 +545,15 @@ def _receipt_line(conn: sqlite3.Connection, plan: LinePlan, warehouse: int | Non
     )
 
 
-def _sale_line(conn: sqlite3.Connection, plan: LinePlan, warehouse: int | None) -> SaleLine:
+def _sale_line(
+    conn: sqlite3.Connection,
+    company_id: int,
+    plan: LinePlan,
+    warehouse: int | None,
+    counterparty: int,
+) -> SaleLine:
+    """A sale line; its sales group and the like (D59) as the item (the service) had the
+    last time it was sold."""
     line = plan.line
     goods = plan.item_id is not None
     return SaleLine(
@@ -551,6 +563,9 @@ def _sale_line(conn: sqlite3.Connection, plan: LinePlan, warehouse: int | None) 
         _amount(line.amount),
         _amount(line.vat, zero=True),
         line.name,
+        sale_subconto=remembered_sale_subconto(
+            conn, company_id, plan.item_id, line.name, counterparty
+        ),
     )
 
 

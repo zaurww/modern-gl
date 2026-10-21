@@ -52,6 +52,7 @@ from modern_gl.application.inventory import (
     to_quantity,
     vat_of,
 )
+from modern_gl.application.queries import remembered_sale_subconto
 from modern_gl.desktop.inventory_page import ItemDialog
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.postings import (
@@ -115,10 +116,16 @@ EXPENSE = "expense"
 ESC1 = "esc1"
 ESC2 = "esc2"
 ESC3 = "esc3"
+# a sale line: the subconto of the sale's own accounts (46; 90.1 / 90.2 / 90.3) that
+# the customer, the item and the warehouse do not give — a sales group, a channel (D59)
+SALE1 = "sale1"
+SALE2 = "sale2"
+SALE3 = "sale3"
 MEMO = "memo"
 SC_KEYS = {SC1, SC2, SC3}  # the subconto of the line's offset (supplier, customer) account
 ESC_KEYS = {ESC1, ESC2, ESC3}
-SUBCONTO_KEYS = SC_KEYS | ESC_KEYS
+SALE_KEYS = {SALE1, SALE2, SALE3}
+SUBCONTO_KEYS = SC_KEYS | ESC_KEYS | SALE_KEYS
 # cells that store the edited value as is
 STORED_FIELDS = {
     ITEM: "item_id",
@@ -156,6 +163,9 @@ HEADERS = {
     ESC1: "Субконто затрат",
     ESC2: "",
     ESC3: "",
+    SALE1: "",  # the name of the directory
+    SALE2: "",
+    SALE3: "",
     MEMO: "Комментарий",
 }
 # a sale line is goods or a service: a line without an item, its memo says what it is
@@ -265,6 +275,8 @@ class InventoryGridRow:
     # a receipt's line without an item: the account and subconto its value goes to
     expense_account_id: int | None = None
     expense_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
+    # a sale's line: a value for each of the model's `sale_kinds`
+    sale_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""
@@ -292,6 +304,7 @@ class InventoryGridRow:
             currency_amount=self.currency_amount,
             expense_account_id=self.expense_account_id,
             expense_subconto=list(self.expense_subconto),
+            sale_subconto=list(self.sale_subconto),
         )  # a copy is a new line: no line id
 
 
@@ -316,6 +329,8 @@ class InventoryLinesModel(QAbstractTableModel):
         self.items = self._items()
         self.warehouses = self._warehouses()
         self.has_currency = False
+        # the kinds a sale line is asked for (D59), one column each
+        self.sale_kinds = sale_kinds(session) if doc_type == "sale" else []
         self.rows = rows or [self.default_row()]
         if doc_type == "transfer":
             self.columns = [
@@ -341,6 +356,7 @@ class InventoryLinesModel(QAbstractTableModel):
                 AMOUNT,
                 *([VAT] if doc_type in VAT_DOCUMENTS else []),
                 *([EXPENSE, ESC1, ESC2, ESC3] if doc_type == "receipt" else []),
+                *([SALE1, SALE2, SALE3] if doc_type == "sale" else []),
                 ACCOUNT,
                 SC1,
                 SC2,
@@ -377,7 +393,7 @@ class InventoryLinesModel(QAbstractTableModel):
     def owner_at(self, row_index: int, key: str) -> int | None:
         """The counterparty chosen on the line, for its contracts (None: any contract)."""
         account_id = self._account_of(self.rows[row_index], key)
-        if key not in SUBCONTO_KEYS or account_id is None:
+        if key not in SUBCONTO_KEYS or key in SALE_KEYS or account_id is None:
             return None
         account = self.s.catalog.accounts[account_id]
         subconto = self._subconto_of(self.rows[row_index], key)
@@ -390,6 +406,8 @@ class InventoryLinesModel(QAbstractTableModel):
 
     @staticmethod
     def _subconto_of(row: InventoryGridRow, key: str) -> list[int | None]:
+        if key in SALE_KEYS:
+            return row.sale_subconto
         return row.expense_subconto if key in ESC_KEYS else row.offset_subconto
 
     def default_row(self) -> InventoryGridRow:
@@ -427,6 +445,9 @@ class InventoryLinesModel(QAbstractTableModel):
                     return tr(SALE_HEADERS[key])
                 if self.doc_type == "receipt" and key in RECEIPT_HEADERS:
                     return tr(RECEIPT_HEADERS[key])
+                if key in SALE_KEYS:
+                    kind_id = self.sale_kind(key)
+                    return self.s.catalog.kinds[kind_id] if kind_id else ""
                 return tr(HEADERS[key])
             return str(section + 1)
         if (
@@ -447,9 +468,16 @@ class InventoryLinesModel(QAbstractTableModel):
     def key(self, index: QModelIndex) -> str:
         return self.columns[index.column()]
 
+    def sale_kind(self, key: str) -> int | None:
+        """The directory of a sale subconto column (None: no such column)."""
+        position = int(key[-1]) - 1
+        return self.sale_kinds[position] if position < len(self.sale_kinds) else None
+
     def kind_at(self, row_index: int, key: str) -> int | None:
         if key not in SUBCONTO_KEYS:
             return None
+        if key in SALE_KEYS:
+            return self.sale_kind(key)
         account_id = self._account_of(self.rows[row_index], key)
         if account_id is None:
             return None
@@ -460,7 +488,17 @@ class InventoryLinesModel(QAbstractTableModel):
             return False
         if key in ESC_KEYS | {EXPENSE} and not self.is_service(row):
             return False
+        if key in SALE_KEYS:
+            return self._takes_sale(self.rows[row], key)
         return key not in SUBCONTO_KEYS or self.kind_at(row, key) is not None
+
+    def _takes_sale(self, row: InventoryGridRow, key: str) -> bool:
+        """The line is asked for the sale subconto of the column: a kind of the customer's
+        account comes from the customer."""
+        kind_id = self.sale_kind(key)
+        account_id = row.offset_account_id
+        customer = self.s.catalog.accounts[account_id].sc_kinds if account_id else ()
+        return kind_id is not None and kind_id not in customer
 
     def is_service(self, row_index: int) -> bool:
         """A sale or receipt line without an item: a service (a fixed asset, an expense
@@ -628,14 +666,52 @@ class InventoryLinesModel(QAbstractTableModel):
         elif key in SUBCONTO_KEYS:
             self._subconto_of(row, key)[int(key[-1]) - 1] = value
         else:
-            setattr(row, STORED_FIELDS[key], value)
-            if key == ITEM and value is None:
-                row.warehouse_id = None  # a sale's service comes from no warehouse
+            self._set_stored(index.row(), key, value)
         self.dataChanged.emit(
             self.index(index.row(), 0), self.index(index.row(), len(self.columns) - 1)
         )
         self.changed.emit()
         return True
+
+    def _set_stored(self, row_index: int, key: str, value) -> None:
+        row = self.rows[row_index]
+        setattr(row, STORED_FIELDS[key], value)
+        if key == ITEM and value is None:
+            row.warehouse_id = None  # a sale's service comes from no warehouse
+        if key in {ITEM, MEMO}:
+            self._remember_sale_subconto(row_index)
+
+    def _remember_sale_subconto(self, row_index: int) -> None:
+        """Empty sale subconto of a line take what the item (the service) had the last
+        time it was sold — to this customer if it was — else what the line above has."""
+        row = self.rows[row_index]
+        if not self.sale_kinds or None not in row.sale_subconto[: len(self.sale_kinds)]:
+            return
+        catalog = self.s.catalog
+        customer = next(
+            (
+                value
+                for value in row.offset_subconto
+                if value is not None and catalog.has_tax_id(catalog.value(value).kind_id)
+            ),
+            None,
+        )
+        remembered = (
+            remembered_sale_subconto(
+                self.s.conn, self.s.company_id, row.item_id, row.memo, customer
+            )
+            if row.item_id is not None or row.memo.strip()
+            else ()
+        )
+        above = self.rows[row_index - 1].sale_subconto if row_index > 0 else []
+        for value in (*remembered, *above):
+            if value is None:
+                continue
+            kind = catalog.value(value).kind_id
+            if kind in self.sale_kinds:
+                position = self.sale_kinds.index(kind)
+                if row.sale_subconto[position] is None:
+                    row.sale_subconto[position] = value
 
     def _set_currency_amount(self, row: InventoryGridRow, value: int | None) -> None:
         row.currency_amount = value
@@ -810,6 +886,8 @@ class InventoryLinesModel(QAbstractTableModel):
         columns = [c for c in range(len(self.columns)) if shown(c)]
 
         def title(key: str) -> str:
+            if key in SALE_KEYS:
+                return str(self.headerData(self.columns.index(key), Qt.Orientation.Horizontal))
             if key in SUBCONTO_KEYS:
                 caption = "Субконто" if key in SC_KEYS else "Субконто затрат"
                 return f"{tr(caption)} {key[-1]}"
@@ -884,6 +962,11 @@ class InventoryLinesModel(QAbstractTableModel):
                         row.offset_account_id,
                         tuple(row.offset_subconto),
                         row.line_id,
+                        tuple(
+                            row.sale_subconto[position]
+                            for position, key in enumerate((SALE1, SALE2, SALE3))
+                            if self._takes_sale(row, key)
+                        ),
                     )
                 )
                 continue
@@ -950,6 +1033,21 @@ class InventoryLinesModel(QAbstractTableModel):
         if row.offset_account_id is None:
             raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
         self._require_subconto(row.offset_account_id, row.offset_subconto, line_no)
+        for key in (SALE1, SALE2, SALE3):  # a sales group: what the sale accounts ask for
+            kind_id = self.sale_kind(key)
+            if kind_id is None or not self._takes_sale(row, key):
+                continue
+            if (
+                kind_id not in self.s.catalog.owner_kinds
+                and row.sale_subconto[int(key[-1]) - 1] is None
+            ):
+                raise ValidationError(
+                    tr(
+                        "строка {line}: заполните субконто «{kind}»",
+                        line=line_no,
+                        kind=self.s.catalog.kinds[kind_id],
+                    )
+                )
 
     def _validate_what(self, row: InventoryGridRow, line_no: int) -> None:
         """What the line is: an item from a warehouse, or a sale's service, or a receipt's
@@ -979,7 +1077,8 @@ class InventoryLinesModel(QAbstractTableModel):
         catalog = self.s.catalog
         account = catalog.accounts[account_id]
         for position, kind_id in enumerate(account.sc_kinds):
-            optional = kind_id in catalog.owner_kinds  # a contract belongs to a counterparty
+            # a contract belongs to a counterparty; a kind added to an account with postings
+            optional = kind_id in catalog.owner_kinds or position in account.sc_optional
             if kind_id is not None and subconto[position] is None and not optional:
                 raise ValidationError(
                     tr(
@@ -988,6 +1087,20 @@ class InventoryLinesModel(QAbstractTableModel):
                         kind=self.s.catalog.kinds[kind_id],
                     )
                 )
+
+
+def sale_kinds(session: Session) -> list[int]:
+    """The subconto kinds a sale line is asked for (`Inventory.sale_kinds`, D59)."""
+    return Inventory(session.conn, actor=session.ledger.actor).sale_kinds(session.company_id)
+
+
+def by_sale_kinds(catalog, kinds: list[int], values) -> list[int | None]:
+    """Stored sale subconto values in the order of the columns of `kinds`."""
+    result: list[int | None] = [None, None, None]
+    for value in values:
+        if value is not None and catalog.value(value).kind_id in kinds:
+            result[kinds.index(catalog.value(value).kind_id)] = value
+    return result
 
 
 def _resolve_choice(choices: list[tuple[int, str]], text: str) -> int | None:
@@ -1192,6 +1305,7 @@ class InventoryLinesTable(QTableView):
             VAT: 84,
             ACCOUNT: 130,
             EXPENSE: 130,
+            **dict.fromkeys(SALE_KEYS, 130),  # named after its directory: «Satış qrupları»
         }
         used = model.s.catalog.used_positions()
         expenses = model.has_expenses()
@@ -1210,6 +1324,10 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, not expenses)
             if key in ESC_KEYS:
                 self.setColumnHidden(column, not expenses or int(key[-1]) not in expense_positions)
+            if key in SALE_KEYS:
+                self.setColumnHidden(
+                    column, not any(model.applies(r, key) for r in range(model.rowCount()))
+                )
             if key == VAT:
                 self.setColumnHidden(column, not model.has_vat())
             if key == CURRENCY_AMOUNT:
@@ -1949,6 +2067,7 @@ class InventoryDocumentPage(QWidget):
         self.type_label.setText(tr(DOCUMENT_TYPES.get(self.doc_type, self.doc_type)))
         self._show_vat_rate(self.doc.vat_rate)
         vat_rate = self._chosen_vat_rate()
+        kinds = sale_kinds(self.s) if self.doc_type == "sale" else []
         rows = [
             InventoryGridRow(
                 line.item_id,
@@ -1964,7 +2083,10 @@ class InventoryDocumentPage(QWidget):
                 vat_typed=line.vat_amount != vat_of(line.amount, vat_rate),
                 currency_amount=line.currency_amount,
                 expense_account_id=line.cost_account_id if self.doc_type == "receipt" else None,
-                expense_subconto=list(line.cost_subconto),
+                expense_subconto=(
+                    list(line.cost_subconto) if self.doc_type == "receipt" else [None, None, None]
+                ),
+                sale_subconto=by_sale_kinds(self.s.catalog, kinds, line.cost_subconto),
             )
             for line in self.doc.lines
         ] or [InventoryGridRow()]

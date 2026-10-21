@@ -30,6 +30,8 @@ class AccountInfo:
     two_sided: bool = False
     currency: int = 0  # domain.currency mode: 0 manat, 1 only in currency, 2 either
     account_type: str | None = None  # domain.accounts.ACCOUNT_TYPES
+    # positions (0..2) that may stay empty: added when the account had postings (D59)
+    sc_optional: frozenset[int] = frozenset()
 
     @property
     def currency_optional(self) -> bool:
@@ -93,6 +95,7 @@ class Catalog:
                 bool(r["two_sided"]),
                 r["currency"],
                 r["account_type"],
+                frozenset(i for i in range(3) if r["sc_optional"] & (1 << i)),
             )
             for r in self.conn.execute(
                 "SELECT * FROM accounts WHERE company_id = ? ORDER BY code IS NULL, code",
@@ -294,6 +297,17 @@ class Catalog:
                 tr("«{text}» подходит к нескольким валютам: {codes}", text=text, codes=codes)
             )
         return found[0]
+
+    def has_postings(self, account_id: int) -> bool:
+        """The account has postings: its subconto kinds stay, new ones go to free places."""
+        return (
+            self.conn.execute(
+                "SELECT 1 FROM postings WHERE company_id = ? "
+                "AND (debit_account_id = ? OR credit_account_id = ?) LIMIT 1",
+                (self.company_id, account_id, account_id),
+            ).fetchone()
+            is not None
+        )
 
     def used_positions(self) -> set[int]:
         """Subconto positions (1..3) used by at least one account."""
