@@ -105,17 +105,36 @@ class Chip(QLabel):
         "blue": ("accent", "accent_soft"),
     }
 
+    # a draft and a posted one are shown as in the lists — Things' check circle, no pill
+    CHECKS: ClassVar[dict[str, bool]] = {"amber": False, "green": True}
+
     def __init__(self, text: str = "", tone: str = "neutral") -> None:
         super().__init__(text)
         self.setFont(fonts().small)
+        self._check: bool | None = None
         self.set(text, tone)
 
     def set(self, text: str, tone: str) -> None:
-        fg, bg = (getattr(P, name) for name in self.TONES[tone])
         self.setText(text)
+        self._check = self.CHECKS.get(tone)
+        if self._check is not None:
+            color = P.secondary if self._check else P.text
+            self.setStyleSheet(f"color: {color}; background: transparent; padding: 3px 0 3px 22px;")
+            self.update()
+            return
+        fg, bg = (getattr(P, name) for name in self.TONES[tone])
         self.setStyleSheet(
             f"color: {fg}; background: {bg}; border-radius: 10px; padding: 3px 10px;"
         )
+
+    def paintEvent(self, event) -> None:
+        super().paintEvent(event)
+        if self._check is None:
+            return
+        painter = QPainter(self)
+        icon = status_icon(self._check)
+        icon.paint(painter, 0, (self.height() - 16) // 2, 16, 16)
+        painter.end()
 
 
 class ElidedLabel(QLabel):
