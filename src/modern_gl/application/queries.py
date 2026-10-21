@@ -93,6 +93,12 @@ def company_name(conn: sqlite3.Connection, company_id: int) -> str:
     return row[0]
 
 
+def parallel_books(conn: sqlite3.Connection, company_id: int) -> bool:
+    """Whether the company keeps IFRS and tax books beside the common one (D63)."""
+    row = conn.execute("SELECT parallel_books FROM companies WHERE id = ?", (company_id,))
+    return bool(row.fetchone()[0])
+
+
 def list_layers(conn: sqlite3.Connection, company_id: int) -> list[tuple[str, str]]:
     return [
         (r["code"], r["name"])

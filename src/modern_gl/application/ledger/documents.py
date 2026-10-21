@@ -850,6 +850,8 @@ class DocumentCommands(SubcontoCommands):
         ).fetchone()
         if row is None:
             raise NotFoundError(tr("слой {code} не найден", code=code))
+        if code != "common":  # a document in an adjustment layer shows the books (D63)
+            self.conn.execute("UPDATE companies SET parallel_books = 1 WHERE id = ?", (company_id,))
         return row["id"]
 
 

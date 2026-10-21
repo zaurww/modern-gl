@@ -150,6 +150,7 @@ class JournalPage(QWidget):
         for col, width in ((DATE, 110), (NUMBER, 60), (BOOK, 190), (TOTAL, 140), (STATUS, 160)):
             self.table.setColumnWidth(col, width)
         hh.setSectionResizeMode(MEMO, QHeaderView.ResizeMode.Stretch)
+        self.table.setColumnHidden(BOOK, not session.parallel_books)  # one book (D63)
         self.table.doubleClicked.connect(self._open_current)
 
         self.empty = EmptyState(

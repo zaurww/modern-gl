@@ -124,11 +124,9 @@ class ReportParams:
     def layers(self) -> tuple[str, ...]:
         return BOOKS[self.book][1]
 
-    def describe(self) -> str:
-        return (
-            f"{ru_date(self.date_from.isoformat())} — {ru_date(self.date_to.isoformat())}"
-            f"   ·   {tr(BOOKS[self.book][0])}"
-        )
+    def describe(self, book: bool = True) -> str:
+        period = f"{ru_date(self.date_from.isoformat())} — {ru_date(self.date_to.isoformat())}"
+        return f"{period}   ·   {tr(BOOKS[self.book][0])}" if book else period
 
 
 def month_of(d: date) -> ReportParams:
@@ -408,6 +406,9 @@ class ReportPage(QWidget):
                 bar.addWidget(label)
                 bar.addWidget(w)
                 bar.addSpacing(6)
+                if w is self.book and not session.parallel_books:  # one book (D63)
+                    label.hide()
+                    w.hide()
             run = button(tr("Сформировать"), "primary", "F5")
             run.clicked.connect(self.refresh)
             bar.addWidget(run)
@@ -486,7 +487,7 @@ class ReportPage(QWidget):
                 edited_date(self.date_to),
                 self.book.currentIndex(),
             )
-            self.header.subtitle.setText(self.params.describe())
+            self.header.subtitle.setText(self.params.describe(self.s.parallel_books))
         try:
             self.build()
         except LedgerError as e:
@@ -845,7 +846,9 @@ class AccountReportPage(ReportPage):
         acc = self.account
         name = acc.name if acc.code else ""  # without a code the name is the title already
         self.header.subtitle.setText(
-            "   ·   ".join(part for part in (name, self.params.describe()) if part)
+            "   ·   ".join(
+                part for part in (name, self.params.describe(self.s.parallel_books)) if part
+            )
         )
 
 
