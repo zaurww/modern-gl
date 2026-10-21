@@ -455,6 +455,11 @@ class MainWindow(QMainWindow):
             menu.addAction(tr("Сохранить копию…")).triggered.connect(self.save_copy)
             menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
             menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
+            menu.addSeparator()
+            books = menu.addAction(tr("Параллельные книги (МСФО, налог)"))
+            books.setCheckable(True)
+            books.setChecked(self.session.parallel_books)
+            books.toggled.connect(self.set_parallel_books)
         menu.addSeparator()
         languages = menu.addMenu(tr("Язык интерфейса"))
         for code, title in LANGUAGES.items():
@@ -1086,6 +1091,17 @@ class MainWindow(QMainWindow):
             self.settings.setValue("language", code)
         if self.company_path is not None:
             self.open_company(self.company_path)
+
+    def set_parallel_books(self, on: bool) -> None:
+        """Books on or off (D63): the pages are built again with or without the field."""
+        if self.session is None or self.company_path is None or not self._confirm_close_all():
+            return
+        try:
+            self.session.ledger.set_parallel_books(self.session.company_id, on)
+        except LedgerError as e:
+            QMessageBox.warning(self, tr("Параллельные книги (МСФО, налог)"), str(e))
+            return
+        self.open_company(self.company_path)
 
     def set_ui_theme(self, name: str) -> None:
         """Another look at once: the pages are built again in its colors."""

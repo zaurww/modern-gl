@@ -132,6 +132,10 @@ class DocumentPage(QWidget):
             meta.addWidget(caption)
             meta.addWidget(w)
             meta.addSpacing(10)
+            # one book until parallel books are turned on (D63): no field to pass by
+            if w is self.layer and not session.parallel_books:
+                caption.hide()
+                w.hide()
         self.amount_caption.setObjectName("secondary")
         meta.addWidget(self.amount_caption)
         meta.addWidget(self.amount)

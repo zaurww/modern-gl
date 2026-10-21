@@ -7,7 +7,7 @@ from datetime import date
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import list_layers
+from modern_gl.application.queries import list_layers, parallel_books
 from modern_gl.infrastructure import cbar
 
 
@@ -28,3 +28,7 @@ class Session:
     @property
     def layers(self) -> list[tuple[str, str]]:
         return list_layers(self.conn, self.company_id)
+
+    @property
+    def parallel_books(self) -> bool:
+        return parallel_books(self.conn, self.company_id)

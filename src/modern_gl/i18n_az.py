@@ -64,6 +64,10 @@ AZ: dict[str, str] = {
     "Налоговые корректировки": "Vergi düzəlişləri",
     "МСФО": "MHBS",
     "Налоговый учёт": "Vergi uçotu",
+    "Параллельные книги (МСФО, налог)": "Paralel kitablar (MHBS, vergi)",
+    "Нельзя выключить параллельные книги: в корректировках МСФО и налога есть документы ({n})": (
+        "Paralel kitabları söndürmək olmaz: MHBS və vergi düzəlişlərində sənədlər var ({n})"
+    ),
     "Активный": "Aktiv",
     "Пассивный": "Passiv",
     "Активно-пассивный": "Aktiv-passiv",
