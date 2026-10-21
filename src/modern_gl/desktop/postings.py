@@ -59,6 +59,7 @@ from modern_gl.application.catalog import Catalog, search
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import PostingData
 from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.widgets import CutCellTips
 from modern_gl.domain import formula
 from modern_gl.domain.accounts import SETTLEMENT_TYPES
 from modern_gl.domain.currency import (
@@ -1141,6 +1142,7 @@ class PostingsTable(QTableView):
         )
         self.setShowGrid(False)
         self.setWordWrap(False)
+        CutCellTips(self)
         self.setTabKeyNavigation(True)
         vh = self.verticalHeader()
         vh.setDefaultSectionSize(34)

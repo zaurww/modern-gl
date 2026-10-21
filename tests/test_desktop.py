@@ -921,3 +921,49 @@ def test_warehouse_postings_open_the_warehouse_document(window):
     window.show_document(linked["gl_document_id"])
     page = current_page(window)
     assert page.model.read_only and not page.btn_source.isHidden()
+
+
+def test_escape_returns_to_the_list_the_document_was_opened_from(window, qtbot):
+    from modern_gl.desktop.trade_page import TradePage
+
+    window.show_place(("purchases",))
+    purchases = current_page(window)
+    assert isinstance(purchases, TradePage)
+    purchases.new_button.click()
+    page = current_page(window)
+    assert page is not purchases
+    table = page.table
+    table.setFocus()
+    table.setCurrentIndex(table.model().index(0, 0))
+    table.edit(table.currentIndex())
+    editor = QApplication.focusWidget()
+    qtbot.keyClick(editor, Qt.Key.Key_Escape)  # the first Esc only leaves the cell
+    assert current_page(window) is page
+    qtbot.keyClick(table, Qt.Key.Key_Escape)
+    assert current_page(window) is purchases
+    assert window.sidebar.item_for(page.key) is None
+
+
+def test_cut_cell_text_is_shown_whole_under_the_mouse(window, monkeypatch):
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QHelpEvent
+    from PySide6.QtWidgets import QToolTip
+
+    window.new_document()
+    table = current_page(window).table
+    model = table.model()
+    model.setData(model.index(0, MEMO), "Очень длинное содержание операции " * 4)
+    model.setData(model.index(0, AMOUNT), 500)
+    shown = []
+    monkeypatch.setattr(QToolTip, "showText", lambda _pos, text, *_a: shown.append(text))
+    monkeypatch.setattr(QToolTip, "hideText", lambda: shown.append(None))
+
+    def hover(column):
+        pos = table.visualRect(model.index(0, column)).center()
+        event = QHelpEvent(QEvent.Type.ToolTip, pos, table.viewport().mapToGlobal(pos))
+        QApplication.sendEvent(table.viewport(), event)
+
+    table.setColumnWidth(MEMO, 80)
+    hover(MEMO)
+    hover(AMOUNT)
+    assert shown == ["Очень длинное содержание операции " * 4, None]
