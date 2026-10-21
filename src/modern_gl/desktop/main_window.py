@@ -86,7 +86,7 @@ from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import LANGUAGES, language, set_language, tr
+from modern_gl.i18n import LANGUAGES, language, set_language, tr, upper
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.workspace import SUFFIX, TRASH, Workspace
 from modern_gl.reporting.inventory import inventory_document_of
@@ -94,7 +94,7 @@ from modern_gl.reporting.trade import PURCHASE, SALE
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 # The sidebar's places by what they are for (D56): entry on top without a heading, then
-# reports, then what the books are set up with; key, title (translated on display), icon
+# reports, then the lists the books are kept with; key, title (translated on display), icon
 # color (a palette name: themes change it)
 PLACES = [
     (("journal",), "Журнал", "accent"),
@@ -104,7 +104,7 @@ REPORTS_PLACES = [
     (("osv",), "ОСВ", "green"),
     (("invoices",), "E-qaimələr", "accent"),
 ]
-SETUP = [
+LISTS = [
     (("chart",), "План счетов", "violet"),
     (("directories",), "Справочники", "teal"),
     (("templates",), "Шаблоны", "amber"),
@@ -121,7 +121,7 @@ MODULES = [
 SECTIONS = [
     (None, PLACES),
     ("Отчёты", REPORTS_PLACES),
-    ("Настройка", SETUP),
+    ("Списки", LISTS),
     ("Модули", MODULES),
 ]
 PLACE_KEYS = [key for _, places in SECTIONS for key, _, _ in places]
@@ -216,7 +216,7 @@ class Sidebar(QWidget):
         self.hint.setText(tr("Ctrl+N  новый документ\nCtrl+W  закрыть"))
 
     def add_section(self, title: str) -> None:
-        item = QListWidgetItem(title.upper())
+        item = QListWidgetItem(upper(title))
         item.setFlags(Qt.ItemFlag.NoItemFlags)
         item.setFont(fonts().caption)
         item.setForeground(QColor(P.tertiary))

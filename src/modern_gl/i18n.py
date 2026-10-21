@@ -51,6 +51,11 @@ def fold(text: str) -> str:
     return text.replace("İ", "i").replace("I", "i").casefold().translate(_FOLD)
 
 
+def upper(text: str) -> str:
+    """Capitals of the interface language: in Azerbaijani i -> İ (and ı -> I)."""
+    return (text.replace("i", "İ") if _current == "az" else text).upper()
+
+
 AZ_ALPHABET = "abcçdeəfgğhxıijkqlmnoöprsştuüvyz"
 _AZ_ORDER = {ch: i for i, ch in enumerate(AZ_ALPHABET)}
 

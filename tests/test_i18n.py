@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from modern_gl.application.catalog import search
-from modern_gl.i18n import fold, set_language, tr
+from modern_gl.i18n import fold, set_language, tr, upper
 from modern_gl.i18n_az import AZ
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 
@@ -93,3 +93,12 @@ def test_azerbaijani_alphabetical_order():
         "Şirkət",
         "Zavod",
     ]
+
+
+def test_upper_knows_azerbaijani_dotted_i():
+    set_language("az")
+    try:
+        assert upper("Siyahılar") == "SİYAHILAR"
+    finally:
+        set_language("ru")
+    assert upper("Списки") == "СПИСКИ"
