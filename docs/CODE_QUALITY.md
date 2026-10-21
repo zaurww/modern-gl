@@ -13,7 +13,7 @@
 | Линтер | `uv run ruff check .` | ошибки, лишние импорты, упрощения, сложность функции > 12 (C90) |
 | Формат | `uv run ruff format --check .` | единый стиль |
 | Типы | `uv run pyright` | 0 ошибок (тот же движок, что Pylance) |
-| Тесты | `uv run pytest -q` | логику учёта, интерфейс, переводы (`test_i18n`), размеры кода (`test_code_size`) |
+| Тесты | `uv run pytest -q` | логику учёта, интерфейс, переводы (`test_i18n`), размеры кода (`test_code_size`), модульность и слои (`test_architecture`), схему базы (`test_database`) — см. `docs/ENGINEERING.md` |
 
 Всё сразу: `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -q`
 
