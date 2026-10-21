@@ -1262,4 +1262,8 @@ AZ: dict[str, str] = {
     "расход за {month} не отнести: период закрыт по {closed}. Выберите в «Расход за» месяц "
     "документа": "{month} xərci aid edilə bilməz: dövr {closed} tarixinədək bağlıdır. "
     "«Xərc dövrü» sahəsində sənədin ayını seçin",
+    # the bank operation in one column, in the order of input
+    "Кому": "Kimə",
+    "От кого": "Kimdən",
+    "Банковский счёт…": "Bank hesabı…",
 }
