@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from itertools import groupby
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -41,10 +44,14 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import transaction
 from modern_gl.reporting.inventory import (
     InventoryDocumentSummary,
+    ItemDetails,
+    StockBalance,
     code_label,
     has_units,
+    item_details,
     list_inventory_documents,
     stock_account_choices,
     stock_balances,
@@ -52,25 +59,79 @@ from modern_gl.reporting.inventory import (
 )
 
 
+def open_item(session: Session, inventory: Inventory, value_id: int, parent=None) -> bool:
+    """The item dialog of a directory element that is an item; False if it is none or
+    nothing was changed."""
+    item = item_details(session.conn, session.company_id, value_id)
+    if item is None:
+        return False
+    dialog = ItemDialog(session, inventory, parent, item=item)
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return False
+    session.catalog.reload()
+    session.notify(tr("Товар сохранён"))
+    return True
+
+
+@dataclass(frozen=True)
+class StockGroup:
+    """A group header in the stock list: the group and the value of what it holds."""
+
+    name: str
+    amount: int
+
+
 class ItemDialog(QDialog):
-    def __init__(self, session: Session, inventory: Inventory, parent=None, name: str = "") -> None:
+    """A new item, or one to change (`item`): its name, code, group and, while no
+    document has it, its unit and stock account."""
+
+    def __init__(
+        self,
+        session: Session,
+        inventory: Inventory,
+        parent=None,
+        name: str = "",
+        item: ItemDetails | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.s, self.inventory = session, inventory
-        self.item_id: int | None = None
-        self.setWindowTitle(tr("Новый товар"))
+        self.s, self.inventory, self.item = session, inventory, item
+        self.item_id: int | None = item.id if item else None
+        self.caption = tr("Товар") if item else tr("Новый товар")
+        self.setWindowTitle(self.caption)
+        value = session.catalog.value(item.value_id) if item else None
         form = QFormLayout(self)
-        self.name = QLineEdit(name)
-        self.code = QLineEdit()
+        self.name = QLineEdit(value.name if value else name)
+        self.code = QLineEdit(value.code or "" if value else "")
+        self.group = QComboBox()
+        self.group.addItem(tr("— без группы"), None)
+        kind = self._item_kind()
+        for depth, group in session.catalog.groups(kind) if kind is not None else []:
+            self.group.addItem(" " * 2 * depth + group.name, group.id)
+        if value is not None and value.parent_id is not None:
+            self.group.setCurrentIndex(max(self.group.findData(value.parent_id), 0))
         self.units = QComboBox()
         for unit in unit_choices(session.conn, session.company_id):
             self.units.addItem(unit.label, unit.id)
         self.accounts = QComboBox()
         for account in stock_account_choices(session.conn, session.company_id):
             self.accounts.addItem(account.label, account.id)
+        if item is not None:
+            self.units.setCurrentIndex(max(self.units.findData(item.unit_id), 0))
+            self.accounts.setCurrentIndex(max(self.accounts.findData(item.inventory_account_id), 0))
+            if item.used:  # its quantities and postings are in these
+                for box in (self.units, self.accounts):
+                    box.setEnabled(False)
         form.addRow(tr("Наименование"), self.name)
         form.addRow(tr("Артикул"), self.code)
+        if self.group.count() > 1:  # the directory has groups
+            form.addRow(tr("Группа"), self.group)
         form.addRow(tr("Единица измерения"), self.units)
         form.addRow(tr("Счёт запасов"), self.accounts)
+        if item is not None and item.used:
+            note = QLabel(tr("По товару есть документы: единица и счёт не меняются"))
+            note.setObjectName("tertiary")
+            note.setFont(fonts().small)
+            form.addRow(note)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
@@ -78,29 +139,40 @@ class ItemDialog(QDialog):
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
+    def _item_kind(self) -> int | None:
+        return next((k for k, code in self.s.catalog.kind_codes.items() if code == "item"), None)
+
     def _save(self) -> None:
         if not self.name.text().strip() or self.units.currentData() is None:
-            QMessageBox.warning(self, tr("Новый товар"), tr("Заполните название и единицу"))
+            QMessageBox.warning(self, self.caption, tr("Заполните название и единицу"))
             return
         if self.accounts.currentData() is None:
             QMessageBox.warning(
-                self,
-                tr("Новый товар"),
-                tr("В плане счетов нет счёта с субконто Товар и Склад"),
+                self, self.caption, tr("В плане счетов нет счёта с субконто Товар и Склад")
             )
             return
+        group = self.group.currentData()
+        unit, account = int(self.units.currentData()), int(self.accounts.currentData())
+        code = self.code.text().strip() or None
         try:
-            self.item_id = self.inventory.add_item(
-                self.s.company_id,
-                self.name.text(),
-                int(self.units.currentData()),
-                int(self.accounts.currentData()),
-                self.code.text(),
-            )
+            if self.item is None:
+                self.item_id = self.inventory.add_item(
+                    self.s.company_id, self.name.text(), unit, account, code, group_id=group
+                )
+            else:
+                self._update(group, unit, account, code)
         except LedgerError as exc:
-            QMessageBox.warning(self, tr("Новый товар"), str(exc))
+            QMessageBox.warning(self, self.caption, str(exc))
             return
         self.accept()
+
+    def _update(self, group: int | None, unit: int, account: int, code: str | None) -> None:
+        assert self.item is not None
+        cid, value_id, ledger = self.s.company_id, self.item.value_id, self.s.ledger
+        with transaction(self.s.conn):
+            ledger.update_subconto_value(cid, value_id, self.name.text(), code)
+            ledger.set_subconto_value_parent(cid, value_id, group)
+            self.inventory.update_item(cid, self.item.id, unit, account)
 
 
 class InventorySettingsDialog(QDialog):
@@ -223,6 +295,9 @@ class InventoryPage(QWidget):
         self.table.setShowGrid(False)
         self.table.verticalHeader().hide()
         self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.doubleClicked.connect(  # the item: its name, group, unit, account
+            lambda index: self.edit_item(index.data(Qt.ItemDataRole.UserRole))
+        )
         self.empty = EmptyState(
             "□",
             tr("На складе пока пусто"),
@@ -277,10 +352,18 @@ class InventoryPage(QWidget):
         self.table.setFocus()
 
     def refresh(self) -> None:
-        rows = stock_balances(self.s.conn, self.s.company_id)
+        balances = stock_balances(self.s.conn, self.s.company_id)
+        rows: list[StockBalance | StockGroup] = []
+        if any(b.group for b in balances):  # each group under its header with its value
+            for group, members in groupby(balances, key=lambda b: b.group):
+                members = list(members)
+                rows.append(StockGroup(group or tr("Без группы"), sum(b.amount for b in members)))
+                rows.extend(members)
+        else:
+            rows = list(balances)
 
         def average(row) -> int:
-            if not row.quantity:
+            if isinstance(row, StockGroup) or not row.quantity:
                 return 0
             numerator = row.amount * QUANTITY_FACTOR
             quotient, remainder = divmod(numerator, row.quantity)
@@ -289,19 +372,31 @@ class InventoryPage(QWidget):
         self.model.set(
             [
                 Column(
-                    tr("Товар"), lambda row: code_label(row.item_code, row.item_name), width=260
+                    tr("Товар"),
+                    lambda row: (
+                        row.name
+                        if isinstance(row, StockGroup)
+                        else code_label(row.item_code, row.item_name)
+                    ),
+                    width=260,
                 ),
-                Column(tr("Склад"), lambda row: row.warehouse_name, width=220),
+                Column(tr("Склад"), lambda row: getattr(row, "warehouse_name", ""), width=220),
                 Column(
                     tr("Количество"),
-                    lambda row: format_quantity(row.quantity, row.precision),
+                    lambda row: (
+                        ""
+                        if isinstance(row, StockGroup)
+                        else format_quantity(row.quantity, row.precision)
+                    ),
                     width=130,
                 ),
-                Column(tr("Ед."), lambda row: row.unit_code, width=80),
+                Column(tr("Ед."), lambda row: getattr(row, "unit_code", ""), width=80),
                 Column(tr("Средняя цена"), average, money=True, width=130),
                 Column(tr("Стоимость"), lambda row: row.amount, money=True, width=150),
             ],
             rows,
+            emphasis=lambda row: isinstance(row, StockGroup),
+            section=lambda row: isinstance(row, StockGroup),
         )
         header = self.table.horizontalHeader()
         for index, column in enumerate(self.model.columns):
@@ -313,8 +408,8 @@ class InventoryPage(QWidget):
         self.header.subtitle.setText(
             tr(
                 "{items} позиций · {amount}",
-                items=len(rows),
-                amount=money(sum(r.amount for r in rows), False),
+                items=len(balances),
+                amount=money(sum(r.amount for r in balances), False),
             )
         )
         documents = list_inventory_documents(self.s.conn, self.s.company_id)
@@ -367,6 +462,13 @@ class InventoryPage(QWidget):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.s.catalog.reload()
             self.s.notify(tr("Товар добавлен"))
+            self.refresh()
+
+    def edit_item(self, row) -> None:
+        if not isinstance(row, StockBalance):
+            return
+        self.s.catalog.reload()
+        if open_item(self.s, self.inventory, row.item_value_id, self):
             self.refresh()
 
     def add_warehouse(self) -> None:

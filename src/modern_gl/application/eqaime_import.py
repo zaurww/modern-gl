@@ -253,7 +253,7 @@ def _counterparty(
     for row in conn.execute(
         "SELECT v.id, v.name FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id "
         "WHERE v.company_id = ? AND k.code = 'counterparty' AND v.tax_id IS NULL "
-        "ORDER BY v.active DESC, v.id",
+        "AND v.is_group = 0 ORDER BY v.active DESC, v.id",
         (company_id,),
     ):
         if fold(" ".join(row["name"].split())) == wanted:

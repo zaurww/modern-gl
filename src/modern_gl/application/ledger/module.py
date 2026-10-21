@@ -26,7 +26,7 @@ class ModuleDocumentCommands(ChartCommands, DocumentCommands):
                 continue
             found = self.conn.execute(
                 "SELECT id FROM subconto_values WHERE company_id = ? AND kind_id = ? "
-                "AND name = ? ORDER BY active DESC, id LIMIT 1",
+                "AND name = ? AND is_group = 0 ORDER BY active DESC, id LIMIT 1",
                 (company_id, kind_id, name),
             ).fetchone()
             values.append(found[0] if found else self.add_subconto_value(company_id, kind_id, name))

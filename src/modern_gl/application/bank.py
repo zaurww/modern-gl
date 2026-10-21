@@ -244,7 +244,7 @@ def bank_places(conn: sqlite3.Connection, company_id: int) -> list[BankPlace]:
         "SELECT v.id, v.name, v.currency_id, c.code AS currency FROM subconto_values v "
         "JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'bank_account' "
         "LEFT JOIN currencies c ON c.id = v.currency_id "
-        "WHERE v.company_id = ? AND v.active = 1",
+        "WHERE v.company_id = ? AND v.active = 1 AND v.is_group = 0",
         (company_id,),
     ).fetchall()
     used = {

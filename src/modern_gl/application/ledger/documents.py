@@ -731,6 +731,14 @@ class DocumentCommands(SubcontoCommands):
                 raise ValidationError(tr("{label}: не заполнено субконто {i}", label=label, i=i))
             if values[value_id]["kind_id"] != kind_id:
                 raise ValidationError(tr("{label}: субконто {i} не того вида", label=label, i=i))
+            if values[value_id]["is_group"]:
+                raise ValidationError(
+                    tr(
+                        "{label}: «{name}» — группа, выберите элемент из неё",
+                        label=label,
+                        name=values[value_id]["name"],
+                    )
+                )
 
     @staticmethod
     def _validate_owners(

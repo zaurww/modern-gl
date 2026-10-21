@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 
 from modern_gl.domain.dates import iso_date
+from modern_gl.i18n import sort_key
 
 
 def code_label(code: str | None, name: str) -> str:
@@ -93,6 +94,19 @@ class StockBalance:
     precision: int
     quantity: int
     amount: int
+    group: str = ""  # the item's group in the directory: «Avadanlıq / Kabellər»
+    item_value_id: int = 0  # the item's directory element
+
+
+@dataclass(frozen=True)
+class ItemDetails:
+    """An item as its dialog shows it; `used` — a document has it (unit and account stay)."""
+
+    id: int
+    value_id: int
+    unit_id: int
+    inventory_account_id: int
+    used: bool
 
 
 @dataclass(frozen=True)
@@ -136,7 +150,7 @@ def stock_balances(
     rows = conn.execute(
         f"""
         SELECT m.item_id, iv.code AS item_code, iv.name AS item_name,
-               m.warehouse_id, wv.name AS warehouse_name,
+               iv.id AS item_value_id, m.warehouse_id, wv.name AS warehouse_name,
                u.code AS unit_code, u.precision,
                SUM(m.quantity) AS quantity, SUM(m.amount) AS amount
         FROM stock_movements m
@@ -147,13 +161,61 @@ def stock_balances(
         JOIN warehouses w ON w.id = m.warehouse_id
         JOIN subconto_values wv ON wv.id = w.subconto_value_id
         WHERE {" AND ".join(clauses)}
-        GROUP BY m.item_id, iv.code, iv.name, m.warehouse_id, wv.name, u.code, u.precision
+        GROUP BY m.item_id, iv.code, iv.name, iv.id, m.warehouse_id, wv.name, u.code,
+                 u.precision
         {having}
         ORDER BY iv.name, wv.name
         """,
         params,
     ).fetchall()
-    return [StockBalance(**dict(row)) for row in rows]
+    paths = group_paths(conn, company_id)
+    balances = [
+        StockBalance(**dict(row), group=paths.get(row["item_value_id"], "")) for row in rows
+    ]
+    # by group, as the directory shows them: the groups first, then the items without one
+    balances.sort(key=lambda b: (b.group == "", sort_key(b.group)))
+    return balances
+
+
+def group_paths(conn: sqlite3.Connection, company_id: int) -> dict[int, str]:
+    """For each directory element in a group: its groups, outermost first (D60)."""
+    rows = conn.execute(
+        "SELECT id, name, parent_id, is_group FROM subconto_values WHERE company_id = ?",
+        (company_id,),
+    ).fetchall()
+    by_id = {r["id"]: r for r in rows}
+    paths: dict[int, str] = {}
+    for row in rows:
+        names, parent, seen = [], row["parent_id"], set()
+        while parent is not None and parent in by_id and parent not in seen:
+            seen.add(parent)
+            names.append(by_id[parent]["name"])
+            parent = by_id[parent]["parent_id"]
+        if names:
+            paths[row["id"]] = " / ".join(reversed(names))
+    return paths
+
+
+def item_details(conn: sqlite3.Connection, company_id: int, value_id: int) -> ItemDetails | None:
+    """The item a directory element is, if it is one."""
+    row = conn.execute(
+        """
+        SELECT i.id, i.subconto_value_id, i.unit_id, i.inventory_account_id,
+               EXISTS (SELECT 1 FROM inventory_lines l WHERE l.item_id = i.id)
+               OR EXISTS (SELECT 1 FROM stock_movements m WHERE m.item_id = i.id) AS used
+        FROM inventory_items i WHERE i.company_id = ? AND i.subconto_value_id = ?
+        """,
+        (company_id, value_id),
+    ).fetchone()
+    if row is None:
+        return None
+    return ItemDetails(
+        row["id"],
+        row["subconto_value_id"],
+        row["unit_id"],
+        row["inventory_account_id"],
+        bool(row["used"]),
+    )
 
 
 def stock_card(

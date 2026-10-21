@@ -58,6 +58,8 @@ class SubcontoInfo:
     tax_id: str | None = None  # a counterparty's VÖEN, or a non-resident's own tax number
     nonresident: bool = False
     country: str | None = None  # of a non-resident
+    parent_id: int | None = None  # the group it is in
+    is_group: bool = False  # a folder of elements, never chosen on a posting
 
     @property
     def label(self) -> str:
@@ -115,7 +117,8 @@ class Catalog:
         self._by_kind: dict[int, list[SubcontoInfo]] = {k: [] for k in self.kinds}
         for r in self.conn.execute(
             "SELECT id, kind_id, name, code, active, currency_id, owner_id, tax_id, "
-            "nonresident, country FROM subconto_values WHERE company_id = ? ORDER BY name",
+            "nonresident, country, parent_id, is_group FROM subconto_values "
+            "WHERE company_id = ? ORDER BY name",
             (self.company_id,),
         ):
             self._add(
@@ -130,6 +133,8 @@ class Catalog:
                     r["tax_id"],
                     bool(r["nonresident"]),
                     r["country"],
+                    r["parent_id"],
+                    bool(r["is_group"]),
                 )
             )
         for values in self._by_kind.values():
@@ -204,13 +209,44 @@ class Catalog:
         return [a for a in self.leaf_accounts if a.id in ids and a.id != group.id]
 
     def values(self, kind_id: int, owner: int | None = None) -> list[SubcontoInfo]:
-        """Values offered for entry (hidden ones are not). With an `owner` (the chosen
-        counterparty) a contract list shows its contracts and the common ones only."""
+        """Values offered for entry (hidden ones and groups are not). With an `owner` (the
+        chosen counterparty) a contract list shows its contracts and the common ones only."""
         return [
             v
             for v in self._by_kind.get(kind_id, [])
-            if v.active and (owner is None or v.owner_id in (None, owner))
+            if v.active and not v.is_group and (owner is None or v.owner_id in (None, owner))
         ]
+
+    def tree(self, kind_id: int) -> list[tuple[int, SubcontoInfo]]:
+        """Every value of a directory as a tree, with its depth: each group followed by
+        what it holds (groups first, then elements, alphabetically)."""
+        children: dict[int | None, list[SubcontoInfo]] = {}
+        for value in self._by_kind.get(kind_id, []):  # already alphabetical
+            parent = value.parent_id if value.parent_id in self._values else None
+            children.setdefault(parent, []).append(value)
+        result: list[tuple[int, SubcontoInfo]] = []
+
+        def walk(parent: int | None, depth: int) -> None:
+            for value in sorted(children.get(parent, []), key=lambda v: not v.is_group):
+                result.append((depth, value))
+                if value.is_group:
+                    walk(value.id, depth + 1)
+
+        walk(None, 0)
+        return result
+
+    def groups(self, kind_id: int) -> list[tuple[int, SubcontoInfo]]:
+        """The groups of a directory, as a tree (for «move into a group»)."""
+        return [(depth, value) for depth, value in self.tree(kind_id) if value.is_group]
+
+    def group_path(self, value_id: int) -> str:
+        """The groups an element is in, outermost first: «Avadanlıq / Kabellər»."""
+        names = []
+        parent = self._values[value_id].parent_id
+        while parent is not None and parent in self._values:
+            names.append(self._values[parent].name)
+            parent = self._values[parent].parent_id
+        return " / ".join(reversed(names))
 
     def owner_title(self, kind_id: int) -> str:
         """What one owner is called: "Контрагент" (a directory is named in plural)."""

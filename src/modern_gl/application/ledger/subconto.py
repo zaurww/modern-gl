@@ -54,29 +54,83 @@ class SubcontoCommands(LedgerBase):
         name: str,
         code: str | None = None,
         owner_id: int | None = None,
+        *,
+        parent_id: int | None = None,
+        is_group: bool = False,
     ) -> int:
-        """Add a directory element; `owner_id` — the counterparty a contract belongs to."""
+        """Add a directory element; `owner_id` — the counterparty a contract belongs to,
+        `parent_id` — the group it is in. With `is_group` it is a group (a folder): it
+        holds elements and is never chosen on a posting."""
         with transaction(self.conn):
             self._check_owner(company_id, kind_id, owner_id)
+            self._check_parent(company_id, kind_id, parent_id)
             try:
+                columns = ["company_id", "kind_id", "code", "name", "owner_id"]
+                params: list[object] = [company_id, kind_id, code, name, owner_id]
+                if parent_id is not None or is_group:  # named only when used (D60)
+                    columns += ["parent_id", "is_group"]
+                    params += [parent_id, int(is_group)]
                 value_id = insert(
                     self.conn,
-                    "INSERT INTO subconto_values (company_id, kind_id, code, name, owner_id) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (company_id, kind_id, code, name, owner_id),
+                    f"INSERT INTO subconto_values ({', '.join(columns)}) "
+                    f"VALUES ({', '.join('?' * len(columns))})",
+                    params,
                 )
             except sqlite3.IntegrityError as e:
                 raise ValidationError(
                     tr("не удалось добавить субконто {name}: {error}", name=name, error=e)
                 ) from e
+            details: dict[str, object] = {"kind_id": kind_id, "name": name, "owner_id": owner_id}
+            if parent_id is not None:
+                details["parent_id"] = parent_id
+            if is_group:
+                details["group"] = True
+            self._audit(company_id, "subconto_value", value_id, "create", details)
+        return value_id
+
+    def add_subconto_group(
+        self, company_id: int, kind_id: int, name: str, parent_id: int | None = None
+    ) -> int:
+        """A group (folder) of a directory: «Kabellər», «Xarici təchizatçılar»."""
+        name = name.strip()
+        if not name:
+            raise ValidationError(tr("название не может быть пустым"))
+        return self.add_subconto_value(
+            company_id, kind_id, name, parent_id=parent_id, is_group=True
+        )
+
+    def set_subconto_value_parent(
+        self, company_id: int, value_id: int, parent_id: int | None
+    ) -> None:
+        """Move an element (or a group with all it holds) into a group, or out of any.
+        Postings keep the element, so reports by element do not change."""
+        with transaction(self.conn):
+            value = self._subconto_value(company_id, value_id)
+            if value["parent_id"] == parent_id:
+                return
+            self._check_parent(company_id, value["kind_id"], parent_id)
+            ancestor = parent_id
+            while ancestor is not None:  # not into itself or a group inside it
+                if ancestor == value_id:
+                    raise ValidationError(tr("группу нельзя перенести в неё саму"))
+                ancestor = self._subconto_value(company_id, ancestor)["parent_id"]
+            self.conn.execute(
+                "UPDATE subconto_values SET parent_id = ? WHERE id = ?", (parent_id, value_id)
+            )
             self._audit(
                 company_id,
                 "subconto_value",
                 value_id,
-                "create",
-                {"kind_id": kind_id, "name": name, "owner_id": owner_id},
+                "move",
+                {"from": value["parent_id"], "to": parent_id},
             )
-        return value_id
+
+    def _check_parent(self, company_id: int, kind_id: int, parent_id: int | None) -> None:
+        if parent_id is None:
+            return
+        parent = self._subconto_value(company_id, parent_id)
+        if parent["kind_id"] != kind_id or not parent["is_group"]:
+            raise ValidationError(tr("«{name}» — не группа этого справочника", name=parent["name"]))
 
     def update_subconto_value(
         self, company_id: int, value_id: int, name: str, code: str | None = None

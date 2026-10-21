@@ -400,8 +400,10 @@ class Inventory:
         code: str | None = None,
         *,
         subconto_value_id: int | None = None,
+        group_id: int | None = None,
     ) -> int:
-        """Create an item and its shared `item` subconto value (or adopt an existing one)."""
+        """Create an item and its shared `item` subconto value (or adopt an existing one);
+        a new value goes into the group `group_id` of the item directory."""
         name = name.strip()
         if not name:
             raise ValidationError(tr("название товара обязательно"))
@@ -411,11 +413,11 @@ class Inventory:
             item_kind = self._kind_id(company_id, "item")
             if subconto_value_id is None:
                 subconto_value_id = self.ledger.add_subconto_value(
-                    company_id, item_kind, name, (code or "").strip() or None
+                    company_id, item_kind, name, (code or "").strip() or None, parent_id=group_id
                 )
             else:
                 value = self._subconto_value(company_id, subconto_value_id)
-                if value["kind_id"] != item_kind:
+                if value["kind_id"] != item_kind or value["is_group"]:
                     raise ValidationError(tr("элемент относится не к справочнику товаров"))
             try:
                 item_id = insert(
@@ -435,6 +437,37 @@ class Inventory:
                 {"subconto_value_id": subconto_value_id, "name": name},
             )
         return item_id
+
+    def update_item(
+        self, company_id: int, item_id: int, unit_id: int, inventory_account_id: int
+    ) -> None:
+        """Another unit or stock account, while no document has the item: its quantities
+        and postings were made in the old ones. The name and group change in the directory."""
+        with transaction(self.conn):
+            item = self._item(company_id, item_id)
+            if (item["unit_id"], item["inventory_account_id"]) == (unit_id, inventory_account_id):
+                return
+            self._unit(company_id, unit_id)
+            self._validate_inventory_account(company_id, inventory_account_id)
+            reason = where_used(self.conn, company_id, "inventory_items", item_id)
+            if reason is not None:
+                raise ValidationError(
+                    tr("единицу и счёт товара менять нельзя: {reason}", reason=reason)
+                )
+            self.conn.execute(
+                "UPDATE inventory_items SET unit_id = ?, inventory_account_id = ? WHERE id = ?",
+                (unit_id, inventory_account_id, item_id),
+            )
+            self._audit(
+                company_id,
+                "inventory_item",
+                item_id,
+                "update",
+                {
+                    "before": [item["unit_id"], item["inventory_account_id"]],
+                    "after": [unit_id, inventory_account_id],
+                },
+            )
 
     def delete_value(self, company_id: int, value_id: int) -> None:
         """Delete a directory element; an item or a warehouse with it, when no document

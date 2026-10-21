@@ -69,6 +69,18 @@ def _directories(p: QPainter) -> None:  # a book with a bookmark
     p.drawLine(QPointF(9, 9.5), QPointF(12, 9.5))
 
 
+def _folder(p: QPainter) -> None:  # a folder: a group of directory elements
+    path = QPainterPath(QPointF(2.5, 5))
+    path.lineTo(2.5, 14)
+    path.lineTo(15.5, 14)
+    path.lineTo(15.5, 6.5)
+    path.lineTo(8.5, 6.5)
+    path.lineTo(7, 4.5)
+    path.lineTo(3, 4.5)
+    path.closeSubpath()
+    p.drawPath(path)
+
+
 def _templates(p: QPainter) -> None:  # two stacked sheets: a reusable entry
     p.drawRoundedRect(QRectF(5.5, 2.5, 10, 10), 1.8, 1.8)
     path = QPainterPath(QPointF(3.5, 5.5))
@@ -166,6 +178,7 @@ GLYPHS: dict[str, Callable[[QPainter], None]] = {
     "sales": _sales,
     "bank": _bank,
     "directories": _directories,
+    "folder": _folder,
     "templates": _templates,
     "currencies": _currencies,
     "invoices": _invoices,
