@@ -51,6 +51,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    enter_goes_on,
     money,
     more_button,
     ru_date,
@@ -690,15 +691,8 @@ class DocumentPage(QWidget):
 
     def keyPressEvent(self, event) -> None:
         """Enter in the title, date, book or operation amount goes on as Tab does."""
-        header = (self.memo, self.date, self.layer, self.amount)
-        if (
-            event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-            and not event.modifiers()
-            and QApplication.focusWidget() in header
-        ):
-            self.focusNextChild()
-            return
-        super().keyPressEvent(event)
+        if not enter_goes_on(self, event):
+            super().keyPressEvent(event)
 
     def _insert_row(self) -> None:
         if self.model.read_only:

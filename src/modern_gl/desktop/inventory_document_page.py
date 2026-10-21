@@ -53,12 +53,15 @@ from modern_gl.application.inventory import (
     vat_of,
 )
 from modern_gl.desktop.inventory_page import ItemDialog
+from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.postings import (
     TABS,
     CellEditor,
     attach_account_list,
     attach_list,
+    edit_again,
     edit_current,
+    edit_next,
     holds_on_group,
     plain_number,
     tabbed_in,
@@ -71,6 +74,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    enter_goes_on,
     money,
     to_qdate,
 )
@@ -169,7 +173,7 @@ DOCUMENT_TYPES = {
 }
 
 HINT = (
-    "Enter / Tab — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   Ctrl+S — сохранить   ·   "
     "Ctrl+Enter — провести"
 )
@@ -1026,7 +1030,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
     error = Signal(str)
     unknown_value = Signal(QPersistentModelIndex, int, str)  # index, kind_id, typed text
     unknown_item = Signal(QPersistentModelIndex, str)
-    unknown_warehouse = Signal(QPersistentModelIndex, str)
+    # index, name, picked as "+ Добавить «…»" (then added without a question)
+    unknown_warehouse = Signal(QPersistentModelIndex, str, bool)
     # (kind_id, name, owner_id) -> the new element's id: a subconto list offers
     # "+ Добавить «…»" (see `attach_list`)
     add_value: Callable[[int, str, int | None], int] | None = None
@@ -1042,7 +1047,10 @@ class InventoryLinesDelegate(QStyledItemDelegate):
             if key in {ACCOUNT, EXPENSE}:
                 attach_account_list(editor, labels, model.s.catalog, self._chosen)
             else:
-                can_add = key in SUBCONTO_KEYS and self.add_value is not None
+                # a new item or warehouse, like a new contract, is offered in the list
+                can_add = key in (ITEM, WAREHOUSE) or (
+                    key in SUBCONTO_KEYS and self.add_value is not None
+                )
                 attach_list(editor, labels, True, self._chosen, can_add=can_add)
         elif key in NUMBER_KEYS:
             editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -1083,6 +1091,7 @@ class InventoryLinesDelegate(QStyledItemDelegate):
             return value
         if editor.property("gl_add") and self.add_value is not None:
             return self.add_value(kind_id, text, owner)
+        editor.setProperty("gl_unknown", True)  # the cursor waits in the cell for the answer
         self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
         return UNSET
 
@@ -1104,8 +1113,12 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                     model.setData(model.index(index.row(), model.columns.index(MEMO)), text)
                     return
                 if text and value is None:
-                    signal = self.unknown_item if key == ITEM else self.unknown_warehouse
-                    signal.emit(QPersistentModelIndex(index), text)
+                    editor.setProperty("gl_unknown", True)  # the cell waits for the answer
+                    where = QPersistentModelIndex(index)
+                    if key == ITEM:
+                        self.unknown_item.emit(where, text)
+                    else:
+                        self.unknown_warehouse.emit(where, text, bool(editor.property("gl_add")))
                     return
             elif key == QUANTITY:
                 value = to_quantity(text) if text else None
@@ -1127,16 +1140,22 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         ):
             self._commit_and_next(editor)  # Tab as Enter: a group holds the cell
             return True
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Backtab:
+            self._commit_and_next(editor, QAbstractItemDelegate.EndEditHint.EditPreviousItem)
+            return True
         return super().eventFilter(editor, event)
 
-    def _commit_and_next(self, editor) -> None:
+    def _commit_and_next(self, editor, hint=QAbstractItemDelegate.EndEditHint.EditNextItem) -> None:
+        """Enter and Tab alike; a group, or a name its directory lacks, keeps the cell."""
         if editor.property("inventory_done"):
             return
         if holds_on_group(editor, self.error):
             return
         editor.setProperty("inventory_done", True)
         self.commitData.emit(editor)
-        self.closeEditor.emit(editor, QAbstractItemDelegate.EndEditHint.EditNextItem)
+        if editor.property("gl_unknown"):
+            hint = QAbstractItemDelegate.EndEditHint.NoHint
+        self.closeEditor.emit(editor, hint)
 
 
 class InventoryLinesTable(QTableView):
@@ -1363,15 +1382,18 @@ class InventoryDocumentPage(QWidget):
         self.vat_caption = QLabel(tr("НДС"))
         self.vat_caption.setObjectName("secondary")
         meta.addWidget(self.vat_caption)
-        self.vat_rate = QComboBox()
+        self.vat_rate = PickBox()
+        self.vat_rate.setFixedWidth(110)
         for rate, label in VAT_RATES:
             self.vat_rate.addItem(tr(label), rate)
         meta.addWidget(self.vat_rate)
         meta.addSpacing(12)
         # the basis of a receipt: an e-qaimə, or a customs declaration for imported goods
-        self.basis = QComboBox()
+        self.basis = PickBox()
+        self.basis.setFixedWidth(120)
         self.basis.addItem(tr("E-qaimə"), EQAIME)
         self.basis.addItem(tr("Декларация"), CUSTOMS)
+        self.basis.setCurrentIndex(0)
         self.basis.setToolTip(tr("Основание: e-qaimə или таможенная декларация (импорт)"))
         meta.addWidget(self.basis)
         self.invoice_caption = QLabel(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
@@ -1389,10 +1411,12 @@ class InventoryDocumentPage(QWidget):
         self.currency_caption = QLabel(tr("Валюта"))
         self.currency_caption.setObjectName("secondary")
         meta.addWidget(self.currency_caption)
-        self.currency = QComboBox()
+        self.currency = PickBox()
+        self.currency.setFixedWidth(80)
         self.currency.addItem("AZN", None)
         for currency in session.catalog.active_currencies:
             self.currency.addItem(currency.code, currency.id)
+        self.currency.setCurrentIndex(0)
         meta.addWidget(self.currency)
         self.rate_caption = QLabel(tr("Курс"))
         self.rate_caption.setObjectName("secondary")
@@ -1515,6 +1539,11 @@ class InventoryDocumentPage(QWidget):
 
     def focus_table(self) -> None:
         self.table.setFocus()
+
+    def keyPressEvent(self, event) -> None:
+        """Enter in the comment, date, VAT, basis, currency or rate goes on as Tab does."""
+        if not enter_goes_on(self, event):
+            super().keyPressEvent(event)
 
     def _shortcut(self, keys: str, callback) -> None:
         shortcut = QShortcut(QKeySequence(keys), self)
@@ -1668,7 +1697,9 @@ class InventoryDocumentPage(QWidget):
             lambda index, text: QTimer.singleShot(0, lambda: self._create_item(index, text))
         )
         self.delegate.unknown_warehouse.connect(
-            lambda index, text: QTimer.singleShot(0, lambda: self._create_warehouse(index, text))
+            lambda index, text, picked: QTimer.singleShot(
+                0, lambda: self._create_warehouse(index, text, ask=not picked)
+            )
         )
 
     def _ask_add(self, text: str, directory: str) -> bool:
@@ -1683,15 +1714,15 @@ class InventoryDocumentPage(QWidget):
 
     def _create_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
         kind = self.s.catalog.kinds[kind_id]
-        if not index.isValid() or not self._ask_add(text, kind):
+        if not index.isValid():
+            return
+        if not self._ask_add(text, kind):
+            edit_again(self.table, index, text)  # the name, to correct it
             return
         owner = self.model.owner_at(index.row(), self.model.columns[index.column()])
-        value_id = self.s.ledger.add_subconto_value(
-            self.s.company_id, kind_id, text, owner_id=owner
-        )
-        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
+        value_id = self._add_typed_value(kind_id, text, owner)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
-        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
+        edit_next(self.table, index)
 
     def _add_typed_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
         value_id = self.s.ledger.add_subconto_value(
@@ -1708,6 +1739,7 @@ class InventoryDocumentPage(QWidget):
         if self.doc_type in {"sale", "receipt"}:
             answer = self._service_or_item(text)
             if answer is None:
+                edit_again(self.table, index, text)  # the name, to correct it
                 return
             if answer == "service":  # what was typed says what the service is
                 self._make_service(index.row(), text)
@@ -1717,11 +1749,13 @@ class InventoryDocumentPage(QWidget):
             self.show_error(tr("Сначала добавьте единицу измерения"))
             return
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.item_id is None:
+            edit_again(self.table, index, text)
             return
         self.s.catalog.reload()
         self.model.refresh_choices()
         self.model.setData(self.model.index(index.row(), index.column()), dialog.item_id)
         self.s.notify(tr("Товар добавлен"))
+        edit_next(self.table, index)
 
     def _make_service(self, row: int, text: str) -> None:
         """The line becomes a service with this text; a receipt's goes on to the account the
@@ -1754,8 +1788,12 @@ class InventoryDocumentPage(QWidget):
         clicked = box.clickedButton()
         return "service" if clicked is service else "item" if clicked is item else None
 
-    def _create_warehouse(self, index: QPersistentModelIndex, text: str) -> None:
-        if not index.isValid() or not self._ask_add(text, tr("Склад")):
+    def _create_warehouse(self, index: QPersistentModelIndex, text: str, ask: bool = True) -> None:
+        """A warehouse the list lacks; picked as "+ Добавить «…»" it goes in at once."""
+        if not index.isValid():
+            return
+        if ask and not self._ask_add(text, tr("Склад")):
+            edit_again(self.table, index, text)
             return
         try:
             warehouse_id = self.inventory.add_warehouse(self.s.company_id, text)
@@ -1766,6 +1804,7 @@ class InventoryDocumentPage(QWidget):
         self.model.refresh_choices()
         self.model.setData(self.model.index(index.row(), index.column()), warehouse_id)
         self.s.notify(tr("Склад «{name}» добавлен", name=text))
+        edit_next(self.table, index)
 
     def _show_vat_rate(self, rate: int | None) -> None:
         index = self.vat_rate.findData(rate)

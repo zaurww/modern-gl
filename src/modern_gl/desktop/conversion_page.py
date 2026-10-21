@@ -7,10 +7,12 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date
 from fractions import Fraction
+from itertools import pairwise
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -47,6 +49,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    enter_goes_on,
     more_button,
     ru_date,
     to_qdate,
@@ -151,25 +154,27 @@ class FeeRow(QWidget):
         self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.amount.setPlaceholderText("0.00")
         lay.addWidget(self.amount)
-        self.currency = QComboBox()
+        self.currency = PickBox()
+        self.currency.setFixedWidth(80)
         lay.addWidget(self.currency)
         taken = QLabel(tr("удержана с"))
         taken.setObjectName("secondary")
         lay.addWidget(taken)
-        self.place = QComboBox()
+        self.place = PickBox(tr("Счёт…"))
         for label, data in money_places(session):
             self.place.addItem(label, data)
+        self.place.setCurrentIndex(0)
         lay.addWidget(self.place, 2)
         to = QLabel(tr("на счёт"))
         to.setObjectName("secondary")
         lay.addWidget(to)
-        self.expense = QComboBox()
-        self.expense.addItem(tr("по настройкам"), None)
+        self.expense = PickBox(tr("по настройкам"))
         for account in session.catalog.leaf_accounts:
             self.expense.addItem(account.label, account.id)
         lay.addWidget(self.expense, 1)
         self.remove = button("×", "flat", tr("Убрать комиссию"))
         self.remove.setFixedWidth(32)
+        self.remove.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # not a stop on the Enter path
         lay.addWidget(self.remove)
 
         self.amount.textEdited.connect(lambda _: self.changed.emit())
@@ -226,7 +231,7 @@ class FeeRow(QWidget):
             fee.currency_id,
         )
         self.amount.setText(amount_text(fee.amount))
-        self.expense.setCurrentIndex(max(self.expense.findData(fee.expense_account_id), 0))
+        self.expense.setCurrentIndex(self.expense.findData(fee.expense_account_id))
 
     def set_read_only(self, read_only: bool) -> None:
         self.amount.setReadOnly(read_only)
@@ -263,23 +268,22 @@ class SidePanel(QFrame):
         lay.addLayout(self.form)
         lay.addStretch(1)
 
-        self.account = QComboBox()
-        self.account.addItem(NONE, None)
+        self.account = PickBox(NONE)
         for a in money_accounts(session):
             self.account.addItem(a.label, a.id)
         self._row(tr("Счёт"), self.account)
         # subconto of the account: one picker per position, shown when the account has it
         self.sc_captions: list[QLabel] = []
-        self.sc: list[QComboBox] = []
+        self.sc: list[PickBox] = []
         for _ in range(3):
             caption = QLabel()
             caption.setObjectName("secondary")
-            box = QComboBox()
+            box = PickBox(NONE)
             box.activated.connect(self._subconto_changed)
             self.sc_captions.append(caption)
             self.sc.append(box)
             self._row(caption, box)
-        self.currency = QComboBox()
+        self.currency = PickBox()
         self._row(tr("Валюта"), self.currency)
         self.amount = QLineEdit()
         self.amount.setFont(fonts().total)
@@ -329,10 +333,10 @@ class SidePanel(QFrame):
                 continue
             caption.setText(self.s.catalog.kinds[kind])
             values = self.s.catalog.values(kind)
-            if len(values) != 1:
-                box.addItem(NONE, None)
             for v in values:
                 box.addItem(v.name, v.id)
+            if len(values) == 1:  # the only element: chosen already
+                box.setCurrentIndex(0)
         self._fit_currency()
         self.changed.emit()
 
@@ -368,7 +372,7 @@ class SidePanel(QFrame):
 
     def set_value(self, side: ConversionSide | None) -> None:
         if side is None:
-            self.account.setCurrentIndex(0)
+            self.account.setCurrentIndex(-1)
             self._account_changed()
             self.amount.clear()
             self.reference.clear()
@@ -607,8 +611,13 @@ class ConversionPage(QWidget):
             ("Ctrl+S", lambda: self.save(post=self.posted)),
             ("Ctrl+Return", lambda: self.save(post=True)),
             ("Ctrl+Enter", lambda: self.save(post=True)),
+            ("Ins", lambda: self.add_fee(focus=True)),
+            ("Ctrl+Del", self._remove_current_fee),
         ):
-            QShortcut(QKeySequence(keys), self).activated.connect(fn)
+            shortcut = QShortcut(QKeySequence(keys), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(fn)
+        self.btn_add_fee.setToolTip(tr("Комиссия, которую удержал банк") + " (Ins)")
         for panel in (self.source, self.target):
             panel.changed.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
@@ -618,6 +627,7 @@ class ConversionPage(QWidget):
             self.load(conversion_id)
         else:
             self._set_new(prefill)
+        self._chain()
 
     # ---- state -----------------------------------------------------------------------
 
@@ -752,15 +762,47 @@ class ConversionPage(QWidget):
         row.removed.connect(self._remove_fee)
         self.fee_rows.append(row)
         self.fees_box.addWidget(row)
-        if focus:
+        self._chain()
+        if focus and not self.read_only:
             row.amount.setFocus()
         return row
 
     def _remove_fee(self, row: FeeRow) -> None:
         self.fee_rows.remove(row)
         self.fees_box.removeWidget(row)
+        row.hide()  # out of the Enter / Tab order at once
         row.deleteLater()
         self._changed()
+
+    def _remove_current_fee(self) -> None:
+        """Ctrl+Del: the fee the cursor is in goes; the cursor to the one above it."""
+        focused = QApplication.focusWidget()
+        row = next((r for r in self.fee_rows if focused and r.isAncestorOf(focused)), None)
+        if row is None or self.read_only:
+            return
+        at = self.fee_rows.index(row)
+        self._remove_fee(row)
+        if self.fee_rows:
+            self.fee_rows[max(at - 1, 0)].amount.setFocus()
+
+    def _chain(self) -> None:
+        """Enter and Tab go in the order things are typed: the title, the side sold from,
+        the side bought to, then the fees (made later than the buttons below them, so
+        Qt's own order would put them last)."""
+        fields: list[QWidget] = [self.memo]
+        for panel in (self.source, self.target):
+            fields += [panel.account, *panel.sc, panel.currency, panel.amount]
+            fields += [panel.date, panel.reference]
+        for row in self.fee_rows:
+            fields += [row.amount, row.currency, row.place, row.expense]
+        fields.append(self.btn_post)
+        for first, second in pairwise(fields):
+            QWidget.setTabOrder(first, second)
+
+    def keyPressEvent(self, event) -> None:
+        """Enter goes on to the next field, as Tab does (as in the journal)."""
+        if not enter_goes_on(self, event):
+            super().keyPressEvent(event)
 
     def _changed(self, *_) -> None:
         if self._loading:

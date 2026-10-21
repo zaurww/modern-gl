@@ -50,7 +50,7 @@ from modern_gl.application.catalog import AccountInfo, SubcontoInfo
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.conversion_page import amount_text, fit_currency
-from modern_gl.desktop.directories_page import new_value
+from modern_gl.desktop.directories_page import added_value, new_value
 from modern_gl.desktop.invoice_picker import InvoicePicker
 from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.session import Session
@@ -131,6 +131,7 @@ class LineRow(QWidget):
     edited = Signal()  # the account or subconto changed by hand: no more suggestions
     removed = Signal(object)
     unknown = Signal(object, int, str)  # the row, the subconto position, the typed name
+    added = Signal(object, int, str)  # the same, "+ Добавить «…»" picked from the list
     error = Signal(str)
     several = Signal(object)  # the row: one payment over several e-qaimə
 
@@ -155,6 +156,8 @@ class LineRow(QWidget):
             box.setMinimumWidth(120)
             box.activated.connect(self._subconto_edited)
             box.unknown.connect(lambda text, p=position: self.unknown.emit(self, p, text))
+            box.added.connect(lambda text, p=position: self.added.emit(self, p, text))
+            box.can_add = True
             self.sc.append(box)
             lay.addWidget(box, 2)
         self.invoice = SuggestBox(tr("E-qaimə"))  # the unpaid ones of the counterparty
@@ -400,6 +403,8 @@ class BankOperationPage(QWidget):
             box = PickBox(NONE)
             box.activated.connect(self._bank_subconto_changed)
             box.unknown.connect(lambda text, p=position: self._add_bank_value(p, text))
+            box.added.connect(lambda text, p=position: self._add_bank_value(p, text, True))
+            box.can_add = True
             self.sc_captions.append(caption)
             self.sc.append(box)
             self._row(bank, caption, box)
@@ -425,6 +430,8 @@ class BankOperationPage(QWidget):
             lambda _: self._choose_counterparty(self.counterparty_edit.currentData())
         )
         self.counterparty_edit.unknown.connect(self._add_counterparty)
+        self.counterparty_edit.added.connect(lambda text: self._add_counterparty(text, True))
+        self.counterparty_edit.can_add = True
         self._row(whom, self.counterparty_caption, self.counterparty_edit)
         self.tax_id = QLabel()
         self.tax_id.setObjectName("secondary")
@@ -767,47 +774,58 @@ class BankOperationPage(QWidget):
     def _not_listed(self, text: str) -> None:
         self.show_error(tr("«{text}» нет в списке", text=text))
 
-    def _add_counterparty(self, text: str) -> None:
+    def _new_value(
+        self, listed: bool, kind: int, text: str, owner_id=None, currency_id=None
+    ) -> int | None:
+        """Picked as "+ Добавить «…»": added at once, as in the journal; typed with the
+        list closed: the directory's window, to check the name first (D49, D54)."""
+        add = added_value if listed else new_value
+        return add(self.s, self, kind, text, owner_id=owner_id, currency_id=currency_id)
+
+    def _add_counterparty(self, text: str, listed: bool = False) -> None:
         """A counterparty not yet in the directory: added right here (D49)."""
         kind = counterparty_kind(self.s)
         if kind is None or self.read_only:
             return
-        value = new_value(self.s, self, kind, text)
+        value = self._new_value(listed, kind, text)
         if value is None:
             return
         self._fill_counterparties()
         self._choose_counterparty(value)
-        self._focus_after(self.counterparty_edit)
+        self._focus_after(self.counterparty_edit, listed)
 
-    def _add_bank_value(self, position: int, text: str) -> None:
+    def _add_bank_value(self, position: int, text: str, listed: bool = False) -> None:
         """A bank account not yet in the directory (a new bank): added right here."""
         account = self.bank_info
         kind = account.sc_kinds[position] if account else None
         if kind is None or self.read_only:
             return
         currency = self.currency.currentData() if account and account.currency else None
-        value = new_value(self.s, self, kind, text, currency_id=currency)
+        value = self._new_value(listed, kind, text, currency_id=currency)
         if value is None:
             return
         chosen = list(self.bank_subconto())
         chosen[position] = value
         self._bank_account_changed(chosen=chosen)
-        self._focus_after(self.sc[position])
+        self._focus_after(self.sc[position], listed)
 
-    def _add_line_value(self, row: LineRow, position: int, text: str) -> None:
+    def _add_line_value(self, row: LineRow, position: int, text: str, listed=False) -> None:
         """A contract (or any element of the line's account) added right here."""
         account = row.account_info
         kind = account.sc_kinds[position] if account else None
         if kind is None or self.read_only:
             return
-        value = new_value(self.s, self, kind, text, owner_id=row.owner_of(position))
+        value = self._new_value(listed, kind, text, owner_id=row.owner_of(position))
         if value is None:
             return
         row.set_subconto(position, value)
-        self._focus_after(row.sc[position])
+        self._focus_after(row.sc[position], listed)
 
-    def _focus_after(self, field: QWidget) -> None:
-        """Back from a dialog: on to the field after the one just filled."""
+    def _focus_after(self, field: QWidget, listed: bool = False) -> None:
+        """Back from a dialog: on to the field after the one just filled (picked from
+        the list, the field goes on by itself)."""
+        if listed:
+            return
         field.setFocus()
         self.focusNextChild()
 
@@ -940,6 +958,7 @@ class BankOperationPage(QWidget):
         row.edited.connect(self._line_edited)
         row.removed.connect(self._remove_line)
         row.unknown.connect(self._add_line_value)
+        row.added.connect(lambda r, p, text: self._add_line_value(r, p, text, True))
         row.error.connect(self.show_error)
         at = len(self.line_rows) if at is None else at
         self.line_rows.insert(at, row)
