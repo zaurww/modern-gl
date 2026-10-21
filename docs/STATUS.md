@@ -16,7 +16,7 @@ e-qaimə) — по желанию; у пользователя есть отде
 ## Как запустить
 - Программа: `uv run modern-gl` (компании — файлы `*.gl` в «Документы\Modern GL»); `uv run modern-gl --demo` — с демо-компанией.
 - Если программа открыта, `uv run` не может обновить exe → закрыть программу или `uv run --no-sync …`.
-- Тесты: `uv run pytest -q` (510 тестов, ~2 мин; в Linux-контейнере нужны `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3` и `QT_QPA_PLATFORM=offscreen`, как в CI). Линтер: `uv run ruff check . && uv run ruff format --check .`. Типы: `uv run pyright` (0 ошибок).
+- Тесты: `uv run pytest -q` (509 тестов, ~2 мин; в Linux-контейнере нужны `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3` и `QT_QPA_PLATFORM=offscreen`, как в CI). Линтер: `uv run ruff check . && uv run ruff format --check .`. Типы: `uv run pyright` (0 ошибок).
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка> az` — смотреть после любых изменений UI.
 - У пользователя остался старый `D:\GL AZE\demo.db` (несколько тестовых компаний в одном файле) — подключается через «Fayldan əlavə et…», программа разложит его по файлам.
 
