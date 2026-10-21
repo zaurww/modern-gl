@@ -1,0 +1,214 @@
+"""Database rules of docs/ENGINEERING.md (D71): every table belongs to a company, references
+stay inside the company, money is never REAL, migrations are frozen, new tables index their
+references. Allowances are the debt listed there; a paid debt must leave the list."""
+
+import hashlib
+import sqlite3
+
+import pytest
+
+from modern_gl.demo_data import create_demo_company
+from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
+
+# A migration is never edited once written (CLAUDE.md); a new one is added here with its hash.
+FROZEN = {
+    "0001_initial.sql": "773fd87b67c2391e",
+    "0002_account_class.sql": "53f82d1fc1d53dbb",
+    "0003_two_sided_instead_of_kind.sql": "748e6c1d254a44f7",
+    "0004_unpost_and_numbering.sql": "ded6a7a9dc47ebf6",
+    "0005_optional_account_code.sql": "0d06f768ae2df1f6",
+    "0006_entry_templates.sql": "5bb5466d36c7643f",
+    "0007_inventory.sql": "aee94863f5bf8c30",
+    "0008_currencies.sql": "0043b6a5f5dda80a",
+    "0009_contract_owner_mixed_currency.sql": "cbb199f1324dfcd0",
+    "0010_account_roles_receipt_vat.sql": "f34f28f498eed3bd",
+    "0011_landed_cost_charges.sql": "8a8f38562eaa14e9",
+    "0012_account_type.sql": "412123518a4ddd64",
+    "0013_inventory_currency.sql": "2b4eeb47d65120f0",
+    "0014_counterparty_tax_id.sql": "4c68c12d06d31810",
+    "0015_posting_invoice.sql": "65b98272660dbd09",
+    "0016_receipt_invoice.sql": "b6a2e14cb750d494",
+    "0017_opening_balances.sql": "ceb74dc377630317",
+    "0018_currency_conversions.sql": "76f90ef359cc1098",
+    "0019_transit_type.sql": "813dbecc41de77bd",
+    "0020_conversion_fees.sql": "975a6d4a0164128c",
+    "0021_vat_deposit_type.sql": "175646ed9ccd1b1c",
+    "0022_sales.sql": "4d77082df18fbc9d",
+    "0023_receipt_expense_lines.sql": "c28e59e19fd70e59",
+    "0024_counterparty_legal_name.sql": "5a6f9fe06e463229",
+    "0025_bank_operations.sql": "c0290e2d9f18dfa4",
+    "0026_eqaime_portal.sql": "514114b1f1ad6a68",
+    "0027_subconto_groups.sql": "4b02c305ff5418da",
+    "0028_account_optional_subconto.sql": "b804f22eb22c0d77",
+    "0029_parallel_books.sql": "c2bbcaf3905d395c",
+    "0030_tags.sql": "a897026dc663030d",
+    "0031_receipt_expense_period.sql": "9fe806ded219f5fb",
+}
+
+# Tables of schema 0031; a table added later must index every reference (debt 7).
+LEGACY_TABLES = {
+    "account_roles",
+    "accounts",
+    "audit_events",
+    "bank_operation_lines",
+    "bank_operations",
+    "companies",
+    "conversion_fees",
+    "currencies",
+    "currency_conversions",
+    "currency_rates",
+    "documents",
+    "entry_template_lines",
+    "entry_templates",
+    "eqaime_portal",
+    "eqaime_portal_changes",
+    "eqaime_reconciled",
+    "inventory_documents",
+    "inventory_items",
+    "inventory_lines",
+    "inventory_units",
+    "landed_cost_charges",
+    "landed_cost_expense_allocations",
+    "landed_cost_shares",
+    "landed_cost_types",
+    "layers",
+    "opening_balance_documents",
+    "postings",
+    "stock_consumptions",
+    "stock_movements",
+    "subconto_kinds",
+    "subconto_value_tags",
+    "subconto_values",
+    "tags",
+    "warehouses",
+}
+# Debt 6: references between a company's tables that do not carry company_id.
+SINGLE_COLUMN_ALLOWED = {
+    "inventory_documents.accrual_document_id",
+    "postings.currency_id",
+    "subconto_kinds.owner_kind_id",
+    "subconto_values.parent_id",
+    "subconto_values.owner_id",
+    "subconto_values.currency_id",
+}
+# A row that belongs to a parent (a line to its document) is found by the parent: indexed.
+OWNER_COLUMNS = {"document_id", "operation_id", "conversion_id", "template_id", "line_id"}
+# Debt 7: owner references without an index.
+UNINDEXED_OWNER_ALLOWED = {
+    "landed_cost_expense_allocations.document_id",
+    "landed_cost_shares.document_id",
+    "landed_cost_shares.line_id",
+    "stock_consumptions.document_id",
+    "stock_movements.line_id",
+}
+
+
+@pytest.fixture(scope="module")
+def db():
+    c = connect(":memory:")
+    yield c
+    c.close()
+
+
+def tables(db: sqlite3.Connection) -> list[str]:
+    return [
+        r[0]
+        for r in db.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' "
+            "AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        )
+    ]
+
+
+def references(db: sqlite3.Connection, table: str) -> list[tuple[str, tuple[str, ...]]]:
+    """(parent table, child columns) of each foreign key."""
+    groups: dict[int, list] = {}
+    for fk in db.execute(f"PRAGMA foreign_key_list({table})"):
+        groups.setdefault(fk[0], []).append(fk)
+    return [
+        (g[0][2], tuple(fk[3] for fk in sorted(g, key=lambda fk: fk[1]))) for g in groups.values()
+    ]
+
+
+def indexed(db: sqlite3.Connection, table: str, columns: tuple[str, ...]) -> bool:
+    """An index (or the primary key) starts with these columns, company_id aside."""
+    key = tuple(c for c in columns if c != "company_id")
+    prefixes = [
+        tuple(r[2] for r in db.execute(f"PRAGMA index_info('{i[1]}')"))
+        for i in db.execute(f"PRAGMA index_list({table})")
+    ]
+    pk = [r for r in db.execute(f"PRAGMA table_info({table})") if r[5]]
+    prefixes.append(tuple(r[1] for r in sorted(pk, key=lambda r: r[5])))
+    return any(p[: len(columns)] == columns or p[: len(key)] == key for p in prefixes)
+
+
+def test_migrations_are_numbered_without_gaps():
+    numbers = sorted(int(p.name.split("_", 1)[0]) for p in MIGRATIONS_DIR.glob("*.sql"))
+    assert numbers == list(range(1, len(numbers) + 1))
+
+
+def test_migrations_are_frozen():
+    found = {
+        p.name: hashlib.sha256(p.read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:16]
+        for p in sorted(MIGRATIONS_DIR.glob("*.sql"))
+    }
+    changed = sorted(n for n in FROZEN if found.get(n) != FROZEN[n])
+    assert not changed, f"старые миграции изменены: {changed} — схему меняет только новая"
+    new = sorted(set(found) - set(FROZEN))
+    assert not new, f"добавьте новые миграции в FROZEN: {[(n, found[n]) for n in new]}"
+
+
+def test_every_table_belongs_to_a_company(db):
+    for table in tables(db):
+        if table in ("companies", "audit_events"):  # the audit log outlives what it records
+            continue
+        cols = {r[1]: r for r in db.execute(f"PRAGMA table_info({table})")}
+        assert "company_id" in cols, f"{table}: нет company_id"
+        rowid = cols["company_id"][5] and sum(1 for r in cols.values() if r[5]) == 1
+        assert cols["company_id"][3] or rowid, f"{table}.company_id может быть NULL"
+
+
+def test_references_stay_inside_the_company(db):
+    single = set()
+    for table in tables(db):
+        for parent, columns in references(db, table):
+            if parent != "companies" and "company_id" not in columns and table != "companies":
+                single.add(f"{table}.{columns[0]}")
+    assert single <= SINGLE_COLUMN_ALLOWED, (
+        f"ссылка без company_id: {sorted(single - SINGLE_COLUMN_ALLOWED)} — "
+        "нужен составной FK (company_id, id)"
+    )
+    paid = SINGLE_COLUMN_ALLOWED - single
+    assert not paid, f"долг погашен: уберите {sorted(paid)} из SINGLE_COLUMN_ALLOWED"
+
+
+def test_columns_are_typed_and_money_is_never_real(db):
+    for table in tables(db):
+        for r in db.execute(f"PRAGMA table_info({table})"):
+            assert r[2], f"{table}.{r[1]}: тип не указан"
+            assert r[2].upper() not in ("REAL", "FLOAT", "DOUBLE", "NUMERIC"), (
+                f"{table}.{r[1]}: {r[2]} — деньги и количества только INTEGER"
+            )
+
+
+def test_references_are_indexed(db):
+    missing = set()
+    for table in tables(db):
+        for _parent, columns in references(db, table):
+            if columns == ("company_id",) or indexed(db, table, columns):
+                continue
+            name = f"{table}.{columns[-1]}"
+            if table not in LEGACY_TABLES or columns[-1] in OWNER_COLUMNS:
+                missing.add(name)
+    assert missing <= UNINDEXED_OWNER_ALLOWED, (
+        f"ссылки без индекса: {sorted(missing - UNINDEXED_OWNER_ALLOWED)}"
+    )
+    paid = UNINDEXED_OWNER_ALLOWED - missing
+    assert not paid, f"долг погашен: уберите {sorted(paid)} из UNINDEXED_OWNER_ALLOWED"
+
+
+def test_demo_company_is_consistent(ledger):
+    create_demo_company(ledger)
+    conn = ledger.conn
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"

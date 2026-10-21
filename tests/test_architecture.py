@@ -1,4 +1,4 @@
-"""The rules of docs/MODULARITY.md (D70): the core knows nothing of modules, layers stay
+"""Code rules of docs/ENGINEERING.md (D70): the core knows nothing of modules, layers stay
 apart, big files do not grow. Each allowance below is a debt listed there; when the debt is
 paid, the test asks to remove the allowance."""
 
@@ -45,7 +45,7 @@ MODULE_CODE = (
     "modern_gl.reporting.eqaime_reconciliation",
 )
 
-# Debt 3 of docs/MODULARITY.md: the journal refuses to change a module's GL document.
+# Debt 3 of docs/ENGINEERING.md: the journal refuses to change a module's GL document.
 CORE_TABLE_ALLOWED = {
     "application/ledger/documents.py": {
         "inventory_documents",
@@ -99,7 +99,7 @@ def test_core_does_not_read_module_tables(path):
     allowed = CORE_TABLE_ALLOWED.get(rel(path), set())
     assert tables <= allowed, (
         f"ядро {rel(path)} читает таблицы модулей {sorted(tables - allowed)} "
-        "— см. docs/MODULARITY.md"
+        "— см. docs/ENGINEERING.md"
     )
     assert allowed <= tables, (
         f"долг в {rel(path)} погашен: уберите {sorted(allowed - tables)} из CORE_TABLE_ALLOWED"
@@ -147,5 +147,5 @@ def test_big_files_do_not_grow():
         limit = CEILINGS.get(name, NEW_FILE_LIMIT)
         assert lines <= limit, (
             f"{name}: {lines} строк при пределе {limit} — сначала вынесите часть файла "
-            "(docs/MODULARITY.md, принцип 5)"
+            "(docs/ENGINEERING.md, принцип 5)"
         )
