@@ -20,7 +20,7 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
 from modern_gl.desktop.opening_balances_page import CREDIT_AMOUNT, OpeningBalancesPage
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
-from modern_gl.desktop.reports_page import OsvPage, SectionRow
+from modern_gl.desktop.reports_page import NAME_MAX, NAME_MIN, OsvPage, SectionRow, figure
 from modern_gl.infrastructure.db import connect
 from modern_gl.infrastructure.workspace import TRASH, Workspace
 from modern_gl.reporting.reports import trial_balance
@@ -257,8 +257,10 @@ def test_osv_drill_down_to_card_and_document(window):
     osv.drill(row)
     card = current_page(window)
     assert card.title() == "Карточка счёта 51"
-    assert len(card.model.rows) == 3
-    card.drill(card.model.rows[0])
+    assert len(card.model.rows) == 5  # opening balance, 3 lines, turnovers and closing
+    card.drill(card.model.rows[0])  # the balance row opens nothing
+    assert current_page(window) is card
+    card.drill(card.model.rows[1])
     assert isinstance(current_page(window), DocumentPage)
 
 
@@ -383,7 +385,7 @@ def test_osv_top_level_only(window):
     codes = [r.code for r in osv.model.rows]
     assert "68" in codes and "68.2" not in codes
     total = osv.model.rows[-1]
-    assert osv.model.data(osv.model.index(len(osv.model.rows) - 1, 2)) == "0.00" or (
+    assert osv.model.data(osv.model.index(len(osv.model.rows) - 1, 2)) == "–" or (
         total.opening_dt != 0
     )
 
@@ -847,20 +849,31 @@ def test_make_template_from_document_and_edit_formula(window, monkeypatch):
     assert [ln.formula for ln in saved.lines] == ["S", "S*3/100"]
 
 
-def test_osv_fits_a_narrow_window(window, qtbot):
-    """Amounts give up width so the names stay readable; headers go in two lines."""
+def test_osv_amounts_stand_next_to_the_names(window, qtbot):
+    """Jon Moon: a table as wide as its content, not the window; a narrow window cuts
+    the names first; nothing is a dash, a negative is in brackets."""
     page = OsvPage(window.session)
     qtbot.addWidget(page)
     page.resize(1600, 700)
     page.show()
     qtbot.waitUntil(lambda: page.table.viewport().width() > 1400)
-    assert not page.model.two_lines
-    page.table.setMaximumWidth(900)  # the table of a narrow window
-    qtbot.waitUntil(lambda: page.model.two_lines)
     table = page.table
-    names = next(i for i, c in enumerate(page.model.columns) if not c.width)
-    assert table.columnWidth(names) >= 150
-    assert table.horizontalHeader().length() <= table.viewport().width()
+    names = next(i for i, c in enumerate(page.model.columns) if not c.width and not c.money)
+    assert table.horizontalHeader().length() < table.viewport().width() - 200
+    assert table.columnWidth(names) <= NAME_MAX
+    wide = table.columnWidth(names)
+    page.table.setMaximumWidth(700)  # the table of a narrow window
+    qtbot.waitUntil(lambda: table.columnWidth(names) < wide)
+    assert table.columnWidth(names) >= min(wide, NAME_MIN)
+    assert [figure(None), figure(0), figure(12345), figure(-12345)] == [
+        "",
+        "–",
+        "123.45",
+        "(123.45)",
+    ]
+    # soft bands of three rows; the total is not banded
+    rows = len(page.model.rows)
+    assert page.model.banded == [i // 3 % 2 == 1 for i in range(rows - 1)] + [False]
 
 
 def test_theme_switches_at_once_and_keeps_the_company(window):
