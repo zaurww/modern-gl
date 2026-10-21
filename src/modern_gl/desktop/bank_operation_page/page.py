@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.bank import (
-    BANK_TYPES,
     CUSTOMER,
     FEE,
     IN,
@@ -50,9 +49,24 @@ from modern_gl.application.bank import (
     load_bank_operation,
     place_balance,
 )
-from modern_gl.application.catalog import AccountInfo, SubcontoInfo
+from modern_gl.application.catalog import AccountInfo
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import load_document
+from modern_gl.desktop.bank_operation_page.common import (
+    FIELD_WIDTH,
+    NONE,
+    SEVERAL,
+    TYPE_KINDS,
+    WITH_COUNTERPARTY,
+    bank_accounts,
+    caption,
+    counterparty_kind,
+    fits,
+    offer_invoices,
+    place_label,
+    select_data,
+)
+from modern_gl.desktop.bank_operation_page.line_row import LineRow
 from modern_gl.desktop.conversion_page import amount_text, fit_currency
 from modern_gl.desktop.directories_page import added_value, new_value
 from modern_gl.desktop.invoice_picker import InvoicePicker
@@ -70,272 +84,10 @@ from modern_gl.desktop.widgets import (
     to_qdate,
 )
 from modern_gl.domain.accounts import BANK_FEE
-from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import DRAFT, PORTAL, OpenInvoice, open_invoices
-
-NONE = "—"
-# the line's account suggests the kind of a counterparty's operation
-TYPE_KINDS = {
-    "payable": SUPPLIER,
-    "advance_paid": SUPPLIER,
-    "receivable": CUSTOMER,
-    "advance_received": CUSTOMER,
-}
-WITH_COUNTERPARTY = (SUPPLIER, CUSTOMER, OTHER)
-SEVERAL = "several"  # the list item «several e-qaimə…»
-# an e-qaimə the books do not have yet: an imported draft, or only seen on the portal
-SOURCES = {DRAFT: "черновик", PORTAL: "с портала"}
-
-
-FIELD_WIDTH = 460  # the fields on the cursor's path
-
-
-def caption(text: str, name: str = "secondary") -> QLabel:
-    label = QLabel(text)
-    label.setObjectName(name)
-    return label
-
-
-def place_label(place: BankPlace) -> str:
-    """A bank account in one field: «ABB · 51 · AZN»."""
-    return f"{place.name}  ·  {place.account_code}  ·  {place.currency or 'AZN'}"
-
-
-def offer_invoices(box: SuggestBox, invoices: Sequence[OpenInvoice]) -> None:
-    """The e-qaimə a list offers: number, date, what is left to pay, and where it is known
-    from if not from the posted documents; «several» after them."""
-    typed = box.text()
-    box.clear()
-    for i in invoices:
-        label = f"{i.invoice} · {ru_date(i.doc_date)} · {format_minor(i.amount)}"
-        if i.vat:
-            label += f" · ƏDV {format_minor(i.vat)}"
-        if i.source in SOURCES:
-            label += f" · {tr(SOURCES[i.source])}"
-        box.addItem(label, i, i.invoice)
-    if len(invoices) > 1:
-        box.addItem(tr("Несколько e-qaimə…"), SEVERAL, "")
-    box.setText(typed)
-
-
-def bank_accounts(session: Session) -> list[AccountInfo]:
-    """Accounts money is in the bank on: by type, or by the bank account directory."""
-    catalog = session.catalog
-    return [
-        a
-        for a in catalog.leaf_accounts
-        if a.account_type in BANK_TYPES
-        or (
-            a.account_type is None
-            and any(catalog.kind_codes.get(k or 0) == "bank_account" for k in a.sc_kinds)
-        )
-    ]
-
-
-def counterparty_kind(session: Session) -> int | None:
-    return next(
-        (k for k, code in session.catalog.kind_codes.items() if code == "counterparty"), None
-    )
-
-
-def fits(account: AccountInfo | None, value: SubcontoInfo) -> bool:
-    """A bank account fits a GL account by currency: a USD account is not offered on a
-    manat-only 51, a manat one not on a currency-only 52."""
-    if account is None:
-        return True
-    if value.currency_id is None:
-        return account.currency != CURRENCY_ONLY
-    return account.currency != NO_CURRENCY
-
-
-def select_data(box: PickBox, data, text: str = "") -> None:
-    """Choose the item with this data; one no longer offered (hidden) is added."""
-    i = box.findData(data)
-    if i < 0 and data is not None:
-        box.addItem(text or str(data), data)
-        i = box.count() - 1
-    box.setCurrentIndex(i)
-
-
-class LineRow(QWidget):
-    """One line: the account, its subconto (the counterparty of the operation fills its
-    own position), the e-qaimə and the amount."""
-
-    changed = Signal()
-    edited = Signal()  # the account or subconto changed by hand: no more suggestions
-    removed = Signal(object)
-    unknown = Signal(object, int, str)  # the row, the subconto position, the typed name
-    added = Signal(object, int, str)  # the same, "+ Добавить «…»" picked from the list
-    error = Signal(str)
-    several = Signal(object)  # the row: one payment over several e-qaimə
-
-    def __init__(self, session: Session) -> None:
-        super().__init__()
-        self.s = session
-        self.counterparty: int | None = None
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(8)
-        self.account = PickBox(tr("Счёт…"))
-        for a in session.catalog.leaf_accounts:
-            self.account.addItem(a.label, a.id)
-        self.account.setMinimumWidth(200)
-        self.account.unknown.connect(
-            lambda text: self.error.emit(tr("«{text}» нет в списке", text=text))
-        )
-        lay.addWidget(self.account, 3)
-        self.sc: list[PickBox] = []
-        for position in range(3):
-            box = PickBox()
-            box.setMinimumWidth(120)
-            box.activated.connect(self._subconto_edited)
-            box.unknown.connect(lambda text, p=position: self.unknown.emit(self, p, text))
-            box.added.connect(lambda text, p=position: self.added.emit(self, p, text))
-            box.can_add = True
-            self.sc.append(box)
-            lay.addWidget(box, 2)
-        self.invoice = SuggestBox(tr("E-qaimə"))  # the unpaid ones of the counterparty
-        self.invoice.setFixedWidth(160)
-        self.invoice.activated.connect(self._invoice_chosen)
-        lay.addWidget(self.invoice)
-        self.amount = QLineEdit()
-        self.amount.setFixedWidth(130)
-        self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.amount.setPlaceholderText("0.00")
-        lay.addWidget(self.amount)
-        self.remove = button("×", "flat", tr("Убрать строку") + " (Ctrl+Del)")
-        self.remove.setFixedWidth(32)
-        self.remove.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Ctrl+Del from the keyboard
-        lay.addWidget(self.remove)
-
-        self.account.activated.connect(self._account_edited)
-        self.invoice.textEdited.connect(lambda _: self.changed.emit())
-        self.amount.textEdited.connect(lambda _: self.changed.emit())
-        self.remove.clicked.connect(lambda: self.removed.emit(self))
-        self._fill_subconto(())
-
-    @property
-    def account_info(self) -> AccountInfo | None:
-        account_id = self.account.currentData()
-        return self.s.catalog.accounts.get(account_id) if account_id is not None else None
-
-    def _account_edited(self, *_) -> None:
-        self._fill_subconto(())
-        self.edited.emit()
-        self.changed.emit()
-
-    def _subconto_edited(self, *_) -> None:
-        self.edited.emit()
-        self.changed.emit()
-
-    def _fill_subconto(self, chosen: Sequence[int | None]) -> None:
-        """A picker per subconto of the account; the counterparty of the operation is its
-        own position, so that one is not shown. Contracts are the counterparty's."""
-        catalog = self.s.catalog
-        account = self.account_info
-        kinds = account.sc_kinds if account else (None, None, None)
-        own = counterparty_kind(self.s)
-        chosen = [*chosen, None, None, None][:3]
-        for box, kind, value in zip(self.sc, kinds, chosen, strict=True):
-            box.clear()
-            hidden = kind is None or (kind == own and self.counterparty is not None)
-            box.setVisible(not hidden)
-            if hidden:
-                continue
-            assert kind is not None
-            owner = self.counterparty if catalog.owner_kinds.get(kind) == own else None
-            box.setPlaceholderText(catalog.kinds[kind] + "…")
-            for v in catalog.values(kind, owner):
-                box.addItem(v.label, v.id, v.name)
-            if value is not None:
-                select_data(box, value, catalog.value(value).name)
-            elif box.count() == 1:  # the only element: chosen already
-                box.setCurrentIndex(0)
-        self.invoice.setVisible(catalog.takes_invoice(account.id if account else None))
-
-    def set_counterparty(self, counterparty: int | None) -> None:
-        if counterparty == self.counterparty:
-            return
-        kept = self.subconto()
-        self.counterparty = counterparty
-        own = counterparty_kind(self.s)
-        account = self.account_info
-        if account is not None:  # a contract of another counterparty goes
-            kept = tuple(
-                None if v is not None and self.s.catalog.owned_elsewhere(v, counterparty) else v
-                for v in kept
-            )
-            kept = tuple(
-                None if k == own else v for k, v in zip(account.sc_kinds, kept, strict=True)
-            )
-        self._fill_subconto(kept)
-
-    def set_invoices(self, invoices: Sequence[OpenInvoice]) -> None:
-        offer_invoices(self.invoice, invoices)
-
-    def _invoice_chosen(self, index: int) -> None:
-        chosen = self.invoice.itemData(index) if index >= 0 else None
-        if chosen == SEVERAL:
-            self.several.emit(self)
-            return
-        if isinstance(chosen, OpenInvoice) and not self.amount.text().strip():
-            self.amount.setText(amount_text(chosen.amount))  # what is left to pay on it
-        self.changed.emit()
-
-    def owner_of(self, position: int) -> int | None:
-        """Whose a new element at this position is: a contract is the counterparty's."""
-        account = self.account_info
-        kind = account.sc_kinds[position] if account else None
-        if kind is None or self.s.catalog.owner_kinds.get(kind) != counterparty_kind(self.s):
-            return None
-        return self.counterparty
-
-    def set_subconto(self, position: int, value: int) -> None:
-        chosen = list(self.subconto())
-        chosen[position] = value
-        self._fill_subconto(chosen)
-        self._subconto_edited()
-
-    def subconto(self) -> tuple[int | None, ...]:
-        """The chosen subconto; the counterparty's position is left to the operation."""
-        return tuple(None if box.isHidden() else box.currentData() for box in self.sc)
-
-    def is_empty(self) -> bool:
-        return self.account.currentData() is None and not self.amount.text().strip()
-
-    def value(self) -> BankLine | None:
-        """None for an empty line (just added, not filled in)."""
-        if self.is_empty():
-            return None
-        text = self.amount.text().strip()
-        return BankLine(
-            self.account.currentData(),
-            to_minor(text) if text else 0,
-            self.subconto(),
-            "" if self.invoice.isHidden() else self.invoice.text().strip(),
-        )
-
-    def set_line(self, line: BankLine, amount: bool = True) -> None:
-        if line.account_id is not None:
-            select_data(
-                self.account, line.account_id, self.s.catalog.accounts[line.account_id].label
-            )
-        else:
-            self.account.setCurrentIndex(-1)
-        self._fill_subconto(line.subconto)
-        if amount:
-            self.amount.setText(amount_text(line.amount))
-            self.invoice.setText(line.invoice)
-
-    def set_read_only(self, read_only: bool) -> None:
-        for w in (self.account, *self.sc):
-            w.setEnabled(not read_only)
-        for edit in (self.invoice, self.amount):
-            edit.setReadOnly(read_only)
-        self.remove.setVisible(not read_only)
+from modern_gl.reporting.invoices import OpenInvoice, open_invoices
 
 
 class BankOperationPage(QWidget):
@@ -819,14 +571,14 @@ class BankOperationPage(QWidget):
         account = self.bank_info
         kinds = account.sc_kinds if account else (None, None, None)
         chosen = [*chosen, None, None, None][:3]
-        for caption, box, kind, value in zip(self.sc_captions, self.sc, kinds, chosen, strict=True):
+        for label, box, kind, value in zip(self.sc_captions, self.sc, kinds, chosen, strict=True):
             box.clear()
             shown = kind is not None
-            caption.setVisible(shown)
+            label.setVisible(shown)
             box.setVisible(shown)
             if kind is None:
                 continue
-            caption.setText(self.s.catalog.kinds[kind])
+            label.setText(self.s.catalog.kinds[kind])
             values = [v for v in self.s.catalog.values(kind) if fits(account, v)]
             for v in values:
                 box.addItem(v.name, v.id)
