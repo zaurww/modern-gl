@@ -64,6 +64,10 @@ AZ: dict[str, str] = {
     "Налоговые корректировки": "Vergi düzəlişləri",
     "МСФО": "MHBS",
     "Налоговый учёт": "Vergi uçotu",
+    "Параллельные книги (МСФО, налог)": "Paralel kitablar (MHBS, vergi)",
+    "Нельзя выключить параллельные книги: в корректировках МСФО и налога есть документы ({n})": (
+        "Paralel kitabları söndürmək olmaz: MHBS və vergi düzəlişlərində sənədlər var ({n})"
+    ),
     "Активный": "Aktiv",
     "Пассивный": "Passiv",
     "Активно-пассивный": "Aktiv-passiv",
@@ -1240,4 +1244,50 @@ AZ: dict[str, str] = {
     "Ожидает подтверждения или в процессе": "Təsdiq gözləyir və ya prosesdədir",
     "Совпадает": "Üst-üstə düşür",
     "На портале": "Portalda",
+    # tags of directory elements (D64)
+    "Метка": "Etiket",
+    "Метки": "Etiketlər",
+    "Все": "Hamısı",
+    "Только с меткой «{name}»": "Yalnız «{name}» etiketli",
+    "Удалить метку «{name}»? Она снимется со всех элементов.": "«{name}» etiketi silinsin? O, bütün elementlərdən götürüləcək.",
+    "+ Метка": "+ Etiket",
+    "Новая метка, например «Связанная сторона»": "Yeni etiket, məsələn «Əlaqəli tərəf»",
+    "Название метки:": "Etiketin adı:",
+    "Новая метка": "Yeni etiket",
+    "По метке отбирается ОСВ по субконто: например, все связанные стороны.": "Subkonto üzrə dövriyyə etiketə görə seçilir: məsələn, bütün əlaqəli tərəflər.",
+    "Метки «{name}» сохранены": "«{name}» etiketləri saxlanıldı",
+    "Метки…": "Etiketlər…",
+    "Удалить метку…": "Etiketi sil…",
+    "метка не найдена": "etiket tapılmadı",
+    "у группы не бывает меток — только у элементов": "qrupun etiketi olmur — yalnız elementlərin",
+    "метка «{name}» уже есть": "«{name}» etiketi artıq var",
+    "Связанная сторона": "Əlaqəli tərəf",
+    "Арендодатель": "İcarəyə verən",
+    "Холдинг": "Holdinq",
+    # D65: the month of a purchase's expense, accrued expenses (76H)
+    "Начисленные расходы": "Hesablanmış xərclər",
+    "Расход за": "Xərc dövrü",
+    "месяц документа": "sənədin ayı",
+    "Месяц расхода по услугам, если e-qaimə пришла позже: расход начисляется "
+    "последним днём этого месяца (Дт затрат / Кт 76H), долг поставщику и НДС — "
+    "датой e-qaimə": "Xidmət xərcinin ayı, e-qaimə gec gəlibsə: xərc həmin ayın son günü "
+    "hesablanır (Dt xərc / Kt 76H), malsatana borc və ƏDV — e-qaimənin tarixi ilə",
+    "Начисление": "Hesablama",
+    "Проводки начисления расхода в месяце услуги": "Xidmət ayında xərcin hesablanma yazılışları",
+    "Начисление расхода по поступлению №{n}": "Alış №{n} üzrə xərcin hesablanması",
+    "расход за {month} должен быть раньше месяца документа": "{month} xərci sənədin ayından "
+    "əvvəl olmalıdır",
+    "месяц расхода указывается для услуг и расходов: в документе нет строк без товара": (
+        "xərc ayı xidmət və xərclər üçün göstərilir: sənəddə malsız sətir yoxdur"
+    ),
+    "не определён счёт начисленных расходов: оставьте один активный счёт типа «Начисленные "
+    "расходы» (например, {code})": "hesablanmış xərclər hesabı müəyyən deyil: «Hesablanmış "
+    "xərclər» tipli bir aktiv hesab saxlayın (məsələn, {code})",
+    "расход за {month} не отнести: период закрыт по {closed}. Выберите в «Расход за» месяц "
+    "документа": "{month} xərci aid edilə bilməz: dövr {closed} tarixinədək bağlıdır. "
+    "«Xərc dövrü» sahəsində sənədin ayını seçin",
+    # the bank operation in one column, in the order of input
+    "Кому": "Kimə",
+    "От кого": "Kimdən",
+    "Банковский счёт…": "Bank hesabı…",
 }

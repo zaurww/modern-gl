@@ -33,6 +33,7 @@ code;type
 71;other_receivable
 75;other_liability
 76;other_liability
+76H;accrued_expenses
 80;profit_loss
 85;share_capital
 88;retained_earnings

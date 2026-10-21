@@ -41,10 +41,11 @@ from modern_gl.application.eqaime_import import (
 from modern_gl.application.eqaime_portal import read_again, rechecks
 from modern_gl.application.inventory import Inventory, format_quantity, to_quantity
 from modern_gl.desktop.period_bar import PeriodBar
+from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import button, money
-from modern_gl.domain.dates import month_name, ru_date
+from modern_gl.domain.dates import earlier_months, month_name, ru_date
 from modern_gl.domain.eqaime import IMPORTED, PortalInvoice
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.periods import MONTH
@@ -52,7 +53,19 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
 from modern_gl.reporting.eqaime_reconciliation import changed_after_reconciliation
 
-COLUMNS = ["Дата", "E-qaimə", "Контрагент / строка", "VÖEN / код", "Вид", "Сумма", "ƏDV", "Станет"]
+COLUMNS = [
+    "Дата",
+    "E-qaimə",
+    "Контрагент / строка",
+    "VÖEN / код",
+    "Вид",
+    "Сумма",
+    "ƏDV",
+    "Расход за",
+    "Станет",
+]
+EXPENSE_MONTH = COLUMNS.index("Расход за")
+BECOMES = COLUMNS.index("Станет")
 
 
 def fetch_invoices(
@@ -187,7 +200,7 @@ class EqaimeImportDialog(QDialog):
         self.tree.setUniformRowHeights(True)
         self.tree.setAlternatingRowColors(False)
         header = self.tree.header()
-        for column, width in enumerate((124, 150, 0, 110, 70, 100, 90, 240)):
+        for column, width in enumerate((118, 140, 0, 104, 64, 90, 76, 130, 0)):
             if width:
                 self.tree.setColumnWidth(column, width)
             else:
@@ -196,6 +209,14 @@ class EqaimeImportDialog(QDialog):
             self.tree.headerItem().setTextAlignment(
                 column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
+        self.tree.headerItem().setToolTip(
+            EXPENSE_MONTH,
+            tr(
+                "Месяц расхода по услугам, если e-qaimə пришла позже: расход начисляется "
+                "последним днём этого месяца (Дт затрат / Кт 76H), долг поставщику и НДС — "
+                "датой e-qaimə"
+            ),
+        )
         self.tree.itemChanged.connect(lambda *_: self._show_count())
         root.addWidget(self.tree, 3)
 
@@ -367,7 +388,10 @@ class EqaimeImportDialog(QDialog):
         self.tree.blockSignals(True)
         self.tree.clear()
         for plan in self.plans:
-            self.tree.addTopLevelItem(self._invoice_item(plan))
+            item = self._invoice_item(plan)
+            self.tree.addTopLevelItem(item)
+            if plan.importable and plan.has_expenses:
+                self.tree.setItemWidget(item, EXPENSE_MONTH, self._expense_month(plan))
         self.tree.blockSignals(False)
         self._show_count()
 
@@ -385,6 +409,7 @@ class EqaimeImportDialog(QDialog):
                 kind,
                 money(invoice.amount, blank_zero=False),
                 money(invoice.vat),
+                "",
                 self._invoice_state(plan),
             ]
         )
@@ -403,10 +428,25 @@ class EqaimeImportDialog(QDialog):
             for column in range(len(COLUMNS)):
                 item.setForeground(column, QColor(P.tertiary))
         if plan.unresolved and plan.importable:
-            item.setForeground(7, QColor(P.amber))
+            item.setForeground(BECOMES, QColor(P.amber))
         for line in plan.lines:
             item.addChild(self._line_item(line, invoice.outgoing))
         return item
+
+    def _expense_month(self, plan: InvoicePlan) -> PickBox:
+        """The month of a purchase's services: the e-qaimə's own or one of the twelve
+        before it (D65); the choice goes into the plan."""
+        box = PickBox()
+        box.addItem(tr("месяц документа"), None)
+        for last in earlier_months(plan.invoice.doc_date):
+            box.addItem(month_name(last[:7]), last)
+        box.setCurrentIndex(max(box.findData(plan.expense_date), 0))
+
+        def chosen(_index: int) -> None:
+            plan.expense_date = box.currentData()
+
+        box.activated.connect(chosen)
+        return box
 
     def _invoice_state(self, plan: InvoicePlan) -> str:
         if plan.existing is not None:
@@ -437,6 +477,7 @@ class EqaimeImportDialog(QDialog):
                 tr("Услуга") if line.service else tr("Товар"),
                 money(line.amount, blank_zero=False),
                 money(line.vat),
+                "",
                 self._becomes(plan, outgoing),
             ]
         )
@@ -452,7 +493,7 @@ class EqaimeImportDialog(QDialog):
             else plan.item_id is None and plan.account_id is None
         )
         if unresolved:
-            child.setForeground(7, QColor(P.amber))
+            child.setForeground(BECOMES, QColor(P.amber))
         return child
 
     def _becomes(self, plan: LinePlan, outgoing: bool) -> str:

@@ -51,6 +51,35 @@ class CompanyCommands(LedgerBase):
             self.conn.execute("UPDATE companies SET name = ? WHERE id = ?", (name, company_id))
             self._audit(company_id, "company", company_id, "rename", {"from": old, "to": name})
 
+    def set_parallel_books(self, company_id: int, on: bool) -> None:
+        """Parallel books (IFRS, tax) on or off (D63): off hides the «Book» field of a
+        document and the book switch of reports. Not while documents lie outside the
+        common layer — they would vanish from sight. Audited."""
+        with transaction(self.conn):
+            old = bool(self._company(company_id)["parallel_books"])
+            if old == on:
+                return
+            if not on:
+                used = self.conn.execute(
+                    "SELECT COUNT(*) FROM documents d JOIN layers l ON l.id = d.layer_id "
+                    "WHERE d.company_id = ? AND l.code <> 'common'",
+                    (company_id,),
+                ).fetchone()[0]
+                if used:
+                    raise ValidationError(
+                        tr(
+                            "Нельзя выключить параллельные книги: в корректировках МСФО и "
+                            "налога есть документы ({n})",
+                            n=used,
+                        )
+                    )
+            self.conn.execute(
+                "UPDATE companies SET parallel_books = ? WHERE id = ?", (int(on), company_id)
+            )
+            self._audit(
+                company_id, "company", company_id, "set_parallel_books", {"from": old, "to": on}
+            )
+
     def set_closed_through(self, company_id: int, through: date | str | None) -> None:
         """Close the period up to `through` inclusive; None reopens everything. Audited."""
         value = None if through is None else iso_date(through)

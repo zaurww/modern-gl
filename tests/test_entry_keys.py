@@ -30,12 +30,19 @@ def answer_no(monkeypatch):
 
 
 @pytest.fixture
-def page(qtbot):
+def books():
+    """Parallel books on: the header has the «Book» field (D63)."""
+    return True
+
+
+@pytest.fixture
+def page(qtbot, books):
     theme.apply(QApplication.instance())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("Firma")
     apply_chart_template(ledger, cid, "classic", "ru")
+    ledger.set_parallel_books(cid, books)
     session = Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda m: None)
     session.working_date = date(2026, 3, 5)
     page = DocumentPage(session)
@@ -98,6 +105,14 @@ def test_header_goes_field_by_field_into_an_open_cell(page, qtbot, key):
     assert focused() is page.layer
     qtbot.keyClick(page.layer, key)
     assert editing_at(page, DT)  # the cursor is in the first cell: typing goes there
+
+
+@pytest.mark.parametrize("books", [False])
+def test_one_book_has_no_book_field(page, qtbot, books):
+    assert not page.layer.isVisible()
+    page.date.setFocus()
+    qtbot.keyClick(page.date, Qt.Key.Key_Return)
+    assert editing_at(page, DT)  # straight from the date into the first cell
 
 
 def test_shift_tab_goes_back_through_the_header(page, qtbot):

@@ -1,4 +1,4 @@
-"""A bank operation (D47, D64): money in or out of one bank account. One row on top, set
+"""A bank operation (D47, D68): money in or out of one bank account. One row on top, set
 before typing — which way, the bank account (one field), the date, the kind; then the
 cursor's path — who, the e-qaimə, how much, «Провести». Below — lines: what it paid (an
 account, a contract, an e-qaimə) and how much; one line is folded into a summary and its
@@ -395,12 +395,12 @@ class BankOperationPage(QWidget):
             bar.addWidget(b)
         bar.addSpacing(20)
         bar.addWidget(caption(tr("Банк")))
-        self.places = bank_places(session.conn, session.company_id)
+        self.places: list[BankPlace] = []  # _fill_banks
         self.bank = PickBox(NONE)  # the account, its bank and currency in one field
-        for place in self.places:
-            self.bank.addItem(place_label(place), place)
         self.bank.setFixedWidth(300)
-        self.bank.unknown.connect(self._not_listed)
+        self.bank.can_add = True  # a new bank: added right here (D49)
+        self.bank.unknown.connect(self._add_bank)
+        self.bank.added.connect(lambda text: self._add_bank(text, True))
         bar.addWidget(self.bank)
         self.currency = PickBox()  # shown only where the account leaves it to choose
         self.currency.setFixedWidth(90)
@@ -499,7 +499,7 @@ class BankOperationPage(QWidget):
         self.amount.setFixedWidth(200)
         self.amount.textEdited.connect(self._amount_typed)
         self.amount_currency = caption("")
-        # a payment's ƏDV goes from (a receipt's to) the ƏDV deposit account (D65): its
+        # a payment's ƏDV goes from (a receipt's to) the ƏDV deposit account (D69): its
         # own operation on that account, typed here with the bank part
         self.vat_caption = caption("")
         self.vat_amount = QLineEdit()
@@ -522,11 +522,8 @@ class BankOperationPage(QWidget):
         form.addLayout(amount_row, 5, 1, 1, 2)
         form.setRowMinimumHeight(6, 6)
         self.deposit_caption = caption(tr("Депозит ƏDV"))
-        self.deposits = [p for p in self.places if p.account_type == "vat_deposit"]
+        self.deposits: list[BankPlace] = []  # _fill_banks
         self.deposit = PickBox(NONE)
-        for place in self.deposits:
-            self.deposit.addItem(place_label(place), place)
-        self.deposit.setCurrentIndex(0 if self.deposits else -1)
         self.deposit.setFixedWidth(300)
         self.deposit.unknown.connect(self._not_listed)
         self.deposit_date = date_edit(session.working_date)
@@ -663,6 +660,7 @@ class BankOperationPage(QWidget):
         self.date.dateChanged.connect(self._follow_date)
         self.deposit_date.dateChanged.connect(self._deposit_day_changed)
         self.kind.activated.connect(self._kind_changed)
+        self._fill_banks()
         self._fill_counterparties()
 
         if operation_id is not None:
@@ -849,6 +847,79 @@ class BankOperationPage(QWidget):
     def _fit_currency(self) -> None:
         fit_currency(self.currency, self.s, self.bank_info, self.bank_subconto())
         self.currency.setVisible(self.currency.isEnabled())  # a currency left to choose
+
+    def _fill_banks(self) -> None:
+        """Every bank account of the company in one list, «Kapital Bank · 51 · AZN»: the
+        ones in use, then a bank on a GL account it was never used with (a new ƏDV
+        deposit on 55 with the bank of 51); the ƏDV deposit ones for the deposit part."""
+        self.places = bank_places(self.s.conn, self.s.company_id)
+        self.places += self._unused_places({p.key for p in self.places})
+        self.bank.clear()
+        for place in self.places:
+            self.bank.addItem(place_label(place), place)
+        chosen = self.deposit.currentData()
+        self.deposits = [p for p in self.places if p.account_type == "vat_deposit"]
+        self.deposit.clear()
+        for place in self.deposits:
+            self.deposit.addItem(place_label(place), place)
+        at = next((i for i, p in enumerate(self.deposits) if p == chosen), 0)
+        self.deposit.setCurrentIndex(at if self.deposits else -1)
+        self._show_bank()
+
+    def _unused_places(self, listed: set[tuple[int, int | None]]) -> list[BankPlace]:
+        catalog = self.s.catalog
+        result = []
+        for account in bank_accounts(self.s):
+            kind = next(
+                (k for k in account.sc_kinds if catalog.kind_codes.get(k or 0) == "bank_account"),
+                None,
+            )
+            if kind is None:
+                continue
+            for v in catalog.values(kind):
+                if (account.id, v.id) in listed or not fits(account, v):
+                    continue
+                currency = catalog.currencies[v.currency_id].code if v.currency_id else ""
+                code = account.code or account.name
+                result.append(
+                    BankPlace(
+                        account.id,
+                        v.id,
+                        v.name,
+                        code,
+                        v.currency_id,
+                        currency,
+                        account.account_type,
+                    )
+                )
+        return result
+
+    def _add_bank(self, text: str, listed: bool = False) -> None:
+        """A bank not yet in the directory: added under the chosen GL account (or the first
+        one with the bank account directory), as an element of that directory."""
+        catalog = self.s.catalog
+        for account in [self.bank_info, *bank_accounts(self.s)]:
+            if account is None:
+                continue
+            position = next(
+                (
+                    i
+                    for i, kind in enumerate(account.sc_kinds)
+                    if catalog.kind_codes.get(kind or 0) == "bank_account"
+                ),
+                None,
+            )
+            if position is None:
+                continue
+            select_data(self.account, account.id, account.label)
+            self._bank_account_changed(chosen=self.bank_subconto())
+            self._add_bank_value(position, text, listed)
+            self._fill_banks()
+            if not listed:
+                self.bank.setFocus()
+                self.focusNextChild()
+            return
+        self._not_listed(text)
 
     def _bank_chosen(self, *_) -> None:
         """The one bank field: its GL account and the element of the bank directory."""
@@ -1302,7 +1373,7 @@ class BankOperationPage(QWidget):
     @property
     def deposit_shown(self) -> bool:
         """A new payment to a supplier (from a customer) on a current account, folded,
-        with an ƏDV deposit account in the company: its ƏDV part is typed beside (D65)."""
+        with an ƏDV deposit account in the company: its ƏDV part is typed beside (D69)."""
         return (
             self.doc is None
             and not self.read_only

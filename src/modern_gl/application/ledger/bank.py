@@ -42,7 +42,7 @@ class BankCommands(ModuleDocumentCommands):
         *,
         post: bool,
     ) -> list[int]:
-        """A new payment and its ƏDV part on the ƏDV deposit account (D65): two
+        """A new payment and its ƏDV part on the ƏDV deposit account (D69): two
         operations, each on its own account, saved both or neither."""
         with transaction(self.conn):
             saved = [self.save_bank_operation(company_id, data, post=post)]

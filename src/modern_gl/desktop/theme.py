@@ -427,6 +427,13 @@ QPushButton#segment {{
 }}
 QPushButton#segment:hover {{ background: {P.field_hover}; color: {P.text}; }}
 QPushButton#segment:checked {{ background: {P.accent_soft}; color: {P.accent}; font-weight: 600; }}
+/* a tag of an element: «Связанная сторона»; on — blue, off — quiet (D64) */
+QPushButton#tag {{
+    background: {P.field}; border: none; border-radius: 11px; color: {P.secondary};
+    padding: 3px 12px;
+}}
+QPushButton#tag:hover {{ background: {P.field_hover}; color: {P.text}; }}
+QPushButton#tag:checked {{ background: {P.accent_soft}; color: {P.accent}; }}
 
 /* Inputs */
 QLineEdit, QDateEdit, QComboBox {{

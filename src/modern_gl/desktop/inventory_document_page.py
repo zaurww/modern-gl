@@ -81,6 +81,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.accounts import INPUT_VAT, OUTPUT_VAT
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
+from modern_gl.domain.dates import earlier_months, month_name
 from modern_gl.domain.eqaime import status_group, status_label
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
@@ -1571,6 +1572,21 @@ class InventoryDocumentPage(QWidget):
         self.portal_status.hide()
         meta.addWidget(self.portal_status)
         meta.addSpacing(12)
+        # services of an earlier month whose e-qaimə came later: accrued there (D65)
+        self.expense_caption = QLabel(tr("Расход за"))
+        self.expense_caption.setObjectName("secondary")
+        meta.addWidget(self.expense_caption)
+        self.expense_month = PickBox()
+        self.expense_month.setFixedWidth(150)
+        self.expense_month.setToolTip(
+            tr(
+                "Месяц расхода по услугам, если e-qaimə пришла позже: расход начисляется "
+                "последним днём этого месяца (Дт затрат / Кт 76H), долг поставщику и НДС — "
+                "датой e-qaimə"
+            )
+        )
+        meta.addWidget(self.expense_month)
+        meta.addSpacing(12)
         self.currency_caption = QLabel(tr("Валюта"))
         self.currency_caption.setObjectName("secondary")
         meta.addWidget(self.currency_caption)
@@ -1642,9 +1658,12 @@ class InventoryDocumentPage(QWidget):
         self.btn_delete = button(tr("Удалить"), "danger")
         self.btn_unpost = button(tr("Отменить проведение"), "flat")
         self.btn_gl = button(tr("Открыть проводки"), "flat")
+        self.btn_accrual = button(tr("Начисление"), "flat")
+        self.btn_accrual.setToolTip(tr("Проводки начисления расхода в месяце услуги"))
         actions.addWidget(self.btn_delete)
         actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_gl)
+        actions.addWidget(self.btn_accrual)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
@@ -1658,6 +1677,7 @@ class InventoryDocumentPage(QWidget):
         self.btn_delete.clicked.connect(self.delete)
         self.btn_unpost.clicked.connect(self.unpost)
         self.btn_gl.clicked.connect(self._open_gl)
+        self.btn_accrual.clicked.connect(self._open_accrual)
         self._connect_delegate()
         self.model.changed.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
@@ -1665,9 +1685,11 @@ class InventoryDocumentPage(QWidget):
         self.vat_rate.activated.connect(self._vat_rate_changed)
         self.basis.activated.connect(self._changed)
         self.invoice.textEdited.connect(self._changed)
+        self.expense_month.activated.connect(self._changed)
         self.currency.activated.connect(self._currency_changed)
         self.rate.textEdited.connect(self._rate_edited)
         self.date.dateChanged.connect(self._date_changed)
+        self.date.dateChanged.connect(self._expense_months_changed)
         self._shortcut("Ctrl+S", lambda: self.save(post=False))
         self._shortcut("Ctrl+Return", lambda: self.save(post=True))
         self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
@@ -2048,6 +2070,7 @@ class InventoryDocumentPage(QWidget):
         if self._expense_columns() != self.expense_columns:  # a service line came or went
             self.table.configure_columns()
             self.expense_columns = self._expense_columns()
+            self._show_expense_month()
         if not self.model.read_only and not self.dirty:
             self.dirty = True
             self.title_changed.emit()
@@ -2061,6 +2084,7 @@ class InventoryDocumentPage(QWidget):
         self._apply_mode(False)
         self._show_currency(None, None)
         self._show_basis(EQAIME, "")
+        self._fill_expense_months(None)
         self.dirty = False  # showing the defaults is not an edit
         self._show_totals()
 
@@ -2093,6 +2117,34 @@ class InventoryDocumentPage(QWidget):
         if self.doc_type == "sale":
             return {"invoice": number}
         return {"invoice": number, "invoice_kind": self.basis.currentData() if number else ""}
+
+    # ---- the month of the expense (D65) --------------------------------------------
+
+    def _fill_expense_months(self, chosen: str | None) -> None:
+        """The months a receipt's services may belong to: the document's own (nothing is
+        accrued) or one of the twelve before it, each as its last day."""
+        self.expense_month.clear()
+        self.expense_month.addItem(tr("месяц документа"), None)
+        for last in earlier_months(edited_date(self.date)):
+            self.expense_month.addItem(month_name(last[:7]), last)
+        if chosen is not None and self.expense_month.findData(chosen) < 0:
+            self.expense_month.addItem(month_name(chosen[:7]), chosen)  # saved earlier
+        self.expense_month.setCurrentIndex(max(self.expense_month.findData(chosen), 0))
+        self._show_expense_month()
+
+    def _expense_months_changed(self, *_args) -> None:
+        self._fill_expense_months(self._expense_date())
+
+    def _expense_date(self) -> str | None:
+        return self.expense_month.currentData() if self.doc_type == "receipt" else None
+
+    def _show_expense_month(self) -> None:
+        """Only a receipt with services (or with a month already chosen) asks for it."""
+        shown = self.doc_type == "receipt" and (
+            self.model.has_expenses() or self._expense_date() is not None
+        )
+        self.expense_caption.setVisible(shown)
+        self.expense_month.setVisible(shown)
 
     def _show_currency(self, currency_id: int | None, rate: int | None) -> None:
         receipt = self.doc_type == "receipt"
@@ -2153,6 +2205,7 @@ class InventoryDocumentPage(QWidget):
         self._apply_mode(read_only)
         self._show_currency(self.doc.currency_id, self.doc.currency_rate)
         self._show_basis(self.doc.invoice_kind, self.doc.invoice)
+        self._fill_expense_months(self.doc.expense_date)
         self.dirty = False
         self._show_totals()
         self.title_changed.emit()
@@ -2166,6 +2219,7 @@ class InventoryDocumentPage(QWidget):
         self.rate.setReadOnly(read_only)
         self.basis.setEnabled(not read_only)
         self.invoice.setReadOnly(read_only)
+        self.expense_month.setEnabled(not read_only)
         self.model.read_only = read_only
         posted = self.doc is not None and self.doc.status == "posted"
         editable = not read_only and self.doc_type != "landed_cost"
@@ -2174,6 +2228,9 @@ class InventoryDocumentPage(QWidget):
         self.btn_delete.setVisible(self.doc is not None)
         self.btn_unpost.setVisible(posted and self.doc_type != "landed_cost")
         self.btn_gl.setVisible(self.doc is not None and self.doc.gl_document_id is not None)
+        self.btn_accrual.setVisible(
+            self.doc is not None and self.doc.accrual_document_id is not None
+        )
         self.hint.setVisible(not read_only and self.doc_type != "landed_cost")
 
     def show_error(self, message: str) -> None:
@@ -2231,6 +2288,7 @@ class InventoryDocumentPage(QWidget):
                     vat_rate=self._chosen_vat_rate(),
                     currency_id=self._chosen_currency(),
                     currency_rate=self._rate_text(),
+                    expense_date=self._expense_date(),
                     **self._invoice(),
                 )
             self.inventory.update_receipt_draft(
@@ -2244,6 +2302,7 @@ class InventoryDocumentPage(QWidget):
                 vat_rate=self._chosen_vat_rate(),
                 currency_id=self._chosen_currency(),
                 currency_rate=self._rate_text(),
+                expense_date=self._expense_date(),
                 **self._invoice(),
             )
             return self.doc.id
@@ -2317,3 +2376,7 @@ class InventoryDocumentPage(QWidget):
     def _open_gl(self) -> None:
         if self.doc is not None and self.doc.gl_document_id is not None:
             self.open_gl_document.emit(self.doc.gl_document_id)
+
+    def _open_accrual(self) -> None:
+        if self.doc is not None and self.doc.accrual_document_id is not None:
+            self.open_gl_document.emit(self.doc.accrual_document_id)

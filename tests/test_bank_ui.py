@@ -244,6 +244,37 @@ def test_vat_deposit_offers_only_what_it_may_pay(qtbot, session):
     assert hidden == {"Зарплата", "Комиссия банка", "Прочее"}
 
 
+def test_the_bank_account_is_one_field(qtbot, session, monkeypatch):
+    """The GL account, the bank and its currency are chosen at once: «Kapital USD · 52 ·
+    USD» puts 52, the bank and USD; the currency is not asked. A bank never used on an
+    account is offered there too (a new ƏDV deposit on 55). A bank not in the list is
+    added right in the field, under the chosen account, and taken."""
+    from modern_gl.desktop.directories_page import ValueDialog
+
+    session.ledger.set_account_type(session.company_id, acc(session, "55"), "vat_deposit")
+    session.catalog.reload()
+    page = new_page(qtbot, session)
+    assert page.bank.currentText() == "Kapital AZN  ·  51  ·  AZN"  # the first bank account
+    assert page.currency.isHidden()
+    choose(page.bank, "Kapital USD  ·  52  ·  USD")
+    assert page.bank_info is not None and page.bank_info.code == "52"
+    assert page.bank_subconto()[0] == value(session, "Kapital USD")
+    assert page.total.text() == "0.00 USD"
+    assert page.deposit.currentText() == "Kapital AZN  ·  55  ·  AZN"  # never used there
+
+    def exec_(dialog):
+        dialog.name.setText("Paşa Bank")
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ValueDialog, "exec", exec_)
+    choose(page.bank, "Kapital AZN  ·  51  ·  AZN")
+    page.bank.unknown.emit("Paşa")
+    paşa = value(session, "Paşa Bank")
+    assert page.bank_info is not None and page.bank_info.code == "51"
+    assert page.bank_subconto()[0] == paşa
+    assert page.bank.currentText() == "Paşa Bank  ·  51  ·  AZN"
+
+
 def test_errors_stay_on_the_page_and_a_draft_is_saved(qtbot, session):
     page = new_page(qtbot, session)
     choose(page.sc[0], "Kapital AZN")
@@ -559,7 +590,7 @@ def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
 
 
 def test_the_vat_part_goes_from_the_deposit_account(qtbot, session):
-    """D65. MT7 of 02.03 to ALFA: 1 000.00 + ƏDV 180.00. Paying on 05.03: the e-qaimə
+    """D69. MT7 of 02.03 to ALFA: 1 000.00 + ƏDV 180.00. Paying on 05.03: the e-qaimə
     from the list puts 1 000.00 from the bank and 180.00 from the ƏDV deposit (55,
     500.00 on it since 01.03); «Провести» makes two operations, MT7 is paid in full."""
     from modern_gl.reporting.invoices import open_invoices

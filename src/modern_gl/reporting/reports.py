@@ -386,8 +386,10 @@ def subconto_balance(
     date_to: date | str,
     layers: Sequence[str] = COMMON,
     position: int = 1,
+    tag_id: int | None = None,
 ) -> list[SubcontoRow]:
-    """ОСВ по субконто: balances of one account split by the subconto at `position`."""
+    """ОСВ по субконто: balances of one account split by the subconto at `position`.
+    With `tag_id` only the elements with that tag («Связанная сторона», D64)."""
     if position not in (1, 2, 3):
         raise ValidationError(tr("позиция субконто должна быть 1, 2 или 3"))
     params = _params(conn, company_id, date_from, date_to, layers)
@@ -398,6 +400,7 @@ def subconto_balance(
             tr("у счёта {code} нет субконто {i}", code=acc["code"] or acc["name"], i=position)
         )
     params["accounts"] = json.dumps(_subtree(accounts, acc["id"]))
+    params["tag"] = tag_id
     raw = conn.execute(
         f"""
         WITH {_DOCS_CTE},
@@ -415,6 +418,10 @@ def subconto_balance(
                SUM(CASE WHEN m.doc_date >= :date_from THEN m.dt ELSE 0 END)        AS dt,
                SUM(CASE WHEN m.doc_date >= :date_from THEN m.ct ELSE 0 END)        AS ct
         FROM moves m LEFT JOIN subconto_values v ON v.id = m.sc
+        WHERE :tag IS NULL OR m.sc IN (
+            SELECT value_id FROM subconto_value_tags
+            WHERE company_id = :company_id AND tag_id = :tag
+        )
         GROUP BY m.sc ORDER BY v.name
         """,
         params,

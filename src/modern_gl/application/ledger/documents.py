@@ -263,7 +263,9 @@ class DocumentCommands(SubcontoCommands):
     def _require_not_module_document(self, doc_id: int) -> None:
         """Postings a module made (warehouse, currency conversion, bank) are corrected there."""
         linked = self.conn.execute(
-            "SELECT number FROM inventory_documents WHERE gl_document_id = ?", (doc_id,)
+            "SELECT number FROM inventory_documents "
+            "WHERE gl_document_id = ? OR accrual_document_id = ?",
+            (doc_id, doc_id),
         ).fetchone()
         if linked is not None:
             raise ValidationError(
@@ -850,6 +852,8 @@ class DocumentCommands(SubcontoCommands):
         ).fetchone()
         if row is None:
             raise NotFoundError(tr("слой {code} не найден", code=code))
+        if code != "common":  # a document in an adjustment layer shows the books (D63)
+            self.conn.execute("UPDATE companies SET parallel_books = 1 WHERE id = ?", (company_id,))
         return row["id"]
 
 

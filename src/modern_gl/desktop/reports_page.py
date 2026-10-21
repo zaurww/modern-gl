@@ -124,11 +124,9 @@ class ReportParams:
     def layers(self) -> tuple[str, ...]:
         return BOOKS[self.book][1]
 
-    def describe(self) -> str:
-        return (
-            f"{ru_date(self.date_from.isoformat())} — {ru_date(self.date_to.isoformat())}"
-            f"   ·   {tr(BOOKS[self.book][0])}"
-        )
+    def describe(self, book: bool = True) -> str:
+        period = f"{ru_date(self.date_from.isoformat())} — {ru_date(self.date_to.isoformat())}"
+        return f"{period}   ·   {tr(BOOKS[self.book][0])}" if book else period
 
 
 def month_of(d: date) -> ReportParams:
@@ -408,11 +406,15 @@ class ReportPage(QWidget):
                 bar.addWidget(label)
                 bar.addWidget(w)
                 bar.addSpacing(6)
+                if w is self.book and not session.parallel_books:  # one book (D63)
+                    label.hide()
+                    w.hide()
             run = button(tr("Сформировать"), "primary", "F5")
             run.clicked.connect(self.refresh)
             bar.addWidget(run)
             bar.addStretch(1)
             root.addLayout(bar)
+            self.bar = bar
 
         self.model = ReportModel()
         self.table = QTableView()
@@ -486,7 +488,7 @@ class ReportPage(QWidget):
                 edited_date(self.date_to),
                 self.book.currentIndex(),
             )
-            self.header.subtitle.setText(self.params.describe())
+            self.header.subtitle.setText(self.params.describe(self.s.parallel_books))
         try:
             self.build()
         except LedgerError as e:
@@ -831,7 +833,11 @@ class AccountReportPage(ReportPage):
         self.header.title.setText(f"{tr(self.caption)} {acc.short}")
         self.header.subtitle.setText(acc.name)
         self.key = (self.kind, account_id)
+        self.add_filters()
         self.refresh()
+
+    def add_filters(self) -> None:
+        """Choices of the report itself, before «Сформировать» (none by default)."""
 
     @property
     def account(self):
@@ -845,7 +851,9 @@ class AccountReportPage(ReportPage):
         acc = self.account
         name = acc.name if acc.code else ""  # without a code the name is the title already
         self.header.subtitle.setText(
-            "   ·   ".join(part for part in (name, self.params.describe()) if part)
+            "   ·   ".join(
+                part for part in (name, self.params.describe(self.s.parallel_books)) if part
+            )
         )
 
 
@@ -949,7 +957,37 @@ class CardPage(AccountReportPage):
 class SubcontoPage(AccountReportPage):
     kind, caption = "subconto", "ОСВ по субконто"
 
+    def add_filters(self) -> None:
+        """«Метка»: only the elements with it — the related parties, the landlords (D64).
+        Shown when some element of the directory has a tag."""
+        self.tag = QComboBox()
+        self.tag.setMinimumWidth(190)
+        self.tag_label = QLabel(tr("Метка"))
+        self.tag_label.setObjectName("secondary")
+        at = self.bar.count() - 2  # before «Сформировать»
+        self.bar.insertWidget(at, self.tag_label)
+        self.bar.insertWidget(at + 1, self.tag)
+        self.bar.insertSpacing(at + 2, 6)
+        self._fill_tags()
+        self.tag.activated.connect(lambda _: self.refresh())
+
+    def _fill_tags(self) -> None:
+        kind_id = self.account.sc_kinds[0]
+        tags = self.s.catalog.kind_tags(kind_id) if kind_id is not None else []
+        current = self.tag.currentData()
+        self.tag.blockSignals(True)
+        self.tag.clear()
+        self.tag.addItem(tr("Все"), None)
+        for tag_id, name in tags:
+            self.tag.addItem(name, tag_id)
+        self.tag.setCurrentIndex(max(self.tag.findData(current), 0))
+        self.tag.blockSignals(False)
+        for w in (self.tag, self.tag_label):
+            w.setVisible(bool(tags))
+
     def build(self) -> None:
+        self._fill_tags()  # a tag given in «Справочники» since the report was opened
+        tag_id = self.tag.currentData()
         rows = reports.subconto_balance(
             self.s.conn,
             self.s.company_id,
@@ -957,6 +995,7 @@ class SubcontoPage(AccountReportPage):
             self.params.date_from,
             self.params.date_to,
             self.params.layers,
+            tag_id=tag_id,
         )
         total = SubcontoRow(name=tr("Итого"))
         for r in rows:
@@ -984,7 +1023,9 @@ class SubcontoPage(AccountReportPage):
             emphasis=lambda r: r is total,
             total=lambda r: r is total,
         )
-        self.footer.setText("")
+        self.footer.setText(
+            tr("Только с меткой «{name}»", name=self.tag.currentText()) if tag_id else ""
+        )
 
     @staticmethod
     def _in_currency(row: SubcontoRow) -> str:

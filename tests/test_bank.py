@@ -333,7 +333,7 @@ def test_vat_deposit_pays_only_vat(ledger, firm):
 
 
 def test_a_payment_and_its_vat_from_the_deposit_are_two_operations(ledger, firm):
-    """D65: 1 180.00 owed to Alfa — 1 000.00 from Kapital AZN (Dt 60.1 / Kt 51) and the
+    """D69: 1 180.00 owed to Alfa — 1 000.00 from Kapital AZN (Dt 60.1 / Kt 51) and the
     ƏDV 180.00 from the deposit (Dt 60.1 / Kt 55) on 06.03, both on MT001; a deposit part
     that may not be posted (kind «other») leaves the bank part unsaved too."""
     f = firm
