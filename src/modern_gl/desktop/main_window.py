@@ -93,15 +93,22 @@ from modern_gl.reporting.inventory import inventory_document_of
 from modern_gl.reporting.trade import PURCHASE, SALE
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
-PLACES = [  # key, title (translated on display), icon color (a palette name: themes change it)
+# The sidebar's places by what they are for (D56): entry on top without a heading, then
+# reports, then what the books are set up with; key, title (translated on display), icon
+# color (a palette name: themes change it)
+PLACES = [
     (("journal",), "Журнал", "accent"),
-    (("osv",), "ОСВ", "green"),
     (("opening",), "Начальные остатки", "accent"),
+]
+REPORTS_PLACES = [
+    (("osv",), "ОСВ", "green"),
+    (("invoices",), "E-qaimələr", "accent"),
+]
+SETUP = [
     (("chart",), "План счетов", "violet"),
     (("directories",), "Справочники", "teal"),
     (("templates",), "Шаблоны", "amber"),
     (("currencies",), "Валюты", "green"),
-    (("invoices",), "E-qaimələr", "accent"),
 ]
 # Modules: optional ways of working beside the journal (D30, D44, D46, D47), in a block of their own
 MODULES = [
@@ -110,7 +117,14 @@ MODULES = [
     (("bank",), "Банк", "teal"),
     (("inventory",), "Склад", "amber"),
 ]
-PLACE_KEYS = [key for key, _, _ in PLACES + MODULES]
+# section heading (None: no heading) and its places, top to bottom
+SECTIONS = [
+    (None, PLACES),
+    ("Отчёты", REPORTS_PLACES),
+    ("Настройка", SETUP),
+    ("Модули", MODULES),
+]
+PLACE_KEYS = [key for _, places in SECTIONS for key, _, _ in places]
 # open pages: a quiet grey icon of what they are (a new document is the blue plus)
 OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
 OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
@@ -391,11 +405,11 @@ class MainWindow(QMainWindow):
         self.sidebar.company.setText(f"{name}   ▾")
         self.setWindowTitle(f"{name} — Modern GL")
         self.sidebar.retranslate()
-        for key, text, color in PLACES:
-            self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
-        self.sidebar.add_section(tr("Модули"))
-        for key, text, color in MODULES:
-            self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
+        for heading, places in SECTIONS:
+            if heading is not None:
+                self.sidebar.add_section(tr(heading))
+            for key, text, color in places:
+                self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
         self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
 
