@@ -8,20 +8,18 @@ from collections.abc import Sequence
 from contextlib import suppress
 from dataclasses import replace
 from datetime import date
-from typing import cast
+from itertools import pairwise
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QApplication,
     QButtonGroup,
-    QComboBox,
-    QCompleter,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListView,
     QMessageBox,
     QVBoxLayout,
     QWidget,
@@ -51,7 +49,8 @@ from modern_gl.application.catalog import AccountInfo, SubcontoInfo
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.conversion_page import amount_text, fit_currency
-from modern_gl.desktop.postings import attach_list
+from modern_gl.desktop.directories_page import new_value
+from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
@@ -111,13 +110,13 @@ def fits(account: AccountInfo | None, value: SubcontoInfo) -> bool:
     return account.currency != NO_CURRENCY
 
 
-def select_data(box: QComboBox, data, text: str = "") -> None:
+def select_data(box: PickBox, data, text: str = "") -> None:
     """Choose the item with this data; one no longer offered (hidden) is added."""
     i = box.findData(data)
     if i < 0 and data is not None:
         box.addItem(text or str(data), data)
         i = box.count() - 1
-    box.setCurrentIndex(max(i, 0))
+    box.setCurrentIndex(i)
 
 
 class LineRow(QWidget):
@@ -127,6 +126,8 @@ class LineRow(QWidget):
     changed = Signal()
     edited = Signal()  # the account or subconto changed by hand: no more suggestions
     removed = Signal(object)
+    unknown = Signal(object, int, str)  # the row, the subconto position, the typed name
+    error = Signal(str)
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -135,17 +136,20 @@ class LineRow(QWidget):
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
-        self.account = QComboBox()
-        self.account.addItem(tr("Счёт…"), None)
+        self.account = PickBox(tr("Счёт…"))
         for a in session.catalog.leaf_accounts:
             self.account.addItem(a.label, a.id)
         self.account.setMinimumWidth(200)
+        self.account.unknown.connect(
+            lambda text: self.error.emit(tr("«{text}» нет в списке", text=text))
+        )
         lay.addWidget(self.account, 3)
-        self.sc: list[QComboBox] = []
-        for _ in range(3):
-            box = QComboBox()
+        self.sc: list[PickBox] = []
+        for position in range(3):
+            box = PickBox()
             box.setMinimumWidth(120)
             box.activated.connect(self._subconto_edited)
+            box.unknown.connect(lambda text, p=position: self.unknown.emit(self, p, text))
             self.sc.append(box)
             lay.addWidget(box, 2)
         self.invoice = QLineEdit()
@@ -157,8 +161,9 @@ class LineRow(QWidget):
         self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.amount.setPlaceholderText("0.00")
         lay.addWidget(self.amount)
-        self.remove = button("×", "flat", tr("Убрать строку"))
+        self.remove = button("×", "flat", tr("Убрать строку") + " (Ctrl+Del)")
         self.remove.setFixedWidth(32)
+        self.remove.setFocusPolicy(Qt.FocusPolicy.NoFocus)  # Ctrl+Del from the keyboard
         lay.addWidget(self.remove)
 
         self.account.activated.connect(self._account_edited)
@@ -197,13 +202,13 @@ class LineRow(QWidget):
                 continue
             assert kind is not None
             owner = self.counterparty if catalog.owner_kinds.get(kind) == own else None
-            box.addItem(catalog.kinds[kind] + "…", None)
+            box.setPlaceholderText(catalog.kinds[kind] + "…")
             for v in catalog.values(kind, owner):
-                box.addItem(v.label, v.id)
+                box.addItem(v.label, v.id, v.name)
             if value is not None:
                 select_data(box, value, catalog.value(value).name)
-            elif box.count() == 2:  # the only element: chosen already
-                box.setCurrentIndex(1)
+            elif box.count() == 1:  # the only element: chosen already
+                box.setCurrentIndex(0)
         self.invoice.setVisible(catalog.takes_invoice(account.id if account else None))
 
     def set_counterparty(self, counterparty: int | None) -> None:
@@ -222,6 +227,20 @@ class LineRow(QWidget):
                 None if k == own else v for k, v in zip(account.sc_kinds, kept, strict=True)
             )
         self._fill_subconto(kept)
+
+    def owner_of(self, position: int) -> int | None:
+        """Whose a new element at this position is: a contract is the counterparty's."""
+        account = self.account_info
+        kind = account.sc_kinds[position] if account else None
+        if kind is None or self.s.catalog.owner_kinds.get(kind) != counterparty_kind(self.s):
+            return None
+        return self.counterparty
+
+    def set_subconto(self, position: int, value: int) -> None:
+        chosen = list(self.subconto())
+        chosen[position] = value
+        self._fill_subconto(chosen)
+        self._subconto_edited()
 
     def subconto(self) -> tuple[int | None, ...]:
         """The chosen subconto; the counterparty's position is left to the operation."""
@@ -248,7 +267,7 @@ class LineRow(QWidget):
                 self.account, line.account_id, self.s.catalog.accounts[line.account_id].label
             )
         else:
-            self.account.setCurrentIndex(0)
+            self.account.setCurrentIndex(-1)
         self._fill_subconto(line.subconto)
         if amount:
             self.amount.setText(amount_text(line.amount))
@@ -268,6 +287,7 @@ class BankOperationPage(QWidget):
     title_changed = Signal()
     open_gl_document = Signal(int)
     copy_requested = Signal(object)  # BankOperationInput
+    next_requested = Signal(object)  # BankOperationInput: the next one of the statement
 
     def __init__(
         self,
@@ -340,22 +360,24 @@ class BankOperationPage(QWidget):
         cards = QHBoxLayout()
         cards.setSpacing(18)
         bank_card, bank = self._card(tr("Банковский счёт"))
-        self.account = QComboBox()
-        self.account.addItem(NONE, None)
+        self.account = PickBox(NONE)
         for a in bank_accounts(session):
             self.account.addItem(a.label, a.id)
+        self.account.unknown.connect(self._not_listed)
         self._row(bank, tr("Счёт"), self.account)
         self.sc_captions: list[QLabel] = []
-        self.sc: list[QComboBox] = []
-        for _ in range(3):
+        self.sc: list[PickBox] = []
+        for position in range(3):
             caption = QLabel()
             caption.setObjectName("secondary")
-            box = QComboBox()
+            box = PickBox(NONE)
             box.activated.connect(self._bank_subconto_changed)
+            box.unknown.connect(lambda text, p=position: self._add_bank_value(p, text))
             self.sc_captions.append(caption)
             self.sc.append(box)
             self._row(bank, caption, box)
-        self.currency = QComboBox()
+        self.currency = PickBox()
+        self.currency.unknown.connect(self._not_listed)
         self._row(bank, tr("Валюта"), self.currency)
         self.reference = QLineEdit()
         self.reference.setPlaceholderText(tr("из банковской выписки, необязательно"))
@@ -363,14 +385,19 @@ class BankOperationPage(QWidget):
         cards.addWidget(bank_card, 1)
 
         whom_card, whom = self._card(tr("Операция"))
-        self.kind = QComboBox()
+        self.kind = PickBox()
         for kind, name in KINDS:
             self.kind.addItem(tr(name), kind)
+        self.kind.setCurrentIndex(0)
+        self.kind.unknown.connect(self._not_listed)
         self._row(whom, tr("Вид"), self.kind)
         self.counterparty_caption = QLabel(tr("Контрагент"))
         self.counterparty_caption.setObjectName("secondary")
-        self.counterparty_edit = QLineEdit()
-        self.counterparty_edit.setPlaceholderText(tr("Название или VÖEN"))
+        self.counterparty_edit = PickBox(tr("Название или VÖEN"))
+        self.counterparty_edit.activated.connect(
+            lambda _: self._choose_counterparty(self.counterparty_edit.currentData())
+        )
+        self.counterparty_edit.unknown.connect(self._add_counterparty)
         self._row(whom, self.counterparty_caption, self.counterparty_edit)
         self.tax_id = QLabel()
         self.tax_id.setObjectName("secondary")
@@ -382,7 +409,9 @@ class BankOperationPage(QWidget):
         lines_caption = QLabel(tr("Расшифровка платежа"))
         lines_caption.setObjectName("secondary")
         lines_head.addWidget(lines_caption)
-        self.btn_add_line = button(tr("+ Строка"), "flat", tr("Ещё одна e-qaimə, договор или счёт"))
+        self.btn_add_line = button(
+            tr("+ Строка"), "flat", tr("Ещё одна e-qaimə, договор или счёт") + " (Ins)"
+        )
         self.btn_add_line.clicked.connect(lambda: self.add_line(focus=True))
         lines_head.addWidget(self.btn_add_line)
         self.btn_add_fee = button(tr("+ Комиссия банка"), "flat")
@@ -437,8 +466,13 @@ class BankOperationPage(QWidget):
             ("Ctrl+S", lambda: self.save(post=self.posted)),
             ("Ctrl+Return", lambda: self.save(post=True)),
             ("Ctrl+Enter", lambda: self.save(post=True)),
+            ("Ins", self._insert_line),
+            ("F9", self._duplicate_line),
+            ("Ctrl+Del", self._remove_current_line),
         ):
-            QShortcut(QKeySequence(keys), self).activated.connect(fn)
+            shortcut = QShortcut(QKeySequence(keys), self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(fn)
         self.direction.buttonClicked.connect(self._direction_changed)
         self.account.activated.connect(self._bank_account_changed)
         self.currency.activated.connect(self._changed)
@@ -446,23 +480,7 @@ class BankOperationPage(QWidget):
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
         self.kind.activated.connect(self._kind_changed)
-        self._counterparty_labels: dict[str, int] = {}
-        kind = counterparty_kind(session)
-        if kind is not None:
-            self._counterparty_labels = {v.label: v.id for v in session.catalog.values(kind)}
-        attach_list(  # the list shows up as the name or VÖEN is typed
-            self.counterparty_edit,
-            list(self._counterparty_labels),
-            False,
-            lambda _editor, text: self._counterparty_chosen(text),
-        )
-        self.counterparty_edit.editingFinished.connect(self._counterparty_typed)
-        # the list looks at the text once the page is built: a loaded counterparty is not
-        # being typed, so its list does not open
-        completer = self.counterparty_edit.findChild(QCompleter)
-        popup = completer.popup() if completer is not None else None
-        if popup is not None:
-            QTimer.singleShot(0, popup.hide)
+        self._fill_counterparties()
 
         if operation_id is not None:
             self.load(operation_id)
@@ -581,7 +599,7 @@ class BankOperationPage(QWidget):
         if d.account_id is not None:
             select_data(self.account, d.account_id, self.s.catalog.accounts[d.account_id].label)
         else:
-            self.account.setCurrentIndex(0)
+            self.account.setCurrentIndex(-1)
         self._bank_account_changed(chosen=d.subconto)
         select_data(self.currency, d.currency_id)
         self.reference.setText(d.reference)
@@ -600,7 +618,8 @@ class BankOperationPage(QWidget):
             w.setEnabled(not ro)
         if ro:
             self.currency.setEnabled(False)
-        for edit in (self.memo, self.reference, self.counterparty_edit):
+        self.counterparty_edit.setEnabled(not ro)
+        for edit in (self.memo, self.reference):
             edit.setReadOnly(ro)
         for row in self.line_rows:
             row.set_read_only(ro)
@@ -652,12 +671,12 @@ class BankOperationPage(QWidget):
                 continue
             caption.setText(self.s.catalog.kinds[kind])
             values = [v for v in self.s.catalog.values(kind) if fits(account, v)]
-            if len(values) != 1:
-                box.addItem(NONE, None)
             for v in values:
                 box.addItem(v.name, v.id)
             if value is not None:
                 select_data(box, value, self.s.catalog.value(value).name)
+            elif len(values) == 1:  # the only one: chosen already
+                box.setCurrentIndex(0)
         self._fit_currency()
         self._kind_visibility()
         self._changed()
@@ -685,10 +704,9 @@ class BankOperationPage(QWidget):
         for w in (self.counterparty_caption, self.counterparty_edit, self.tax_id):
             w.setVisible(shown)
         deposit = self.bank_info is not None and self.bank_info.account_type == "vat_deposit"
-        view = cast(QListView, self.kind.view())
         for i in range(self.kind.count()):
             allowed = not deposit or self.kind.itemData(i) in VAT_DEPOSIT_KINDS
-            view.setRowHidden(i, not allowed)
+            self.kind.setItemHidden(i, not allowed)
         self.memo.setPlaceholderText(self._default_memo())
 
     def _kind_changed(self, *_) -> None:
@@ -709,33 +727,60 @@ class BankOperationPage(QWidget):
         self._changed()
         self.title_changed.emit()
 
-    def _counterparty_chosen(self, text: str) -> None:
-        value = self._counterparty_labels.get(text)
-        if value is not None:
-            self._choose_counterparty(value)
-
-    def _counterparty_typed(self) -> None:
-        """Typed without picking from the list: the name or VÖEN, if it is one element."""
-        text = self.counterparty_edit.text().strip()
-        if not text:
-            self._choose_counterparty(None)
-            return
-        if text in self._counterparty_labels:
-            self._choose_counterparty(self._counterparty_labels[text])
-            return
-        current = self.counterparty
-        if current is not None and text == self.s.catalog.value(current).name:
-            return  # shown as chosen (two branches may share the name)
+    def _fill_counterparties(self) -> None:
+        """Found by name or VÖEN; the field shows the name, the VÖEN is under it."""
+        box = self.counterparty_edit
+        box.clear()
         kind = counterparty_kind(self.s)
-        try:
-            found = self.s.catalog.resolve_value(kind, text) if kind is not None else None
-        except LookupError as e:
-            self.show_error(str(e))
+        for v in self.s.catalog.values(kind) if kind is not None else []:
+            box.addItem(v.label, v.id, v.name)
+
+    def _not_listed(self, text: str) -> None:
+        self.show_error(tr("«{text}» нет в списке", text=text))
+
+    def _add_counterparty(self, text: str) -> None:
+        """A counterparty not yet in the directory: added right here (D49)."""
+        kind = counterparty_kind(self.s)
+        if kind is None or self.read_only:
             return
-        if found is None:
-            self.show_error(tr("контрагент «{text}» не найден", text=text))
+        value = new_value(self.s, self, kind, text)
+        if value is None:
             return
-        self._choose_counterparty(found)
+        self._fill_counterparties()
+        self._choose_counterparty(value)
+        self._focus_after(self.counterparty_edit)
+
+    def _add_bank_value(self, position: int, text: str) -> None:
+        """A bank account not yet in the directory (a new bank): added right here."""
+        account = self.bank_info
+        kind = account.sc_kinds[position] if account else None
+        if kind is None or self.read_only:
+            return
+        currency = self.currency.currentData() if account and account.currency else None
+        value = new_value(self.s, self, kind, text, currency_id=currency)
+        if value is None:
+            return
+        chosen = list(self.bank_subconto())
+        chosen[position] = value
+        self._bank_account_changed(chosen=chosen)
+        self._focus_after(self.sc[position])
+
+    def _add_line_value(self, row: LineRow, position: int, text: str) -> None:
+        """A contract (or any element of the line's account) added right here."""
+        account = row.account_info
+        kind = account.sc_kinds[position] if account else None
+        if kind is None or self.read_only:
+            return
+        value = new_value(self.s, self, kind, text, owner_id=row.owner_of(position))
+        if value is None:
+            return
+        row.set_subconto(position, value)
+        self._focus_after(row.sc[position])
+
+    def _focus_after(self, field: QWidget) -> None:
+        """Back from a dialog: on to the field after the one just filled."""
+        field.setFocus()
+        self.focusNextChild()
 
     def _choose_counterparty(self, value: int | None) -> None:
         if value == self.counterparty:
@@ -756,7 +801,7 @@ class BankOperationPage(QWidget):
     def _show_counterparty(self) -> None:
         value = self.counterparty
         info = self.s.catalog.value(value) if value is not None else None
-        self.counterparty_edit.setText(info.name if info else "")
+        select_data(self.counterparty_edit, value, info.name if info else "")
         self.tax_id.setText(f"VÖEN {info.tax_id}" if info and info.tax_id else "")
 
     def _suggest(self) -> None:
@@ -820,14 +865,74 @@ class BankOperationPage(QWidget):
     def add_line(self, focus: bool = False) -> LineRow:
         row = LineRow(self.s)
         row.set_counterparty(self.counterparty)
+        row.set_read_only(self.read_only)
         row.changed.connect(self._changed)
         row.edited.connect(self._line_edited)
         row.removed.connect(self._remove_line)
+        row.unknown.connect(self._add_line_value)
+        row.error.connect(self.show_error)
         self.line_rows.append(row)
         self.lines_box.addWidget(row)
+        self._chain()
         if focus:
             row.account.setFocus()
         return row
+
+    def _insert_line(self) -> None:
+        if not self.read_only:
+            self.add_line(focus=True)
+
+    def _current_line(self) -> LineRow | None:
+        focused = QApplication.focusWidget()
+        return next((r for r in self.line_rows if focused and r.isAncestorOf(focused)), None)
+
+    def _duplicate_line(self) -> None:
+        """F9: one more line like this one (another e-qaimə of the same supplier)."""
+        row = self._current_line()
+        if row is None or self.read_only or (line := row.value()) is None:
+            return
+        copy = self.add_line()
+        copy.set_line(replace(line, invoice=""))
+        (copy.amount if copy.invoice.isHidden() else copy.invoice).setFocus()
+        self._changed()
+
+    def _remove_current_line(self) -> None:
+        """Ctrl+Del: the line the cursor is in; the cursor goes to the one above."""
+        row = self._current_line()
+        if row is None or self.read_only:
+            return
+        at = self.line_rows.index(row)
+        self._remove_line(row)
+        if self.line_rows:
+            self.line_rows[max(at - 1, 0)].account.setFocus()
+
+    def _chain(self) -> None:
+        """Enter and Tab go in the order things are typed: the header, then the lines,
+        then the statement reference and the purpose (the lines are made later than the
+        buttons below them, so Qt's own order would put them last)."""
+        fields: list[QWidget] = [self.btn_out, self.btn_in, self.date, self.account, *self.sc]
+        fields += [self.currency, self.kind, self.counterparty_edit]
+        for row in self.line_rows:
+            fields += [row.account, *row.sc, row.invoice, row.amount]
+        fields += [self.reference, self.memo, self.btn_post]
+        for first, second in pairwise(fields):
+            QWidget.setTabOrder(first, second)
+
+    def keyPressEvent(self, event) -> None:
+        key, focused = event.key(), QApplication.focusWidget()
+        # Enter a field did not want (it took what was typed): on to the next one
+        enter = key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and not event.modifiers()
+        if enter and focused is not self.btn_post:
+            self.focusNextChild()
+            return
+        # ← → on «Приход / Расход»: the other way
+        if key in (Qt.Key.Key_Left, Qt.Key.Key_Right) and focused in (self.btn_in, self.btn_out):
+            if not self.read_only:
+                other = self.btn_in if self.btn_out.isChecked() else self.btn_out
+                other.click()
+                other.setFocus()
+            return
+        super().keyPressEvent(event)
 
     def add_fee(self) -> None:
         """A bank fee taken with the payment: a line on the fee account."""
@@ -844,6 +949,7 @@ class BankOperationPage(QWidget):
     def _remove_line(self, row: LineRow, changed: bool = True) -> None:
         self.line_rows.remove(row)
         self.lines_box.removeWidget(row)
+        row.hide()  # out of the Enter / Tab order at once
         row.deleteLater()
         if changed:
             self._changed()
@@ -933,6 +1039,7 @@ class BankOperationPage(QWidget):
     def save(self, post: bool) -> bool:
         if self.read_only:
             return False
+        new = self.doc is None
         self.error.hide()
         try:
             data = self.collect()
@@ -950,7 +1057,20 @@ class BankOperationPage(QWidget):
             else tr("Черновик №{n} сохранён", n=self.doc.number)
         )
         self.saved.emit(self.doc.document_id)
+        if new and post:  # a statement is typed one operation after another
+            self.next_requested.emit(self.next_of(data))
         return True
+
+    @staticmethod
+    def next_of(data: BankOperationInput) -> BankOperationInput:
+        """The next operation of the statement: the same bank account, day and way."""
+        return BankOperationInput(
+            doc_date=data.doc_date,
+            direction=data.direction,
+            account_id=data.account_id,
+            subconto=data.subconto,
+            currency_id=data.currency_id,
+        )
 
     def unpost(self) -> None:
         if self.doc is None:

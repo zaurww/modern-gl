@@ -5,7 +5,8 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QListView, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QMessageBox
 
 from modern_gl.application.bank import (
     IN,
@@ -223,9 +224,8 @@ def test_vat_deposit_offers_only_what_it_may_pay(qtbot, session):
     session.catalog.reload()
     page = new_page(qtbot, session)
     choose(page.account, "55  Специальные счета в банках")
-    view = page.kind.view()
-    assert isinstance(view, QListView)
-    hidden = {page.kind.itemText(i) for i in range(page.kind.count()) if view.isRowHidden(i)}
+    kind = page.kind
+    hidden = {kind.itemText(i) for i in range(kind.count()) if kind.isItemHidden(i)}
     assert hidden == {"Зарплата", "Комиссия банка", "Прочее"}
 
 
@@ -284,12 +284,21 @@ def test_the_journal_opens_the_operation(qtbot, tmp_path):
         page = win.stack.currentWidget()
         assert isinstance(page, BankOperationPage)
         pay_alfa(page)
+        account, bank_value = page.account.currentData(), page.bank_subconto()
         assert page.save(post=True)
         doc = page.doc
-        assert doc is not None and ("bank_op", doc.id) in win.pages
-        assert bank.model.rowCount() == 2  # the statement follows
+        assert doc is not None and bank.model.rowCount() == 2  # the statement follows
+        # the next one of the statement opens in its place: the same account and day
+        following = win.stack.currentWidget()
+        assert isinstance(following, BankOperationPage) and following is not page
+        assert following.doc is None and ("bank_op", doc.id) not in win.pages
+        assert following.account.currentData() == account
+        assert following.bank_subconto() == bank_value
+        assert following.date.date() == page.date.date()
+        assert following.line_rows[0].amount.text() == "" and not following.is_dirty()
 
-        win.close_page(("bank_op", doc.id))
+        win.close_current()  # Esc / Ctrl+W: back to the statement
+        assert win.stack.currentWidget() is bank
         win.open_document(doc.document_id)  # from the journal or a report
         assert isinstance(win.stack.currentWidget(), BankOperationPage)
         win.stack.currentWidget().btn_gl.click()
@@ -308,3 +317,105 @@ def test_the_journal_opens_the_operation(qtbot, tmp_path):
         assert isinstance(win.stack.currentWidget(), ConversionPage)
     finally:
         win.shutdown()
+
+
+def key(qtbot, k, modifier=Qt.KeyboardModifier.NoModifier) -> None:
+    """A key where the user's goes: the open list, or the field with the cursor."""
+    popup = QApplication.activePopupWidget()
+    target = popup if popup is not None and popup.isVisible() else QApplication.focusWidget()
+    assert target is not None
+    qtbot.keyClick(target, k, modifier)
+
+
+def typed(text: str) -> None:
+    """Typed into the field with the cursor (keyClicks fails on Azerbaijani letters)."""
+    edit = QApplication.focusWidget()
+    assert isinstance(edit, QLineEdit)
+    edit.selectAll()
+    edit.insert(text)
+    edit.textEdited.emit(edit.text())
+
+
+def shown_page(qtbot, session: Session) -> BankOperationPage:
+    page = new_page(qtbot, session)
+    page.show()
+    qtbot.waitExposed(page)
+    page.activateWindow()
+    qtbot.waitUntil(lambda: page.counterparty_edit.hasFocus())
+    return page
+
+
+def test_an_operation_is_typed_and_posted_without_the_mouse(qtbot, session):
+    """D49: name → Enter → the line as last time → e-qaimə → amount → Ctrl+Enter."""
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    page.counterparty_edit.setFocus()
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)  # the highlighted one is taken, on to the line
+    assert page.counterparty == value(session, "ALFA MMC")
+    line = page.line_rows[0]
+    assert line.account.hasFocus() and line.account_info is not None
+    assert line.account_info.code == "60.1"
+    key(qtbot, Qt.Key.Key_Return)  # the account as suggested
+    assert line.sc[1].hasFocus() and line.sc[1].currentText() == "Договор 1"
+    key(qtbot, Qt.Key.Key_Return)
+    assert line.invoice.hasFocus()
+    typed("MT005")
+    key(qtbot, Qt.Key.Key_Return)
+    assert line.amount.hasFocus()
+    typed("500")
+    key(qtbot, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    assert page.doc is not None and page.doc.status == "posted"
+    assert [(x.amount, x.invoice) for x in page.doc.lines] == [(50_000, "MT005")]
+
+
+def test_lines_with_keys_insert_copy_and_remove(qtbot, session):
+    page = shown_page(qtbot, session)
+    line = page.line_rows[0]
+    line.amount.setFocus()
+    typed("100")
+    key(qtbot, Qt.Key.Key_F9)  # a copy: the same account, the amount to change
+    assert len(page.line_rows) == 2
+    copy = page.line_rows[1]
+    assert copy.account.currentData() == line.account.currentData()
+    assert copy.amount.text() == "100.00"
+    key(qtbot, Qt.Key.Key_Insert)  # an empty one, the cursor on its account
+    assert len(page.line_rows) == 3 and page.line_rows[2].account.hasFocus()
+    key(qtbot, Qt.Key.Key_Delete, Qt.KeyboardModifier.ControlModifier)
+    assert len(page.line_rows) == 2 and copy.account.hasFocus()
+    assert page.total.text() == "200.00 AZN"
+
+
+def test_a_new_counterparty_is_added_right_in_the_operation(qtbot, session, monkeypatch):
+    """Not in the directory: its window opens with what was typed, no trip to
+    «Справочники»; a VÖEN typed goes to the VÖEN field."""
+    from modern_gl.desktop.directories_page import ValueDialog
+
+    seen = []
+
+    def exec_(dialog):
+        seen.append((dialog.name.text(), dialog.tax_id.text()))
+        dialog.name.setText("BETA MMC")
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ValueDialog, "exec", exec_)
+    page = shown_page(qtbot, session)
+    typed("9876543210")
+    key(qtbot, Qt.Key.Key_Return)
+    qtbot.waitUntil(lambda: page.counterparty is not None)
+    assert seen == [("", "9876543210")]
+    beta = value(session, "BETA MMC")
+    assert page.counterparty == beta
+    assert session.catalog.value(beta).tax_id == "9876543210"
+    assert page.tax_id.text() == "VÖEN 9876543210"
+    assert page.line_rows[0].account.hasFocus()  # on with the payment
+
+
+def test_a_name_nothing_is_called_stays_in_the_field(qtbot, session):
+    page = shown_page(qtbot, session)
+    page.kind.setFocus()
+    typed("xyz")
+    key(qtbot, Qt.Key.Key_Return)
+    assert page.kind.hasFocus() and page.kind.currentData() == SUPPLIER
+    qtbot.waitUntil(lambda: page.error.isVisible())
+    assert page.error.text() == "«xyz» нет в списке"

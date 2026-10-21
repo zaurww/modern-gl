@@ -30,6 +30,7 @@ AZ: dict[str, str] = {
     "компания {id} не найдена": "şirkət {id} tapılmadı",
     "документ {id} не найден": "sənəd {id} tapılmadı",
     "счёт {code} не найден": "{code} hesabı tapılmadı",
+    "«{text}» нет в списке": "«{text}» siyahıda yoxdur",
     "слой {code} не найден": "{code} qatı tapılmadı",
     "не число: {value}": "rəqəm deyil: {value}",
     "больше {n} знаков после запятой: {value}": "vergüldən sonra {n} rəqəmdən çox: {value}",
