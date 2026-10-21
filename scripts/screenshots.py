@@ -572,12 +572,15 @@ def main() -> None:
     payment = cast(BankOperationPage, win.stack.currentWidget())
     payment.counterparty_edit.setText(i18n.tr("Альфа Трейд"))
     payment.counterparty_edit.editingFinished.emit()
-    payment.line_rows[0].amount.setText("590")
-    payment.line_rows[0].invoice.setText("MT2602000777")
+    payment.amount.setText("590")
+    payment.amount.textEdited.emit("590")
+    payment.invoice.setText("MT2602000777")
+    payment.invoice.textEdited.emit("MT2602000777")
+    shot("12b_bank_payment")  # one line, folded: who, e-qaimə, amount
     payment.add_fee()
     payment.line_rows[1].amount.setText("1.20")
     payment._changed()
-    shot("12b_bank_payment")
+    shot("12b2_bank_payment_lines")
     shoot_sale_groups(session, win, ledger, shot)
 
 

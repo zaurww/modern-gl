@@ -513,6 +513,11 @@ QMenu::separator {{ height: 1px; background: {P.hairline}; margin: 4px 8px; }}
 QStatusBar {{ background: {P.window}; color: {P.secondary}; border-top: 1px solid {P.hairline}; }}
 QLabel#secondary {{ color: {P.secondary}; }}
 QLabel#tertiary {{ color: {P.tertiary}; }}
+QLabel#columnCaption {{ color: {P.header_text}; }}
+QFrame#rule {{ background: {P.hairline}; border: none; }}
+/* a form's lines folded into one: where the money goes */
+QFrame#summary {{ background: {P.subtle}; border: none; border-radius: 8px; }}
+QFrame#summary QLabel {{ background: transparent; }}
 QLabel#error {{
     color: {P.red}; background: {P.red_soft}; border-radius: 7px; padding: 7px 10px;
 }}

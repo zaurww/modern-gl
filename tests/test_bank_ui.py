@@ -361,27 +361,47 @@ def shown_page(qtbot, session: Session) -> BankOperationPage:
 
 
 def test_an_operation_is_typed_and_posted_without_the_mouse(qtbot, session):
-    """D49: name → Enter → the line as last time → e-qaimə → amount → Ctrl+Enter."""
+    """D49: name → Enter → e-qaimə → Enter → amount → Enter → «Провести» → Enter; the
+    bank, day and kind are set before, the line as last time is folded into one."""
     page = shown_page(qtbot, session)
     choose(page.sc[0], "Kapital AZN")
+    assert page.bank.currentText().startswith("Kapital AZN")
     page.counterparty_edit.setFocus()
     typed("alfa")
-    key(qtbot, Qt.Key.Key_Return)  # the highlighted one is taken, on to the line
+    key(qtbot, Qt.Key.Key_Return)  # the highlighted one is taken, on to the e-qaimə
     assert page.counterparty == value(session, "ALFA MMC")
     line = page.line_rows[0]
-    assert line.account.hasFocus() and line.account_info is not None
-    assert line.account_info.code == "60.1"
-    key(qtbot, Qt.Key.Key_Return)  # the account as suggested
-    assert line.sc[1].hasFocus() and line.sc[1].currentText() == "Договор 1"
-    key(qtbot, Qt.Key.Key_Return)
-    assert line.invoice.hasFocus()
+    assert line.account_info is not None and line.account_info.code == "60.1"
+    assert page.folded and not line.isVisible()
+    assert "Договор 1" in page.summary_text.text()
+    assert page.invoice.hasFocus()
     typed("MT005")
     key(qtbot, Qt.Key.Key_Return)
-    assert line.amount.hasFocus()
+    assert page.amount.hasFocus()
     typed("500")
-    key(qtbot, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    key(qtbot, Qt.Key.Key_Return)
+    assert page.btn_post.hasFocus()
+    key(qtbot, Qt.Key.Key_Return)
     assert page.doc is not None and page.doc.status == "posted"
     assert [(x.amount, x.invoice) for x in page.doc.lines] == [(50_000, "MT005")]
+
+
+def test_the_lines_unfold_with_a_fee_or_by_hand(qtbot, session):
+    """One line is folded; F6 adds the fee line and shows both with their columns."""
+    page = shown_page(qtbot, session)
+    assert page.folded and page.summary.isVisible() and not page.lines_header.isVisible()
+    page.amount.setFocus()
+    typed("100")
+    assert page.line_rows[0].amount.text() == "100"
+    key(qtbot, Qt.Key.Key_F6)
+    assert len(page.line_rows) == 2 and not page.folded
+    assert page.lines_header.isVisible() and page.line_rows[0].amount.text() == "100"
+    assert page.line_rows[1].amount.hasFocus()
+    key(qtbot, Qt.Key.Key_Delete, Qt.KeyboardModifier.ControlModifier)
+    assert len(page.line_rows) == 1 and not page.folded  # unfolded by hand: stays
+    other = shown_page(qtbot, session)
+    other.btn_unfold.click()
+    assert not other.folded and other.line_rows[0].account.hasFocus()
 
 
 def test_lines_with_keys_insert_copy_and_remove(qtbot, session):
@@ -423,7 +443,7 @@ def test_a_new_counterparty_is_added_right_in_the_operation(qtbot, session, monk
     assert page.counterparty == beta
     assert session.catalog.value(beta).tax_id == "9876543210"
     assert page.tax_id.text() == "VÖEN 9876543210"
-    assert page.line_rows[0].account.hasFocus()  # on with the payment
+    assert page.invoice.hasFocus()  # on with the payment
 
 
 def test_a_name_nothing_is_called_stays_in_the_field(qtbot, session):
@@ -497,12 +517,13 @@ def test_the_unpaid_e_qaime_of_the_counterparty_are_offered(qtbot, session):
         ("MT2", 123_900),
     ]
     line = page.line_rows[0]
-    line.invoice.setFocus()
+    assert page.invoice.hasFocus()  # the list opens by itself
     qtbot.waitUntil(lambda: QApplication.activePopupWidget() is not None)
     key(qtbot, Qt.Key.Key_Down)
     key(qtbot, Qt.Key.Key_Return)
     assert line.invoice.text() == "MT1" and line.amount.text() == "1 000.00"
-    assert line.amount.hasFocus()
+    assert page.invoice.text() == "MT1" and page.amount.text() == "1 000.00"
+    assert page.amount.hasFocus()
 
 
 def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
@@ -519,11 +540,10 @@ def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
     choose(page.sc[0], "Kapital AZN")
     typed("alfa")
     key(qtbot, Qt.Key.Key_Return)
-    line = page.line_rows[0]
-    type_text(line.amount, "2000")
-    several = line.invoice.findText("Несколько e-qaimə…")
-    assert several == line.invoice.count() - 1  # after the e-qaimə themselves
-    line.invoice._choose(several)
+    type_text(page.amount, "2000")
+    several = page.invoice.findText("Несколько e-qaimə…")
+    assert several == page.invoice.count() - 1  # after the e-qaimə themselves
+    page.invoice._choose(several)
     qtbot.waitUntil(lambda: len(page.line_rows) == 2)
     assert [(r.invoice.text(), r.amount.text()) for r in page.line_rows] == [
         ("MT1", "1 000.00"),
