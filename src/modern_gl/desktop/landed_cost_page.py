@@ -61,7 +61,15 @@ from modern_gl.desktop.postings import (
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import Chip, button, date_edit, edited_date, money, to_qdate
+from modern_gl.desktop.widgets import (
+    Chip,
+    CutCellTips,
+    button,
+    date_edit,
+    edited_date,
+    money,
+    to_qdate,
+)
 from modern_gl.domain.currency import format_unit_rate, parse_rate, to_base, unit_rate
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError, ValidationError
@@ -713,6 +721,7 @@ class LinesTable(QTableView):
         )
         self.setShowGrid(False)
         self.setWordWrap(False)
+        CutCellTips(self)
         self.setTabKeyNavigation(True)
         self.verticalHeader().setDefaultSectionSize(34)
 

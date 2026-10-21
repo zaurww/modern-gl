@@ -187,6 +187,73 @@ def has_currency(session: Session, kind_id: int) -> bool:
     return any(a.currency for a in session.catalog.accounts_using(kind_id))
 
 
+def tax_id_taken(
+    session: Session,
+    parent: QWidget,
+    kind_id: int,
+    tax: tuple[str | None, bool, str | None],
+    value_id: int | None = None,
+) -> bool:
+    """A VÖEN another counterparty already has: save anyway (a branch) or go back."""
+    tax_id, foreign, _ = tax
+    if tax_id is None or foreign:
+        return False
+    others = session.catalog.same_tax_id(kind_id, tax_id, value_id)
+    if not others:
+        return False
+    question = tr(
+        "VÖEN {tax_id} уже есть у «{name}». Всё равно сохранить?", tax_id=tax_id, name=others[0]
+    )
+    return QMessageBox.question(parent, tr("VÖEN"), question) != QMessageBox.StandardButton.Yes
+
+
+def new_value(
+    session: Session,
+    parent: QWidget,
+    kind_id: int,
+    typed: str = "",
+    owner_id: int | None = None,
+    currency_id: int | None = None,
+) -> int | None:
+    """A new element in the window of its directory, also right where it is needed (D49):
+    what was typed is its name — or its VÖEN, if it is digits. The new id, or None."""
+    cat = session.catalog
+    kind = cat.kinds[kind_id]
+    dlg = ValueDialog(
+        session,
+        kind_id,
+        tr("Новый элемент"),
+        owner_id=owner_id,
+        parent=parent,
+        currency_id=currency_id,
+    )
+    digits = typed.replace(" ", "")
+    if dlg.tax_id is not None and digits.isdigit():
+        dlg.tax_id.setText(digits)
+    else:
+        dlg.name.setText(typed.strip())
+    if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
+        return None
+    name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
+    tax = dlg.tax()
+    if tax_id_taken(session, parent, kind_id, tax):
+        return None
+    cid = session.company_id
+    try:
+        with transaction(session.conn):
+            value_id = session.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner)
+            if currency is not None:
+                session.ledger.set_subconto_value_currency(cid, value_id, currency)
+            if tax != (None, False, None):
+                session.ledger.set_subconto_value_tax(cid, value_id, *tax)
+    except LedgerError as e:
+        session.notify(str(e))
+        return None
+    cat.reload()
+    session.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=name))
+    return value_id
+
+
 class DirectoriesPage(QWidget):
     key = ("directories",)
 
@@ -400,43 +467,16 @@ class DirectoriesPage(QWidget):
     def _tax_id_taken(
         self, kind_id: int, tax: tuple[str | None, bool, str | None], value_id: int | None = None
     ) -> bool:
-        """A VÖEN another counterparty already has: save anyway (a branch) or go back."""
-        tax_id, foreign, _ = tax
-        if tax_id is None or foreign:
-            return False
-        others = self.s.catalog.same_tax_id(kind_id, tax_id, value_id)
-        if not others:
-            return False
-        question = tr(
-            "VÖEN {tax_id} уже есть у «{name}». Всё равно сохранить?",
-            tax_id=tax_id,
-            name=others[0],
-        )
-        return QMessageBox.question(self, tr("VÖEN"), question) != QMessageBox.StandardButton.Yes
+        return tax_id_taken(self.s, self, kind_id, tax, value_id)
 
     def _add_detailed(self, kind_id: int, owner_id: int | None) -> None:
-        kind = self.s.catalog.kinds[kind_id]
-        dlg = ValueDialog(self.s, kind_id, tr("Новый элемент"), owner_id=owner_id, parent=self)
-        if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
-            return
-        name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
-        tax = dlg.tax()
-        if self._tax_id_taken(kind_id, tax):
+        value_id = new_value(self.s, self, kind_id, owner_id=owner_id)
+        if value_id is None:
             return
         if kind_id != self.kind_id():
             self.refresh(select_kind=kind_id)
-
-        def add() -> int:
-            cid = self.s.company_id
-            with transaction(self.s.conn):
-                value_id = self.s.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner)
-                if currency is not None:
-                    self.s.ledger.set_subconto_value_currency(cid, value_id, currency)
-                if tax != (None, False, None):
-                    self.s.ledger.set_subconto_value_tax(cid, value_id, *tax)
-            return value_id
-
-        self._apply(add, tr("Добавлено в «{kind}»: {text}", kind=kind, text=name))
+        self.refresh()
+        self.refresh_values(value_id)
 
     def _edit_detailed(self, value: SubcontoInfo) -> None:
         dlg = ValueDialog(

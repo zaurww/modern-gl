@@ -38,6 +38,7 @@ from modern_gl.application.conversions import (
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger.conversion import MissingAccountRole
 from modern_gl.application.queries import load_document
+from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
@@ -79,7 +80,7 @@ def amount_text(minor: int) -> str:
 
 
 def fit_currency(
-    box: QComboBox,
+    box: QComboBox | PickBox,
     session: Session,
     account: AccountInfo | None,
     subconto: Sequence[int | None],
@@ -91,6 +92,7 @@ def fit_currency(
     box.clear()
     if account is None or not account.currency:
         box.addItem(BASE, None)
+        box.setCurrentIndex(0)
         box.setEnabled(False)
         return
     catalog = session.catalog
@@ -104,6 +106,7 @@ def fit_currency(
     )
     if fixed is not None:
         box.addItem(catalog.currencies[fixed].code, fixed)
+        box.setCurrentIndex(0)
         box.setEnabled(False)
         return
     if account.currency == CURRENCY_OPTIONAL:

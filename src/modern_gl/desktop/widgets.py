@@ -6,9 +6,10 @@ from collections.abc import Callable
 from datetime import date
 from typing import ClassVar, cast
 
-from PySide6.QtCore import QDate, QSize, Qt
-from PySide6.QtGui import QIcon, QPainter
+from PySide6.QtCore import QDate, QEvent, QObject, QSize, Qt
+from PySide6.QtGui import QFontMetrics, QHelpEvent, QIcon, QPainter
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMenu,
     QPushButton,
+    QToolTip,
     QVBoxLayout,
     QWidget,
 )
@@ -136,6 +138,32 @@ class ElidedLabel(QLabel):
             text,
             self.foregroundRole(),
         )
+
+
+class CutCellTips(QObject):
+    """A table cell whose text does not fit shows it whole under the mouse; a cell that
+    fits shows nothing (a tip repeating what is already seen is noise)."""
+
+    def __init__(self, view: QAbstractItemView) -> None:
+        super().__init__(view)
+        self.view = view
+        view.viewport().installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() != QEvent.Type.ToolTip:
+            return False
+        pos = cast(QHelpEvent, event).pos()
+        index = self.view.indexAt(pos)
+        text = str(index.data() or "") if index.isValid() else ""
+        if not text or index.data(Qt.ItemDataRole.ToolTipRole):
+            return False  # the model's own tip, if it has one
+        font = index.data(Qt.ItemDataRole.FontRole) or self.view.font()
+        room = self.view.visualRect(index).width() - 12  # the cell's padding
+        if QFontMetrics(font).horizontalAdvance(text) <= room:
+            QToolTip.hideText()
+        else:
+            QToolTip.showText(cast(QHelpEvent, event).globalPos(), text, self.view)
+        return True
 
 
 class PageHeader(QWidget):

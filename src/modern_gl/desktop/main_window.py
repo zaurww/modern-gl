@@ -269,6 +269,7 @@ class MainWindow(QMainWindow):
         self.company_path: Path | None = None
         self.session: Session | None = None
         self.pages: dict[object, QWidget] = {}
+        self.came_from: dict[QWidget, object] = {}  # an open page → the page it was opened from
         self.resize(1360, 820)
 
         central = QWidget()
@@ -409,6 +410,7 @@ class MainWindow(QMainWindow):
             self.stack.removeWidget(page)
             page.deleteLater()
         self.pages.clear()
+        self.came_from.clear()
         if self.conn is not None:
             try:
                 if self.company_path is not None:
@@ -704,6 +706,8 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(page)
         self._size_by_current_page()
         if open_item:
+            # closing it returns to the page it was opened from (the list of purchases…)
+            self.came_from[page] = self._key_of(self.stack.currentWidget())
             title = page.title() if isinstance(page, TitledPage) else ""
             self.sidebar.add_item(key, title, open_icon(key))
 
@@ -896,8 +900,14 @@ class MainWindow(QMainWindow):
         page.saved.connect(lambda doc_id, p=page: self._conversion_saved(p, doc_id))
         page.open_gl_document.connect(self.show_document)
         page.copy_requested.connect(self.new_bank_operation)
+        page.next_requested.connect(lambda data, p=page: self._next_bank_operation(p, data))
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
         page.title_changed.connect(lambda p=page: self._retitle(p))
+
+    def _next_bank_operation(self, page: BankOperationPage, data) -> None:
+        """A new operation posted: it is in the statement; the next one opens in its place."""
+        self.close_page(self._key_of(page), ask=False)
+        self.new_bank_operation(data)
 
     def open_inventory_document(self, document_id: int) -> None:
         key = ("inventory_doc", document_id)
@@ -1024,7 +1034,8 @@ class MainWindow(QMainWindow):
         del self.pages[key]
         self.stack.removeWidget(page)
         page.deleteLater()
-        self.show_place(("journal",))
+        back = self.came_from.pop(page, None)
+        self.show_place(back if back in self.pages else ("journal",))
 
     def _confirm_close(self, page) -> bool:
         if not getattr(page, "is_dirty", lambda: False)():  # e.g. the empty-state page
@@ -1072,6 +1083,13 @@ class MainWindow(QMainWindow):
             theme.apply(app)
         if self.company_path is not None:
             self.open_company(self.company_path)
+
+    def keyPressEvent(self, event) -> None:
+        # Esc nobody on the page wanted (an open cell or list takes it first): back
+        if event.key() == Qt.Key.Key_Escape and not event.modifiers():
+            self.close_current()
+            return
+        super().keyPressEvent(event)
 
     def eventFilter(self, obj, event) -> bool:
         """Click on the × of an open item in the sidebar closes it."""
