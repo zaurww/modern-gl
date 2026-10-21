@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QMenu,
+    QMessageBox,
     QStackedLayout,
     QStyle,
     QStyledItemDelegate,
@@ -1052,6 +1053,9 @@ class ChartPage(ReportPage):
             sc = QShortcut(QKeySequence(keys), self)
             sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             sc.activated.connect(fn)
+        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
+        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
+        delete.activated.connect(lambda: self.delete_account(self._current()))
         self.refresh()
 
     def title(self) -> str:
@@ -1085,7 +1089,10 @@ class ChartPage(ReportPage):
             muted=lambda a: not a.active,
         )
         self.footer.setText(
-            tr("Ins — новый счёт   ·   F2 — изменить   ·   двойной щелчок — карточка счёта")
+            tr(
+                "Ins — новый счёт   ·   F2 — изменить   ·   Del — удалить   ·   "
+                "двойной щелчок — карточка счёта"
+            )
         )
 
     def drill(self, row) -> None:
@@ -1149,6 +1156,22 @@ class ChartPage(ReportPage):
         message = "Счёт {code} снова виден" if not acc.active else "Счёт {code} скрыт"
         self._after_change(acc.id, tr(message, code=acc.short))
 
+    def delete_account(self, acc: AccountInfo | None) -> None:
+        """An account entered by mistake; a used one stays, the message says where it is."""
+        if acc is None:
+            return
+        question = tr("Удалить счёт {code}?", code=acc.label)
+        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.s.ledger.delete_account(self.s.company_id, acc.id)
+        except LedgerError as e:
+            self.s.notify(str(e))
+            return
+        self.s.catalog.reload()
+        self.refresh()
+        self.s.notify(tr("Счёт {code} удалён", code=acc.short))
+
     def _after_change(self, account_id: int, message: str) -> None:
         self.s.catalog.reload()
         self.refresh()
@@ -1165,6 +1188,7 @@ class ChartPage(ReportPage):
             (tr("Изменить…"), lambda: self.edit_account(row)),
             (tr("Добавить субсчёт…"), lambda: self.edit_account(None, row.id)),
             (tr("Показать") if not row.active else tr("Скрыть"), lambda: self.toggle_hidden(row)),
+            (tr("Удалить"), lambda: self.delete_account(row)),
             None,
         ]
         return edit + self._account_actions(row.id) + self._class_actions(row.id)

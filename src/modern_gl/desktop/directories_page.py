@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.catalog import SubcontoInfo
+from modern_gl.application.inventory import Inventory
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
@@ -345,7 +346,9 @@ class DirectoriesPage(QWidget):
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
         right.addLayout(self.stack, 1)
-        hint = QLabel(tr("Ins — новый элемент   ·   F2 или двойной щелчок — изменить"))
+        hint = QLabel(
+            tr("Ins — новый элемент   ·   F2 или двойной щелчок — изменить   ·   Del — удалить")
+        )
         hint.setObjectName("tertiary")
         hint.setFont(fonts().small)
         right.addWidget(hint)
@@ -359,6 +362,9 @@ class DirectoriesPage(QWidget):
             sc = QShortcut(QKeySequence(keys), self)
             sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             sc.activated.connect(fn)
+        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
+        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
+        delete.activated.connect(lambda: self.delete_value(self._current_value()))
         self.refresh()
 
     def title(self) -> str:
@@ -571,6 +577,19 @@ class DirectoriesPage(QWidget):
             value.id,
         )
 
+    def delete_value(self, value: SubcontoInfo | None) -> None:
+        """An element entered by mistake; a used one stays, the message says where it is."""
+        if value is None:
+            return
+        question = tr("Удалить «{name}»?", name=value.name)
+        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+            return
+        inventory = Inventory(self.s.conn, actor=self.s.ledger.actor)
+        self._apply(
+            lambda: inventory.delete_value(self.s.company_id, value.id),
+            tr("«{name}» удалён", name=value.name),
+        )
+
     def choose_currency(self, value: SubcontoInfo) -> None:
         """A USD bank account, a contract in EUR: the line takes this currency."""
         currencies = self.s.catalog.active_currencies
@@ -619,6 +638,7 @@ class DirectoriesPage(QWidget):
                 tr("Показать") if not value.active else tr("Скрыть"),
                 lambda: self.toggle_value(value),
             ),
+            (tr("Удалить"), lambda: self.delete_value(value)),
         ]
         if any(a.currency for a in self.s.catalog.accounts_using(value.kind_id)):
             actions.append((tr("Валюта…"), lambda: self.choose_currency(value)))

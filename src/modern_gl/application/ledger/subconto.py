@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from modern_gl.application.common import insert
+from modern_gl.application.common import insert, where_used
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
@@ -128,6 +128,30 @@ class SubcontoCommands(LedgerBase):
                 "UPDATE subconto_values SET active = ? WHERE id = ?", (int(active), value_id)
             )
             self._audit(company_id, "subconto_value", value_id, "show" if active else "hide", {})
+
+    def delete_subconto_value(self, company_id: int, value_id: int) -> None:
+        """Delete a directory element entered by mistake, if nothing refers to it: no
+        postings (drafts count), contracts of its own, templates, documents of the modules.
+        A used one can be hidden. An item or a warehouse goes through `Inventory.delete_value`."""
+        with transaction(self.conn):
+            value = self._subconto_value(company_id, value_id)
+            reason = where_used(self.conn, company_id, "subconto_values", value_id)
+            if reason is not None:
+                raise ValidationError(
+                    tr(
+                        "«{name}» нельзя удалить: {reason}. Его можно скрыть.",
+                        name=value["name"],
+                        reason=reason,
+                    )
+                )
+            self.conn.execute("DELETE FROM subconto_values WHERE id = ?", (value_id,))
+            self._audit(
+                company_id,
+                "subconto_value",
+                value_id,
+                "delete",
+                {"kind_id": value["kind_id"], "name": value["name"]},
+            )
 
     def set_subconto_value_currency(
         self, company_id: int, value_id: int, currency_id: int | None

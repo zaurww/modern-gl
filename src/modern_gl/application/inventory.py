@@ -13,7 +13,14 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from modern_gl.application.common import company_row, insert, now, pad_subconto, write_audit
+from modern_gl.application.common import (
+    company_row,
+    insert,
+    now,
+    pad_subconto,
+    where_used,
+    write_audit,
+)
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.accounts import (
     COST_OF_SALES,
@@ -428,6 +435,30 @@ class Inventory:
                 {"subconto_value_id": subconto_value_id, "name": name},
             )
         return item_id
+
+    def delete_value(self, company_id: int, value_id: int) -> None:
+        """Delete a directory element; an item or a warehouse with it, when no document
+        has it (`Ledger.delete_subconto_value` checks the rest)."""
+        with transaction(self.conn):
+            value = self._subconto_value(company_id, value_id)
+            for table in ("inventory_items", "warehouses"):
+                row = self.conn.execute(
+                    f"SELECT id FROM {table} WHERE company_id = ? AND subconto_value_id = ?",
+                    (company_id, value_id),
+                ).fetchone()
+                if row is None:
+                    continue
+                reason = where_used(self.conn, company_id, table, row["id"])
+                if reason is not None:
+                    raise ValidationError(
+                        tr(
+                            "«{name}» нельзя удалить: {reason}. Его можно скрыть.",
+                            name=value["name"],
+                            reason=reason,
+                        )
+                    )
+                self.conn.execute(f"DELETE FROM {table} WHERE id = ?", (row["id"],))
+            self.ledger.delete_subconto_value(company_id, value_id)
 
     def add_warehouse(
         self,

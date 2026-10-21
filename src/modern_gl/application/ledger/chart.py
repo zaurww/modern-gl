@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 
-from modern_gl.application.common import insert, pad_subconto
+from modern_gl.application.common import insert, pad_subconto, where_used
 from modern_gl.application.ledger.base import LedgerBase, account_label, clean_code
 from modern_gl.domain.accounts import ACCOUNT_CLASSES, ACCOUNT_ROLES, ROLE_TYPES, TYPE_CLASS
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY, currency_mode
@@ -311,6 +311,29 @@ class ChartCommands(LedgerBase):
                 acc["id"],
                 "show" if active else "hide",
                 {"code": acc["code"]},
+            )
+
+    def delete_account(self, company_id: int, account: int | str) -> None:
+        """Delete an account entered by mistake. Only one nothing refers to: no postings
+        (drafts count), subaccounts, items, templates, settings; a used one can be hidden."""
+        with transaction(self.conn):
+            acc = self._account(company_id, account)
+            reason = where_used(self.conn, company_id, "accounts", acc["id"])
+            if reason is not None:
+                raise ValidationError(
+                    tr(
+                        "счёт {code} нельзя удалить: {reason}. Его можно скрыть.",
+                        code=account_label(acc),
+                        reason=reason,
+                    )
+                )
+            self.conn.execute("DELETE FROM accounts WHERE id = ?", (acc["id"],))
+            self._audit(
+                company_id,
+                "account",
+                acc["id"],
+                "delete",
+                {"code": acc["code"], "name": acc["name"]},
             )
 
     def _check_currency_fits(self, account: sqlite3.Row, label: str, mode: int) -> None:
