@@ -7,13 +7,11 @@ import calendar
 import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from modern_gl.domain.eqaime import ALL, PortalInvoice, portal_invoice
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
-
-RECHECK_MONTHS = 12  # reconciled months older than this are not read again
 
 
 def fetch_list(
@@ -47,6 +45,36 @@ def full_month(date_from: date, date_to: date) -> str | None:
     return month if (date_from, date_to) == month_bounds(month) else None
 
 
+DAY, WEEK, MONTH = "day", "week", "month"
+
+
+def quick_period(span: str, today: date) -> tuple[date, date]:
+    """What a morning check looks at. «Вчера»: yesterday, on a Monday Friday to Sunday;
+    «Неделя»: from Monday of yesterday's week to yesterday (on a Monday: the last week);
+    «Месяц»: yesterday's month, whole (on the 1st: the month just ended)."""
+    yesterday = today - timedelta(days=1)
+    if span == DAY:
+        return (today - timedelta(days=3) if today.weekday() == 0 else yesterday), yesterday
+    if span == WEEK:
+        return yesterday - timedelta(days=yesterday.weekday()), yesterday
+    return month_bounds(f"{yesterday:%Y-%m}")
+
+
+def usual_span(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> str:
+    """How this company is usually reconciled: like its last mark (a month if none)."""
+    row = conn.execute(
+        "SELECT date_from, date_to FROM eqaime_reconciled WHERE company_id = ? AND outgoing = ? "
+        "ORDER BY reconciled_at DESC LIMIT 1",
+        (company_id, int(outgoing)),
+    ).fetchone()
+    if row is None:
+        return MONTH
+    days = (date.fromisoformat(row["date_to"]) - date.fromisoformat(row["date_from"])).days + 1
+    if full_month(date.fromisoformat(row["date_from"]), date.fromisoformat(row["date_to"])):
+        return MONTH
+    return DAY if days <= 3 else WEEK if days <= 7 else MONTH
+
+
 @dataclass(frozen=True)
 class Recheck:
     outgoing: bool
@@ -55,14 +83,19 @@ class Recheck:
 
 
 def rechecks(conn: sqlite3.Connection, company_id: int, today: date) -> list[Recheck]:
-    """What to read again from the portal to see changes in reconciled months: per
-    direction, from the first to the last reconciled month of the last year."""
-    oldest = f"{today.year - 1:04d}-{today.month:02d}"
+    """What to read again from the portal to see changes in reconciled periods: per
+    direction, from the first to the last reconciled day of the last year."""
+    oldest = (today - timedelta(days=365)).isoformat()
     return [
-        Recheck(bool(row["outgoing"]), month_bounds(row["first"])[0], month_bounds(row["last"])[1])
+        Recheck(
+            bool(row["outgoing"]),
+            date.fromisoformat(max(row["first"], oldest)),
+            date.fromisoformat(row["last"]),
+        )
         for row in conn.execute(
-            "SELECT outgoing, MIN(month) AS first, MAX(month) AS last FROM eqaime_reconciled "
-            "WHERE company_id = ? AND month > ? GROUP BY outgoing ORDER BY outgoing",
+            "SELECT outgoing, MIN(date_from) AS first, MAX(date_to) AS last "
+            "FROM eqaime_reconciled WHERE company_id = ? AND date_to >= ? "
+            "GROUP BY outgoing ORDER BY outgoing",
             (company_id, oldest),
         )
     ]

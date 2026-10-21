@@ -8,7 +8,17 @@ from datetime import date
 import pytest
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.application.eqaime_portal import fetch_list, full_month, rechecks
+from modern_gl.application.eqaime_portal import (
+    DAY,
+    MONTH,
+    WEEK,
+    fetch_list,
+    full_month,
+    month_bounds,
+    quick_period,
+    rechecks,
+    usual_span,
+)
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.eqaime import ALL, ON_APPROVAL, PortalInvoice, portal_invoice
@@ -27,6 +37,7 @@ from modern_gl.reporting.eqaime_reconciliation import (
     book_invoices,
     changed_after_reconciliation,
     reconcile,
+    reconciled_through,
 )
 from tests.test_eqaime_import import FakePortal
 
@@ -281,7 +292,7 @@ def test_changes_after_the_month_is_marked_reconciled(firm):
     ledger.remember_portal(
         firm.cid, [on_portal("MT02", "2026-03-06", 200, 0)], "2026-04-02T09:00:00"
     )
-    ledger.mark_reconciled(firm.cid, False, "2026-03", "2026-04-05T09:00:00")
+    ledger.mark_reconciled(firm.cid, False, "2026-03-01", "2026-03-31", "2026-04-05T09:00:00")
     ledger.remember_portal(
         firm.cid,
         [
@@ -296,9 +307,9 @@ def test_changes_after_the_month_is_marked_reconciled(firm):
     (changed,) = changed_after_reconciliation(firm.conn, firm.cid)
     assert (changed.outgoing, changed.month, changed.numbers) == (False, "2026-03", ("MT01",))
 
-    ledger.mark_reconciled(firm.cid, False, "2026-03", "2026-04-22T09:00:00")  # again
+    ledger.mark_reconciled(firm.cid, False, "2026-03-01", "2026-03-31", "2026-04-22T09:00:00")
     assert changed_after_reconciliation(firm.conn, firm.cid) == []
-    ledger.unmark_reconciled(firm.cid, False, "2026-03")
+    ledger.unmark_reconciled(firm.cid, False, "2026-03-01", "2026-03-31")
     assert firm.conn.execute("SELECT COUNT(*) FROM eqaime_reconciled").fetchone()[0] == 0
 
 
@@ -306,8 +317,8 @@ def test_reconciled_months_are_read_again(firm):
     """Purchases: January and March 2026 reconciled -> 1 Jan .. 31 Mar read again; a month
     of over a year ago is not."""
     for month in ("2025-03", "2026-01", "2026-03"):
-        firm.ledger.mark_reconciled(firm.cid, False, month)
-    firm.ledger.mark_reconciled(firm.cid, True, "2026-02")
+        firm.ledger.mark_reconciled(firm.cid, False, *month_bounds(month))
+    firm.ledger.mark_reconciled(firm.cid, True, *month_bounds("2026-02"))
     got = [
         (r.outgoing, r.date_from, r.date_to)
         for r in rechecks(firm.conn, firm.cid, date(2026, 4, 10))
@@ -362,7 +373,7 @@ def test_reconciliation_dialog(firm, qtbot, monkeypatch):
     from modern_gl.desktop import eqaime_reconciliation_page
     from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
     from modern_gl.desktop.session import Session
-    from modern_gl.reporting.eqaime_reconciliation import reconciled_months
+    from modern_gl.reporting.eqaime_reconciliation import reconciled_periods
     from tests.test_eqaime_import import fake_token
 
     firm.purchase("2026-03-05", "MT01", "1000", "180")
@@ -388,8 +399,11 @@ def test_reconciliation_dialog(firm, qtbot, monkeypatch):
         working_date=date(2026, 3, 20),
         notify=lambda _text: None,
     )
-    dialog = EqaimeReconciliationDialog(session, sign_in=lambda parent: fake_token())
+    dialog = EqaimeReconciliationDialog(
+        session, sign_in=lambda parent: fake_token(), today=date(2026, 4, 1)
+    )
     qtbot.addWidget(dialog)
+    assert dialog.span_buttons[MONTH].isChecked()  # nothing marked yet: a month
     dialog.load()
     qtbot.waitUntil(lambda: dialog.outcome is not None, timeout=5000)
     heads = [dialog.tree.topLevelItem(i) for i in range(dialog.tree.topLevelItemCount())]
@@ -409,10 +423,12 @@ def test_reconciliation_dialog(firm, qtbot, monkeypatch):
     count = firm.conn.execute("SELECT COUNT(*) FROM eqaime_portal").fetchone()[0]
     assert count == 2  # what the portal showed is kept
 
-    assert dialog.mark_button.text() == "Март 2026 сверен"
+    assert dialog.mark_button.text() == "Сверено: март 2026"
     dialog.mark_button.click()
-    assert list(reconciled_months(firm.conn, firm.cid, False)) == ["2026-03"]
-    assert dialog.mark_button.text() == "Снять отметку «сверен»"
+    marks = reconciled_periods(firm.conn, firm.cid, False)
+    assert [(m.date_from, m.date_to) for m in marks] == [("2026-03-01", "2026-03-31")]
+    assert dialog.through.text() == "Сверено по 31.03.2026"
+    assert dialog.mark_button.text() == "Снять отметку «сверено»"
 
     absent = heads[1].child(0) if heads[1] is not None else None
     assert absent is not None and absent.text(1) == "MT04"
@@ -471,7 +487,9 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
         [on_portal("MT2603000111", "2026-03-05", 11_800, 1_800, tin="1700000001")],
         "2026-04-01T09:00:00",
     )
-    shop.ledger.mark_reconciled(shop.company_id, False, "2026-03", "2026-04-02T09:00:00")
+    shop.ledger.mark_reconciled(
+        shop.company_id, False, "2026-03-01", "2026-03-31", "2026-04-02T09:00:00"
+    )
     row, detail = received()
     row = {**row, "status": ON_APPROVAL, "amount": 200.60, "vat": 30.60}
     portal = FakePortal({ON_APPROVAL: [row]}, {"a1": detail})
@@ -496,3 +514,81 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
     assert tuple(stored) == (ON_APPROVAL, 20_060, 3_060)
     assert dialog.warning.isVisibleTo(dialog)
     assert "март 2026, покупки: 1" in dialog.warning.text()
+
+
+@pytest.mark.parametrize(
+    ("today", "span", "period"),
+    [
+        (date(2026, 10, 21), DAY, (date(2026, 10, 20), date(2026, 10, 20))),  # Wednesday
+        (date(2026, 10, 19), DAY, (date(2026, 10, 16), date(2026, 10, 18))),  # Monday: Fri-Sun
+        (date(2026, 10, 21), WEEK, (date(2026, 10, 19), date(2026, 10, 20))),
+        (date(2026, 10, 19), WEEK, (date(2026, 10, 12), date(2026, 10, 18))),  # the last week
+        (date(2026, 11, 1), MONTH, (date(2026, 10, 1), date(2026, 10, 31))),
+        (date(2026, 10, 21), MONTH, (date(2026, 10, 1), date(2026, 10, 31))),
+    ],
+)
+def test_quick_periods_of_a_morning_check(today, span, period):
+    assert quick_period(span, today) == period
+
+
+def test_a_day_is_reconciled_by_the_portal_date(firm):
+    """MT01 is dated 20.10 on the portal and posted on 21.10: the same month, so it agrees
+    on the 20th (its totals counted there: 118.00 / 18.00 both sides) and is not on the
+    21st at all. Posted in November it would be «другой период»."""
+    firm.purchase("2026-10-21", "MT01", "100", "18")
+    portal = [on_portal("MT01", "2026-10-20", 11_800, 1_800)]
+    day = reconcile(firm.conn, firm.cid, False, "2026-10-20", "2026-10-20", portal)
+    assert [r.group for r in day.rows] == [MATCHED] and day.agrees
+    assert (day.book_total, day.book_vat) == (11_800, 1_800)
+    firm.ledger.remember_portal(firm.cid, portal)
+    next_day = reconcile(firm.conn, firm.cid, False, "2026-10-21", "2026-10-21", [])
+    assert next_day.rows == [] and next_day.agrees
+
+    firm.purchase("2026-11-02", "MT02", "100", "18")
+    late = [on_portal("MT02", "2026-10-31", 11_800, 1_800)]
+    assert [
+        r.group
+        for r in reconcile(firm.conn, firm.cid, False, "2026-10-31", "2026-10-31", late).rows
+    ] == [PERIOD]
+
+
+def test_reconciled_days_are_warned_about_until_reconciled_again(firm):
+    """The 20th marked on the 21st; on the 22nd MT01 (of the 20th) is cancelled: warned.
+    A change in MT05 (of the 5th, never marked) is not. October marked on the 23rd: the
+    warning goes. Marks 01-19, 20, 22: reconciled through the 20th (the 21st is a gap)."""
+    ledger = firm.ledger
+    ledger.remember_portal(
+        firm.cid,
+        [on_portal("MT01", "2026-10-20", 100, 0), on_portal("MT05", "2026-10-05", 100, 0)],
+        "2026-10-21T08:00:00",
+    )
+    ledger.mark_reconciled(firm.cid, False, "2026-10-20", "2026-10-20", "2026-10-21T08:30:00")
+    ledger.remember_portal(
+        firm.cid,
+        [
+            on_portal("MT01", "2026-10-20", 100, 0, "canceled"),
+            on_portal("MT05", "2026-10-05", 300, 0),
+        ],
+        "2026-10-22T08:00:00",
+    )
+    (changed,) = changed_after_reconciliation(firm.conn, firm.cid)
+    assert (changed.month, changed.numbers) == ("2026-10", ("MT01",))
+    assert usual_span(firm.conn, firm.cid, False) == DAY
+
+    ledger.mark_reconciled(firm.cid, False, "2026-10-01", "2026-10-31", "2026-10-23T08:00:00")
+    assert changed_after_reconciliation(firm.conn, firm.cid) == []
+    assert usual_span(firm.conn, firm.cid, False) == MONTH
+
+    ledger.unmark_reconciled(firm.cid, False, "2026-10-01", "2026-10-31")
+    ledger.mark_reconciled(firm.cid, False, "2026-10-01", "2026-10-19")
+    ledger.mark_reconciled(firm.cid, False, "2026-10-22", "2026-10-22")
+    assert reconciled_through(firm.conn, firm.cid, False) == "2026-10-20"
+
+
+def test_period_text():
+    from modern_gl.desktop.eqaime_reconciliation_page import period_text
+
+    assert period_text("2026-03-01", "2026-03-31") == "март 2026"
+    assert period_text("2026-10-20", "2026-10-20") == "20.10.2026"
+    assert period_text("2026-10-12", "2026-10-18") == "12.10–18.10.2026"
+    assert period_text("2025-12-29", "2026-01-04") == "29.12.2025–04.01.2026"

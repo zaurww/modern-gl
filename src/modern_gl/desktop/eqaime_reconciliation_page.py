@@ -1,5 +1,6 @@
-"""«Сверка с порталом»: the e-qaimə of a month on the tax portal against the books (D53) —
-what is forgotten, cancelled, different; the totals on top; the month marked reconciled."""
+"""«Сверка с порталом»: the e-qaimə of a period on the tax portal against the books (D53) —
+what is forgotten, cancelled, different; the totals on top; the period marked reconciled.
+Made for a morning check too: «Вчера», «Неделя», «Месяц» set the period at a click."""
 
 from __future__ import annotations
 
@@ -10,10 +11,12 @@ from datetime import date
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -21,16 +24,20 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.eqaime_portal import (
+    DAY,
+    MONTH,
+    WEEK,
     fetch_list,
     full_month,
-    month_bounds,
+    quick_period,
     read_again,
     rechecks,
+    usual_span,
 )
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog, PortalLoader, changes_warning
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import button, date_edit, edited_date, money
+from modern_gl.desktop.widgets import button, date_edit, edited_date, money, to_qdate
 from modern_gl.domain.dates import month_name, ru_date
 from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, status_label
 from modern_gl.domain.errors import LedgerError
@@ -50,7 +57,8 @@ from modern_gl.reporting.eqaime_reconciliation import (
     Reconciliation,
     ReconciliationRow,
     reconcile,
-    reconciled_months,
+    reconciled_periods,
+    reconciled_through,
 )
 
 COLUMNS = ["Дата", "E-qaimə", "Контрагент", "На портале", "Портал", "Книга", "Разница", ""]
@@ -82,6 +90,7 @@ class EqaimeReconciliationDialog(QDialog):
         parent: QWidget | None = None,
         sign_in: Callable[[QWidget], str | None] | None = None,
         direction: str = "receipt",  # "receipt" (purchases) or "sale"
+        today: date | None = None,
     ) -> None:
         super().__init__(parent)
         self.s = session
@@ -92,6 +101,7 @@ class EqaimeReconciliationDialog(QDialog):
         self.chosen_document: int | None = None  # double-clicked: the caller opens it
         self.period = (session.working_date, session.working_date)  # of the last load
         self.worker: QThread | None = None
+        self.today = today or date.today()
         title_text = tr(
             "Сверка продаж с порталом" if self.outgoing else "Сверка покупок с порталом"
         )
@@ -112,7 +122,18 @@ class EqaimeReconciliationDialog(QDialog):
 
         bar = QHBoxLayout()
         bar.setSpacing(8)
-        first, last = month_bounds(f"{session.working_date:%Y-%m}")
+        self.span_buttons: dict[str, QPushButton] = {}
+        # the usual period at a click; the one this company was last marked with is chosen
+        self.spans = QButtonGroup(self)
+        for span, caption in ((DAY, tr("Вчера")), (WEEK, tr("Неделя")), (MONTH, tr("Месяц"))):
+            choice = button(caption, "segment")
+            choice.setCheckable(True)
+            choice.clicked.connect(lambda _checked=False, span=span: self.choose(span))
+            self.spans.addButton(choice)
+            self.span_buttons[span] = choice
+            bar.addWidget(choice)
+        bar.addSpacing(10)
+        first, last = quick_period(MONTH, self.today)
         self.date_from = date_edit(first)
         self.date_to = date_edit(last)
         for caption, widget in ((tr("Период с"), self.date_from), (tr("по"), self.date_to)):
@@ -126,7 +147,14 @@ class EqaimeReconciliationDialog(QDialog):
         self.load_button.clicked.connect(self.load)
         bar.addWidget(self.load_button)
         bar.addStretch(1)
+        self.through = QLabel()  # «Сверено по 20.10.2026»
+        self.through.setObjectName("secondary")
+        bar.addWidget(self.through)
         root.addLayout(bar)
+        for edit in (self.date_from, self.date_to):
+            edit.dateChanged.connect(self._dates_edited)
+        self.choose(usual_span(session.conn, session.company_id, self.outgoing))
+        self._show_through()
 
         self.warning = QLabel()
         self.warning.setObjectName("warning")
@@ -201,7 +229,7 @@ class EqaimeReconciliationDialog(QDialog):
         close = button(tr("Закрыть"), "flat")
         close.clicked.connect(self.reject)
         actions.addWidget(close)
-        self.mark_button = button(tr("Месяц сверен"), "primary")
+        self.mark_button = button(tr("Сверено"), "primary")
         self.mark_button.clicked.connect(self.toggle_reconciled)
         self.mark_button.setEnabled(False)
         actions.addWidget(self.mark_button)
@@ -407,28 +435,50 @@ class EqaimeReconciliationDialog(QDialog):
             self.chosen_document = row.book.documents[0][0]
             self.accept()
 
-    # ---- the month -----------------------------------------------------------------
+    # ---- the period ----------------------------------------------------------------
 
-    def _month(self) -> str | None:
+    def choose(self, span: str) -> None:
+        first, last = quick_period(span, self.today)
+        for edit, day in ((self.date_from, first), (self.date_to, last)):
+            edit.blockSignals(True)
+            edit.setDate(to_qdate(day))
+            edit.blockSignals(False)
+        self.span_buttons[span].setChecked(True)
+
+    def _dates_edited(self) -> None:
+        """Dates typed by hand: none of the quick periods is chosen any more."""
+        self.spans.setExclusive(False)
+        for choice in self.span_buttons.values():
+            choice.setChecked(False)
+        self.spans.setExclusive(True)
+
+    def _show_through(self) -> None:
+        through = reconciled_through(self.s.conn, self.s.company_id, self.outgoing)
+        self.through.setText(tr("Сверено по {date}", date=ru_date(through)) if through else "")
+
+    def _marked_period(self) -> tuple[str, str] | None:
+        """The period of the shown result."""
         if self.outcome is None:
             return None
-        return full_month(
-            date.fromisoformat(self.outcome.date_from), date.fromisoformat(self.outcome.date_to)
+        return self.outcome.date_from, self.outcome.date_to
+
+    def _is_marked(self, period: tuple[str, str]) -> bool:
+        return any(
+            (m.date_from, m.date_to) == period
+            for m in reconciled_periods(self.s.conn, self.s.company_id, self.outgoing)
         )
 
     def _show_mark(self) -> None:
-        month = self._month()
-        marked = reconciled_months(self.s.conn, self.s.company_id, self.outgoing)
-        self.mark_button.setEnabled(month is not None)
-        if month is None:
-            self.mark_button.setText(tr("Месяц сверен"))
-            self.mark_button.setToolTip(tr("Отметить можно только целый месяц"))
-        elif month in marked:
-            self.mark_button.setText(tr("Снять отметку «сверен»"))
+        period = self._marked_period()
+        self.mark_button.setEnabled(period is not None)
+        if period is None:
+            return
+        if self._is_marked(period):
+            self.mark_button.setText(tr("Снять отметку «сверено»"))
             self.mark_button.setObjectName("flat")
-            self.mark_button.setToolTip(tr("Сверен {date}", date=ru_date(marked[month][:10])))
+            self.mark_button.setToolTip("")
         else:
-            self.mark_button.setText(tr("{month} сверен", month=month_name(month).capitalize()))
+            self.mark_button.setText(tr("Сверено: {period}", period=period_text(*period)))
             self.mark_button.setObjectName("primary")
             self.mark_button.setToolTip(
                 tr("Если потом на портале что-то изменится, программа предупредит")
@@ -437,19 +487,20 @@ class EqaimeReconciliationDialog(QDialog):
         self.mark_button.style().polish(self.mark_button)
 
     def toggle_reconciled(self) -> None:
-        month = self._month()
-        if month is None:
+        period = self._marked_period()
+        if period is None:
             return
         try:
-            if month in reconciled_months(self.s.conn, self.s.company_id, self.outgoing):
-                self.s.ledger.unmark_reconciled(self.s.company_id, self.outgoing, month)
+            if self._is_marked(period):
+                self.s.ledger.unmark_reconciled(self.s.company_id, self.outgoing, *period)
             else:
-                self.s.ledger.mark_reconciled(self.s.company_id, self.outgoing, month)
-                self.s.notify(tr("{month}: отмечен сверенным", month=month_name(month)))
+                self.s.ledger.mark_reconciled(self.s.company_id, self.outgoing, *period)
+                self.s.notify(tr("Отмечено сверенным: {period}", period=period_text(*period)))
         except LedgerError as exc:
             self.status.setText(str(exc))
             return
         self._show_mark()
+        self._show_through()
 
     def import_missing(self) -> None:
         """The import of the same period and direction, signed in already."""
@@ -470,3 +521,14 @@ class EqaimeReconciliationDialog(QDialog):
 def _signed(minor: int) -> str:
     """A difference: negative in brackets, as the reports show it (D52)."""
     return f"({format_minor(-minor)})" if minor < 0 else format_minor(minor)
+
+
+def period_text(date_from: str, date_to: str) -> str:
+    """'март 2026' for a whole month, '20.10.2026' for a day, '14.10–20.10.2026' else."""
+    month = full_month(date.fromisoformat(date_from), date.fromisoformat(date_to))
+    if month:
+        return month_name(month)
+    if date_from == date_to:
+        return ru_date(date_from)
+    start = ru_date(date_from)
+    return f"{start[:5] if date_from[:4] == date_to[:4] else start}–{ru_date(date_to)}"

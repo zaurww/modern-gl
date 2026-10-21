@@ -44,11 +44,13 @@ CREATE TABLE eqaime_portal_changes (
 
 CREATE INDEX eqaime_portal_changes_entry ON eqaime_portal_changes (company_id, portal_id);
 
--- a month the user has reconciled with the portal, purchases or sales apart
+-- a period the user has reconciled with the portal (a day, a week, a month), purchases or
+-- sales apart: a change seen later in an e-qaimə dated in it is warned about
 CREATE TABLE eqaime_reconciled (
     company_id    INTEGER NOT NULL REFERENCES companies(id),
     outgoing      INTEGER NOT NULL CHECK (outgoing IN (0, 1)),
-    month         TEXT NOT NULL CHECK (month GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]'),
+    date_from     TEXT NOT NULL,
+    date_to       TEXT NOT NULL CHECK (date_to >= date_from),
     reconciled_at TEXT NOT NULL,
-    PRIMARY KEY (company_id, outgoing, month)
+    PRIMARY KEY (company_id, outgoing, date_from, date_to)
 );

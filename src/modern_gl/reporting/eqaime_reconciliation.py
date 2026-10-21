@@ -17,7 +17,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.dates import iso_date
@@ -217,18 +217,16 @@ def book_invoices(
 
 
 def known_on_portal(
-    conn: sqlite3.Connection, company_id: int, outgoing: bool, numbers: Sequence[str]
+    conn: sqlite3.Connection, company_id: int, outgoing: bool
 ) -> dict[str, PortalInvoice]:
-    """What the portal showed of these numbers the last time it was read."""
-    result = {}
-    for number in numbers:
-        r = conn.execute(
-            "SELECT * FROM eqaime_portal WHERE company_id = ? AND outgoing = ? AND number = ?",
-            (company_id, int(outgoing), number),
-        ).fetchone()
-        if r is not None:
-            result[number] = _portal(r)
-    return result
+    """What the portal showed of each number the last time it was read."""
+    return {
+        r["number"]: _portal(r)
+        for r in conn.execute(
+            "SELECT * FROM eqaime_portal WHERE company_id = ? AND outgoing = ?",
+            (company_id, int(outgoing)),
+        )
+    }
 
 
 def _portal(r: sqlite3.Row) -> PortalInvoice:
@@ -294,31 +292,35 @@ def reconcile(
 
     books = book_invoices(conn, company_id, outgoing, layers)
     listed = {p.number: p for p in portal if p.outgoing == outgoing}
+    known = known_on_portal(conn, company_id, outgoing)
     changes = portal_changes(conn, company_id, outgoing)
+
+    def day_of(book: BookInvoice) -> str:
+        """The day an e-qaimə of the books counts on: the portal's, when it is in the same
+        month (posted a day later is no matter), else the posting's."""
+        p = listed.get(book.number) or known.get(book.number)
+        return (
+            p.doc_date if p is not None and p.doc_date[:7] == book.doc_date[:7] else book.doc_date
+        )
+
     rows: list[ReconciliationRow] = []
     for number, p in listed.items():
         book = books.get(number)
-        group = _group(p, book, inside)
+        group = _group(p, book)
         if group:
             rows.append(_row(group, number, p, book, changes))
-    unlisted = [n for n, b in books.items() if n not in listed and inside(b.doc_date)]
-    known = known_on_portal(conn, company_id, outgoing, unlisted)
-    for number in unlisted:
-        book, p = books[number], known.get(number)
-        if p is not None and status_group(p.status) == "void":
-            group = VOID_IN_BOOKS
-        elif p is not None and not inside(p.doc_date):
-            group = PERIOD  # on the portal in another month: not in this list
-        else:
-            group, p = NOT_ON_PORTAL, None
-        rows.append(_row(group, number, p, book, changes))
+    for number, book in books.items():
+        if number in listed or not inside(day_of(book)):
+            continue
+        p = known.get(number)  # read before, in another period
+        rows.append(_row(_group(p, book) if p else NOT_ON_PORTAL, number, p, book, changes))
     rows.sort(key=lambda r: (GROUPS.index(r.group), r.doc_date, r.number))
     counted = [
         p
         for p in listed.values()
         if status_group(p.status) in ("turnover", "pending") and inside(p.doc_date)
     ]
-    in_books = [b for b in books.values() if inside(b.doc_date)]
+    in_books = [b for b in books.values() if inside(day_of(b))]
     return Reconciliation(
         outgoing,
         start,
@@ -344,9 +346,10 @@ def _row(
     return ReconciliationRow(group, number, portal, book, same_party, changes.get(number, []))
 
 
-def _group(portal: PortalInvoice, book: BookInvoice | None, inside) -> str:
-    """Where an e-qaimə of the portal's list goes; '' — not shown (cancelled and not in
-    the books, or a status the program does not know)."""
+def _group(portal: PortalInvoice, book: BookInvoice | None) -> str:
+    """Where an e-qaimə of the portal goes; '' — not shown (cancelled and not in the
+    books, or a status the program does not know). The period that matters is the month:
+    the ƏDV declaration is monthly."""
     status = status_group(portal.status)
     if status == "void":
         return VOID_IN_BOOKS if book is not None else ""
@@ -358,44 +361,73 @@ def _group(portal: PortalInvoice, book: BookInvoice | None, inside) -> str:
         return PARTY
     if (portal.total, portal.vat) != (book.total, book.vat):
         return AMOUNTS
-    if not inside(book.doc_date) or book.doc_date[:7] != portal.doc_date[:7]:
+    if book.doc_date[:7] != portal.doc_date[:7]:
         return PERIOD
     return PENDING if status == "pending" else MATCHED
+
+
+@dataclass(frozen=True)
+class Mark:
+    """A period marked reconciled."""
+
+    date_from: str
+    date_to: str
+    reconciled_at: str
+
+
+def reconciled_periods(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> list[Mark]:
+    return [
+        Mark(r["date_from"], r["date_to"], r["reconciled_at"])
+        for r in conn.execute(
+            "SELECT date_from, date_to, reconciled_at FROM eqaime_reconciled "
+            "WHERE company_id = ? AND outgoing = ? ORDER BY date_from, date_to",
+            (company_id, int(outgoing)),
+        )
+    ]
+
+
+def reconciled_through(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> str | None:
+    """The last day reconciled without a gap from the first mark: «сверено по …»."""
+    through: str | None = None
+    for mark in reconciled_periods(conn, company_id, outgoing):
+        if through is not None and mark.date_from > _next_day(through):
+            break
+        through = max(through or mark.date_to, mark.date_to)
+    return through
+
+
+def _next_day(day: str) -> str:
+    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
 
 
 @dataclass(frozen=True)
 class ChangedMonth:
     outgoing: bool
     month: str  # YYYY-MM
-    reconciled_at: str
     numbers: tuple[str, ...]
 
 
-def reconciled_months(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> dict[str, str]:
-    """month -> when it was marked reconciled."""
-    return {
-        r["month"]: r["reconciled_at"]
-        for r in conn.execute(
-            "SELECT month, reconciled_at FROM eqaime_reconciled "
-            "WHERE company_id = ? AND outgoing = ? ORDER BY month",
-            (company_id, int(outgoing)),
-        )
-    }
-
-
 def changed_after_reconciliation(conn: sqlite3.Connection, company_id: int) -> list[ChangedMonth]:
-    """Reconciled months in which an e-qaimə changed on the portal after the mark (by its
-    old or new date): the books may no longer agree."""
+    """E-qaimə that changed on the portal after the period of their date (old or new) was
+    marked reconciled — and was not reconciled again since: the books may no longer
+    agree. By month, purchases then sales."""
     result = []
     for outgoing in (False, True):
-        for month, at in reconciled_months(conn, company_id, outgoing).items():
-            numbers = tuple(
-                number
-                for number, found in portal_changes(conn, company_id, outgoing, at).items()
-                if any(month in (c.old_date[:7], c.new_date[:7]) for c in found)
-            )
-            if numbers:
-                result.append(ChangedMonth(outgoing, month, at, numbers))
+        marks = reconciled_periods(conn, company_id, outgoing)
+        if not marks:
+            continue
+        found: dict[str, list[str]] = {}
+        for number, changes in portal_changes(conn, company_id, outgoing).items():
+            for change in changes:
+                for day in {change.old_date, change.new_date}:
+                    covering = [m for m in marks if m.date_from <= day <= m.date_to]
+                    latest = max(covering, key=lambda m: m.reconciled_at, default=None)
+                    if latest is None or latest.reconciled_at >= change.seen_at:
+                        continue
+                    numbers = found.setdefault(day[:7], [])
+                    if number not in numbers:
+                        numbers.append(number)
+        result += [ChangedMonth(outgoing, m, tuple(n)) for m, n in sorted(found.items())]
     return result
 
 

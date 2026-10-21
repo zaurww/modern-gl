@@ -632,8 +632,8 @@ def shoot_reconciliation(session, win, out: Path) -> None:
     ]
     dialog = EqaimeReconciliationDialog(session, win)
     dialog.company.setText("Portal: DEMO MMC · VÖEN 1402375141")
-    dialog.date_from.setDate(first)
-    dialog.date_to.setDate(last)
+    dialog.date_from.setDate(QDate(first.year, first.month, first.day))
+    dialog.date_to.setDate(QDate(last.year, last.month, last.day))
     dialog.show_result(reconcile(session.conn, session.company_id, False, first, last, portal))
     dialog.resize(1180, 760)
     dialog.show()

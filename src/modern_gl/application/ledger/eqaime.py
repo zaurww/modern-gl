@@ -4,9 +4,11 @@ Not accounting: nothing here moves a posting; the reconciliation reads it."""
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import date
 
 from modern_gl.application.common import now
 from modern_gl.application.ledger.base import LedgerBase
+from modern_gl.domain.dates import iso_date
 from modern_gl.domain.eqaime import PortalInvoice
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -92,24 +94,34 @@ class EqaimeCommands(LedgerBase):
         return changed
 
     def mark_reconciled(
-        self, company_id: int, outgoing: bool, month: str, at: str | None = None
+        self,
+        company_id: int,
+        outgoing: bool,
+        date_from: date | str,
+        date_to: date | str,
+        at: str | None = None,
     ) -> None:
-        """The month (YYYY-MM) of purchases or sales agrees with the portal: changes seen
-        after this moment are warned about."""
-        if len(month) != 7 or month[4] != "-":
-            raise ValidationError(tr("месяц должен быть в виде ГГГГ-ММ: {month}", month=month))
+        """The period (a day, a week, a month) of purchases or sales agrees with the
+        portal: changes seen after this moment in e-qaimə dated in it are warned about."""
+        start, end = iso_date(date_from), iso_date(date_to)
+        if start > end:
+            raise ValidationError(tr("начало периода позже конца"))
         with transaction(self.conn):
             self._company(company_id)
             self.conn.execute(
-                "INSERT INTO eqaime_reconciled (company_id, outgoing, month, reconciled_at) "
-                "VALUES (?, ?, ?, ?) ON CONFLICT (company_id, outgoing, month) "
+                "INSERT INTO eqaime_reconciled "
+                "(company_id, outgoing, date_from, date_to, reconciled_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT (company_id, outgoing, date_from, date_to) "
                 "DO UPDATE SET reconciled_at = excluded.reconciled_at",
-                (company_id, int(outgoing), month, at or now()),
+                (company_id, int(outgoing), start, end, at or now()),
             )
 
-    def unmark_reconciled(self, company_id: int, outgoing: bool, month: str) -> None:
+    def unmark_reconciled(
+        self, company_id: int, outgoing: bool, date_from: date | str, date_to: date | str
+    ) -> None:
         with transaction(self.conn):
             self.conn.execute(
-                "DELETE FROM eqaime_reconciled WHERE company_id = ? AND outgoing = ? AND month = ?",
-                (company_id, int(outgoing), month),
+                "DELETE FROM eqaime_reconciled WHERE company_id = ? AND outgoing = ? "
+                "AND date_from = ? AND date_to = ?",
+                (company_id, int(outgoing), iso_date(date_from), iso_date(date_to)),
             )
