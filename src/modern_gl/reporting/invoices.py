@@ -200,8 +200,22 @@ def open_invoices(
         known.add(number)
         if whose:
             found.append(OpenInvoice(number, doc_date, owed - paid.get(number, 0), source))
+    other_way = _other_way(conn, company_id, payable)  # a payment on a purchase is no sale
     found.sort(key=lambda i: (i.doc_date, i.invoice))
-    return [i for i in found if i.amount > 0]
+    return [i for i in found if i.amount > 0 and i.invoice not in other_way]
+
+
+def _other_way(conn: sqlite3.Connection, company_id: int, payable: bool) -> set[str]:
+    """E-qaimə known to go the other way: sales when paying, purchases when money comes
+    in (a purchase or sale document, or the portal's list) — an advance paid on a purchase
+    not posted yet is not offered as owed to the company."""
+    rows = conn.execute(
+        "SELECT invoice FROM inventory_documents WHERE company_id = ? AND doc_type = ? "
+        "AND invoice IS NOT NULL AND COALESCE(invoice_kind, '') = '' "
+        "UNION SELECT number FROM eqaime_portal WHERE company_id = ? AND outgoing = ?",
+        (company_id, "sale" if payable else "receipt", company_id, int(payable)),
+    )
+    return {r[0] for r in rows}
 
 
 def _same_firm(

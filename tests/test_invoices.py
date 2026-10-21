@@ -349,7 +349,9 @@ def test_a_payment_is_offered_the_e_qaime_of_drafts_and_of_the_portal(firm):
     MT3 only in a purchase draft 05.03: 100.00 + ƏDV 18.00         -> 118.00, a draft
     MT4 only on the portal, 05.03, 236.00 with ƏDV                 -> 236.00, the portal
     Not offered: MT1 again from the portal (the books have it), MT5 annulled on the portal,
-    MT6 a sale on the portal, MT7 dated after the payment, MT8 a draft of Beta."""
+    MT6 a sale on the portal, MT7 dated after the payment, MT8 a draft of Beta.
+    Money from Alfa: only the sale MT6 70.00 — the 200.00 paid on the purchase MT2 (the
+    portal lists it as received) is not offered as owed to us."""
     from modern_gl.application.inventory import Inventory, ReceiptLine
     from modern_gl.domain.eqaime import PortalInvoice
     from modern_gl.reporting.invoices import DRAFT, PORTAL, open_invoices
@@ -389,6 +391,7 @@ def test_a_payment_is_offered_the_e_qaime_of_drafts_and_of_the_portal(firm):
         cid,
         [
             PortalInvoice("MT1", False, "2026-03-01", "approved", tin, total=118_000),
+            PortalInvoice("MT2", False, "2026-03-03", "approved", tin, total=50_000),
             PortalInvoice("MT4", False, "2026-03-05", "approvedBySystem", tin, total=23_600),
             PortalInvoice("MT5", False, "2026-03-05", "canceled", tin, total=5_000),
             PortalInvoice("MT6", True, "2026-03-05", "approved", tin, total=7_000),
@@ -402,10 +405,5 @@ def test_a_payment_is_offered_the_e_qaime_of_drafts_and_of_the_portal(firm):
         ("MT3", 11_800, DRAFT),
         ("MT4", 23_600, PORTAL),
     ]
-    # what Alfa owes us: the 200.00 paid on MT2 while its purchase is a draft (as before),
-    # and the sale MT6 on the portal
     owed = open_invoices(conn, cid, v["Альфа"], payable=False, on_date="2026-03-06")
-    assert [(i.invoice, i.amount, i.source) for i in owed] == [
-        ("MT2", 20_000, ""),
-        ("MT6", 7_000, PORTAL),
-    ]
+    assert [(i.invoice, i.amount, i.source) for i in owed] == [("MT6", 7_000, PORTAL)]
