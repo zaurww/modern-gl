@@ -578,6 +578,30 @@ def main() -> None:
     payment.line_rows[1].amount.setText("1.20")
     payment._changed()
     shot("12b_bank_payment")
+    shoot_sale_groups(session, win, ledger, shot)
+
+
+def shoot_sale_groups(session, win, ledger, shot) -> None:
+    """Sales groups on 46 (D61): the sale asks for the group in its own column."""
+    cid = session.company_id
+    groups = ledger.add_subconto_kind(cid, None, "Satış qrupları")
+    goods = ledger.add_subconto_value(cid, groups, "Mallar")
+    services = ledger.add_subconto_value(cid, groups, "Xidmətlər")
+    ledger.update_account(cid, "46", subconto=[groups])
+    session.catalog.reload()
+    win.new_inventory_document("sale")
+    sale_page = cast(InventoryDocumentPage, win.stack.currentWidget())
+    lines = sale_page.model
+    customer = session.catalog.values(ledger.subconto_kind_id(cid, "counterparty"))[0].id
+    for row, (memo, amount, group) in enumerate(
+        [("Konsultasiya", 50_000, services), ("Çatdırılma", 12_000, goods)]
+    ):
+        if row:
+            lines.insert_row()
+        for key, value in (("memo", memo), ("amount", amount), ("sale1", group), ("sc1", customer)):
+            lines.setData(lines.index(row, lines.columns.index(key)), value)
+    sale_page.table.configure_columns()
+    shot("12c_sale_groups")
 
 
 def shoot_reconciliation(session, win, out: Path) -> None:

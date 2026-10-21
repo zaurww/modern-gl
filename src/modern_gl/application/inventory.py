@@ -110,7 +110,11 @@ class IssueLine:
 class SaleLine:
     """A line of a sale: goods (an item taken from a warehouse at the average cost) or a
     service (no item, no warehouse; the memo says what it is). The amount is the revenue
-    without VAT; the customer's account and subconto default to the document's."""
+    without VAT; the customer's account and subconto default to the document's.
+
+    `sale_subconto`: values for the subconto of the sale's own accounts (revenue, cost of
+    sales, the VAT charge) that the customer, the item and the warehouse do not give — a
+    sales group, a channel (D61); each account takes them by kind."""
 
     item_id: int | None
     warehouse_id: int | None
@@ -121,6 +125,7 @@ class SaleLine:
     customer_account_id: int | None = None
     customer_subconto: Sequence[int | None] = ()
     line_id: int | None = None
+    sale_subconto: Sequence[int | None] = ()
 
 
 @dataclass(frozen=True)
@@ -197,7 +202,8 @@ class InventoryLineData:
     vat_amount: int = 0
     currency_amount: int | None = None
     # a posted sale: where the cost of the goods went; a receipt's line without an item:
-    # the account its value goes to, with these subconto
+    # the account its value goes to, with these subconto; a sale's line: the values for its
+    # sale accounts' subconto (SaleLine.sale_subconto)
     cost_account_id: int | None = None
     cost_subconto: tuple[int | None, int | None, int | None] = (None, None, None)
 
@@ -1335,37 +1341,83 @@ class Inventory:
         self, company_id: int, doc: sqlite3.Row, lines: Sequence[sqlite3.Row]
     ) -> list[PostingInput]:
         """A sale's postings: Dr customer / Cr revenue for each line (with its VAT when the
-        VAT is charged from another account), the VAT to pay once per customer, and for
-        goods Dr cost of sales / Cr inventory at the average cost."""
+        VAT is charged from another account), the VAT to pay once per customer (and per
+        subconto of the VAT charge account), and for goods Dr cost of sales / Cr inventory
+        at the average cost. The sale accounts take their subconto by kind from the
+        customer's, the item's, the warehouse's and the line's own values (D61)."""
         revenue_id = self._sale_account(company_id, SALES_REVENUE)
         sales_vat_id = self.ledger.account_role(company_id, SALES_VAT)
         invoice = doc["invoice"] or ""
         revenue: list[PostingInput] = []
         costs: list[PostingInput] = []
-        vat: dict[tuple[int, tuple[int | None, ...]], int] = {}
+        vat: dict[tuple[int, tuple[int | None, ...], tuple[int | None, ...]], int] = {}
         for line in lines:
             self._require_sale_line(line)
             customer_sc = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
+            values = self._sale_values(company_id, line)
             memo = line["memo"]
             if line["item_id"] is not None:
                 item = self._item(company_id, line["item_id"])
                 memo = memo or item["name"]
-                costs.append(self._sale_cost(company_id, doc, line, item, memo))
+                costs.append(self._sale_cost(company_id, doc, line, item, memo, values))
             revenue.append(
                 PostingInput(
                     line["offset_account_id"],
                     revenue_id,
                     _money(line["amount"] + (line["vat_amount"] if sales_vat_id else 0)),
                     customer_sc,
-                    (),
+                    self._sale_side(company_id, revenue_id, values, line["line_no"]),
                     memo,
                     invoice=invoice,
                 )
             )
             if line["vat_amount"]:
-                key = (line["offset_account_id"], customer_sc)
+                debit_sc = (
+                    customer_sc
+                    if sales_vat_id is None
+                    else self._sale_side(company_id, sales_vat_id, values, line["line_no"])
+                )
+                key = (sales_vat_id or line["offset_account_id"], debit_sc, customer_sc)
                 vat[key] = vat.get(key, 0) + line["vat_amount"]
-        return revenue + self._sale_vat(company_id, invoice, vat, sales_vat_id) + costs
+        return revenue + self._sale_vat(company_id, invoice, vat) + costs
+
+    def _sale_values(self, company_id: int, line: sqlite3.Row) -> tuple[int | None, ...]:
+        """What a sale line's accounts take their subconto from: the customer, the line's
+        own values (a sales group), the item and the warehouse."""
+        values = [line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]]
+        values += [line["cost_sc1"], line["cost_sc2"], line["cost_sc3"]]
+        if line["item_id"] is not None:
+            values.append(self._item(company_id, line["item_id"])["subconto_value_id"])
+        if line["warehouse_id"] is not None:
+            values.append(self._warehouse(company_id, line["warehouse_id"])["subconto_value_id"])
+        return tuple(values)
+
+    def _sale_side(
+        self, company_id: int, account_id: int, values: Sequence[int | None], line_no: int
+    ) -> tuple[int | None, ...]:
+        """The account's subconto filled by kind from `values`; a kind none of them gives
+        is asked for by name, unless it may stay empty (a contract; a kind added when the
+        account had postings already)."""
+        account = self._account(company_id, account_id)
+        result = self._by_kind(company_id, account_id, values)
+        for position, (kind_id, value_id) in enumerate(
+            zip(self._account_kind_ids(account), result, strict=True)
+        ):
+            if kind_id is None or value_id is not None:
+                continue
+            kind = self.conn.execute(
+                "SELECT name, owner_kind_id FROM subconto_kinds WHERE id = ?", (kind_id,)
+            ).fetchone()
+            if kind["owner_kind_id"] is None and not account["sc_optional"] & (1 << position):
+                raise ValidationError(
+                    tr(
+                        "строка {line}: укажите «{kind}» — его требует счёт {account}",
+                        line=line_no,
+                        kind=kind["name"],
+                        account=account["code"] or account["name"],
+                    )
+                )
+        return result
 
     def _sale_cost(
         self,
@@ -1374,6 +1426,7 @@ class Inventory:
         line: sqlite3.Row,
         item: sqlite3.Row,
         memo: str,
+        values: Sequence[int | None],
     ) -> PostingInput:
         """Take a goods line from stock: its movement, and Dr cost of sales / Cr inventory."""
         warehouse = self._warehouse(company_id, line["warehouse_id"])
@@ -1399,7 +1452,7 @@ class Inventory:
             cost_id,
             item["inventory_account_id"],
             _money(amount),
-            (),
+            self._sale_side(company_id, cost_id, values, line["line_no"]),
             self._inventory_subconto(company_id, item, warehouse),
             memo,
         )
@@ -1408,34 +1461,41 @@ class Inventory:
         self,
         company_id: int,
         invoice: str,
-        totals: Mapping[tuple[int, tuple[int | None, ...]], int],
-        sales_vat_id: int | None,
+        totals: Mapping[tuple[int, tuple[int | None, ...], tuple[int | None, ...]], int],
     ) -> list[PostingInput]:
-        """The VAT to pay, one posting per customer: Dr the account it is charged from (the
-        customer's own when none is chosen) / Cr output VAT. Accounts with subconto of the
-        customer's kinds take the customer's values."""
+        """The VAT to pay: Dr the account it is charged from (the customer's own when none
+        is chosen) / Cr output VAT, one posting per debit account with its subconto and
+        customer. The output VAT account takes the customer's subconto by kind."""
         if not totals:
             return []
         vat_id = self._sale_account(company_id, OUTPUT_VAT)
-        result = []
-        for (account_id, customer_sc), amount in totals.items():
-            debit_id = sales_vat_id or account_id
-            debit_sc = (
-                customer_sc
-                if sales_vat_id is None
-                else self._by_kind(company_id, debit_id, customer_sc)
+        return [
+            PostingInput(
+                debit_id,
+                vat_id,
+                _money(amount),
+                debit_sc,
+                self._by_kind(company_id, vat_id, customer_sc),
+                tr("НДС"),
+                invoice=invoice,
             )
-            result.append(
-                PostingInput(
-                    debit_id,
-                    vat_id,
-                    _money(amount),
-                    debit_sc,
-                    self._by_kind(company_id, vat_id, customer_sc),
-                    tr("НДС"),
-                    invoice=invoice,
-                )
-            )
+            for (debit_id, debit_sc, customer_sc), amount in totals.items()
+        ]
+
+    def sale_kinds(self, company_id: int) -> list[int]:
+        """The subconto kinds a sale line is asked for (D61): those of the sale accounts
+        (revenue, cost of sales, the VAT charge) but the item and the warehouse, which the
+        line gives itself. A kind the customer's account has comes from the customer."""
+        result: list[int] = []
+        for role in (SALES_REVENUE, COST_OF_SALES, SALES_VAT):
+            account_id = self.ledger.account_role(company_id, role)
+            if account_id is None:
+                continue
+            account = self._account(company_id, account_id)
+            codes = self._account_kind_codes(company_id, account)
+            for kind_id, code in zip(self._account_kind_ids(account), codes, strict=True):
+                if kind_id not in (None, *result) and code not in {"item", "warehouse"}:
+                    result.append(kind_id)
         return result
 
     def _by_kind(
@@ -1919,13 +1979,19 @@ class Inventory:
                 "VALUES (?, ?, ?, ?, ?)",
                 (company_id, inv_id, line_id, issue_line_id, share),
             )
-            postings.append(
-                (
-                    issue["offset_account_id"],
-                    (issue["offset_sc1"], issue["offset_sc2"], issue["offset_sc3"]),
-                    share,
-                )
+            subconto: Sequence[int | None] = (
+                issue["offset_sc1"],
+                issue["offset_sc2"],
+                issue["offset_sc3"],
             )
+            if issue["doc_type"] == "sale":  # the cost of sales, as the sale posted it
+                sold = self.conn.execute(
+                    "SELECT * FROM inventory_lines WHERE id = ?", (issue_line_id,)
+                ).fetchone()
+                subconto = self._by_kind(
+                    company_id, issue["offset_account_id"], self._sale_values(company_id, sold)
+                )
+            postings.append((issue["offset_account_id"], subconto, share))
         return postings
 
     def delete_document(self, company_id: int, document_id: int) -> None:
@@ -2133,6 +2199,12 @@ class Inventory:
             account_id = source.customer_account_id or customer_account_id
             if account_id is not None:
                 self._account(company_id, account_id)
+            sale_sc = [value for value in source.sale_subconto if value is not None]
+            kinds = [self._subconto_value(company_id, value)["kind_id"] for value in sale_sc]
+            if len(set(kinds)) != len(kinds) or len(kinds) > 3:
+                raise ValidationError(
+                    tr("строка {line}: лишние значения субконто продажи", line=line_no)
+                )
             self._insert_line(
                 document_id,
                 company_id,
@@ -2150,6 +2222,7 @@ class Inventory:
                 source.memo.strip(),
                 line_id=source.line_id,
                 vat_amount=vat,
+                cost_subconto=sale_sc,
             )
 
     @staticmethod
@@ -2568,7 +2641,7 @@ class Inventory:
     def _receipt_consumptions(self, company_id: int, receipt_line_id: int) -> list[sqlite3.Row]:
         return self.conn.execute(
             """
-            SELECT c.issue_line_id, c.quantity,
+            SELECT c.issue_line_id, c.quantity, d.doc_type,
                    CASE WHEN d.doc_type = 'sale' THEN l.cost_account_id
                         ELSE l.offset_account_id END AS offset_account_id,
                    CASE WHEN d.doc_type = 'sale' THEN NULL ELSE l.offset_sc1 END AS offset_sc1,

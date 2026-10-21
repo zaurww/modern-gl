@@ -124,6 +124,18 @@ class AccountDialog(QDialog):
         form.addRow(tr("Валюта"), self.currency)
         for i, box in enumerate(self.subconto, start=1):
             form.addRow(tr("Субконто {i}", i=i), box)
+        # an account with postings keeps its subconto; a new one goes to a free place (D61)
+        self.subconto_hint = QLabel(
+            tr(
+                "По счёту есть проводки: субконто можно только добавить. "
+                "В старых проводках оно останется пустым («<не указано>» в отчётах)."
+            )
+        )
+        self.subconto_hint.setObjectName("tertiary")
+        self.subconto_hint.setFont(fonts().small)
+        self.subconto_hint.setWordWrap(True)
+        self.subconto_hint.hide()
+        form.addRow("", self.subconto_hint)
         root.addLayout(form)
 
         self.error = QLabel()
@@ -167,6 +179,11 @@ class AccountDialog(QDialog):
         self.contra.setChecked(a.contra)
         for box, kind_id in zip(self.subconto, a.sc_kinds, strict=True):
             self._select(box, kind_id)
+        if not a.is_group and self.s.catalog.has_postings(a.id):
+            self.subconto_hint.show()
+            for box, kind_id in zip(self.subconto, a.sc_kinds, strict=True):
+                if kind_id is not None:  # old postings carry values of this kind
+                    box.setEnabled(False)
 
     def _prefill_child(self, parent_id: int | None) -> None:
         if not parent_id:

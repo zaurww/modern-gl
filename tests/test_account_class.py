@@ -139,7 +139,7 @@ def test_update_account_protects_history(demo, conn):
     assert tuple(row) == ("221.01", "Основной банк")  # postings follow: they reference the id
     with pytest.raises(ValidationError, match="не может стать группой"):
         led.update_account(cid, "201", is_group=True)  # 201 has postings
-    with pytest.raises(ValidationError, match="субконто менять нельзя"):
+    with pytest.raises(ValidationError, match="субконто можно только добавить"):
         led.update_account(cid, "531", subconto=[])
     with pytest.raises(ValidationError, match="уже есть"):
         led.update_account(cid, "201", new_code="301")

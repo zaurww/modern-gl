@@ -717,7 +717,8 @@ class DocumentCommands(SubcontoCommands):
         optional: set[int],
     ) -> None:
         """Each subconto position of the account is filled with a value of its kind; one
-        of an `optional` kind (a contract) may be left empty."""
+        of an `optional` kind (a contract) may be left empty, and so may a position added
+        when the account already had postings (D61)."""
         for i in range(1, MAX_SUBCONTO + 1):
             kind_id = acc[f"sc{i}_kind_id"]
             value_id = p[f"{prefix}_sc{i}"]
@@ -726,7 +727,7 @@ class DocumentCommands(SubcontoCommands):
                     raise ValidationError(tr("{label}: у счёта нет субконто {i}", label=label, i=i))
                 continue
             if value_id is None:
-                if kind_id in optional:
+                if kind_id in optional or acc["sc_optional"] & (1 << (i - 1)):
                     continue
                 raise ValidationError(tr("{label}: не заполнено субконто {i}", label=label, i=i))
             if values[value_id]["kind_id"] != kind_id:
