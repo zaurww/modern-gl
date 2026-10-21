@@ -346,9 +346,10 @@ class DirectoriesPage(QWidget):
         item = self.kinds.currentItem()
         return item.data(KIND_ROLE) if item else None
 
-    def refresh(self, select_kind: int | None = None) -> None:
+    def refresh(self, select_kind: int | None = None, keep_value: bool = False) -> None:
         cat = self.s.catalog
         current = select_kind or self.kind_id()
+        value = self._current_value() if keep_value else None
         self.kinds.blockSignals(True)
         self.kinds.clear()
         for kind_id, name in sorted(cat.kinds.items(), key=lambda kv: sort_key(kv[1])):
@@ -363,7 +364,7 @@ class DirectoriesPage(QWidget):
             self.kinds.setCurrentRow(0)
         self.kinds.blockSignals(False)
         self.header.subtitle.setText(tr("{n} справочников", n=len(cat.kinds)))
-        self.refresh_values()
+        self.refresh_values(value.id if value else None)
 
     def refresh_values(self, select_value: int | None = None) -> None:
         cat, kind_id = self.s.catalog, self.kind_id()

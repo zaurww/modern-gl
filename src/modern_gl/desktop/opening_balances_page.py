@@ -272,6 +272,7 @@ class OpeningBalancesPage(QWidget):
         delegate = PostingsDelegate(session.catalog, self, EntryHints())
         delegate.error.connect(self.show_error)
         delegate.unknown_value.connect(self._offer_new_value)
+        delegate.add_value = self._add_value
         self.table = PostingsTable(self.model, delegate)
         for column in range(CT, CT + 4):  # the counter-account is always the same
             self.table.setColumnHidden(column, True)
@@ -528,15 +529,24 @@ class OpeningBalancesPage(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
-        if answer != QMessageBox.StandardButton.Yes or not index.isValid():
+        if not index.isValid():
+            return
+        if answer != QMessageBox.StandardButton.Yes:
+            self.table.edit_again(index, text)  # the name, to correct it
             return
         owner = self.model.owner_at(index.row(), index.column())
-        value_id = self.s.ledger.add_subconto_value(
-            self.s.company_id, kind_id, text, owner_id=owner
-        )
-        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
+        value_id = self._add_value(kind_id, text, owner)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
+        self.table.edit_next(index)
+
+    def _add_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
+        value_id = self.s.ledger.add_subconto_value(
+            self.s.company_id, kind_id, text, owner_id=owner_id
+        )
+        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
+        kind = self.s.catalog.kinds[kind_id]
         self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
+        return value_id
 
     def save(self, post: bool) -> bool:
         if self.model.read_only:

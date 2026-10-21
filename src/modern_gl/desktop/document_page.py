@@ -64,7 +64,8 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 HINT = (
-    "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   "
+    "Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   # — шаблон   ·   Ctrl+V — вставить из Excel   ·   "
     "Ctrl+S — сохранить   ·   Ctrl+Enter — провести   ·   Ctrl+Shift+Enter — провести и новый"
 )
@@ -215,14 +216,13 @@ class DocumentPage(QWidget):
         self.btn_save.clicked.connect(lambda: self.save(post=False))
         self.btn_post.clicked.connect(lambda: self.save(post=True))
         self.amount.textEdited.connect(self._amount_edited)
-        self.amount.returnPressed.connect(self._focus_grid)
         self.delegate.error.connect(self.show_error)
         self.delegate.unknown_value.connect(self._offer_new_value)
+        self.delegate.add_value = self._add_typed_value
         # deferred: the cell editor that picked the template has to close first
         self.delegate.template_chosen.connect(
             lambda row, tid: QTimer.singleShot(0, lambda: self.insert_template(row, tid))
         )
-        self.memo.returnPressed.connect(self._focus_grid)
 
         self._shortcut("Ctrl+S", lambda: self.save(post=False))
         self._shortcut("Ctrl+Return", lambda: self.save(post=True))
@@ -685,8 +685,20 @@ class DocumentPage(QWidget):
         return self.doc
 
     def _focus_grid(self) -> None:
-        self.table.setFocus()
         self.table.setCurrentIndex(self.model.index(0, DT))
+        self.table.setFocus(Qt.FocusReason.TabFocusReason)  # the cell opens for typing
+
+    def keyPressEvent(self, event) -> None:
+        """Enter in the title, date, book or operation amount goes on as Tab does."""
+        header = (self.memo, self.date, self.layer, self.amount)
+        if (
+            event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and not event.modifiers()
+            and QApplication.focusWidget() in header
+        ):
+            self.focusNextChild()
+            return
+        super().keyPressEvent(event)
 
     def _insert_row(self) -> None:
         if self.model.read_only:
@@ -793,9 +805,18 @@ class DocumentPage(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes,
         )
-        if answer != QMessageBox.StandardButton.Yes or not index.isValid():
+        if not index.isValid():
+            return
+        if answer != QMessageBox.StandardButton.Yes:
+            self.table.edit_again(index, text)  # the name, to correct it
             return
         owner = self.model.owner_at(index.row(), index.column())  # a contract of this partner
-        value_id = self._add_value(kind_id, text, owner)
+        value_id = self._add_typed_value(kind_id, text, owner)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
+        self.table.edit_next(index)
+
+    def _add_typed_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
+        value_id = self._add_value(kind_id, text, owner_id)
+        kind = self.s.catalog.kinds[kind_id]
         self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
+        return value_id

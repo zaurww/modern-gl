@@ -1,11 +1,13 @@
 """Postings grid: model, inline editors with completion, keyboard flow.
 
-Keyboard flow (1C-like): type into a cell to edit, Enter/Tab moves to the next cell
-that applies — subconto cells the chosen account doesn't have are skipped, and so
-are the currency cells of a line without a currency account. On a currency line the
-amount in manat follows the amount in currency at the rate (the rate of the document
-date is offered; both the rate and the manat amount can be typed over).
-Enter on the last cell of the last row starts a new row.
+Keyboard flow (1C-like): type into a cell to edit, Enter and Tab alike move to the next
+cell that applies (Shift+Tab back), and the cell they reach is open for typing at once —
+subconto cells the chosen account doesn't have are skipped, and so are the currency
+cells of a line without a currency account. On a currency line the amount in manat
+follows the amount in currency at the rate (the rate of the document date is offered;
+both the rate and the manat amount can be typed over).
+Enter on the last cell of the last row starts a new row. A name a directory does not
+have yet is offered last in the list ("+ Добавить «…»"): Enter adds it, no dialog.
 
 Paste (Ctrl+V) takes lines copied from Excel, one posting per line. With a header line
 (Дебет, Кредит, Сумма… in Russian or Azerbaijani, any order) cells go by the headers;
@@ -873,6 +875,47 @@ class PostingsModel(QAbstractTableModel):
         return result
 
 
+TABS = (Qt.Key.Key_Tab, Qt.Key.Key_Backtab)
+
+
+def adding_label(text: str) -> str:
+    return tr("+ Добавить «{text}»", text=text)
+
+
+def names_it(label: str, text: str) -> bool:
+    """The list item is the typed name itself (a counterparty's label adds its VÖEN)."""
+    return fold(label.split("  ·  ")[0]) == fold(text)
+
+
+def edit_current(view: QTableView) -> None:
+    """The current cell (the first one, if none) opened for typing: a cell reached from
+    the keyboard shows its cursor, so it is clear that typing goes there."""
+    model = view.model()
+    if view.state() == QAbstractItemView.State.EditingState or model.rowCount() == 0:
+        return
+    index = view.currentIndex()
+    if not index.isValid():
+        first = next(
+            (
+                c
+                for c in range(model.columnCount())
+                if not view.isColumnHidden(c)
+                and model.flags(model.index(0, c)) & Qt.ItemFlag.ItemIsEditable
+            ),
+            None,
+        )
+        if first is None:
+            return
+        index = model.index(0, first)
+        view.setCurrentIndex(index)
+    if index.flags() & Qt.ItemFlag.ItemIsEditable:
+        view.edit(index)
+
+
+def tabbed_in(event) -> bool:
+    return event.reason() in (Qt.FocusReason.TabFocusReason, Qt.FocusReason.BacktabFocusReason)
+
+
 class PickWithKeys(QObject):
     """On the open list, Enter or Tab takes the highlighted item."""
 
@@ -908,10 +951,14 @@ def attach_list(
     show_all: bool,
     chosen,
     subaccounts: Callable[[str], list[str] | None] | None = None,
+    can_add: bool = False,
 ) -> Callable[[], None]:
     """Completion list under a cell editor; `chosen(editor, text)` gets the picked item.
     `subaccounts(text)` lists the accounts of a group typed in full ("68"): they are
     offered with none taken, so Enter does not pick 68.1 behind the user's back.
+    `can_add`: a typed name the list does not have is offered last as "+ Добавить «…»"
+    (the only item, so Enter takes it, when nothing matches); picking it gives `chosen`
+    the name, with the editor's "gl_add" property set.
     Returns `pick_first()`: the list again with its first item highlighted."""
     model = QStringListModel(editor)
     completer = QCompleter(model, editor)
@@ -920,6 +967,7 @@ def attach_list(
     completer.setWidget(editor)  # filtering is ours (search), not Qt's prefix matching
     popup = cast(QAbstractItemView, completer.popup())
     popup.setObjectName("completer")
+    adding = {"label": "", "text": ""}  # the "+ Добавить" item now in the list
 
     def refresh(text: str, pick_first: bool = False) -> None:
         try:
@@ -933,6 +981,11 @@ def attach_list(
                 matches = search(items, text) if (typed or show_all) else []
             if not text.strip().startswith(TEMPLATE_MARK):  # templates only after "#"
                 matches = [m for m in matches if not m.startswith(TEMPLATE_MARK)]
+            name = text.strip()
+            new = can_add and typed and not any(names_it(m, name) for m in matches)
+            adding.update(label=adding_label(name) if new else "", text=name)
+            if new:
+                matches = [*matches, adding["label"]]
             model.setStringList(matches)
             if not matches:
                 popup.hide()
@@ -948,14 +1001,18 @@ def attach_list(
         except RuntimeError:  # editor already closed
             pass
 
+    def pick(item: str) -> None:
+        if adding["label"] and item == adding["label"]:
+            editor.setProperty("gl_add", True)
+            item = adding["text"]
+        chosen(editor, item)
+
     editor.textEdited.connect(refresh)
     # mouse click; the str overload of the signal is not in the PySide6 stubs
-    completer.activated[str].connect(  # pyright: ignore[reportIndexIssue]
-        lambda text: chosen(editor, text)
-    )
+    completer.activated[str].connect(pick)  # pyright: ignore[reportIndexIssue]
     # Enter / Tab on a highlighted item: Qt would hand the key to the editor *before*
     # reporting the choice, so the editor would commit what was typed (often nothing).
-    PickWithKeys(popup, lambda text: chosen(editor, text))
+    PickWithKeys(popup, pick)
     QTimer.singleShot(0, lambda: refresh(editor.text()))
     return lambda: refresh(editor.text(), pick_first=True)
 
@@ -1003,6 +1060,9 @@ class PostingsDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self.catalog = catalog
         self.hints = hints or EntryHints()
+        # (kind_id, name, owner_id) -> the new element's id: set by a page that adds to
+        # directories; then a subconto list offers "+ Добавить «…»"
+        self.add_value: Callable[[int, str, int | None], int] | None = None
 
     def _template_items(self) -> list[str]:
         return [f"{TEMPLATE_MARK}{name}" for _, name in self.hints.templates()]
@@ -1039,7 +1099,7 @@ class PostingsDelegate(QStyledItemDelegate):
         elif side in ("debit", "credit"):
             # a subconto cell opens with its whole list, like a 1C directory
             items = self._subconto_items(model, index.row(), index.column())
-            attach_list(editor, items, True, self._chosen)
+            attach_list(editor, items, True, self._chosen, can_add=self.add_value is not None)
         elif side == "currency":
             attach_list(
                 editor, [c.label for c in self.catalog.active_currencies], True, self._chosen
@@ -1099,6 +1159,12 @@ class PostingsDelegate(QStyledItemDelegate):
         try:
             value = model.parse(index.row(), index.column(), editor.text())
         except UnknownValue as e:
+            if editor.property("gl_add") and self.add_value is not None:
+                owner = model.owner_at(index.row(), index.column())
+                model.setData(index, self.add_value(e.kind_id, e.text, owner))
+                return
+            # the page asks; the cursor waits in this cell for the answer
+            editor.setProperty("gl_unknown", True)
             self.unknown_value.emit(QPersistentModelIndex(index), e.kind_id, e.text)
             return
         except (LookupError, ValueError, TypeError, ValidationError) as e:
@@ -1110,19 +1176,26 @@ class PostingsDelegate(QStyledItemDelegate):
         if event.type() == QEvent.Type.KeyPress and event.key() in (
             Qt.Key.Key_Return,
             Qt.Key.Key_Enter,
+            Qt.Key.Key_Tab,
         ):
             self._commit_and_next(editor)
             return True
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Backtab:
+            self._commit_and_next(editor, QAbstractItemDelegate.EndEditHint.EditPreviousItem)
+            return True
         return super().eventFilter(editor, event)
 
-    def _commit_and_next(self, editor) -> None:
+    def _commit_and_next(self, editor, hint=QAbstractItemDelegate.EndEditHint.EditNextItem) -> None:
+        """Enter and Tab alike; a group, or a name its directory lacks, keeps the cell."""
         if editor.property("gl_done"):
             return
         if holds_on_group(editor, self.error):
             return
         editor.setProperty("gl_done", True)
         self.commitData.emit(editor)
-        self.closeEditor.emit(editor, QAbstractItemDelegate.EndEditHint.EditNextItem)
+        if editor.property("gl_unknown"):
+            hint = QAbstractItemDelegate.EndEditHint.NoHint
+        self.closeEditor.emit(editor, hint)
 
 
 class PostingsTable(QTableView):
@@ -1224,22 +1297,60 @@ class PostingsTable(QTableView):
         ]
         return cols[-1]
 
-    def closeEditor(self, editor, hint):
-        idx = self.currentIndex()
-        m = self.model()
-        if (
-            hint == QAbstractItemDelegate.EndEditHint.EditNextItem
-            and idx.isValid()
-            and idx.row() == m.rowCount() - 1
+    def _at_end(self, idx: QModelIndex) -> bool:
+        return (
+            idx.isValid()
+            and idx.row() == self.model().rowCount() - 1
             and idx.column() == self._last_enabled_column(idx.row())
+        )
+
+    def _new_row(self) -> None:
+        m = self.model()
+        row = m.insert_row()
+        new = m.index(row, self._first_enabled_column(row))
+        self.setCurrentIndex(new)
+        self.edit(new)
+
+    def closeEditor(self, editor, hint):
+        if hint == QAbstractItemDelegate.EndEditHint.EditNextItem and self._at_end(
+            self.currentIndex()
         ):
             super().closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
-            row = m.insert_row()
-            new = m.index(row, self._first_enabled_column(row))
-            self.setCurrentIndex(new)
-            self.edit(new)
+            self._new_row()
             return
         super().closeEditor(editor, hint)
+
+    def edit_next(self, index: QModelIndex | QPersistentModelIndex) -> None:
+        """From this cell on to the next one, open for typing (after a question that
+        kept the cursor in the cell)."""
+        if not index.isValid():
+            return
+        self.setCurrentIndex(self.model().index(index.row(), index.column()))
+        if self._at_end(self.currentIndex()):
+            self._new_row()
+            return
+        new = self.moveCursor(
+            QAbstractItemView.CursorAction.MoveNext, Qt.KeyboardModifier.NoModifier
+        )
+        self.setCurrentIndex(new)
+        self.edit(new)
+
+    def edit_again(self, index: QModelIndex | QPersistentModelIndex, text: str) -> None:
+        """Back into the cell with what was typed, to correct it."""
+        if not index.isValid():
+            return
+        idx = self.model().index(index.row(), index.column())
+        self.setCurrentIndex(idx)
+        self.edit(idx)
+        for editor in self.viewport().findChildren(CellEditor):
+            if editor.isVisible() and not editor.property("gl_done"):  # the one just opened
+                editor.setText(text)
+                editor.selectAll()
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        if tabbed_in(event):
+            edit_current(self)
 
     def _first_enabled_column(self, row: int) -> int:
         return next(
@@ -1259,3 +1370,5 @@ class PostingsTable(QTableView):
                 self.edit(idx)
                 return
         super().keyPressEvent(event)
+        if event.key() in TABS:  # Tab moves on as Enter does: into the next cell, open
+            edit_current(self)

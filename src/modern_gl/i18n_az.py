@@ -207,10 +207,12 @@ AZ: dict[str, str] = {
     "в документе нет проводок": "sənəddə yazılış yoxdur",
     "сумма должна быть больше нуля": "məbləğ sıfırdan böyük olmalıdır",
     # ---- document --------------------------------------------------------------------------
-    "Enter — следующее поле   ·   Ins — строка   ·   F9 — копия строки   ·   "
+    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   "
+    "Ins — строка   ·   F9 — копия строки   ·   "
     "Del — удалить строку   ·   # — шаблон   ·   Ctrl+V — вставить из Excel   ·   "
     "Ctrl+S — сохранить   ·   Ctrl+Enter — провести   ·   Ctrl+Shift+Enter — провести и новый": (
-        "Enter — növbəti xana   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
+        "Enter, Tab — irəli   ·   Shift+Tab — geri   ·   "
+        "Ins — sətir   ·   F9 — sətrin surəti   ·   "
         "Del — sətri sil   ·   # — şablon   ·   Ctrl+V — Excel-dən yapışdır   ·   "
         "Ctrl+S — saxla   ·   Ctrl+Enter — keçir   ·   Ctrl+Shift+Enter — keçir və yenisi"
     ),
@@ -248,6 +250,7 @@ AZ: dict[str, str] = {
     "Дата документа сторно для №{n} от {date}:": "№{n} ({date}) sənədi üçün storno tarixi:",
     "Новый элемент справочника": "Soraqçanın yeni elementi",
     "«{text}» нет в справочнике «{kind}». Добавить?": "«{text}» «{kind}» soraqçasında yoxdur. Əlavə edilsin?",
+    "+ Добавить «{text}»": "+ Əlavə et «{text}»",
     "Добавлено в «{kind}»: {text}": "«{kind}» soraqçasına əlavə edildi: {text}",
     # ---- journal ---------------------------------------------------------------------------
     "Журнал": "Jurnal",

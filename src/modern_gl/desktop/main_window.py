@@ -741,6 +741,8 @@ class MainWindow(QMainWindow):
             page.refresh()
         if isinstance(page, BankPage):
             page.refresh()
+        if isinstance(page, DirectoriesPage):  # elements added elsewhere (e-qaimə import…)
+            page.refresh(keep_value=True)
         if isinstance(page, FocusablePage):
             page.focus_table()
 

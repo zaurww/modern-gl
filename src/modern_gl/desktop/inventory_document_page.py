@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
@@ -53,11 +54,14 @@ from modern_gl.application.inventory import (
 )
 from modern_gl.desktop.inventory_page import ItemDialog
 from modern_gl.desktop.postings import (
+    TABS,
     CellEditor,
     attach_account_list,
     attach_list,
+    edit_current,
     holds_on_group,
     plain_number,
+    tabbed_in,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -1011,6 +1015,9 @@ def _widen(editor: QLineEdit) -> None:
     editor.raise_()
 
 
+UNSET = object()  # a cell edit that sets nothing
+
+
 class InventoryLinesDelegate(QStyledItemDelegate):
     """Enter or Tab commits a cell; a name missing from a directory can be added on the spot."""
 
@@ -1018,6 +1025,9 @@ class InventoryLinesDelegate(QStyledItemDelegate):
     unknown_value = Signal(QPersistentModelIndex, int, str)  # index, kind_id, typed text
     unknown_item = Signal(QPersistentModelIndex, str)
     unknown_warehouse = Signal(QPersistentModelIndex, str)
+    # (kind_id, name, owner_id) -> the new element's id: a subconto list offers
+    # "+ Добавить «…»" (see `attach_list`)
+    add_value: Callable[[int, str, int | None], int] | None = None
 
     def createEditor(self, parent, option, index):
         model: InventoryLinesModel = index.model()
@@ -1030,7 +1040,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
             if key in {ACCOUNT, EXPENSE}:
                 attach_account_list(editor, labels, model.s.catalog, self._chosen)
             else:
-                attach_list(editor, labels, True, self._chosen)
+                can_add = key in SUBCONTO_KEYS and self.add_value is not None
+                attach_list(editor, labels, True, self._chosen, can_add=can_add)
         elif key in NUMBER_KEYS:
             editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         if key == ITEM:  # a long name of an e-qaimə line is seen whole while edited
@@ -1058,6 +1069,21 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         editor.setText(value or "")
         editor.selectAll()
 
+    def _subconto_value(self, editor, model, index, key: str, text: str) -> object:
+        """The element named; one its directory lacks is added when picked as
+        "+ Добавить «…»", else the page is told. UNSET: nothing to set."""
+        kind_id = model.kind_at(index.row(), key)
+        if kind_id is None:  # the account has no subconto at this position
+            return UNSET
+        owner = model.owner_at(index.row(), key)
+        value = model.s.catalog.resolve_value(kind_id, text, owner) if text else None
+        if not text or value is not None:
+            return value
+        if editor.property("gl_add") and self.add_value is not None:
+            return self.add_value(kind_id, text, owner)
+        self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
+        return UNSET
+
     def setModelData(self, editor, model, index):
         model = cast(InventoryLinesModel, model)
         key = model.key(index)
@@ -1066,13 +1092,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
             if key in {ACCOUNT, EXPENSE}:
                 value = model.s.catalog.resolve_account(text).id if text else None
             elif key in SUBCONTO_KEYS:
-                kind_id = model.kind_at(index.row(), key)
-                if kind_id is None:  # the account has no subconto at this position
-                    return
-                owner = model.owner_at(index.row(), key)
-                value = model.s.catalog.resolve_value(kind_id, text, owner) if text else None
-                if text and value is None:
-                    self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
+                value = self._subconto_value(editor, model, index, key, text)
+                if value is UNSET:  # no subconto here, or the page asks about the name
                     return
             elif key in LIST_KEYS:
                 value = _resolve_choice(model.choices(index.row(), key), text) if text else None
@@ -1097,11 +1118,12 @@ class InventoryLinesDelegate(QStyledItemDelegate):
             self.error.emit(str(exc).strip("'\""))
 
     def eventFilter(self, editor, event):
-        if (
-            event.type() == QEvent.Type.KeyPress
-            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-            and holds_on_group(editor, self.error)
+        if event.type() == QEvent.Type.KeyPress and event.key() in (
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+            Qt.Key.Key_Tab,
         ):
+            self._commit_and_next(editor)  # Tab as Enter: a group holds the cell
             return True
         return super().eventFilter(editor, event)
 
@@ -1242,6 +1264,13 @@ class InventoryLinesTable(QTableView):
                 self.edit(index)
                 return
         super().keyPressEvent(event)
+        if event.key() in TABS:  # Tab moves on as Enter does: into the next cell, open
+            edit_current(self)
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        if tabbed_in(event):
+            edit_current(self)
 
 
 class NewNamesDialog(QDialog):
@@ -1622,6 +1651,7 @@ class InventoryDocumentPage(QWidget):
 
     def _connect_delegate(self) -> None:
         self.delegate.error.connect(self.show_error)
+        self.delegate.add_value = self._add_typed_value
         # Deferred: the cell editor has to be fully closed before a dialog takes focus.
         self.delegate.unknown_value.connect(
             lambda index, kind_id, text: QTimer.singleShot(
@@ -1656,6 +1686,15 @@ class InventoryDocumentPage(QWidget):
         self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
         self.model.setData(self.model.index(index.row(), index.column()), value_id)
         self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
+
+    def _add_typed_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
+        value_id = self.s.ledger.add_subconto_value(
+            self.s.company_id, kind_id, text, owner_id=owner_id
+        )
+        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
+        kind = self.s.catalog.kinds[kind_id]
+        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
+        return value_id
 
     def _create_item(self, index: QPersistentModelIndex, text: str) -> None:
         if not index.isValid():

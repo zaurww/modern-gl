@@ -52,11 +52,14 @@ from modern_gl.application.inventory import (
     vat_of,
 )
 from modern_gl.desktop.postings import (
+    TABS,
     CellEditor,
     attach_account_list,
     attach_list,
+    edit_current,
     holds_on_group,
     plain_number,
+    tabbed_in,
 )
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
@@ -689,11 +692,12 @@ class CellDelegate(QStyledItemDelegate):
             self.error.emit(str(exc).strip("'\""))
 
     def eventFilter(self, editor, event):
-        if (
-            event.type() == QEvent.Type.KeyPress
-            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-            and holds_on_group(editor, self.error)
+        if event.type() == QEvent.Type.KeyPress and event.key() in (
+            Qt.Key.Key_Return,
+            Qt.Key.Key_Enter,
+            Qt.Key.Key_Tab,
         ):
+            self._commit_and_next(editor)  # Tab as Enter: a group holds the cell
             return True
         return super().eventFilter(editor, event)
 
@@ -745,6 +749,13 @@ class LinesTable(QTableView):
                 self.edit(index)
                 return
         super().keyPressEvent(event)
+        if event.key() in TABS:  # Tab moves on as Enter does: into the next cell, open
+            edit_current(self)
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        if tabbed_in(event):
+            edit_current(self)
 
 
 def _list(selection: QAbstractItemView.SelectionMode) -> QTableView:

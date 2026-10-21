@@ -54,8 +54,16 @@ def edited_date(edit: QDateEdit) -> date:
     return cast(date, edit.date().toPython())
 
 
+class DateEdit(QDateEdit):
+    """Tab leaves the field, as from any other (Qt's own walks day → month → year);
+    the parts are typed one after another: a full part moves on to the next."""
+
+    def focusNextPrevChild(self, next: bool) -> bool:
+        return QWidget.focusNextPrevChild(self, next)
+
+
 def date_edit(value: date, parent: QWidget | None = None) -> QDateEdit:
-    w = QDateEdit(to_qdate(value), parent)
+    w = DateEdit(to_qdate(value), parent)
     w.setDisplayFormat(DATE_FORMAT)
     w.setCalendarPopup(True)
     return w

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
+from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
 from modern_gl.desktop.opening_balances_page import CREDIT_AMOUNT, OpeningBalancesPage
@@ -321,7 +322,8 @@ def test_subconto_list_opens_at_once_and_filters_from_first_letter(window, qtbot
 
     type_text(editor, "б")  # first letter already filters
     assert popup.isVisible()
-    assert completer.model().stringList() == ["Бета Сервис"]
+    # a name not in the directory is offered last, to add it
+    assert completer.model().stringList() == ["Бета Сервис", "+ Добавить «б»"]
     assert popup.currentIndex().row() == 0  # best match preselected
 
     qtbot.keyClick(popup, Qt.Key.Key_Return)
@@ -980,3 +982,29 @@ def test_cut_cell_text_is_shown_whole_under_the_mouse(window, monkeypatch):
     hover(MEMO)
     hover(AMOUNT)
     assert shown == ["Очень длинное содержание операции " * 4, None]
+
+
+def test_directories_show_counterparties_added_elsewhere_on_return(window):
+    """Drafts from the portal add counterparties while the directories page is open
+    already: going back to it shows them at once, the row chosen stays chosen."""
+    s = window.session
+    window.show_place(("directories",))
+    page = current_page(window)
+    assert isinstance(page, DirectoriesPage)
+    kind = s.ledger.subconto_kind_id(s.company_id, "counterparty")
+    page.refresh(select_kind=kind)
+    page.table.setCurrentIndex(page.model.index(0, 0))
+    chosen = page._current_value()
+    assert chosen is not None
+    window.show_place(("journal",))
+
+    new_id = s.ledger.add_subconto_value(s.company_id, kind, "Portal MMC")
+    s.catalog.reload()  # as the e-qaimə import does
+    window.show_place(("directories",))
+
+    assert page.kind_id() == kind
+    names = [page.model.index(r, 0).data() for r in range(page.model.rowCount())]
+    assert "Portal MMC" in names
+    assert new_id in {v.id for v in s.catalog.all_values(kind)}
+    current = page._current_value()
+    assert current is not None and current.id == chosen.id
