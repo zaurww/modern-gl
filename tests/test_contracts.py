@@ -257,3 +257,22 @@ def test_migration_gives_contracts_their_counterparty(tmp_path):
         assert cat.accounts[3].currency == 0
     finally:
         conn.close()
+
+
+def test_a_posting_without_a_contract_is_allowed_but_not_without_a_counterparty(ledger, firm):
+    """Many suppliers have no contract, only the e-qaimə: Dt 26 [Аренда] / Kt 60 [Бета, —]
+    300.00 posts; 60 by contract closes at 300.00 Kt under «not given». The counterparty
+    itself stays required."""
+    from modern_gl.reporting.reports import subconto_balance
+
+    cid, acc, v, _ = firm
+    rent = (v["Аренда"],)
+    ledger.post_new(
+        cid, "2026-03-05", [PostingInput(acc["26"], acc["60"], "300", rent, (v["Бета"],))]
+    )
+    rows = subconto_balance(ledger.conn, cid, "60", "2026-03-01", "2026-03-31", position=2)
+    assert [(r.name, r.closing_ct) for r in rows] == [("<не указано>", 30_000)]
+    with pytest.raises(ValidationError, match="не заполнено субконто 1"):
+        ledger.post_new(
+            cid, "2026-03-05", [PostingInput(acc["26"], acc["60"], "1", rent, (None, v["Общий"]))]
+        )
