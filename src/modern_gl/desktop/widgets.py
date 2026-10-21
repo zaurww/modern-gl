@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import date
 from typing import ClassVar, cast
 
-from PySide6.QtCore import QDate, QEvent, QObject, QSize, Qt
+from PySide6.QtCore import QDate, QEvent, QObject, QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QFontMetrics, QHelpEvent, QIcon, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QHBoxLayout,
     QLabel,
+    QLayout,
+    QLayoutItem,
     QLineEdit,
     QMenu,
     QPushButton,
@@ -173,6 +175,62 @@ class Chip(QLabel):
         icon = status_icon(self._check)
         icon.paint(painter, 0, (self.height() - 16) // 2, 16, 16)
         painter.end()
+
+
+class FlowLayout(QLayout):
+    """Widgets in a row that wraps to the next line when the row is full (tags)."""
+
+    def __init__(self, parent: QWidget | None = None, spacing: int = 6) -> None:
+        super().__init__(parent)
+        self._items: list[QLayoutItem] = []
+        self._spacing = spacing
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item: QLayoutItem) -> None:
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int) -> QLayoutItem | None:  # type: ignore[override]
+        return self._items[index] if 0 <= index < len(self._items) else None
+
+    def takeAt(self, index: int) -> QLayoutItem | None:  # type: ignore[override]
+        return self._items.pop(index) if 0 <= index < len(self._items) else None
+
+    def expandingDirections(self) -> Qt.Orientation:
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return self._place(QRect(0, 0, width, 0), move=False)
+
+    def setGeometry(self, rect: QRect) -> None:
+        super().setGeometry(rect)
+        self._place(rect, move=True)
+
+    def sizeHint(self) -> QSize:
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        return size
+
+    def _place(self, rect: QRect, move: bool) -> int:
+        x, y, line = rect.x(), rect.y(), 0
+        for item in self._items:
+            hint = item.sizeHint()
+            if x + hint.width() > rect.right() + 1 and line:
+                x, y, line = rect.x(), y + line + self._spacing, 0
+            if move:
+                item.setGeometry(QRect(QPoint(x, y), hint))
+            x += hint.width() + self._spacing
+            line = max(line, hint.height())
+        return y + line - rect.y()
 
 
 class ElidedLabel(QLabel):

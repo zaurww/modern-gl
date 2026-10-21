@@ -30,7 +30,7 @@ from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
-from modern_gl.desktop.reports_page import OsvPage
+from modern_gl.desktop.reports_page import OsvPage, SubcontoPage
 from modern_gl.infrastructure.workspace import Workspace
 
 
@@ -194,11 +194,18 @@ def main() -> None:
     ledger.set_subconto_value_tax(
         session.company_id, acme, "DE 811 234 567", nonresident=True, country="Almaniya"
     )
+    cid = session.company_id
+    related = ledger.add_tag(cid, i18n.tr("Связанная сторона"))
+    landlord = ledger.add_tag(cid, i18n.tr("Арендодатель"))
+    ledger.add_tag(cid, i18n.tr("Холдинг"))
+    tagged = session.catalog.values(partners)[1].id  # Бета: the dialog below shows it
+    ledger.set_subconto_value_tags(cid, tagged, [related, landlord])
+    ledger.set_subconto_value_tags(cid, acme, [related])
     session.catalog.reload()
     directories.refresh(select_kind=partners)
     shot("8b5_counterparties")
     for name, value in (
-        ("8b6_counterparty_dialog", session.catalog.values(partners)[1]),
+        ("8b6_counterparty_dialog", session.catalog.value(tagged)),
         ("8b7_nonresident_dialog", session.catalog.value(acme)),
     ):
         dialog = ValueDialog(
@@ -210,6 +217,11 @@ def main() -> None:
         loop.exec()
         dialog.grab().save(str(out / f"{name}.png"))
         dialog.close()
+    win.open_report("subconto", session.catalog.by_code["60"].id, osv.params)
+    by_tag = cast(SubcontoPage, win.stack.currentWidget())
+    by_tag.tag.setCurrentIndex(by_tag.tag.findData(related))
+    by_tag.refresh()
+    shot("6b_subconto_tag")
     win.show_place(("inventory",))
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()

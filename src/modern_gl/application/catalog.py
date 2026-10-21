@@ -7,7 +7,7 @@ into ids. Plain Python, no Qt, so it is unit-testable.
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
 from modern_gl.application.currencies import CurrencyInfo, list_currencies
@@ -62,6 +62,7 @@ class SubcontoInfo:
     country: str | None = None  # of a non-resident
     parent_id: int | None = None  # the group it is in
     is_group: bool = False  # a folder of elements, never chosen on a posting
+    tags: frozenset[int] = frozenset()  # «Связанная сторона», «Арендодатель» (D63)
 
     @property
     def label(self) -> str:
@@ -116,6 +117,18 @@ class Catalog:
         self.owner_kinds: dict[int, int] = {
             r["id"]: r["owner_kind_id"] for r in kinds if r["owner_kind_id"] is not None
         }
+        self.tags: dict[int, str] = {
+            r["id"]: r["name"]
+            for r in self.conn.execute(
+                "SELECT id, name FROM tags WHERE company_id = ?", (self.company_id,)
+            )
+        }
+        value_tags: dict[int, set[int]] = {}
+        for r in self.conn.execute(
+            "SELECT value_id, tag_id FROM subconto_value_tags WHERE company_id = ?",
+            (self.company_id,),
+        ):
+            value_tags.setdefault(r["value_id"], set()).add(r["tag_id"])
         self._values: dict[int, SubcontoInfo] = {}
         self._by_kind: dict[int, list[SubcontoInfo]] = {k: [] for k in self.kinds}
         for r in self.conn.execute(
@@ -138,6 +151,7 @@ class Catalog:
                     r["country"],
                     r["parent_id"],
                     bool(r["is_group"]),
+                    frozenset(value_tags.get(r["id"], ())),
                 )
             )
         for values in self._by_kind.values():
@@ -177,6 +191,20 @@ class Catalog:
         """Register a value just created through the Ledger, without a full reload."""
         self._add(SubcontoInfo(value_id, kind_id, name, code, owner_id=owner_id))
         self._by_kind[kind_id].sort(key=lambda v: sort_key(v.name))
+
+    def sorted_tags(self, ids: Iterable[int] | None = None) -> list[tuple[int, str]]:
+        """Tags (all, or these) in alphabetical order: (id, name)."""
+        chosen = self.tags if ids is None else {i: self.tags[i] for i in ids if i in self.tags}
+        return sorted(chosen.items(), key=lambda kv: sort_key(kv[1]))
+
+    def tag_text(self, value: SubcontoInfo) -> str:
+        """«Арендодатель · Связанная сторона»: the tags of an element, for a list."""
+        return "  ·  ".join(name for _, name in self.sorted_tags(value.tags))
+
+    def kind_tags(self, kind_id: int) -> list[tuple[int, str]]:
+        """Tags some element of the directory has: the choice of a report's filter."""
+        used = {t for v in self._by_kind.get(kind_id, []) for t in v.tags}
+        return self.sorted_tags(used)
 
     @property
     def leaf_accounts(self) -> list[AccountInfo]:
