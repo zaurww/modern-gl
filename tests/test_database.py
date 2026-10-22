@@ -50,6 +50,7 @@ FROZEN = {
     "0036_company_mode.sql": "a9553da764433920",
     "0037_incoming.sql": "76850b60a80bfa56",
     "0038_owner_indexes.sql": "dd926587843c2ffe",
+    "0039_lines_by_item.sql": "ec898b1c996643ed",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).
@@ -206,6 +207,19 @@ def test_references_are_indexed(db):
     )
     paid = UNINDEXED_OWNER_ALLOWED - missing
     assert not paid, f"долг погашен: уберите {sorted(paid)} из UNINDEXED_OWNER_ALLOWED"
+
+
+def test_the_receipts_of_an_item_are_found_by_its_index(db):
+    """Debt 6: an issue or a sale looks up the receipts of its item; without the index the
+    demo year's recalculation read every warehouse row ~3 400 times (2.9 s → 1.7 s)."""
+    assert indexed(db, "inventory_lines", ("company_id", "item_id"))
+    plan = " ".join(
+        r[3]
+        for r in db.execute(
+            "EXPLAIN QUERY PLAN SELECT id FROM inventory_lines WHERE company_id = 1 AND item_id = 2"
+        )
+    )
+    assert "inventory_lines_by_item" in plan
 
 
 def test_demo_company_is_consistent(ledger):

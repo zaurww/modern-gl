@@ -338,6 +338,10 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         docs = [self._document(company_id, i) for i in dict.fromkeys(later)]
         if document_id is not None:
             docs.append(self._document(company_id, document_id))
+        with self._keeping_catalog():  # the catalog is read once for all of them
+            self._apply_sorted(company_id, document_id, docs)
+
+    def _apply_sorted(self, company_id: int, document_id: int | None, docs: list[Row]) -> None:
         for doc in sorted(docs, key=_sequence_key):
             if doc["id"] == document_id:
                 self._apply(company_id, doc)

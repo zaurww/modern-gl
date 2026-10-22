@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 
 from modern_gl.application.common import closed_on, company_row, write_audit
 from modern_gl.application.ledger import Ledger
@@ -17,6 +18,27 @@ class InventoryBase:
         self.conn = conn
         self.actor = actor
         self.ledger = Ledger(conn, actor=actor)
+        # rows of the catalog (items, warehouses, accounts, subconto) kept while documents
+        # are recalculated: nothing there changes meanwhile (debt 6, ~100 000 lookups a year)
+        self._kept: dict[tuple, object] | None = None
+
+    @contextmanager
+    def _keeping_catalog(self) -> Iterator[None]:
+        outer = self._kept is not None
+        if not outer:
+            self._kept = {}
+        try:
+            yield
+        finally:
+            if not outer:
+                self._kept = None
+
+    def _kept_row[T](self, key: tuple, read: Callable[[], T]) -> T:
+        if self._kept is None:
+            return read()
+        if key not in self._kept:
+            self._kept[key] = read()
+        return self._kept[key]  # type: ignore[return-value]
 
     def _company(self, company_id: int) -> Row:
         return company_row(self.conn, company_id)
@@ -31,6 +53,11 @@ class InventoryBase:
         return row
 
     def _item(self, company_id: int, item_id: int) -> Row:
+        return self._kept_row(
+            ("item", company_id, item_id), lambda: self._read_item(company_id, item_id)
+        )
+
+    def _read_item(self, company_id: int, item_id: int) -> Row:
         row = self.conn.execute(
             """
             SELECT i.*, v.name, v.code, v.active, u.precision AS unit_precision,
@@ -49,6 +76,12 @@ class InventoryBase:
         return row
 
     def _warehouse(self, company_id: int, warehouse_id: int) -> Row:
+        return self._kept_row(
+            ("warehouse", company_id, warehouse_id),
+            lambda: self._read_warehouse(company_id, warehouse_id),
+        )
+
+    def _read_warehouse(self, company_id: int, warehouse_id: int) -> Row:
         row = self.conn.execute(
             """
             SELECT w.*, v.name, v.code, v.active
@@ -73,6 +106,11 @@ class InventoryBase:
         return row
 
     def _account(self, company_id: int, account_id: int) -> Row:
+        return self._kept_row(
+            ("account", company_id, account_id), lambda: self._read_account(company_id, account_id)
+        )
+
+    def _read_account(self, company_id: int, account_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM accounts WHERE company_id = ? AND id = ?",
             (company_id, account_id),
@@ -82,6 +120,11 @@ class InventoryBase:
         return row
 
     def _subconto_value(self, company_id: int, value_id: int) -> Row:
+        return self._kept_row(
+            ("value", company_id, value_id), lambda: self._read_subconto_value(company_id, value_id)
+        )
+
+    def _read_subconto_value(self, company_id: int, value_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM subconto_values WHERE company_id = ? AND id = ?",
             (company_id, value_id),
@@ -161,6 +204,14 @@ class InventoryBase:
         return tuple(account[f"sc{position}_kind_id"] for position in range(1, 4))
 
     def _account_kind_codes(
+        self, company_id: int, account: Row
+    ) -> tuple[str | None, str | None, str | None]:
+        return self._kept_row(
+            ("kind codes", company_id, account["id"]),
+            lambda: self._read_account_kind_codes(company_id, account),
+        )
+
+    def _read_account_kind_codes(
         self, company_id: int, account: Row
     ) -> tuple[str | None, str | None, str | None]:
         result: list[str | None] = []

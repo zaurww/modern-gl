@@ -6,6 +6,12 @@ Makes (once) `<folder>/big-<N>.gl`: the demo company plus N postings over the ye
 2024–2026 — purchases on e-qaimə from 300 suppliers, their payments, sales to 300
 customers, expenses by cost item — and prints how long each report takes, slowest first.
 Anything over ~0.3 s is a candidate for a background thread.
+
+    uv run python scripts/benchmark.py <folder> --stock
+
+Makes (once) `<folder>/stock-year.gl` — the demo year (D76: every module, a year of the
+warehouse) — and times the warehouse's recalculation: the year's first document taken out
+of the sequence and posted back (every later one recalculated each time), and the stock.
 """
 
 from __future__ import annotations
@@ -97,8 +103,51 @@ def measure(path: Path) -> list[tuple[float, str]]:
     return sorted(timings, reverse=True)
 
 
+def measure_stock(path: Path) -> list[tuple[float, str]]:
+    from modern_gl.application.inventory import Inventory
+    from modern_gl.reporting.inventory.stock import stock_balances
+
+    if not path.exists():
+        from modern_gl.demo_year import create_year_demo
+
+        conn = connect(path)
+        create_year_demo(Ledger(conn))
+        conn.close()
+    conn = connect(path)
+    cid = conn.execute("SELECT id FROM companies").fetchone()["id"]
+    with transaction(conn):  # the demo year closes its first half: the whole year is open here
+        conn.execute("UPDATE companies SET closed_through = NULL WHERE id = ?", (cid,))
+    inv = Inventory(conn)
+    docs = conn.execute(
+        "SELECT id, doc_type FROM inventory_documents WHERE company_id = ? AND status = 'posted' "
+        "ORDER BY doc_date, number",
+        (cid,),
+    ).fetchall()
+    first = next(d["id"] for d in docs if d["doc_type"] != "opening")
+    print(f"складских документов: {len(docs)}")
+    timings = []
+    for name, case in (
+        (
+            "Склад: отмена проведения первого (пересчёт всех)",
+            lambda: inv.unpost_document(cid, first),
+        ),
+        ("Склад: проведение первого (пересчёт всех)", lambda: inv.post_document(cid, first)),
+        ("Склад: остатки на конец года", lambda: stock_balances(conn, cid, "2026-12-31")),
+    ):
+        start = time.perf_counter()
+        case()
+        timings.append((time.perf_counter() - start, name))
+    conn.close()
+    return sorted(timings, reverse=True)
+
+
 def main() -> None:
     folder = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
+    if "--stock" in sys.argv:
+        for seconds, name in measure_stock(folder / "stock-year.gl"):
+            mark = "  ← в фон?" if seconds > 0.3 else ""
+            print(f"{seconds * 1000:9.0f} мс  {name}{mark}")
+        return
     postings = (
         int(sys.argv[sys.argv.index("--postings") + 1]) if "--postings" in sys.argv else 100_000
     )
