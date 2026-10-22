@@ -27,16 +27,7 @@ class AccountTypeCommands(LedgerBase):
             acc = self._account(company_id, account)
             self._check_class(account_label(acc), account_class)
             old = acc["account_class"]
-            ids = [acc["id"]]
-            stack = [acc["id"]]
-            while stack:
-                children = self.conn.execute(
-                    "SELECT id FROM accounts WHERE company_id = ? AND parent_id = ? "
-                    "AND account_class IS ?",
-                    (company_id, stack.pop(), old),
-                ).fetchall()
-                ids += [c["id"] for c in children]
-                stack += [c["id"] for c in children]
+            ids = self._with_followers(company_id, acc["id"], "account_class IS ?", (old,))
             self.conn.executemany(
                 "UPDATE accounts SET account_class = ? WHERE id = ?",
                 [(account_class, i) for i in ids],
@@ -73,16 +64,9 @@ class AccountTypeCommands(LedgerBase):
             label = account_label(acc)
             account_class = self._class_of_type(label, account_type, None) or acc["account_class"]
             old = (acc["account_type"], acc["account_class"])
-            ids = [acc["id"]]
-            stack = [acc["id"]]
-            while stack:
-                children = self.conn.execute(
-                    "SELECT id FROM accounts WHERE company_id = ? AND parent_id = ? "
-                    "AND account_type IS ? AND account_class IS ?",
-                    (company_id, stack.pop(), *old),
-                ).fetchall()
-                ids += [c["id"] for c in children]
-                stack += [c["id"] for c in children]
+            ids = self._with_followers(
+                company_id, acc["id"], "account_type IS ? AND account_class IS ?", old
+            )
             self.conn.executemany(
                 "UPDATE accounts SET account_type = ?, account_class = ? WHERE id = ?",
                 [(account_type, account_class, i) for i in ids],
@@ -100,6 +84,23 @@ class AccountTypeCommands(LedgerBase):
                     "subaccounts": len(ids) - 1,
                 },
             )
+
+    def _with_followers(
+        self, company_id: int, account_id: int, same: str, values: tuple
+    ) -> list[int]:
+        """The account and its subaccounts, at any depth, that are like it (`same` — an SQL
+        condition): these follow a change of its class or type. A subaccount set otherwise
+        on purpose stops the walk below it."""
+        ids = [account_id]
+        stack = [account_id]
+        while stack:
+            children = self.conn.execute(
+                f"SELECT id FROM accounts WHERE company_id = ? AND parent_id = ? AND {same}",
+                (company_id, stack.pop(), *values),
+            ).fetchall()
+            ids += [c["id"] for c in children]
+            stack += [c["id"] for c in children]
+        return ids
 
     def _type_class(self, account_id: int) -> str | None:
         row = self.conn.execute(
