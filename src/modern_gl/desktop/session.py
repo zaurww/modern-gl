@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +36,8 @@ class Session:
     path: Path | None = None
     large: bool = False
     background: Background = field(default_factory=Background)
+    # when the newest backup of the company was made (D97); None — none yet
+    last_backup: Callable[[], datetime | None] = lambda: None
     # official rates of a day {code: (rate, nominal)}; tests put a stub here (no network)
     fetch_rates: Callable[[date], dict[str, tuple[int, int]]] = cbar.fetch
 

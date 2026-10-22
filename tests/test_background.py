@@ -55,7 +55,7 @@ def test_a_large_company_reads_in_the_background_with_the_same_figures(window, q
     window.show_place(("home",))
     home = window.stack.currentWidget()
     assert isinstance(home, HomePage)
-    qtbot.waitUntil(lambda: len(home.sections) == 3)
+    qtbot.waitUntil(lambda: len(home.sections) == 4)  # with the backup (D97)
     money = [ln.figure.text() for ln in home.sections[1].lines]
     qtbot.waitUntil(
         lambda: [ln.figure.text() for ln in home.sections[1].lines] == ["1 750.00", "7 580.00"]

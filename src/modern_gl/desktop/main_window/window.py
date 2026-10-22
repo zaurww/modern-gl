@@ -22,6 +22,7 @@ from modern_gl.application.queries import (
     load_template,
 )
 from modern_gl.desktop import theme
+from modern_gl.desktop.backups_dialog import BackupsDialog
 from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.command_palette import CommandPalette
@@ -140,11 +141,21 @@ class MainWindow(OpenPages):
         if PeriodDialog(self.open_session, self).exec():
             self._reopen()
 
+    def show_backups(self) -> None:
+        """«Резервные копии» (D97): when and where, a copy now, the second folder."""
+        if self._viewing() or self.conn is None or self.company_path is None:
+            return
+        BackupsDialog(self.workspace, self.conn, self.company_path, self.settings, self).exec()
+        home = self.pages.get(("home",))
+        if isinstance(home, HomePage):
+            home.refresh()
+
     def _file_actions(self, menu: QMenu) -> None:
         """What changes the open company's file (not shown while viewing)."""
         s = self.open_session
         menu.addAction(tr("Сохранить как…")).triggered.connect(self.save_as)
         menu.addAction(tr("Сохранить копию…")).triggered.connect(self.save_copy)
+        menu.addAction(tr("Резервные копии…")).triggered.connect(self.show_backups)
         menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
         menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
         menu.addSeparator()
@@ -170,6 +181,7 @@ class MainWindow(OpenPages):
         if key == ("home",):
             page = HomePage(s, shown_places(s.stock_only))
             page.open_place.connect(self.show_place)
+            page.open_backups.connect(self.show_backups)
             return page
         if key == ("journal",):
             page = JournalPage(s)

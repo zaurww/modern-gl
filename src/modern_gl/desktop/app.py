@@ -19,6 +19,7 @@ from modern_gl import demo_year, i18n
 from modern_gl.application.ledger import Ledger
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import qt_texts, theme
+from modern_gl.desktop.backups_dialog import MIRROR_SETTING
 from modern_gl.desktop.cell_editing import select_whole_on_entry
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
@@ -61,7 +62,8 @@ def main() -> int:
         settings.setValue("data_dir", args[args.index("--data") + 1])
     folder = Path(str(settings.value("data_dir", "") or default_folder()))
     files = cast(list[str], settings.value("company_files", [], type=list))
-    workspace = Workspace(folder, files)
+    mirror = str(settings.value(MIRROR_SETTING, "") or "")
+    workspace = Workspace(folder, files, mirror or None)
     if "--demo" in args and not workspace.companies():
         add_demo_company(workspace)
     if "--demo-year" in args and all(c.name != demo_year.NAME for c in workspace.companies()):
