@@ -88,15 +88,17 @@ class RevaluationCommands(DocumentCommands):
             moves AS (
                 SELECT p.debit_account_id AS account_id, p.dt_sc1 AS sc1, p.dt_sc2 AS sc2,
                        p.dt_sc3 AS sc3, p.currency_id, p.amount, p.currency_amount
-                FROM postings p JOIN docs ON docs.id = p.document_id
+                FROM postings p CROSS JOIN docs
                 JOIN accounts a ON a.id = p.debit_account_id
-                WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
+                WHERE docs.id = p.document_id AND p.company_id = :company_id
+                  AND a.currency <> 0 AND p.currency_id IS NOT NULL
                 UNION ALL
                 SELECT p.credit_account_id, p.ct_sc1, p.ct_sc2, p.ct_sc3, p.currency_id,
                        -p.amount, -p.currency_amount
-                FROM postings p JOIN docs ON docs.id = p.document_id
+                FROM postings p CROSS JOIN docs
                 JOIN accounts a ON a.id = p.credit_account_id
-                WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
+                WHERE docs.id = p.document_id AND p.company_id = :company_id
+                  AND a.currency <> 0 AND p.currency_id IS NOT NULL
             )
             SELECT m.account_id, m.sc1, m.sc2, m.sc3, m.currency_id, c.code,
                    SUM(m.amount) AS balance, SUM(m.currency_amount) AS currency_balance

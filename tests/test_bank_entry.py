@@ -136,7 +136,7 @@ def test_a_transfer_to_an_own_account_is_one_line_in_both_statements(qtbot, bank
     page = statement_page(qtbot, session)
     names = [t.split("  ", 1)[-1] for t in items_of(page.entry.account)]
     assert "Kapital USD" not in names  # another currency: only a conversion
-    other = session.ledger.add_bank_account(
+    other = session.ledger.bank.add_bank_account(
         session.company_id, "PAŞA AZN", acc(session, "51"), "current"
     )
     page.refresh()
@@ -167,7 +167,7 @@ def test_lines_move_to_another_account(qtbot, bank, monkeypatch):
     enter_until(qtbot, line.money_out)
     type_text(line.money_out, "100")
     enter(qtbot)
-    other = session.ledger.add_bank_account(
+    other = session.ledger.bank.add_bank_account(
         session.company_id, "PAŞA AZN", acc(session, "51"), "current"
     )
     page.refresh()
@@ -236,7 +236,7 @@ def test_an_overpaid_e_qaime_leaves_an_advance_offset_later(qtbot, bank):
     qtbot.addWidget(dialog)
     dialog.counterparty.setCurrentIndex(dialog.counterparty.findData(value(session, "ALFA MMC")))
     dialog.plan()
-    assert [o.parts for o in dialog.offsets] == [[("MT002", 32_000)]]
+    assert [o.parts for o in dialog.offsets] == [(("MT002", 32_000),)]
     dialog.offset()
     cid, alfa = session.company_id, value(session, "ALFA MMC")
     assert counterparty_balance(session.conn, cid, acc(session, "60.2"), alfa, "2026-03-31") == 0

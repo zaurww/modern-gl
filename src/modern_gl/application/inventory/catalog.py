@@ -79,6 +79,24 @@ class CatalogCommands(InventoryBase):
             )
         return item_id
 
+    def edit_item(
+        self,
+        company_id: int,
+        item_id: int,
+        name: str,
+        code: str | None,
+        group_id: int | None,
+        unit_id: int,
+        inventory_account_id: int,
+    ) -> None:
+        """The item's window saved: its name, code and group in the directory, its unit
+        and stock account — all or nothing."""
+        with transaction(self.conn):
+            value_id = self._item(company_id, item_id)["subconto_value_id"]
+            self.ledger.update_subconto_value(company_id, value_id, name, code)
+            self.ledger.set_subconto_value_parent(company_id, value_id, group_id)
+            self.update_item(company_id, item_id, unit_id, inventory_account_id)
+
     def update_item(
         self, company_id: int, item_id: int, unit_id: int, inventory_account_id: int
     ) -> None:

@@ -1545,3 +1545,37 @@ def test_inventory_settings_choose_the_input_vat_account(vat_demo, conn, qtbot):
     dialog.input_vat.setCurrentIndex(dialog.input_vat.findData(demo.expense_account))
     dialog._save()
     assert demo.inventory.ledger.account_role(demo.company_id, INPUT_VAT) == demo.expense_account
+
+
+def test_a_recalculation_reads_the_catalog_once_and_forgets_it(inventory_demo):
+    """Debt 6: while later documents are recalculated an item is read once, not for every
+    line of every document; afterwards it is read afresh (a change of it is seen)."""
+    demo = inventory_demo
+    inv = demo.inventory
+    receipt(demo, "5", "50")  # 10.01
+    for day in ("2026-01-12", "2026-01-13", "2026-01-14"):
+        inv.post_issue(
+            demo.company_id, day, [IssueLine(demo.item, demo.main, "1", demo.expense_account)]
+        )
+    reads: list[int] = []
+    read_item = inv._read_item
+
+    def counted(company_id: int, item_id: int):
+        reads.append(item_id)
+        return read_item(company_id, item_id)
+
+    inv._read_item = counted  # type: ignore[method-assign]
+    inv.post_receipt(  # 05.01: the receipt of 10.01 and the three issues are recalculated
+        demo.company_id,
+        "2026-01-05",
+        [ReceiptLine(demo.item, demo.main, "5", "100")],
+        demo.payable_account,
+        [demo.supplier],
+    )
+    # once for the new draft, once for the five documents in order (each read it before)
+    assert reads == [demo.item, demo.item]
+    assert inv._kept is None
+    inv.post_issue(
+        demo.company_id, "2026-01-15", [IssueLine(demo.item, demo.main, "1", demo.expense_account)]
+    )
+    assert len(reads) > 2  # read again: nothing is kept between scenarios

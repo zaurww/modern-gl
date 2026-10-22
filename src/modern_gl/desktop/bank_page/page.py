@@ -4,6 +4,8 @@ a day or a period each; one statement — its lines and its balance against the 
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from PySide6.QtCore import QModelIndex, QSettings, Qt, Signal
@@ -25,6 +27,7 @@ from modern_gl.application.bank import (
     BankOperationInput,
     BankPlace,
     BankStatement,
+    Statement,
     StatementLine,
     bank_accounts,
     bank_operation_of_document,
@@ -58,6 +61,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 
 ACCOUNTS, JOURNAL, STATEMENT = "accounts", "journal", "statement"
 
@@ -67,6 +71,16 @@ def next_workday(day: str) -> str:
     while d.weekday() >= 5:
         d += timedelta(days=1)
     return d.isoformat()
+
+
+@dataclass(frozen=True)
+class BankData:
+    """What a level of the page reads (in the background for a large company, debt 6)."""
+
+    level: str
+    accounts: list[BankAccount]
+    statements: list[BankStatement]  # of the account open
+    lines: Statement | None  # of the statement open, if it is still there
 
 
 class BankPage(ReportPage):
@@ -83,6 +97,7 @@ class BankPage(ReportPage):
         self.accounts: list[BankAccount] = []
         self.statements: list[BankStatement] = []
         self._amount_mode: str | None = None
+        self._start_entry = False  # the cursor to the entry line once the statement is shown
         self._build_actions()
         self._build_crumbs()
         self.entry = EntryLine(session)
@@ -246,9 +261,8 @@ class BankPage(ReportPage):
 
     def open_statement(self, date_from: str, date_to: str) -> None:
         self.period = (date_from, date_to)
+        self._start_entry = True
         self.go(STATEMENT)
-        if self.level == STATEMENT:
-            self.entry.start()
 
     def up(self) -> None:
         if self.level == STATEMENT:
@@ -269,28 +283,47 @@ class BankPage(ReportPage):
     def title(self) -> str:
         return tr("Банк")
 
-    def refresh(self) -> None:
-        cid = self.s.company_id
-        self.accounts = bank_accounts(self.s.conn, cid, self.s.working_date.isoformat())
+    def fetch(self, conn: Connection) -> BankData:
+        return self.job()(conn)
+
+    def job(self) -> Callable[[Connection], BankData]:
+        cid, day = self.s.company_id, self.s.working_date.isoformat()
+        level, key, period = self.level, self.account_key, self.period
+
+        def read(conn: Connection) -> BankData:
+            accounts = bank_accounts(conn, cid, day)
+            account = next((a for a in accounts if a.place.key == key), None)
+            statements = bank_statements(conn, cid, account.place) if account else []
+            here = any((s.date_from, s.date_to) == period for s in statements)
+            lines = None
+            if account and period and level == STATEMENT and here:
+                lines = statement(conn, cid, account.place, *period)
+            return BankData(level, accounts, statements, lines)
+
+        return read
+
+    def present(self, data: BankData) -> None:
+        self.level, self.accounts, self.statements = data.level, data.accounts, data.statements
         if self.level != ACCOUNTS and self.account is None:
             self.level, self.period = ACCOUNTS, None  # the account is gone
-        self.statements = (
-            bank_statements(self.s.conn, cid, self.account.place) if self.account else []
-        )
-        if self.level == STATEMENT and self.current is None:
+        if self.level == STATEMENT and (self.current is None or data.lines is None):
             self.level = JOURNAL
-        super().refresh()
-        if not self.model.rows:
-            self.stack.setCurrentWidget(self.empty_states[self.level])
-        self._show_level()
-
-    def build(self) -> None:
         if self.level == ACCOUNTS:
             self._build_accounts()
         elif self.level == JOURNAL:
             self._build_journal()
         else:
-            self._build_statement()
+            assert data.lines is not None
+            self._build_statement(data.lines)
+
+    def _shown(self) -> None:
+        super()._shown()
+        if not self.model.rows:
+            self.stack.setCurrentWidget(self.empty_states[self.level])
+        self._show_level()
+        if self._start_entry and self.level == STATEMENT:
+            self.entry.start()
+        self._start_entry = False
 
     def _build_accounts(self) -> None:
         self.model.bands = False
@@ -314,10 +347,9 @@ class BankPage(ReportPage):
         self.header.title.setText(account.title)
         self.header.subtitle.setText(f"{where(account)}  ·  {tr(kind)}")
 
-    def _build_statement(self) -> None:
+    def _build_statement(self, lines: Statement) -> None:
         account, s = self.account, self.current
         assert account is not None and s is not None
-        lines = statement(self.s.conn, self.s.company_id, account.place, s.date_from, s.date_to)
         self.model.bands = True
         self.model.set(
             line_columns(s.date_from != s.date_to),
@@ -399,7 +431,7 @@ class BankPage(ReportPage):
         if place is None:
             return
         try:
-            self.s.ledger.add_bank_statement(
+            self.s.ledger.bank.add_bank_statement(
                 self.s.company_id, place.account_id, place.value_id, date_from, date_to
             )
         except LedgerError as e:
@@ -412,7 +444,7 @@ class BankPage(ReportPage):
         if place is None or s is None:
             return
         try:
-            self.s.ledger.set_bank_closing(
+            self.s.ledger.bank.set_bank_closing(
                 self.s.company_id, place.account_id, place.value_id, s.date_from, s.date_to, amount
             )
         except LedgerError as e:
@@ -463,8 +495,8 @@ class BankPage(ReportPage):
     def set_amount_mode(self, mode: str) -> None:
         self._amount_mode = mode
         QSettings().setValue("bank/amounts", mode)
+        self._start_entry = True
         self.refresh()
-        self.entry.start()
 
     def move_selected(self) -> None:
         """The marked lines entered on the wrong account go to another one of its currency,
@@ -481,7 +513,9 @@ class BankPage(ReportPage):
         if target is None:
             return
         try:
-            self.s.ledger.move_bank_operations(cid, operations, target.account_id, target.subconto)
+            self.s.ledger.bank.move_bank_operations(
+                cid, operations, target.account_id, target.subconto
+            )
         except LedgerError as e:
             self.s.notify(str(e))
             return

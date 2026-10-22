@@ -12,6 +12,13 @@ from PySide6.QtCore import (
     Signal,
 )
 
+from modern_gl.application.default_accounts import (
+    COST_OF_GOODS,
+    CUSTOMER,
+    RETAINED_EARNINGS,
+    SUPPLIER,
+    default_account,
+)
 from modern_gl.application.inventory import (
     INCOMING_TYPES,
     Inventory,
@@ -65,6 +72,10 @@ def by_sale_kinds(catalog, kinds: list[int], values) -> list[int | None]:
         if value is not None and catalog.value(value).kind_id in kinds:
             result[kinds.index(catalog.value(value).kind_id)] = value
     return result
+
+
+# the account a new line's offset starts with, by the document (debt 11: by type, not 60/62/46)
+OFFSET_PURPOSE = {"opening": SUPPLIER, "receipt": SUPPLIER, "sale": CUSTOMER}
 
 
 class InventoryLinesBase(QAbstractTableModel):
@@ -185,14 +196,15 @@ class InventoryLinesBase(QAbstractTableModel):
     def default_row(self) -> InventoryGridRow:
         if self.doc_type == "incoming":
             return InventoryGridRow(offset_account_id=self.incoming_account)
-        codes = [{"opening": "60", "receipt": "60", "sale": "62"}.get(self.doc_type, "46")]
-        if self.doc_type == "opening" and self.stock_only:
-            codes = ["88", "84", *codes]  # unseen (D90): retained earnings, not a supplier
-        account = next(filter(None, map(self._leaf_by_code, codes)), None)
-        if account is None or self.doc_type in {"transfer", "landed_cost"}:
+        if self.doc_type in {"transfer", "landed_cost"}:
             return InventoryGridRow()
+        purposes = [OFFSET_PURPOSE.get(self.doc_type, COST_OF_GOODS)]
+        if self.doc_type == "opening" and self.stock_only:
+            purposes.insert(0, RETAINED_EARNINGS)  # unseen (D90): not a supplier
+        led, cid = self.s.ledger, self.s.company_id
+        account = next(filter(None, (default_account(led, cid, p) for p in purposes)), None)
         # Subconto (counterparty, contract) stay empty: a guessed value would post silently.
-        return InventoryGridRow(offset_account_id=account.id)
+        return InventoryGridRow(offset_account_id=account)
 
     def _accounts_hidden(self) -> bool:
         return (
@@ -213,20 +225,6 @@ class InventoryLinesBase(QAbstractTableModel):
         self.beginResetModel()
         self.endResetModel()
         self.changed.emit()
-
-    def _leaf_by_code(self, code: str):
-        """The account of the code, or the first under it when it is a group (60 → 60.1)."""
-        account = self.s.catalog.by_code.get(code)
-        if account is not None and account.is_group:
-            account = next(
-                (
-                    candidate
-                    for candidate in self.s.catalog.leaf_accounts
-                    if candidate.code.startswith(f"{code}.")
-                ),
-                None,
-            )
-        return account
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         return 0 if parent is not None and parent.isValid() else len(self.rows)

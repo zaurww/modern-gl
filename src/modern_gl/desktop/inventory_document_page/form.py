@@ -24,9 +24,9 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.inventory import (
     INCOMING_REASONS,
-    STANDARD_VAT_RATE,
     Inventory,
     InventoryDocumentData,
+    default_vat_rate,
 )
 from modern_gl.desktop.inventory_document_page.columns import (
     DOCUMENT_TYPES,
@@ -49,7 +49,6 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
 )
-from modern_gl.domain.accounts import INPUT_VAT, OUTPUT_VAT
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.i18n import tr
 
@@ -75,10 +74,7 @@ class InventoryDocumentForm(QWidget):
         self._build_head(root)
         self._build_meta(root)
 
-        # a new receipt (sale) has VAT when the company has an account to post its VAT to
-        vat_role = OUTPUT_VAT if doc_type == "sale" else INPUT_VAT
-        has_vat_account = session.ledger.account_role(session.company_id, vat_role) is not None
-        self._show_vat_rate(STANDARD_VAT_RATE if has_vat_account else None)
+        self._show_vat_rate(default_vat_rate(session.ledger, session.company_id, doc_type))
         self.model = InventoryLinesModel(
             session,
             doc_type,

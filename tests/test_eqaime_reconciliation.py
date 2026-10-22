@@ -268,7 +268,7 @@ def test_a_number_known_from_before_explains_the_books(firm):
     cancelled -> cancelled, in the books."""
     firm.purchase("2026-03-30", "MT20", "100", "18")
     firm.purchase("2026-03-31", "MT21", "100", "18")
-    firm.ledger.remember_portal(
+    firm.ledger.eqaime.remember_portal(
         firm.cid,
         [
             on_portal("MT20", "2026-04-01", 11_800, 1_800),
@@ -287,16 +287,16 @@ def test_the_portal_is_remembered_with_its_changes(firm):
     corrects the amount: 118.00 -> 236.00 — shown with the row."""
     ledger = firm.ledger
     first = on_portal("MT01", "2026-03-05", 11_800, 1_800, ON_APPROVAL)
-    assert ledger.remember_portal(firm.cid, [first], "2026-03-06T10:00:00") == 0
+    assert ledger.eqaime.remember_portal(firm.cid, [first], "2026-03-06T10:00:00") == 0
     approved = on_portal("MT01", "2026-03-05", 11_800, 1_800)
-    assert ledger.remember_portal(firm.cid, [approved], "2026-03-11T10:00:00") == 1
-    assert ledger.remember_portal(firm.cid, [approved], "2026-03-12T10:00:00") == 0
+    assert ledger.eqaime.remember_portal(firm.cid, [approved], "2026-03-11T10:00:00") == 1
+    assert ledger.eqaime.remember_portal(firm.cid, [approved], "2026-03-12T10:00:00") == 0
     firm.purchase("2026-03-05", "MT01", "100", "18")
     result = reconcile(firm.conn, firm.cid, False, "2026-03-01", "2026-03-31", [approved])
     assert result.rows[0].group == MATCHED and result.rows[0].changes == []
 
     corrected = on_portal("MT01", "2026-03-05", 23_600, 3_600)
-    assert ledger.remember_portal(firm.cid, [corrected], "2026-04-02T09:00:00") == 1
+    assert ledger.eqaime.remember_portal(firm.cid, [corrected], "2026-04-02T09:00:00") == 1
     row = reconcile(firm.conn, firm.cid, False, "2026-03-01", "2026-03-31", [corrected]).rows[0]
     assert row.group == AMOUNTS
     assert [(c.old_total, c.new_total) for c in row.changes] == [(11_800, 23_600)]
@@ -313,16 +313,18 @@ def test_changes_after_the_month_is_marked_reconciled(firm):
     """March purchases reconciled on 5 April. On 20 April MT01 is cancelled: March is
     warned about. A change before the mark, or in a month not marked, is not."""
     ledger = firm.ledger
-    ledger.remember_portal(
+    ledger.eqaime.remember_portal(
         firm.cid,
         [on_portal("MT01", "2026-03-05", 100, 0), on_portal("MT02", "2026-03-06", 100, 0)],
         "2026-04-01T09:00:00",
     )
-    ledger.remember_portal(
+    ledger.eqaime.remember_portal(
         firm.cid, [on_portal("MT02", "2026-03-06", 200, 0)], "2026-04-02T09:00:00"
     )
-    ledger.mark_reconciled(firm.cid, False, "2026-03-01", "2026-03-31", "2026-04-05T09:00:00")
-    ledger.remember_portal(
+    ledger.eqaime.mark_reconciled(
+        firm.cid, False, "2026-03-01", "2026-03-31", "2026-04-05T09:00:00"
+    )
+    ledger.eqaime.remember_portal(
         firm.cid,
         [
             on_portal("MT01", "2026-03-05", 100, 0, "canceled"),
@@ -330,15 +332,17 @@ def test_changes_after_the_month_is_marked_reconciled(firm):
         ],
         "2026-04-20T09:00:00",
     )
-    ledger.remember_portal(
+    ledger.eqaime.remember_portal(
         firm.cid, [on_portal("MT30", "2026-04-07", 300, 0)], "2026-04-21T09:00:00"
     )
     (changed,) = changed_after_reconciliation(firm.conn, firm.cid)
     assert (changed.outgoing, changed.month, changed.numbers) == (False, "2026-03", ("MT01",))
 
-    ledger.mark_reconciled(firm.cid, False, "2026-03-01", "2026-03-31", "2026-04-22T09:00:00")
+    ledger.eqaime.mark_reconciled(
+        firm.cid, False, "2026-03-01", "2026-03-31", "2026-04-22T09:00:00"
+    )
     assert changed_after_reconciliation(firm.conn, firm.cid) == []
-    ledger.unmark_reconciled(firm.cid, False, "2026-03-01", "2026-03-31")
+    ledger.eqaime.unmark_reconciled(firm.cid, False, "2026-03-01", "2026-03-31")
     assert firm.conn.execute("SELECT COUNT(*) FROM eqaime_reconciled").fetchone()[0] == 0
 
 
@@ -346,8 +350,8 @@ def test_reconciled_months_are_read_again(firm):
     """Purchases: January and March 2026 reconciled -> 1 Jan .. 31 Mar read again; a month
     of over a year ago is not."""
     for month in ("2025-03", "2026-01", "2026-03"):
-        firm.ledger.mark_reconciled(firm.cid, False, *month_bounds(month))
-    firm.ledger.mark_reconciled(firm.cid, True, *month_bounds("2026-02"))
+        firm.ledger.eqaime.mark_reconciled(firm.cid, False, *month_bounds(month))
+    firm.ledger.eqaime.mark_reconciled(firm.cid, True, *month_bounds("2026-02"))
     got = [
         (r.outgoing, r.date_from, r.date_to)
         for r in rechecks(firm.conn, firm.cid, date(2026, 4, 10))
@@ -490,7 +494,7 @@ def test_a_document_shows_its_status_on_the_portal(conn, qtbot):
 
     def chip(status: str | None) -> str | None:
         if status is not None:
-            shop.ledger.remember_portal(
+            shop.ledger.eqaime.remember_portal(
                 shop.company_id, [on_portal("MT01", "2026-03-05", 1180, 180, status)]
             )
         page = InventoryDocumentPage(session, doc_type="receipt")
@@ -515,12 +519,12 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
     from tests.test_sales import make_shop
 
     shop = make_shop(conn, "classic")
-    shop.ledger.remember_portal(
+    shop.ledger.eqaime.remember_portal(
         shop.company_id,
         [on_portal("MT2603000111", "2026-03-05", 11_800, 1_800, tin="1700000001")],
         "2026-04-01T09:00:00",
     )
-    shop.ledger.mark_reconciled(
+    shop.ledger.eqaime.mark_reconciled(
         shop.company_id, False, "2026-03-01", "2026-03-31", "2026-04-02T09:00:00"
     )
     row, detail = received()
@@ -601,7 +605,7 @@ def test_a_day_is_reconciled_by_the_portal_date(firm):
     day = reconcile(firm.conn, firm.cid, False, "2026-10-20", "2026-10-20", portal)
     assert [r.group for r in day.rows] == [MATCHED] and day.agrees
     assert (day.book_total, day.book_vat) == (11_800, 1_800)
-    firm.ledger.remember_portal(firm.cid, portal)
+    firm.ledger.eqaime.remember_portal(firm.cid, portal)
     next_day = reconcile(firm.conn, firm.cid, False, "2026-10-21", "2026-10-21", [])
     assert next_day.rows == [] and next_day.agrees
 
@@ -618,13 +622,15 @@ def test_reconciled_days_are_warned_about_until_reconciled_again(firm):
     A change in MT05 (of the 5th, never marked) is not. October marked on the 23rd: the
     warning goes. Marks 01-19, 20, 22: reconciled through the 20th (the 21st is a gap)."""
     ledger = firm.ledger
-    ledger.remember_portal(
+    ledger.eqaime.remember_portal(
         firm.cid,
         [on_portal("MT01", "2026-10-20", 100, 0), on_portal("MT05", "2026-10-05", 100, 0)],
         "2026-10-21T08:00:00",
     )
-    ledger.mark_reconciled(firm.cid, False, "2026-10-20", "2026-10-20", "2026-10-21T08:30:00")
-    ledger.remember_portal(
+    ledger.eqaime.mark_reconciled(
+        firm.cid, False, "2026-10-20", "2026-10-20", "2026-10-21T08:30:00"
+    )
+    ledger.eqaime.remember_portal(
         firm.cid,
         [
             on_portal("MT01", "2026-10-20", 100, 0, "canceled"),
@@ -636,13 +642,15 @@ def test_reconciled_days_are_warned_about_until_reconciled_again(firm):
     assert (changed.month, changed.numbers) == ("2026-10", ("MT01",))
     assert usual_span(firm.conn, firm.cid, False) == DAY
 
-    ledger.mark_reconciled(firm.cid, False, "2026-10-01", "2026-10-31", "2026-10-23T08:00:00")
+    ledger.eqaime.mark_reconciled(
+        firm.cid, False, "2026-10-01", "2026-10-31", "2026-10-23T08:00:00"
+    )
     assert changed_after_reconciliation(firm.conn, firm.cid) == []
     assert usual_span(firm.conn, firm.cid, False) == MONTH
 
-    ledger.unmark_reconciled(firm.cid, False, "2026-10-01", "2026-10-31")
-    ledger.mark_reconciled(firm.cid, False, "2026-10-01", "2026-10-19")
-    ledger.mark_reconciled(firm.cid, False, "2026-10-22", "2026-10-22")
+    ledger.eqaime.unmark_reconciled(firm.cid, False, "2026-10-01", "2026-10-31")
+    ledger.eqaime.mark_reconciled(firm.cid, False, "2026-10-01", "2026-10-19")
+    ledger.eqaime.mark_reconciled(firm.cid, False, "2026-10-22", "2026-10-22")
     assert reconciled_through(firm.conn, firm.cid, False) == "2026-10-20"
 
 

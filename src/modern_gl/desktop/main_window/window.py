@@ -39,6 +39,7 @@ from modern_gl.desktop.landed_cost_page import LandedCostPage
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
 from modern_gl.desktop.main_window.commands import palette_entries
 from modern_gl.desktop.main_window.open_pages import OpenPages
+from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
@@ -156,7 +157,7 @@ class MainWindow(OpenPages):
     def _make_place(self, key) -> QWidget:
         s = self.open_session
         if key == ("home",):
-            page = HomePage(s)
+            page = HomePage(s, shown_places(s.stock_only))
             page.open_place.connect(self.show_place)
             return page
         if key == ("journal",):

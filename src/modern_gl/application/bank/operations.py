@@ -4,7 +4,7 @@ the lines paid last time, the purpose of payment by default."""
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
@@ -251,3 +251,37 @@ def allocate(total: int, owed: Sequence[int]) -> tuple[list[int], int]:
         paid.append(part)
         total -= part
     return paid, total
+
+
+def vat_deposit_part(
+    data: BankOperationInput,
+    account_id: int,
+    subconto: tuple[int | None, ...],
+    amount: int,
+    day: str,
+) -> BankOperationInput | None:
+    """The second operation of a payment whose ƏDV goes through the deposit account (D41,
+    D69): the same counterparty, line and e-qaimə, on the deposit account, its own day,
+    in manat, the ƏDV amount. None when there is nothing to pay from the deposit."""
+    if amount == 0 or not data.lines:
+        return None
+    return replace(
+        data,
+        doc_date=day,
+        account_id=account_id,
+        subconto=subconto,
+        currency_id=None,
+        reference="",
+        lines=(replace(data.lines[0], amount=amount),),
+    )
+
+
+def split_by_deposit(owed: int, vat: int, with_deposit: bool, on_deposit: bool) -> tuple[int, int]:
+    """An e-qaimə chosen for a payment: (from the bank, from the ƏDV deposit). With the
+    deposit beside the bank, it pays the ƏDV and the bank the rest; the deposit account
+    itself pays only the ƏDV (or everything when the e-qaimə has none)."""
+    if with_deposit:
+        return owed - vat, vat
+    if on_deposit:
+        return vat or owed, 0
+    return 0, 0

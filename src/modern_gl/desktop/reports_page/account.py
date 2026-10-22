@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 
 from PySide6.QtWidgets import (
@@ -23,6 +24,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import SubcontoRow, Turnovers
 
@@ -100,16 +102,14 @@ class CardEdge:
 class CardPage(AccountReportPage):
     kind, caption = "card", "Карточка счёта"
 
-    def build(self) -> None:
-        card = reports.account_card(
-            self.s.conn,
-            self.s.company_id,
-            self.account_id,
-            self.params.date_from,
-            self.params.date_to,
-            self.params.layers,
-            self.params.subconto,
+    def fetch(self, conn: Connection) -> reports.AccountCard:
+        p = self.params
+        return reports.account_card(
+            conn, self.s.company_id, self.account_id, p.date_from, p.date_to, p.layers, p.subconto
         )
+
+    def present(self, data: reports.AccountCard) -> None:
+        card = data
         # within one year the year is in the period already
         one_year = self.params.date_from.year == self.params.date_to.year
         columns = [
@@ -224,20 +224,24 @@ class SubcontoPage(AccountReportPage):
         for w in (self.tag, self.tag_label):
             w.setVisible(bool(tags))
 
-    def build(self) -> None:
+    def job(self) -> Callable[[Connection], list[reports.SubcontoRow]]:
         self._fill_tags()  # a tag given in «Справочники» since the report was opened
-        tag_id = self.tag.currentData()
+        tag_id, levels = self.tag.currentData(), self.levels.currentIndex() + 1
+        p, cid, account = self.params, self.s.company_id, self.account_id
+
+        def read(conn: Connection) -> list[reports.SubcontoRow]:
+            return reports.subconto_balance(
+                conn, cid, account, p.date_from, p.date_to, p.layers, tag_id=tag_id, levels=levels
+            )
+
+        return read
+
+    def fetch(self, conn: Connection) -> list[reports.SubcontoRow]:
+        return self.job()(conn)
+
+    def present(self, data: list[reports.SubcontoRow]) -> None:
+        rows = data
         levels = self.levels.currentIndex() + 1
-        rows = reports.subconto_balance(
-            self.s.conn,
-            self.s.company_id,
-            self.account_id,
-            self.params.date_from,
-            self.params.date_to,
-            self.params.layers,
-            tag_id=tag_id,
-            levels=levels,
-        )
         total = SubcontoRow(name=tr("Итого"))
         for r in rows:
             if r.depth == 0:  # a contract is in its counterparty already
@@ -267,7 +271,9 @@ class SubcontoPage(AccountReportPage):
             total=lambda r: r is total,
         )
         self.footer.setText(
-            tr("Только с меткой «{name}»", name=self.tag.currentText()) if tag_id else ""
+            tr("Только с меткой «{name}»", name=self.tag.currentText())
+            if self.tag.currentData()
+            else ""
         )
 
     def drill(self, row) -> None:
@@ -290,15 +296,14 @@ class SubcontoPage(AccountReportPage):
 class AnalysisPage(AccountReportPage):
     kind, caption = "analysis", "Анализ счёта"
 
-    def build(self) -> None:
-        rows = reports.account_analysis(
-            self.s.conn,
-            self.s.company_id,
-            self.account_id,
-            self.params.date_from,
-            self.params.date_to,
-            self.params.layers,
+    def fetch(self, conn: Connection) -> list[reports.CorrRow]:
+        p = self.params
+        return reports.account_analysis(
+            conn, self.s.company_id, self.account_id, p.date_from, p.date_to, p.layers
         )
+
+    def present(self, data: list[reports.CorrRow]) -> None:
+        rows = data
         columns = [
             Column(tr("Корр. счёт"), lambda r: r.corr_code, width=1),
             Column(tr("Наименование"), lambda r: r.corr_name),

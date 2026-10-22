@@ -16,6 +16,7 @@ from modern_gl.application.bank.accounts import (
 )
 from modern_gl.application.bank.advances import (
     SETTLES,
+    AdvanceOffset,
     counterparty_balance,
     payment_lines,
 )
@@ -46,6 +47,8 @@ from modern_gl.application.bank.operations import (
     last_lines,
     latest_direction,
     load_bank_operation,
+    split_by_deposit,
+    vat_deposit_part,
 )
 from modern_gl.application.bank.places import (
     BankPlace,
@@ -91,6 +94,7 @@ __all__ = [
     "TYPE_KINDS",
     "VAT_DEPOSIT",
     "VAT_DEPOSIT_KINDS",
+    "AdvanceOffset",
     "BankAccount",
     "BankLine",
     "BankOperation",
@@ -114,6 +118,8 @@ __all__ = [
     "load_bank_operation",
     "payment_lines",
     "place_balance",
+    "split_by_deposit",
     "statement",
     "transfer_targets",
+    "vat_deposit_part",
 ]

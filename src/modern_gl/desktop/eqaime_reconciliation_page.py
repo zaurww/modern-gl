@@ -278,7 +278,9 @@ class EqaimeReconciliationDialog(QDialog):
     def _loaded(self, lists: PortalLists) -> None:
         self.load_button.setEnabled(True)
         try:
-            self.s.ledger.remember_portal(self.s.company_id, [*lists.rechecked, *lists.listed])
+            self.s.ledger.eqaime.remember_portal(
+                self.s.company_id, [*lists.rechecked, *lists.listed]
+            )
         except LedgerError as exc:
             self.status.setText(str(exc))
             return
@@ -475,9 +477,9 @@ class EqaimeReconciliationDialog(QDialog):
             return
         try:
             if self._is_marked(period):
-                self.s.ledger.unmark_reconciled(self.s.company_id, self.outgoing, *period)
+                self.s.ledger.eqaime.unmark_reconciled(self.s.company_id, self.outgoing, *period)
             else:
-                self.s.ledger.mark_reconciled(self.s.company_id, self.outgoing, *period)
+                self.s.ledger.eqaime.mark_reconciled(self.s.company_id, self.outgoing, *period)
                 self.s.notify(tr("Отмечено сверенным: {period}", period=period_text(*period)))
         except LedgerError as exc:
             self.status.setText(str(exc))

@@ -119,6 +119,11 @@ class _Chart:
             )
         }
         self.partner, self.contract = kinds.get("counterparty"), kinds.get("contract")
+        # per account, once: its type and where its partner and contract are
+        self.info = {
+            account_id: (a["account_type"], self.slot(a, self.partner), self.slot(a, self.contract))
+            for account_id, a in self.accounts.items()
+        }
 
     def slot(self, account: Row, kind: int | None) -> int | None:
         if kind is None:
@@ -128,16 +133,17 @@ class _Chart:
     def add(self, row: InvoiceRow, p: Row) -> None:
         """One posting of the invoice: settlement turnovers, partner, contract, ƏDV."""
         vat = deposit = False
-        types = {self.accounts[p[f"{side}_account_id"]]["account_type"] for side in SIDES}
+        sides = (
+            ("debit", "dt", self.info[p["debit_account_id"]]),
+            ("credit", "ct", self.info[p["credit_account_id"]]),
+        )
+        types = {info[0] for _, _, info in sides}
         # an advance set against the e-qaimə (D78: Dt 60.1 [e-qaimə] / Ct 60.2): only the
         # settlement side pays it, the advance side is no turnover of the e-qaimə
         offset = bool(types & ADVANCE_TYPES) and bool(types & {"payable", "receivable"})
-        for side, prefix in (("debit", "dt"), ("credit", "ct")):
-            account = self.accounts[p[f"{side}_account_id"]]
-            vat |= account["account_type"] in VAT_TYPES
-            deposit |= account["account_type"] == "vat_deposit"
-            partner_at = self.slot(account, self.partner)
-            kind = account["account_type"]
+        for side, prefix, (kind, partner_at, contract_at) in sides:
+            vat |= kind in VAT_TYPES
+            deposit |= kind == "vat_deposit"
             if not (kind in SETTLEMENT_TYPES or (kind is None and partner_at is not None)):
                 continue
             if offset and kind in ADVANCE_TYPES:
@@ -149,7 +155,6 @@ class _Chart:
             who = p[f"{prefix}_sc{partner_at}"] if partner_at else None
             if who is not None and who not in row.counterparties:
                 row.counterparties.append(who)
-            contract_at = self.slot(account, self.contract)
             if contract_at and row.contract_id is None:
                 row.contract_id = p[f"{prefix}_sc{contract_at}"]
         if vat:

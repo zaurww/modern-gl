@@ -70,10 +70,12 @@ def _moves_by_account(conn: Connection, params: dict) -> dict[int, list[Row]]:
         moves AS (
             SELECT docs.doc_date, p.debit_account_id AS account_id, p.dt_sc1 AS sc,
                    p.amount AS dt, 0 AS ct
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
             UNION ALL
             SELECT docs.doc_date, p.credit_account_id, p.ct_sc1, 0, p.amount
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
         )
         SELECT account_id, sc,
                SUM(CASE WHEN doc_date <  :date_from THEN dt - ct ELSE 0 END) AS opening,
@@ -175,14 +177,16 @@ def _currency_turnovers(conn: Connection, params: dict) -> dict[int, list[Curren
         moves AS (
             SELECT docs.doc_date, p.debit_account_id AS account_id, p.currency_id,
                    p.currency_amount AS dt, 0 AS ct
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
             JOIN accounts a ON a.id = p.debit_account_id
-            WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND a.currency <> 0 AND p.currency_id IS NOT NULL
             UNION ALL
             SELECT docs.doc_date, p.credit_account_id, p.currency_id, 0, p.currency_amount
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
             JOIN accounts a ON a.id = p.credit_account_id
-            WHERE a.currency <> 0 AND p.currency_id IS NOT NULL
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND a.currency <> 0 AND p.currency_id IS NOT NULL
         )
         SELECT m.account_id, m.currency_id, c.code,
                SUM(CASE WHEN doc_date <  :date_from THEN dt - ct ELSE 0 END) AS opening,
@@ -255,12 +259,14 @@ def subconto_balance(
         WITH {_DOCS_CTE},
         moves AS (
             SELECT docs.doc_date, {_sides("dt", positions)}, p.amount AS dt, 0 AS ct
-            FROM postings p JOIN docs ON docs.id = p.document_id
-            WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.debit_account_id IN (SELECT value FROM json_each(:accounts))
             UNION ALL
             SELECT docs.doc_date, {_sides("ct", positions)}, 0, p.amount
-            FROM postings p JOIN docs ON docs.id = p.document_id
-            WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.credit_account_id IN (SELECT value FROM json_each(:accounts))
         )
         SELECT {keys},
                SUM(CASE WHEN m.doc_date <  :date_from THEN m.dt - m.ct ELSE 0 END) AS opening,
@@ -348,15 +354,17 @@ def _subconto_currency(
         WITH {_DOCS_CTE},
         moves AS (
             SELECT {_sides("dt", positions)}, p.currency_id, p.currency_amount AS net
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
             JOIN accounts own ON own.id = p.debit_account_id
-            WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.debit_account_id IN (SELECT value FROM json_each(:accounts))
               AND own.currency <> 0 AND p.currency_id IS NOT NULL
             UNION ALL
             SELECT {_sides("ct", positions)}, p.currency_id, -p.currency_amount
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
             JOIN accounts own ON own.id = p.credit_account_id
-            WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.credit_account_id IN (SELECT value FROM json_each(:accounts))
               AND own.currency <> 0 AND p.currency_id IS NOT NULL
         )
         SELECT {keys}, c.code, SUM(m.net) AS net
@@ -423,9 +431,10 @@ def _card_rows(conn: Connection, params: dict, subconto: Sequence[int | None]) -
                    CASE WHEN own.currency <> 0 THEN p.currency_id END AS currency_id,
                    COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0) AS cur_dt,
                    0 AS cur_ct, p.invoice, p.invoice_kind
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
             JOIN accounts own ON own.id = p.debit_account_id
-            WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.debit_account_id IN (SELECT value FROM json_each(:accounts))
               {_same_subconto("dt", subconto)}
             UNION ALL
             SELECT docs.doc_date, docs.number, docs.id, docs.memo,
@@ -433,9 +442,10 @@ def _card_rows(conn: Connection, params: dict, subconto: Sequence[int | None]) -
                    CASE WHEN own.currency <> 0 THEN p.currency_id END,
                    0, COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0),
                    p.invoice, p.invoice_kind
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
             JOIN accounts own ON own.id = p.credit_account_id
-            WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.credit_account_id IN (SELECT value FROM json_each(:accounts))
               {_same_subconto("ct", subconto)}
         ),
         running AS (
@@ -497,13 +507,15 @@ def account_analysis(
         WITH {_DOCS_CTE},
         moves AS (
             SELECT p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct
-            FROM postings p JOIN docs ON docs.id = p.document_id
-            WHERE docs.doc_date >= :date_from
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND docs.doc_date >= :date_from
               AND p.debit_account_id IN (SELECT value FROM json_each(:accounts))
             UNION ALL
             SELECT p.debit_account_id, 0, p.amount
-            FROM postings p JOIN docs ON docs.id = p.document_id
-            WHERE docs.doc_date >= :date_from
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND docs.doc_date >= :date_from
               AND p.credit_account_id IN (SELECT value FROM json_each(:accounts))
         )
         SELECT a.id, a.code, a.name, SUM(m.dt) AS dt, SUM(m.ct) AS ct

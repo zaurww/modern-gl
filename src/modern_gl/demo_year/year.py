@@ -267,7 +267,7 @@ class Year(Imports, Money):
             "Malların topdan satışı (sifariş)",
             vat_rate=STANDARD_VAT_RATE,
         )
-        self.ledger.save_bank_operation(
+        self.ledger.bank.save_bank_operation(
             self.cid,
             BankOperationInput(
                 d.isoformat(),
@@ -298,10 +298,10 @@ class Year(Imports, Money):
         x = shown[purchase]
         shown[purchase] = replace(x, total=x.total + 1_180, vat=x.vat + 180)
         shown[sale] = replace(shown[sale], status="canceled")
-        self.ledger.remember_portal(self.cid, shown, f"{YEAR}-10-05T09:30:00")
+        self.ledger.eqaime.remember_portal(self.cid, shown, f"{YEAR}-10-05T09:30:00")
         for month in range(1, 9):
             for outgoing in (False, True):
-                self.ledger.mark_reconciled(
+                self.ledger.eqaime.mark_reconciled(
                     self.cid,
                     outgoing,
                     date(YEAR, month, 1),

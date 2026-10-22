@@ -37,6 +37,14 @@ def connect(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def connect_reader(path: str | Path) -> sqlite3.Connection:
+    """A second connection to an open company's file, for reading in a worker thread
+    (desktop.background): read-only, no migration; WAL lets it read beside the writer."""
+    conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def open_snapshot(path: str | Path) -> sqlite3.Connection:
     """A company file for viewing only (D80): a copy in memory, brought up to the current
     schema there, that refuses every write. The file is only read — no lock is kept, no

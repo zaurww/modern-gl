@@ -6,6 +6,7 @@ settlement account itself without an e-qaimə."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 
 from modern_gl.application.bank.operations import IN, OUT, BankLine, allocate
 from modern_gl.application.common import pad_subconto
@@ -80,3 +81,14 @@ def payment_lines(
     if left - cover:
         lines.append(BankLine(advance_account, left - cover, tuple(pad_subconto(advance_subconto))))
     return lines
+
+
+@dataclass(frozen=True)
+class AdvanceOffset:
+    """One side of «Зачесть авансы» (D78): the advance on its account against the
+    unpaid e-qaimə on the settlement account, oldest first."""
+
+    settlement: int  # 60.1 / 62.1
+    advance: int  # 60.2 / 62.2
+    advance_amount: int
+    parts: tuple[tuple[str, int], ...]  # (e-qaimə, amount)

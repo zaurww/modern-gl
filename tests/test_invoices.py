@@ -387,7 +387,7 @@ def test_a_payment_is_offered_the_e_qaime_of_drafts_and_of_the_portal(firm):
         invoice="MT3",
     )
     tin = "1234567890"
-    ledger.remember_portal(
+    ledger.eqaime.remember_portal(
         cid,
         [
             PortalInvoice("MT1", False, "2026-03-01", "approved", tin, total=118_000),
@@ -451,7 +451,7 @@ def test_the_vat_left_to_pay_from_the_deposit_account(firm):
         cid, "2026-03-05", [PostingInput(acc["60"], acc["51"], "50", alfa, bank, invoice="MT1")]
     )
     assert left("2026-03-05") == [("MT1", 3_000, 3_000)]
-    ledger.remember_portal(
+    ledger.eqaime.remember_portal(
         cid,
         [
             PortalInvoice(

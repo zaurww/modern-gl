@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from modern_gl.application.inventory import (
     STANDARD_VAT_RATE,
 )
+from modern_gl.application.inventory import VAT_DOCUMENTS as INVENTORY_VAT_DOCUMENTS
 from modern_gl.i18n import fold
 from modern_gl.i18n_az import AZ
 
@@ -55,7 +56,7 @@ SOFT_KEYS = {WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE} | SUBCONTO_KEYS
 NUMBER_KEYS = {QUANTITY, PRICE, AMOUNT, CURRENCY_AMOUNT, VAT}
 # the VAT of a receipt or a sale: rate in hundredths of a percent, None = without VAT
 VAT_RATES = [(STANDARD_VAT_RATE, "18%"), (None, "Без НДС")]
-VAT_DOCUMENTS = {"receipt", "sale"}
+VAT_DOCUMENTS = INVENTORY_VAT_DOCUMENTS  # kept here for the pages
 
 HEADERS = {
     ITEM: "Товар",
