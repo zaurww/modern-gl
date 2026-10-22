@@ -175,6 +175,13 @@ def find_documents(
     return found[:limit]
 
 
+def posting_count(conn: Connection, company_id: int) -> int:
+    """How large the company is: its postings (the window reads large ones in the background)."""
+    return conn.execute(
+        "SELECT COUNT(*) FROM postings WHERE company_id = ?", (company_id,)
+    ).fetchone()[0]
+
+
 def journal_drafts(conn: Connection, company_id: int, day: date | str) -> list[int]:
     """Drafts of the journal dated up to the day, oldest first — not those a module made
     (a bank operation, a purchase): they are posted in their own form."""

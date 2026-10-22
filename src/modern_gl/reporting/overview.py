@@ -91,10 +91,12 @@ def money(conn: Connection, company_id: int, day: str) -> list[Money]:
         moves AS (
             SELECT p.debit_account_id AS account_id, p.dt_sc1 AS sc, p.amount AS amount,
                    p.currency_id, p.currency_amount AS currency_amount
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
             UNION ALL
             SELECT p.credit_account_id, p.ct_sc1, -p.amount, p.currency_id, -p.currency_amount
-            FROM postings p JOIN docs ON docs.id = p.document_id
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
         )
         SELECT a.id AS account_id, a.code, a.name AS account_name, m.sc, v.name AS value_name,
                SUM(m.amount) AS balance, MIN(c.code) AS currency, MAX(c.code) AS other,

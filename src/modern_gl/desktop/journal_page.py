@@ -36,6 +36,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 
 COLUMNS = ["Дата", "№", "Содержание", "Книга", "Автор", "Сумма", ""]
 DATE, NUMBER, MEMO, BOOK, AUTHOR, TOTAL, STATUS = range(7)
@@ -216,9 +217,24 @@ class JournalPage(QWidget):
         return False
 
     def refresh(self, select_id: int | None = None) -> None:
+        """The documents read (in the background for a large company) and shown."""
         current = select_id or self._current_id()
-        conn, cid = self.s.conn, self.s.company_id
-        self.model.set_docs(list_documents(conn, cid), journal_authors(conn, cid))
+        cid = self.s.company_id
+
+        def read(conn: Connection) -> tuple[list[DocumentSummary], dict[int, str]]:
+            return list_documents(conn, cid), journal_authors(conn, cid)
+
+        self.s.read(
+            self,
+            read,
+            lambda found: self._show(found[0], found[1], current),
+            lambda e: self.s.notify(str(e)),
+        )
+
+    def _show(
+        self, docs: list[DocumentSummary], authors: dict[int, str], current: int | None
+    ) -> None:
+        self.model.set_docs(docs, authors)
         self.table.setColumnHidden(AUTHOR, not self.model.several_authors())
         self.stack.setCurrentWidget(self.table if self.model.docs else self.empty)
         row = next((i for i, d in enumerate(self.model.docs) if d.id == current), None)

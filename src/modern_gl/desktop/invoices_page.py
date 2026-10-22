@@ -9,6 +9,8 @@ an invoice by its number, the counterparty or its VÖEN; Enter opens its documen
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtWidgets import QCheckBox, QLineEdit
 
 from modern_gl.desktop.reports_page import Column, MenuAction, ReportPage, ReportParams
@@ -18,6 +20,7 @@ from modern_gl.domain.dates import ru_date
 from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
+from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.invoices import InvoiceRow, invoice_report
 
 
@@ -52,15 +55,15 @@ class InvoicesPage(ReportPage):
     def title(self) -> str:
         return tr("E-qaimələr")
 
-    def build(self) -> None:
-        rows = invoice_report(
-            self.s.conn,
-            self.s.company_id,
-            self.params.date_from,
-            self.params.date_to,
-            self.params.layers,
-            self.open_only.isChecked(),
-        )
+    def job(self) -> Callable[[Connection], list[InvoiceRow]]:
+        p, cid, open_only = self.params, self.s.company_id, self.open_only.isChecked()
+        return lambda conn: invoice_report(conn, cid, p.date_from, p.date_to, p.layers, open_only)
+
+    def fetch(self, conn: Connection) -> list[InvoiceRow]:
+        return self.job()(conn)
+
+    def present(self, data: list[InvoiceRow]) -> None:
+        rows = data
         needle = fold(self.search.text().strip())
         if needle:
             rows = [r for r in rows if needle in fold(self._searched(r))]

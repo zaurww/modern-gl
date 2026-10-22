@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
 
 from modern_gl.desktop.home_page.rows import Line, Section
-from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import PageHeader, button, hide_when_viewing, money, ru_date
 from modern_gl.domain.currency import format_rate
@@ -15,8 +16,27 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.overview import POST_DRAFTS, Attention, DayRate, attention, rates
+from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting.overview import (
+    POST_DRAFTS,
+    Attention,
+    DayRate,
+    Money,
+    attention,
+    rates,
+)
 from modern_gl.reporting.overview import money as money_rows
+
+
+@dataclass(frozen=True)
+class Overview:
+    """What «Bu gün» read for a day; `money` None — a warehouse-only company (D90)."""
+
+    day: str
+    attention: list[Attention]
+    money: list[Money] | None
+    rates: list[DayRate]
+
 
 COLUMN = 640  # one narrow column: read top to bottom, not across a wide screen
 
@@ -24,8 +44,10 @@ COLUMN = 640  # one narrow column: read top to bottom, not across a wide screen
 class HomePage(QWidget):
     open_place = Signal(object)  # a sidebar place: («journal»,), («bank»,)…
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, places: set) -> None:
+        """`places` — the sidebar's places of this company: a row opens only one of them."""
         super().__init__()
+        self.places = places
         self.setObjectName("page")
         self.s = session
         outer = QVBoxLayout(self)
@@ -61,25 +83,38 @@ class HomePage(QWidget):
         return tr("Сегодня")
 
     def refresh(self) -> None:
+        """The three lists read (in the background for a large company) and shown."""
+        day = iso_date(self.s.working_date)
+        self.header.subtitle.setText(f"{ru_date(day)}   ·   {self.s.company_name}")
+        cid, books = self.s.company_id, not self.s.stock_only  # no books: no money (D90)
+
+        def read(conn: Connection) -> Overview:
+            return Overview(
+                day,
+                attention(conn, cid, day),
+                money_rows(conn, cid, day) if books else None,
+                rates(conn, cid, day),
+            )
+
+        self.s.read(self, read, self._present, lambda e: self.s.notify(str(e)))
+
+    def _present(self, read: Overview) -> None:
         for section in self.sections:  # hidden at once: deleteLater waits for the loop
             self.body.removeWidget(section)
             section.hide()
             section.deleteLater()
-        day = iso_date(self.s.working_date)
-        self.header.subtitle.setText(f"{ru_date(day)}   ·   {self.s.company_name}")
-        self.sections = [self._attention(day)]
-        if not self.s.stock_only:  # no books: no cash or bank accounts to show (D90)
-            self.sections.append(self._money(day))
-        self.sections.append(self._rates(day))
+        self.sections = [self._attention(read.attention)]
+        if read.money is not None:
+            self.sections.append(self._money(read.money))
+        self.sections.append(self._rates(read.rates))
         for section in self.sections:
             self.body.addWidget(section)
 
     # ---- the three lists -------------------------------------------------------------
 
-    def _attention(self, day: str) -> Section:
+    def _attention(self, found: list[Attention]) -> Section:
         section = Section(tr("Требует внимания"))
-        places = shown_places(self.s.stock_only)
-        rows = [r for r in attention(self.s.conn, self.s.company_id, day) if r.place in places]
+        rows = [r for r in found if r.place in self.places]
         for row in rows:
             figure = money(row.amount) if row.amount else str(row.count)
             note = str(row.count) if row.amount else ""
@@ -96,9 +131,8 @@ class HomePage(QWidget):
     def _opener(self, row: Attention):
         return lambda: self.open_place.emit(row.place)
 
-    def _money(self, day: str) -> Section:
+    def _money(self, rows: list[Money]) -> Section:
         section = Section(tr("Деньги"))
-        rows = money_rows(self.s.conn, self.s.company_id, day)
         for m in rows:
             figure = format_minor(m.balance)
             if m.currency_balance is not None:
@@ -109,9 +143,8 @@ class HomePage(QWidget):
             section.empty(tr("Нет движения денег"))
         return section
 
-    def _rates(self, day: str) -> Section:
+    def _rates(self, shown: list[DayRate]) -> Section:
         section = Section(tr("Курсы"))
-        shown = rates(self.s.conn, self.s.company_id, day)
         for r in shown:
             section.add(self._rate_line(r))
         if not shown:

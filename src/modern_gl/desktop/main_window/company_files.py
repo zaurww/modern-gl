@@ -32,8 +32,9 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import company_name
+from modern_gl.application.queries import company_name, posting_count
 from modern_gl.desktop import theme
+from modern_gl.desktop.background import LARGE
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
@@ -221,12 +222,16 @@ class CompanyFiles(QMainWindow):
             notify_undo=self.notify,
         )
         self.session.read_only = read_only
+        self.session.path = path
+        self.session.large = posting_count(conn, company_id) >= LARGE
         if old_date:
             self.session.working_date = old_date
         self._show_company(name)
 
     def _close_company(self) -> None:
         """Drop all pages of the current company and close its file."""
+        if self.session is not None:
+            self.session.background.wait()  # a worker's read of this file ends first
         self._drop_pages()
         if self.conn is not None:
             try:

@@ -25,6 +25,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.accounts import normal_side
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import OsvRow
 
@@ -104,14 +105,12 @@ class OsvPage(ReportPage):
                 result.extend(block)
         return result
 
-    def build(self) -> None:
-        osv = reports.trial_balance(
-            self.s.conn,
-            self.s.company_id,
-            self.params.date_from,
-            self.params.date_to,
-            self.params.layers,
-        )
+    def fetch(self, conn: Connection) -> reports.Osv:
+        p = self.params
+        return reports.trial_balance(conn, self.s.company_id, p.date_from, p.date_to, p.layers)
+
+    def present(self, data: reports.Osv) -> None:
+        osv = data
         total = OsvRow(name=tr("Итого"), depth=-1)
         total.add(osv.total)
         columns = [
