@@ -24,12 +24,9 @@ OVER_LIMIT = {
     "application/eqaime_import.py": 641,
     "application/inventory/drafts.py::DraftCommands._insert_line": 86,
     "application/inventory/movements.py::MovementCommands._apply_line": 96,
-    "application/ledger/validation.py::PostingChecks._validate_for_posting": 92,
     "application/quick_entry.py": 602,
     "demo_data.py::create_demo_company": 124,
     "desktop/theme.py::stylesheet": 186,
-    "reporting/reports.py::trial_balance": 103,
-    "reporting/reports.py::account_card": 83,
 }
 
 

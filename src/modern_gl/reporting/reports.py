@@ -227,6 +227,19 @@ def trial_balance(
     Group rows sum their children's columns.
     """
     params = _params(conn, company_id, date_from, date_to, layers)
+    accounts = _accounts(conn, company_id)
+    values, flags, by_value = _account_turnovers(accounts, _moves_by_account(conn, params))
+    rows, total = _osv_rows(accounts, values, flags)
+    return Osv(
+        rows=rows,
+        total=total,
+        subconto=_name_subconto(conn, company_id, by_value),
+        currency=_currency_turnovers(conn, params),
+    )
+
+
+def _moves_by_account(conn: sqlite3.Connection, params: dict) -> dict[int, list[sqlite3.Row]]:
+    """Opening balance and turnovers of each account per its first subconto value."""
     raw = conn.execute(
         f"""
         WITH {_DOCS_CTE},
@@ -246,12 +259,21 @@ def trial_balance(
         """,
         params,
     ).fetchall()
-
-    accounts = _accounts(conn, company_id)
     per_account: dict[int, list[sqlite3.Row]] = defaultdict(list)
     for r in raw:
         per_account[r["account_id"]].append(r)
+    return per_account
 
+
+def _account_turnovers(
+    accounts: dict[int, sqlite3.Row], per_account: dict[int, list[sqlite3.Row]]
+) -> tuple[
+    dict[int, Turnovers],
+    dict[int, tuple[bool, bool]],
+    dict[int, list[tuple[int | None, Turnovers]]],
+]:
+    """Each account's turnovers (expanded per first subconto for a two-sided account),
+    whether its balance is on the wrong side, and its parts by first subconto."""
     values: dict[int, Turnovers] = {}
     flags: dict[int, tuple[bool, bool]] = {}
     by_value: dict[int, list[tuple[int | None, Turnovers]]] = {}
@@ -278,7 +300,16 @@ def trial_balance(
                 (part["sc"], Turnovers.from_net(part["opening"], part["dt"], part["ct"]))
                 for part in parts
             ]
+    return values, flags, by_value
 
+
+def _osv_rows(
+    accounts: dict[int, sqlite3.Row],
+    values: dict[int, Turnovers],
+    flags: dict[int, tuple[bool, bool]],
+) -> tuple[list[OsvRow], Turnovers]:
+    """The rows in the order of the chart, groups summing their children; silent
+    accounts (and their silent subtrees) are left out."""
     children: dict[int | None, list[int]] = defaultdict(list)
     for a in accounts.values():  # already ordered by code
         children[a["parent_id"]].append(a["id"])
@@ -309,12 +340,7 @@ def trial_balance(
 
     for top in children[None]:
         total.add(visit(top, 0))
-    return Osv(
-        rows=rows,
-        total=total,
-        subconto=_name_subconto(conn, company_id, by_value),
-        currency=_currency_turnovers(conn, params),
-    )
+    return rows, total
 
 
 def _currency_turnovers(conn: sqlite3.Connection, params: dict) -> dict[int, list[CurrencyRow]]:
@@ -484,7 +510,29 @@ def account_card(
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account)["id"]))
-    raw = conn.execute(
+    raw = _card_rows(conn, params)
+    opening = 0
+    card = AccountCard(opening=0)
+    for r in raw:
+        if r["currency"]:
+            net = r["cur_dt"] - r["cur_ct"]
+            if r["doc_date"] < params["date_from"]:
+                card.currency_opening[r["currency"]] = (
+                    card.currency_opening.get(r["currency"], 0) + net
+                )
+            card.currency_closing[r["currency"]] = card.currency_closing.get(r["currency"], 0) + net
+        if r["doc_date"] < params["date_from"]:
+            opening = r["balance"]
+            continue
+        card.lines.append(_card_line(r))
+    card.opening = opening
+    return card
+
+
+def _card_rows(conn: sqlite3.Connection, params: dict) -> list[sqlite3.Row]:
+    """Each posting line of the accounts, either side, with its corr account and the
+    running balance; currency amounts only for currency accounts."""
+    return conn.execute(
         f"""
         WITH {_DOCS_CTE},
         lines AS (
@@ -519,39 +567,25 @@ def account_card(
         """,
         params,
     ).fetchall()
-    opening = 0
-    card = AccountCard(opening=0)
-    for r in raw:
-        if r["currency"]:
-            net = r["cur_dt"] - r["cur_ct"]
-            if r["doc_date"] < params["date_from"]:
-                card.currency_opening[r["currency"]] = (
-                    card.currency_opening.get(r["currency"], 0) + net
-                )
-            card.currency_closing[r["currency"]] = card.currency_closing.get(r["currency"], 0) + net
-        if r["doc_date"] < params["date_from"]:
-            opening = r["balance"]
-            continue
-        card.lines.append(
-            CardLine(
-                doc_date=r["doc_date"],
-                number=r["number"],
-                document_id=r["document_id"],
-                memo=r["memo"],
-                corr_code=r["corr_code"],
-                corr_id=r["corr_id"],
-                debit=r["dt"],
-                credit=r["ct"],
-                balance=r["balance"],
-                currency=r["currency"] or "",
-                currency_debit=r["cur_dt"],
-                currency_credit=r["cur_ct"],
-                invoice=r["invoice"] or "",
-                invoice_kind=r["invoice_kind"] or "",
-            )
-        )
-    card.opening = opening
-    return card
+
+
+def _card_line(r: sqlite3.Row) -> CardLine:
+    return CardLine(
+        doc_date=r["doc_date"],
+        number=r["number"],
+        document_id=r["document_id"],
+        memo=r["memo"],
+        corr_code=r["corr_code"],
+        corr_id=r["corr_id"],
+        debit=r["dt"],
+        credit=r["ct"],
+        balance=r["balance"],
+        currency=r["currency"] or "",
+        currency_debit=r["cur_dt"],
+        currency_credit=r["cur_ct"],
+        invoice=r["invoice"] or "",
+        invoice_kind=r["invoice_kind"] or "",
+    )
 
 
 def account_analysis(

@@ -19,6 +19,34 @@ from modern_gl.i18n import tr
 
 class PostingChecks(SubcontoCommands):
     def _validate_for_posting(self, company_id: int, doc: sqlite3.Row) -> None:
+        self._require_open_period(company_id, doc)
+        postings = self.conn.execute(
+            "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
+        ).fetchall()
+        if not postings:
+            raise ValidationError(tr("документ №{n} без проводок", n=doc["number"]))
+        accounts, values = self._rows_of(company_id, postings)
+        self._require_not_opening_account(company_id, doc, accounts)
+        is_reversal = doc["reversal_of"] is not None
+        currencies = {
+            r["id"]: r["code"]
+            for r in self.conn.execute(
+                "SELECT id, code FROM currencies WHERE company_id = ?", (company_id,)
+            )
+        }
+        # a contract may stay empty: many suppliers have none, only the e-qaimə
+        optional = {
+            r["id"]
+            for r in self.conn.execute(
+                "SELECT id FROM subconto_kinds WHERE company_id = ? AND owner_kind_id IS NOT NULL",
+                (company_id,),
+            )
+        }
+        for p in postings:
+            self._validate_currency(p, accounts, values, currencies)
+            self._validate_line(p, accounts, values, optional, is_reversal)
+
+    def _require_open_period(self, company_id: int, doc: sqlite3.Row) -> None:
         closed = self._company(company_id)["closed_through"]
         if closed is not None and doc["doc_date"] <= closed:
             raise PeriodClosedError(
@@ -29,12 +57,11 @@ class PostingChecks(SubcontoCommands):
                     closed=closed,
                 )
             )
-        postings = self.conn.execute(
-            "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
-        ).fetchall()
-        if not postings:
-            raise ValidationError(tr("документ №{n} без проводок", n=doc["number"]))
 
+    def _rows_of(
+        self, company_id: int, postings: list[sqlite3.Row]
+    ) -> tuple[dict[int, sqlite3.Row], dict[int, sqlite3.Row]]:
+        """The accounts and subconto values of the postings (with the owners of contracts)."""
         accounts = self._rows_by_id(
             "accounts",
             company_id,
@@ -53,7 +80,11 @@ class PostingChecks(SubcontoCommands):
         )
         owners = {v["owner_id"] for v in values.values()} - {None} - set(values)
         values |= self._rows_by_id("subconto_values", company_id, owners)
+        return accounts, values
 
+    def _require_not_opening_account(
+        self, company_id: int, doc: sqlite3.Row, accounts: dict[int, sqlite3.Row]
+    ) -> None:
         control = self.conn.execute(
             "SELECT account_id FROM account_roles WHERE company_id = ? AND role = ?",
             (company_id, OPENING_BALANCE),
@@ -67,49 +98,37 @@ class PostingChecks(SubcontoCommands):
                 tr("счёт ввода начальных остатков проводится только в разделе «Начальные остатки»")
             )
 
-        is_reversal = doc["reversal_of"] is not None
-        currencies = {
-            r["id"]: r["code"]
-            for r in self.conn.execute(
-                "SELECT id, code FROM currencies WHERE company_id = ?", (company_id,)
+    def _validate_line(
+        self,
+        p: sqlite3.Row,
+        accounts: dict[int, sqlite3.Row],
+        values: dict[int, sqlite3.Row],
+        optional: set[int],
+        is_reversal: bool,
+    ) -> None:
+        """The sign of the amount, and each side: a leaf account, active, its subconto."""
+        line = p["line_no"]
+        if is_reversal and p["amount"] >= 0:
+            raise ValidationError(
+                tr("строка {line}: сумма сторно должна быть отрицательной", line=line)
             )
-        }
-        # a contract may stay empty: many suppliers have none, only the e-qaimə
-        optional = {
-            r["id"]
-            for r in self.conn.execute(
-                "SELECT id FROM subconto_kinds WHERE company_id = ? AND owner_kind_id IS NOT NULL",
-                (company_id,),
+        if not is_reversal and p["amount"] <= 0:
+            raise ValidationError(tr("строка {line}: сумма должна быть положительной", line=line))
+        for side, prefix in SIDES:
+            acc = accounts[p[f"{side}_account_id"]]
+            label = tr(
+                "строка {line}, {side} {code}",
+                line=line,
+                side=tr("Дт" if side == "debit" else "Кт"),
+                code=account_label(acc),
             )
-        }
-        for p in postings:
-            line = p["line_no"]
-            self._validate_currency(p, accounts, values, currencies)
-            if is_reversal and p["amount"] >= 0:
-                raise ValidationError(
-                    tr("строка {line}: сумма сторно должна быть отрицательной", line=line)
-                )
-            if not is_reversal and p["amount"] <= 0:
-                raise ValidationError(
-                    tr("строка {line}: сумма должна быть положительной", line=line)
-                )
-            for side, prefix in SIDES:
-                acc = accounts[p[f"{side}_account_id"]]
-                label = tr(
-                    "строка {line}, {side} {code}",
-                    line=line,
-                    side=tr("Дт" if side == "debit" else "Кт"),
-                    code=account_label(acc),
-                )
-                if acc["is_group"]:
-                    raise ValidationError(
-                        tr("{label}: нельзя проводить на группу счетов", label=label)
-                    )
-                if not acc["active"] and not is_reversal:
-                    raise ValidationError(tr("{label}: счёт не активен", label=label))
-                self._validate_subconto(acc, p, prefix, label, values, optional)
-                if not is_reversal:
-                    self._validate_owners(p, prefix, label, values)
+            if acc["is_group"]:
+                raise ValidationError(tr("{label}: нельзя проводить на группу счетов", label=label))
+            if not acc["active"] and not is_reversal:
+                raise ValidationError(tr("{label}: счёт не активен", label=label))
+            self._validate_subconto(acc, p, prefix, label, values, optional)
+            if not is_reversal:
+                self._validate_owners(p, prefix, label, values)
 
     def _rows_by_id(self, table: str, company_id: int, ids: set[int]) -> dict[int, sqlite3.Row]:
         """Rows of a company table (accounts, subconto_values) with these ids, by id."""
