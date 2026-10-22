@@ -1,4 +1,4 @@
-# Состояние проекта — 2026-10-22 (двадцать вторая сессия)
+# Состояние проекта — 2026-10-22 (двадцать третья сессия)
 
 Читать в начале новой сессии вместе с `CLAUDE.md` и `docs/DECISIONS.md`.
 
@@ -16,12 +16,13 @@ e-qaimə) — по желанию; у пользователя есть отде
 ## Как запустить
 - Программа: `uv run modern-gl` (компании — файлы `*.gl` в «Документы\Modern GL»); `uv run modern-gl --demo` — с демо-компанией.
 - Если программа открыта, `uv run` не может обновить exe → закрыть программу или `uv run --no-sync …`.
-- Тесты: `uv run pytest -q` (657 тестов, ~1,5–2,5 мин; в Linux-контейнере нужны `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3` и `QT_QPA_PLATFORM=offscreen`, как в CI). Линтер: `uv run ruff check . && uv run ruff format --check .`. Типы: `uv run pyright` (0 ошибок).
+- Тесты: `uv run pytest -q` (658 тестов, ~1,5 мин; в Linux-контейнере нужны `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3` и `QT_QPA_PLATFORM=offscreen`, как в CI). Линтер: `uv run ruff check . && uv run ruff format --check .`. Типы: `uv run pyright` (0 ошибок).
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка> az` — смотреть после любых изменений UI.
 - У пользователя остался старый `D:\GL AZE\demo.db` (несколько тестовых компаний в одном файле) — подключается через «Fayldan əlavə et…», программа разложит его по файлам.
 
 ## Что готово
 - **Статус без «чекбокса» и проведение черновиков разом** (сессия 22, D73): в списках «Alış»/«Satış» и в шапке документа проведён — синяя галочка, черновик — янтарная точка (пустой круг путали с чекбоксом). Кнопка «Провести черновики: N» (выделенные или все после поиска, напр. «socar»): строке покупки без счёта — счёт последней покупки этого поставщика; что не провелось — остаётся черновиком с причиной. Код — `application/trade_batch.py`; тесты — `tests/test_trade_batch.py`. **Проверить вживую.** Дальше: для продаж — подставлять товар/группу продаж по истории так же.
+- **Рефакторинг: страницы и окна разделены** (сессия 23, D70, ветка `refactor/split-pages`): `document_page.py` (~820) → пакет (`form`, `rates`, `templates`, `clipboard`, `page`); `conversion_page.py` (~990) → пакет (`common`, `fee_row`, `side_panel`, `accounts_dialog`, `form`, `page`); `directories_page.py` (~900) → пакет (`tags`, `values`, `page`); окно e-qaimə → `eqaime_portal_loader`, `eqaime_import_form`, `eqaime_import_page`; `LandedCostPage` → `landed_cost_page/form`; модель начальных остатков → `opening_postings.py`; таблица отчётов → `reports_page/table.py`; `reporting/inventory.py` → пакет (`choices`, `stock`, `documents`, `costs`). Длинные `__init__` (сверка с порталом, начальные остатки, окно счёта, шаблон, склад, валюты, отчёты) делятся на методы `_build_…`. Методы перенесены как есть (сверено по AST), скриншоты совпадают (кроме временного сообщения строки состояния). **Долг №3 из `ENGINEERING.md` погашен:** окно e-qaimə брало название товара своим SQL без `company_id` — теперь `reporting.inventory.item_name` с фильтром по компании (тест), `test_architecture` больше не разрешает SQL ни в одном виджете. Пути подмены в тестах: `document_page.page.ask_date`, `document_page.templates.QInputDialog`, `directories_page.page.QInputDialog`. `OVER_LIMIT`: 29 → 16 мест.
 - **Рефакторинг: большие классы разделены** (сессия 22, D70, ветка `refactor/split-classes`): `BankOperationPage` (было ~1310 строк, `__init__` ~320) → пакет `bank_operation_page/`: `form` (поля строятся методами), группы `bank` (поле банка), `counterparty` (вид и контрагент), `lines` (строки платежа), `folded` (одна строка и депозит ƏDV), `line_row`, `common`, страница `page`. `MainWindow` (~870) → пакет `main_window/`: `CompanyFiles` (файл компании: создать, открыть, сохранить как, копия, восстановление, удаление) ← `OpenPages` (стек страниц) ← `MainWindow` (какие страницы есть), `sidebar`. `InventoryDocumentPage` (~890) → `form`, `header`, `clipboard`, `new_values`, `page`; `InventoryLinesModel` (~820) → `lines_base`, `lines_clipboard`, `lines_inputs`, `lines_model`; `PostingsModel` (~620) → `postings/base`, `clipboard`, `model`. Методы перенесены как есть (проверено сравнением AST), сигналы подключаются в одном `_connect()`; поведение интерфейса не менялось — скриншоты побайтно совпадают (кроме даты и временного сообщения строки состояния). Дубль поиска в списке объединён: `cell_editing.resolve_choice` (в «Доп. расходах» теперь тоже ищет по коду, предпочитает единственное начало и перечисляет совпадения), тест `tests/test_resolve_choice.py`. В тестах путь подмены диалогов — `main_window.company_files`. `OVER_LIMIT`: 49 → 37 мест.
 - **Инженерные правила** (сессия 21, D71–D72): `docs/ENGINEERING.md` — модульность и масштабируемость, архитектура данных, структура базы, разработка; чек-лист новой функции, долг по приоритету (убрать из `ledger/documents.py` знание о таблицах модулей до модуля ОС; модули — не наследованием в `Ledger`; SQL в `eqaime_import_page.py`; 6 ссылок без `company_id`; индексы ссылок; замеры и фон). Стражи — `tests/test_architecture.py` (ядро не читает таблицы модулей и не импортирует их код, слои) и `tests/test_database.py` (миграции подряд и неизменны, `company_id`, составные FK, типы, индексы ссылок, целостность демо-компании). Кода учёта не меняли. **Дальше:** по решению пользователя — пункт 1 долга (до модуля ОС).
 - **Форма банковской операции — путь курсора только по тому, что меняется** (сессия 19, D68, заменила D66 сессии 20): шапка одной строкой (Məxaric/Mədaxil · «Bank» одним полем «Kapital Bank · 51 · AZN» с неиспользованными парами «счёт × банк» и добавлением банка прямо в поле · дата · вид · остаток), путь Kontragent → E-qaimə → Məbləğ (+ «ƏDV depozitdən», D69) → «Keçir»; одна строка свёрнута, F6/Ins/F9/«Açmaq» разворачивают. На странице «Bank» две одинаковые кнопки «+ Mədaxil» / «+ Məxaric», конвертация и настройки — в «⋯». Тесты — `tests/test_bank_ui.py`.
@@ -631,16 +632,17 @@ e-qaimə) — по желанию; у пользователя есть отде
    периода на обезличенном реальном примере. До успешной сверки и проверки
    backup/restore не считать программу готовой для клиентского учёта.
 7. **Чистота кода (D70, процесс — [`docs/CODE_QUALITY.md`](CODE_QUALITY.md)); полный список
-   долга — `OVER_LIMIT` в `tests/test_code_size.py` (37 мест). После сессии 22:** большие
-   классы `BankOperationPage`, `MainWindow`, `InventoryDocumentPage`, `InventoryLinesModel`,
-   `PostingsModel` разделены (форма + группы, см. «Что готово»); дубль поиска в списке
-   объединён. Дальше по отчёту `uv run python tests/test_code_size.py`: `DocumentPage`
-   (класс ~750, `__init__` ~170, модуль ~820), `conversion_page.py` (~990), `directories_page.py`
-   (~900), большие `__init__` — `EqaimeImportDialog` (~180), `LandedCostPage` (~150),
-   `ConversionPage` (~140), `EqaimeReconciliationDialog` (~130), `OpeningBalancesPage`,
-   `AccountDialog` (~125); `theme.stylesheet` (~190). Тот же рецепт: форма + группы.
-   **Проверить вживую** (Windows): банк, покупка/продажа, меню компании — ручного прогона
-   после переделки не было, только тесты и скриншоты.
+   долга — `OVER_LIMIT` в `tests/test_code_size.py` (16 мест). После сессии 23:** интерфейс
+   в пределах (кроме `theme.stylesheet` ~190 строк — это таблица стилей одной строкой QSS).
+   Остались функции логики учёта и отчётов: `create_demo_company` (~125),
+   `ConversionCommands._conversion_postings` (~115), `trial_balance` (~105),
+   `ChartCommands.update_account`/`add_account` (~100), `MovementCommands._apply_line` (~95),
+   `bank_places`, `statement`, `_validate_for_posting` (~90), `_insert_line`, `Catalog.reload`,
+   `account_card` (~85); модули `application/eqaime_import.py` (~640), `quick_entry.py` (~600).
+   Делить их — по одному, с тестами учёта рядом (цифры уже проверены тестами).
+   **Проверить вживую** (Windows): банк, покупка/продажа, меню компании, документ, конвертация,
+   справочники, загрузка e-qaimə, доп. расходы, начальные остатки — после переделки (сессии
+   22–23) ручного прогона не было, только тесты и скриншоты.
 
 **Стек:** Python + PySide6 + SQLite остаётся основным для локальной однопользовательской
 версии и соответствует коммерческому сценарию «один консультант — много фирм».
