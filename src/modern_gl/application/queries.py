@@ -109,7 +109,10 @@ def list_layers(conn: Connection, company_id: int) -> list[tuple[str, str]]:
     ]
 
 
-def list_documents(conn: Connection, company_id: int) -> list[DocumentSummary]:
+def list_documents(
+    conn: Connection, company_id: int, date_from: str | None = None, date_to: str | None = None
+) -> list[DocumentSummary]:
+    """The journal: every document, or those dated within the period."""
     rows = conn.execute(
         """
         SELECT d.id, d.number, d.doc_date, d.memo, l.code AS layer, d.status,
@@ -120,13 +123,24 @@ def list_documents(conn: Connection, company_id: int) -> list[DocumentSummary]:
         LEFT JOIN documents o ON o.id = d.reversal_of
         LEFT JOIN documents r ON r.reversal_of = d.id
         LEFT JOIN postings p ON p.document_id = d.id
-        WHERE d.company_id = ?
+        WHERE d.company_id = :company_id
+          AND (:date_from IS NULL OR d.doc_date >= :date_from)
+          AND (:date_to IS NULL OR d.doc_date <= :date_to)
         GROUP BY d.id
         ORDER BY d.doc_date, d.number
         """,
-        (company_id,),
+        {"company_id": company_id, "date_from": date_from, "date_to": date_to},
     ).fetchall()
     return [DocumentSummary(**dict(r)) for r in rows]
+
+
+def document_by_number(conn: Connection, company_id: int, number: int) -> int:
+    row = conn.execute(
+        "SELECT id FROM documents WHERE company_id = ? AND number = ?", (company_id, number)
+    ).fetchone()
+    if row is None:
+        raise NotFoundError(tr("документ №{n} не найден", n=number))
+    return row["id"]
 
 
 def load_document(conn: Connection, company_id: int, doc_id: int) -> DocumentData:

@@ -96,7 +96,9 @@ def test_core_does_not_import_modules(path):
     assert not bad, f"ядро {rel(path)} импортирует модули {sorted(bad)}"
 
 
-@pytest.mark.parametrize("layer", ["domain", "application", "reporting", "infrastructure"])
+@pytest.mark.parametrize(
+    "layer", ["domain", "application", "reporting", "infrastructure", "assistant"]
+)
 def test_no_qt_outside_desktop(layer):
     bad = [
         rel(p)
@@ -132,7 +134,7 @@ SQLITE_ONLY = re.compile(
 )
 
 
-@pytest.mark.parametrize("layer", ["domain", "application", "reporting", "desktop"])
+@pytest.mark.parametrize("layer", ["domain", "application", "reporting", "desktop", "assistant"])
 def test_database_engine_only_in_infrastructure(layer):
     bad = {}
     for path in files(layer):

@@ -1363,4 +1363,11 @@ AZ: dict[str, str] = {
     "Активен": "Aktiv",
     "да": "bəli",
     "нет": "xeyr",
+    # assistant server (D83)
+    "документ №{n} не найден": "sənəd №{n} tapılmadı",
+    "книга: {books}": "kitab: {books}",
+    "справочник: {names}": "soraqça: {names}",
+    "укажите компанию: {names}": "şirkəti göstərin: {names}",
+    "компания «{name}» не найдена; есть: {names}": "«{name}» şirkəti tapılmadı; var: {names}",
+    "«{name}» — несколько компаний: {names}": "«{name}» — bir neçə şirkət: {names}",
 }
