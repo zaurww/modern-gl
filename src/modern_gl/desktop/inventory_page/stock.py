@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from modern_gl.application.inventory import QUANTITY_FACTOR, format_quantity
+from modern_gl.application.inventory import format_quantity, unit_price
 from modern_gl.desktop.inventory_page.dialogs import (
     InventorySettingsDialog,
     ItemDialog,
@@ -97,11 +97,9 @@ class StockPart(InventoryForm):
             rows = list(balances)
 
         def average(row) -> int:
-            if isinstance(row, StockGroup) or not row.quantity:
+            if isinstance(row, StockGroup):
                 return 0
-            numerator = row.amount * QUANTITY_FACTOR
-            quotient, remainder = divmod(numerator, row.quantity)
-            return quotient + int(remainder * 2 >= row.quantity)
+            return unit_price(row.amount, row.quantity) or 0
 
         def source(row) -> str:
             """Where the goods last came from: «İdxal · YGB 12345 · 12.03.2026»."""

@@ -11,14 +11,14 @@ from datetime import date
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QApplication, QLineEdit
 
-from modern_gl.application.inventory import QUANTITY_FACTOR, format_quantity
+from modern_gl.application.inventory import format_quantity, unit_price
 from modern_gl.desktop.reports_page import Column, MenuAction, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import EmptyState, button, money
 from modern_gl.domain.currency import format_unit_rate, unit_rate
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.invoice import CUSTOMS
-from modern_gl.domain.money import format_minor, round_ratio
+from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.reporting.inventory import (
     Declaration,
@@ -66,7 +66,7 @@ def declaration_title(d: Declaration) -> str:
 
 def _line_row(line: LandedLine, currency: str | None, declaration: Declaration) -> _Row:
     def per_unit(amount: int) -> int | None:
-        return round_ratio(amount * QUANTITY_FACTOR, line.quantity) if line.quantity else None
+        return unit_price(amount, line.quantity)
 
     in_currency = ""
     if currency and line.currency_amount is not None:

@@ -12,8 +12,9 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from modern_gl.application.inventory import (
-    QUANTITY_FACTOR,
     format_quantity,
+    line_amount,
+    unit_price,
     vat_of,
 )
 from modern_gl.application.queries import remembered_expense, remembered_sale_subconto
@@ -56,7 +57,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import format_minor, round_ratio
+from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     ItemChoice,
@@ -131,9 +132,7 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
     def _price(self, row: InventoryGridRow) -> int | None:
         """The price of a unit, in the document's currency."""
         value = row.currency_amount if self.rate is not None else row.amount
-        if not row.quantity or value is None:
-            return None
-        return round_ratio(value * QUANTITY_FACTOR, row.quantity)
+        return None if value is None or not row.quantity else unit_price(value, row.quantity)
 
     def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
         row = self.rows[index.row()]
@@ -225,7 +224,7 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
         if key == PRICE:
             if not row.quantity:
                 raise ValidationError(tr("сначала укажите количество"))
-            total = round_ratio(value * row.quantity, QUANTITY_FACTOR)
+            total = line_amount(value, row.quantity)
             if self.rate is not None:
                 self._set_currency_amount(row, total)
             else:

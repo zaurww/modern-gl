@@ -14,11 +14,11 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from modern_gl.application.inventory import (
-    QUANTITY_FACTOR,
     LandedCostCharge,
     LandedCostTarget,
     allocate_minor,
     format_quantity,
+    unit_price,
     vat_of,
 )
 from modern_gl.desktop.cell_editing import resolve_choice
@@ -57,7 +57,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.currency import format_unit_rate, parse_rate, unit_rate
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import SCALE as MONEY_SCALE
-from modern_gl.domain.money import format_minor, round_ratio, to_minor
+from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     ReceiptLineChoice,
@@ -466,7 +466,7 @@ class TargetsModel(QAbstractTableModel):
             return money(target.share)
         if key == UNIT_COST and receipt.quantity:  # the price per unit with the expenses
             cost = receipt.amount + (target.share or 0)
-            return money(round_ratio(cost * QUANTITY_FACTOR, receipt.quantity))
+            return money(unit_price(cost, receipt.quantity) or 0)
         return ""
 
     def parse(self, row: int, key: str, text: str):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 
-from modern_gl.application.inventory.model import QUANTITY_SCALE, VAT_RATE_SCALE
+from modern_gl.application.inventory.model import QUANTITY_FACTOR, QUANTITY_SCALE, VAT_RATE_SCALE
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
@@ -38,6 +38,17 @@ def to_quantity(value: str | int | Decimal) -> int:
 def vat_of(amount: int, rate: int | None) -> int:
     """VAT on an amount without VAT, rounded to a minor unit (half away from zero)."""
     return 0 if not rate else round_ratio(amount * rate, VAT_RATE_SCALE)
+
+
+def unit_price(amount: int, quantity: int) -> int | None:
+    """The price of one unit (amount / quantity), half away from zero; None without a
+    quantity."""
+    return round_ratio(amount * QUANTITY_FACTOR, quantity) if quantity else None
+
+
+def line_amount(price: int, quantity: int) -> int:
+    """The amount of a line from its unit price, half away from zero."""
+    return round_ratio(price * quantity, QUANTITY_FACTOR)
 
 
 def format_quantity(quantity: int, precision: int = 3) -> str:

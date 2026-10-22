@@ -25,8 +25,8 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.inventory import (
-    QUANTITY_FACTOR,
     format_quantity,
+    unit_price,
 )
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
@@ -37,7 +37,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.currency import format_unit_rate, unit_rate
 from modern_gl.domain.dates import ru_date
-from modern_gl.domain.money import format_minor, round_ratio
+from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.reporting.inventory import (
     BatchCostLine,
@@ -211,8 +211,7 @@ class _CostRow:
 def _cost_row(line: BatchCostLine) -> _CostRow:
     price = ""
     if line.currency and line.currency_amount is not None and line.quantity:
-        unit = round_ratio(line.currency_amount * QUANTITY_FACTOR, line.quantity)
-        price = f"{money(unit)} {line.currency}"
+        price = f"{money(unit_price(line.currency_amount, line.quantity) or 0)} {line.currency}"
     return _CostRow(
         f"№{line.number}  ·  {ru_date(line.doc_date)}",
         line.item_name,
@@ -223,7 +222,7 @@ def _cost_row(line: BatchCostLine) -> _CostRow:
         line.shares,
         line.expenses,
         line.total,
-        round_ratio(line.total * QUANTITY_FACTOR, line.quantity) if line.quantity else None,
+        unit_price(line.total, line.quantity),
     )
 
 

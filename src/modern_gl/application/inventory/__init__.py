@@ -9,8 +9,10 @@ from __future__ import annotations
 from modern_gl.application.inventory.amounts import (
     allocate_minor,
     format_quantity,
+    line_amount,
     split_charges,
     to_quantity,
+    unit_price,
     vat_of,
 )
 from modern_gl.application.inventory.catalog import CatalogCommands
@@ -58,8 +60,10 @@ __all__ = [
     "TransferLine",
     "allocate_minor",
     "format_quantity",
+    "line_amount",
     "split_charges",
     "to_quantity",
+    "unit_price",
     "vat_of",
 ]
 
