@@ -877,7 +877,6 @@ AZ: dict[str, str] = {
     "Все проводки": "Bütün yazılışlar",
     "Уже введённая проводка (фактура брокера, таможни…): её дебет перейдёт в стоимость товаров. Показан нераспределённый остаток.": "Artıq daxil edilmiş yazılış (broker, gömrük fakturası…): onun debeti malların dəyərinə keçəcək. Bölüşdürülməmiş qalıq göstərilir.",
     "Проводка: {label}": "Yazılış: {label}",
-    "«{text}» подходит к нескольким": "«{text}» bir neçəsinə uyğun gəlir",
     "Добавьте поступления партии": "Partiyanın daxilolmalarını əlavə edin",
     "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — расход   ·   Del — удалить строку   ·   Сумма «30 USD» — в валюте   ·   НДС «18%» — посчитать   ·   Ctrl+Enter — провести": "Enter, Tab — irəli   ·   Shift+Tab — geri   ·   Ins — xərc   ·   Del — sətri sil   ·   Məbləğ «30 USD» — valyutada   ·   ƏDV «18%» — hesabla   ·   Ctrl+Enter — keçir",
     "в документе нет расходов": "sənəddə xərc yoxdur",

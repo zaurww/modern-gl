@@ -33,7 +33,7 @@ from modern_gl.application.inventory import (
     InventoryDocumentData,
     vat_of,
 )
-from modern_gl.desktop.cell_editing import edit_again, edit_next
+from modern_gl.desktop.cell_editing import edit_again, edit_next, resolve_choice
 from modern_gl.desktop.inventory_document_page.columns import (
     DOCUMENT_TYPES,
     EXPENSE,
@@ -50,7 +50,6 @@ from modern_gl.desktop.inventory_document_page.columns import (
 from modern_gl.desktop.inventory_document_page.lines_model import (
     InventoryLinesModel,
     by_sale_kinds,
-    resolve_choice,
     sale_kinds,
 )
 from modern_gl.desktop.inventory_document_page.lines_table import (

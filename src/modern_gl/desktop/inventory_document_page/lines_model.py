@@ -27,6 +27,7 @@ from modern_gl.application.inventory import (
     vat_of,
 )
 from modern_gl.application.queries import remembered_sale_subconto
+from modern_gl.desktop.cell_editing import resolve_choice
 from modern_gl.desktop.inventory_document_page.columns import (
     ACCOUNT,
     AMOUNT,
@@ -78,7 +79,7 @@ from modern_gl.domain.currency import to_base
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import format_minor, round_ratio, to_minor
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     Choice,
     ItemChoice,
@@ -922,23 +923,3 @@ def by_sale_kinds(catalog, kinds: list[int], values) -> list[int | None]:
         if value is not None and catalog.value(value).kind_id in kinds:
             result[kinds.index(catalog.value(value).kind_id)] = value
     return result
-
-
-def resolve_choice(choices: list[tuple[int, str]], text: str) -> int | None:
-    """Exact label, name or code, else a unique fragment; None if nothing matches."""
-    needle = fold(text)
-    exact = [
-        choice_id
-        for choice_id, label in choices
-        if needle in {fold(label), fold(label.split("  ", 1)[-1]), fold(label.split("  ", 1)[0])}
-    ]
-    if exact:
-        return exact[0]
-    partial = [(choice_id, label) for choice_id, label in choices if needle in fold(label)]
-    if len(partial) > 1:
-        starts = [choice for choice in partial if fold(choice[1]).startswith(needle)]
-        partial = starts if len(starts) == 1 else partial
-    if len(partial) > 1:
-        names = ", ".join(label for _, label in partial[:5])
-        raise LookupError(tr("«{text}» подходит к нескольким: {names}", text=text, names=names))
-    return partial[0][0] if partial else None

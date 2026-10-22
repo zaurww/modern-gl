@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 
 from modern_gl.domain.currency import to_base
-from modern_gl.i18n import fold, tr
 from modern_gl.reporting.inventory import (
     ReceiptLineChoice,
 )
@@ -103,14 +102,3 @@ class TargetRow:
     manual: int | None = None
     line_id: int | None = None
     share: int | None = None  # calculated (or the manual amount)
-
-
-def resolve(choices: list[tuple[int, str]], text: str) -> int | None:
-    needle = fold(text)
-    exact = [i for i, label in choices if needle in {fold(label), fold(label.split("  ")[-1])}]
-    if exact:
-        return exact[0]
-    partial = [i for i, label in choices if needle in fold(label)]
-    if len(partial) > 1:
-        raise LookupError(tr("«{text}» подходит к нескольким", text=text))
-    return partial[0] if partial else None
