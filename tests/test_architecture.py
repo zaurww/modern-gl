@@ -49,15 +49,9 @@ MODULE_CODE = (
     "modern_gl.reporting.eqaime_reconciliation",
 )
 
-# Debt 1 of docs/ENGINEERING.md: the journal refuses to change a module's GL document.
-CORE_TABLE_ALLOWED = {
-    "application/ledger/documents.py": {
-        "inventory_documents",
-        "landed_cost_charges",
-        "currency_conversions",
-        "bank_operations",
-    },
-}
+# The core never reads a module's table (debt 1 paid in session 25: the document_owners
+# view tells it who owns a GL document); a new reading is not allowed.
+CORE_TABLE_ALLOWED: dict[str, set[str]] = {}
 # A widget never runs its own query (debt 3 paid in session 22); a new one is not allowed.
 SQL_IN_WIDGETS_ALLOWED: set[str] = set()
 

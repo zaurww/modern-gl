@@ -23,6 +23,7 @@ from modern_gl.application.inventory.model import (
 from modern_gl.application.inventory.movements import MovementCommands
 from modern_gl.application.inventory.sales import SaleCommands
 from modern_gl.application.ledger import PostingInput
+from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import tr
@@ -42,6 +43,15 @@ _SEQUENCE_RANK = {
 
 def _sequence_key(doc: sqlite3.Row) -> tuple[str, int, int]:
     return doc["doc_date"], _SEQUENCE_RANK[doc["doc_type"]], doc["number"]
+
+
+explain_owner(
+    "inventory",
+    lambda _role, _n, m: tr(
+        "бухгалтерский документ создан складским документом №{n}; исправьте его через склад",
+        n=m,
+    ),
+)
 
 
 class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, AccrualCommands):

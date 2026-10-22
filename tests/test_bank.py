@@ -270,6 +270,25 @@ def test_the_journal_does_not_touch_its_postings(ledger, firm):
             action(cid, doc_id)
 
 
+def test_the_journal_refuses_by_the_owners_view_alone(ledger, firm, monkeypatch):
+    """The core learns who owns a GL document from the document_owners view, never from a
+    module's tables; a module's own words are only words: without them the journal still
+    refuses, in general terms."""
+    f = firm
+    cid = f["cid"]
+    op_id = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    doc_id = load_bank_operation(ledger.conn, cid, op_id).document_id
+    owners = ledger.conn.execute(
+        "SELECT module, role FROM document_owners WHERE company_id = ? AND document_id = ?",
+        (cid, doc_id),
+    ).fetchall()
+    assert [tuple(r) for r in owners] == [("bank", "made")]
+    monkeypatch.setattr("modern_gl.application.ledger.documents.OWNER_TEXTS", {})
+    for action in (ledger.unpost, ledger.delete_document):
+        with pytest.raises(ValidationError, match="исправьте их там"):
+            action(cid, doc_id)
+
+
 def test_what_cannot_be_posted(ledger, firm):
     f = firm
     cid, acc, v = f["cid"], f["acc"], f["v"]
