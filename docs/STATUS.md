@@ -663,6 +663,12 @@ e-qaimə) — по желанию; у пользователя есть отде
    долга по размерам нет: `OVER_LIMIT` в `tests/test_code_size.py` пуст. Ближе всего к пределу
    (по `uv run python tests/test_code_size.py`): `desktop/theme.py` (~600 строк),
    `quick_entry/parser.py` (~455). Дальше — регулярный обзор по чек-листу `CODE_QUALITY.md`.
+   **На 2026-10-22 (сессия 36, после D89) у самого предела:** `ChartCommands.add_account`
+   (80/80) и класс `ChartCommands` (498/500) в `application/ledger/chart.py`,
+   `BatchCostDialog.__init__` (80/80), `MovementCommands` (493/500), `DirectoriesPage`
+   (491/500, модуль 554/600). Следующая работа с типами счетов (баланс по типам) почти
+   наверняка тронет `chart.py` — сначала отдельным коммитом вынести из `ChartCommands`
+   типы и классы счетов (`set_account_class`, `set_account_type`, `_type_class`, `_class_of_type`, `_check_class`) в свою группу.
    **Проверить вживую** (Windows): банк, покупка/продажа, меню компании, документ, конвертация,
    справочники, загрузка e-qaimə, доп. расходы, начальные остатки, быстрая строка, ОСВ и
    карточка — после переделок (сессии 22–26) ручного прогона не было, только тесты и скриншоты.
