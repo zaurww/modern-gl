@@ -47,7 +47,6 @@ class AccountDialog(QDialog):
         super().__init__(parent)
         self.s = session
         self.account = account
-        cat = session.catalog
         self.setWindowTitle(tr("Счёт {code}", code=account.short) if account else tr("Новый счёт"))
         self.setMinimumWidth(560)
 
@@ -61,12 +60,47 @@ class AccountDialog(QDialog):
         form = QFormLayout()
         form.setHorizontalSpacing(18)
         form.setVerticalSpacing(10)
+        self._build_fields(account, parent_id)
+        self._build_type(account)
+        self.contra = QCheckBox(tr("Контрсчёт"))
+        class_row = QHBoxLayout()
+        class_row.addWidget(self.account_type, 1)
+        class_row.addWidget(self.contra)
+        self._build_subconto()
+
+        form.addRow(tr("Код"), self.code)
+        form.addRow(tr("Наименование"), self.name)
+        form.addRow(tr("Родитель"), self.parent_box)
+        form.addRow("", self.group)
+        form.addRow(tr("Тип"), class_row)
+        form.addRow("", self.two_sided)
+        form.addRow(tr("Валюта"), self.currency)
+        for i, box in enumerate(self.subconto, start=1):
+            form.addRow(tr("Субконто {i}", i=i), box)
+        self._build_subconto_hint(form)
+        root.addLayout(form)
+
+        self.error = QLabel()
+        self.error.setObjectName("error")
+        self.error.setWordWrap(True)
+        self.error.hide()
+        root.addWidget(self.error)
+
+        self._build_buttons(root)
+
+        self.group.toggled.connect(self._group_toggled)
+        if account:
+            self._load(account)
+        else:
+            self._prefill_child(parent_id)
+
+    def _build_fields(self, account: AccountInfo | None, parent_id: int | None) -> None:
         self.code = QLineEdit(account.code if account else "")
         self.code.setPlaceholderText(tr("необязательно"))
         self.name = QLineEdit(account.name if account else "")
         self.parent_box = QComboBox()
         self.parent_box.addItem("—", None)
-        for a in cat.accounts.values():
+        for a in self.s.catalog.accounts.values():
             if a.is_group or (account is None and a.id == parent_id):
                 self.parent_box.addItem(a.label, a.id)
         self.two_sided = QCheckBox(tr("Сальдо бывает с обеих сторон"))
@@ -86,6 +120,8 @@ class AccountDialog(QDialog):
                 "переоцениваются по курсу"
             )
         )
+
+    def _build_type(self, account: AccountInfo | None) -> None:
         # Type picker grouped by class: a class alone in bold, then its types. Item data is
         # the type, or the class for a class alone ("" — not set); see _choice()
         self.account_type = QComboBox()
@@ -103,27 +139,17 @@ class AccountDialog(QDialog):
                 self.account_type.setItemData(
                     self.account_type.count() - 1, bold, Qt.ItemDataRole.FontRole
                 )
-        self.contra = QCheckBox(tr("Контрсчёт"))
-        class_row = QHBoxLayout()
-        class_row.addWidget(self.account_type, 1)
-        class_row.addWidget(self.contra)
+
+    def _build_subconto(self) -> None:
         self.subconto = []
         for _ in range(3):
             box = QComboBox()
             box.addItem("—", None)
-            for kind_id, kind_name in sorted(cat.kinds.items(), key=lambda kv: kv[1]):
+            for kind_id, kind_name in sorted(self.s.catalog.kinds.items(), key=lambda kv: kv[1]):
                 box.addItem(kind_name, kind_id)
             self.subconto.append(box)
 
-        form.addRow(tr("Код"), self.code)
-        form.addRow(tr("Наименование"), self.name)
-        form.addRow(tr("Родитель"), self.parent_box)
-        form.addRow("", self.group)
-        form.addRow(tr("Тип"), class_row)
-        form.addRow("", self.two_sided)
-        form.addRow(tr("Валюта"), self.currency)
-        for i, box in enumerate(self.subconto, start=1):
-            form.addRow(tr("Субконто {i}", i=i), box)
+    def _build_subconto_hint(self, form: QFormLayout) -> None:
         # an account with postings keeps its subconto; a new one goes to a free place (D61)
         self.subconto_hint = QLabel(
             tr(
@@ -136,14 +162,8 @@ class AccountDialog(QDialog):
         self.subconto_hint.setWordWrap(True)
         self.subconto_hint.hide()
         form.addRow("", self.subconto_hint)
-        root.addLayout(form)
 
-        self.error = QLabel()
-        self.error.setObjectName("error")
-        self.error.setWordWrap(True)
-        self.error.hide()
-        root.addWidget(self.error)
-
+    def _build_buttons(self, root: QVBoxLayout) -> None:
         buttons = QHBoxLayout()
         buttons.addStretch(1)
         cancel = button(tr("Отмена"))
@@ -154,12 +174,6 @@ class AccountDialog(QDialog):
         buttons.addWidget(cancel)
         buttons.addWidget(save)
         root.addLayout(buttons)
-
-        self.group.toggled.connect(self._group_toggled)
-        if account:
-            self._load(account)
-        else:
-            self._prefill_child(parent_id)
 
     # ---- state -----------------------------------------------------------------------
 
