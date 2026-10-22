@@ -39,6 +39,7 @@ from modern_gl.i18n import language, set_language, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import Connection, DatabaseError, Error
 from modern_gl.infrastructure.workspace import SUFFIX, TRASH, Workspace
+from modern_gl.reporting.handover import handover_files, write_handover
 
 
 def confirm_delete(parent: QWidget, name: str) -> bool:
@@ -299,6 +300,24 @@ class CompanyFiles(QMainWindow):
             QMessageBox.warning(self, tr("Сохранить копию"), str(e))
             return
         self.notify(tr("Копия сохранена: {file}", file=target))
+
+    def hand_over(self) -> None:
+        """Everything as plain text in a zip, for the accountant who takes the company (D81)."""
+        if self.conn is None or self.company_path is None or self.session is None:
+            return
+        today = datetime.now().date()
+        name = f"{self.company_path.stem} — {tr('передача дел')} {today}.zip"
+        target, _ = QFileDialog.getSaveFileName(
+            self, tr("Передача дел"), str(Path.home() / name), tr("Архив zip (*.zip)")
+        )
+        if not target:
+            return
+        try:
+            write_handover(Path(target), handover_files(self.conn, self.session.company_id, today))
+        except (OSError, Error) as e:
+            QMessageBox.warning(self, tr("Передача дел"), str(e))
+            return
+        self.notify(tr("Пакет передачи сохранён: {file}", file=target))
 
     def restore_company(self) -> None:
         if self.company_path is not None:

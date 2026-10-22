@@ -86,6 +86,7 @@ class MainWindow(OpenPages):
             if viewing:
                 menu.addAction(tr("Перечитать файл")).triggered.connect(self.reread)
             menu.addAction(tr("Показать файл компании")).triggered.connect(self.show_company_file)
+            menu.addAction(tr("Передача дел…")).triggered.connect(self.hand_over)
             if not viewing:
                 self._file_actions(menu)
         menu.addSeparator()
