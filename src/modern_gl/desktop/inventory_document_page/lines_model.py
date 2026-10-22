@@ -16,7 +16,7 @@ from modern_gl.application.inventory import (
     format_quantity,
     vat_of,
 )
-from modern_gl.application.queries import remembered_sale_subconto
+from modern_gl.application.queries import remembered_expense, remembered_sale_subconto
 from modern_gl.desktop.inventory_document_page.columns import (
     ACCOUNT,
     AMOUNT,
@@ -31,6 +31,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     RECEIPT_HEADERS,
     SALE_HEADERS,
     SALE_KEYS,
+    SC_KEYS,
     STORED_FIELDS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
@@ -240,6 +241,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
         elif key in SUBCONTO_KEYS:
             self._subconto_of(row, key)[int(key[-1]) - 1] = value
+            if key in SC_KEYS:
+                self._remember_expense(index.row())
         else:
             self._set_stored(index.row(), key, value)
         self.dataChanged.emit(
@@ -255,6 +258,38 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
             row.warehouse_id = None  # a sale's service comes from no warehouse
         if key in {ITEM, MEMO}:
             self._remember_sale_subconto(row_index)
+            self._remember_expense(row_index)
+
+    def _party(self, row: InventoryGridRow) -> int | None:
+        """The line's counterparty: its offset subconto from a directory with a VÖEN."""
+        catalog = self.s.catalog
+        return next(
+            (
+                value
+                for value in row.offset_subconto
+                if value is not None and catalog.has_tax_id(catalog.value(value).kind_id)
+            ),
+            None,
+        )
+
+    def _remember_expense(self, row_index: int) -> None:
+        """An empty expense account of a purchased service (a fixed asset) takes the one
+        the same service had the last time — from this supplier if it was bought from it —
+        else this supplier's last service's (D76). One chosen by hand is never replaced."""
+        row = self.rows[row_index]
+        if (
+            self.doc_type != "receipt"
+            or row.expense_account_id is not None
+            or not self.is_service(row_index)
+        ):
+            return
+        remembered = remembered_expense(self.s.conn, self.s.company_id, row.memo, self._party(row))
+        if remembered is None or remembered[0] not in self.s.catalog.accounts:
+            return
+        row.expense_account_id, subconto = remembered
+        row.expense_subconto = list(subconto)
+        self._drop_foreign(row.expense_account_id, row.expense_subconto)
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
 
     def _remember_sale_subconto(self, row_index: int) -> None:
         """Empty sale subconto of a line take what the item (the service) had the last
@@ -263,17 +298,9 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
         if not self.sale_kinds or None not in row.sale_subconto[: len(self.sale_kinds)]:
             return
         catalog = self.s.catalog
-        customer = next(
-            (
-                value
-                for value in row.offset_subconto
-                if value is not None and catalog.has_tax_id(catalog.value(value).kind_id)
-            ),
-            None,
-        )
         remembered = (
             remembered_sale_subconto(
-                self.s.conn, self.s.company_id, row.item_id, row.memo, customer
+                self.s.conn, self.s.company_id, row.item_id, row.memo, self._party(row)
             )
             if row.item_id is not None or row.memo.strip()
             else ()

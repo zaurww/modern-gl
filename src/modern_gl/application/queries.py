@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
+from itertools import chain
 
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import fold, sort_key, tr
@@ -318,3 +319,39 @@ def remembered_sale_subconto(
     if row is None:
         return ()
     return tuple(v for v in (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"]) if v)
+
+
+def remembered_expense(
+    conn: sqlite3.Connection,
+    company_id: int,
+    memo: str = "",
+    counterparty: int | None = None,
+) -> tuple[int, tuple[int | None, int | None, int | None]] | None:
+    """The expense account and its subconto a posted purchase line without an item (a
+    service, a fixed asset) went to the last time: the same memo from this supplier, else
+    from anyone, else this supplier's last such line (D76). None when nothing was."""
+    rows = conn.execute(
+        """
+        SELECT l.memo, l.cost_account_id, l.cost_sc1, l.cost_sc2, l.cost_sc3,
+               ? IN (l.offset_sc1, l.offset_sc2, l.offset_sc3) AS same_party
+        FROM inventory_lines l
+        JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
+        WHERE l.company_id = ? AND d.doc_type = 'receipt' AND d.status = 'posted'
+          AND l.item_id IS NULL AND l.cost_account_id IS NOT NULL
+        ORDER BY d.doc_date DESC, d.id DESC, l.line_no
+        """,
+        (counterparty, company_id),
+    ).fetchall()
+    wanted = fold(memo.strip())
+    same_memo = [row for row in rows if wanted and fold(row["memo"].strip()) == wanted]
+    row = next(
+        chain(
+            (row for row in same_memo if row["same_party"]),
+            same_memo[:1],
+            (row for row in rows if row["same_party"]),
+        ),
+        None,
+    )
+    if row is None:
+        return None
+    return row["cost_account_id"], (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"])

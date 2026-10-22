@@ -332,3 +332,106 @@ def test_a_service_purchase_has_no_warehouse_column_and_names_its_subconto(shop,
     model.insert_row()
     assert model.setData(model.index(1, model.columns.index(ITEM)), shop.item)
     assert not page.table.isColumnHidden(warehouse)
+
+
+def test_the_expense_account_is_remembered_by_service_and_supplier(shop, conn):
+    """Bought before (all to 26, by cost item):
+      03-05 supplier  «Printerin təmiri»  [Təmir]
+      03-06 supplier  «İnternet»          [Rabitə]
+      03-07 Beta      «printerin TƏMİRİ»  [Xidmət]
+    The same service from the same supplier wins over a later one from Beta; from anyone,
+    the latest one; a service never bought takes the supplier's last service. A draft
+    teaches nothing: only posted purchases count."""
+    from modern_gl.application.queries import remembered_expense
+
+    repair, telecom, service = values(shop, "cost_item", "Təmir", "Rabitə", "Xidmət")
+    beta = shop.ledger.add_subconto_value(
+        shop.company_id, shop.ledger.subconto_kind_id(shop.company_id, "counterparty"), "Beta"
+    )
+
+    def buy(date: str, party: list[int], memo: str, value: int) -> None:
+        line = ReceiptLine(
+            None,
+            None,
+            None,
+            "10",
+            memo,
+            expense_account_id=shop.acc["26"],
+            expense_subconto=[value],
+        )
+        shop.inventory.post_receipt(shop.company_id, date, [line], shop.acc["60"], party)
+
+    buy("2026-03-05", shop.supplier, "Printerin təmiri", repair)
+    buy("2026-03-06", shop.supplier, "İnternet", telecom)
+    buy("2026-03-07", [beta], "printerin TƏMİRİ", service)
+    cid, supplier, cost = shop.company_id, shop.supplier[0], shop.acc["26"]
+    assert remembered_expense(conn, cid, "Printerin təmiri", supplier) == (
+        cost,
+        (repair, None, None),
+    )
+    assert remembered_expense(conn, cid, "Printerin təmiri", beta) == (cost, (service, None, None))
+    assert remembered_expense(conn, cid, "printerin temiri") == (cost, (service, None, None))
+    assert remembered_expense(conn, cid, "Kartric", supplier) == (cost, (telecom, None, None))
+    assert remembered_expense(conn, cid, "Kartric", beta) == (cost, (service, None, None))
+    assert remembered_expense(conn, cid, "Kartric") is None
+    shop.inventory.create_receipt_draft(
+        cid,
+        "2026-03-08",
+        [ReceiptLine(None, None, None, "5", "Kartric", expense_account_id=shop.acc["08"])],
+        shop.acc["60"],
+        shop.supplier,
+    )
+    assert remembered_expense(conn, cid, "Kartric", supplier) == (cost, (telecom, None, None))
+
+
+def test_receipt_page_fills_the_expense_account_of_a_service_bought_before(shop, conn, qtbot):
+    """«Printerin təmiri» was bought to 26 [Təmir]: typed again, the line takes 26 [Təmir]
+    and posts Dt 26 / Kt 60 30.00 + VAT 5.40. A new service gets nothing until its supplier
+    is chosen, then the supplier's last account; one typed by hand is not replaced."""
+    (repair,) = values(shop, "cost_item", "Təmir")
+    purchase(
+        shop,
+        [
+            ReceiptLine(
+                None,
+                None,
+                None,
+                "50",
+                "Printerin təmiri",
+                expense_account_id=shop.acc["26"],
+                expense_subconto=[repair],
+            )
+        ],
+    )
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    model = page.model
+
+    page._make_service(0, "printerin təmiri")
+    assert (model.rows[0].expense_account_id, model.rows[0].expense_subconto) == (
+        shop.acc["26"],
+        [repair, None, None],
+    )
+
+    def put(row: int, key: str, value) -> None:
+        assert model.setData(model.index(row, model.columns.index(key)), value)
+
+    put(0, AMOUNT, 3_000)
+    put(0, SC1, shop.supplier[0])
+    put(0, SC2, shop.supplier[1])
+    assert page.save(post=True), page.error.text()
+    assert page.doc is not None
+    assert [p[:3] for p in shop.postings(page.doc.id)] == [("26", "60", 3_000), ("19", "60", 540)]
+
+    page = InventoryDocumentPage(session, doc_type="receipt")
+    qtbot.addWidget(page)
+    model = page.model
+    page._make_service(0, "Kartric")
+    assert model.rows[0].expense_account_id is None  # no cartridge was bought yet
+    put(0, SC1, shop.supplier[0])
+    assert model.rows[0].expense_account_id == shop.acc["26"]  # the supplier's last service
+    put(0, EXPENSE, shop.acc["08"])
+    put(0, SC1, None)
+    put(0, SC1, shop.supplier[0])
+    assert model.rows[0].expense_account_id == shop.acc["08"]
