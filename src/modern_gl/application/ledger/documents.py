@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import date
 
-from modern_gl.application.common import closed_on, insert, now, pad_subconto
+from modern_gl.application.common import closed_on, insert, now, pad_subconto, with_reason
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.validation import PostingChecks
 from modern_gl.application.queries import journal_drafts
@@ -85,11 +85,12 @@ class DocumentCommands(PostingChecks):
             self._require_draft(self._document(company_id, doc_id))
             self.delete_document(company_id, doc_id)
 
-    def unpost(self, company_id: int, doc_id: int) -> None:
+    def unpost(self, company_id: int, doc_id: int, reason: str = "") -> None:
         """Turn a posted document back into an editable draft (open period only).
 
-        The audit trail keeps the full posted content. A red-storno document cannot be
-        unposted — delete it instead; a reversed document needs its storno deleted first.
+        The audit trail keeps the full posted content and why it was done (`reason`).
+        A red-storno document cannot be unposted — delete it instead; a reversed document
+        needs its storno deleted first.
         """
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
@@ -105,7 +106,7 @@ class DocumentCommands(PostingChecks):
             self.conn.execute(
                 "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc_id,)
             )
-            self._audit(company_id, "document", doc_id, "unpost", snapshot)
+            self._audit(company_id, "document", doc_id, "unpost", with_reason(snapshot, reason))
 
     def repost(
         self,
@@ -218,8 +219,9 @@ class DocumentCommands(PostingChecks):
         self._insert_postings(company_id, doc_id, postings)
         self._post(company_id, doc_id)
 
-    def delete_document(self, company_id: int, doc_id: int) -> None:
-        """Delete a draft, or a posted document in an open period. Audited with its content.
+    def delete_document(self, company_id: int, doc_id: int, reason: str = "") -> None:
+        """Delete a draft, or a posted document in an open period. Audited with its content
+        and why it was done (`reason`).
 
         Deleting a storno brings the reversed document back to normal.
         """
@@ -235,7 +237,7 @@ class DocumentCommands(PostingChecks):
                     (doc_id,),
                 )
             self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
-            self._audit(company_id, "document", doc_id, "delete", snapshot)
+            self._audit(company_id, "document", doc_id, "delete", with_reason(snapshot, reason))
 
     def _require_changeable(self, company_id: int, doc: Row) -> None:
         company = self._company(company_id)

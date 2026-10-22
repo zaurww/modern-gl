@@ -40,6 +40,12 @@ def closed_on(company: Row, day: str) -> bool:
     return closed is not None and day <= closed
 
 
+def with_reason(details: dict, reason: str) -> dict:
+    """An audit event's details with why the change was made, when it was told."""
+    reason = reason.strip()
+    return {**details, "reason": reason} if reason else details
+
+
 def company_row(conn: Connection, company_id: int) -> Row:
     row = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
     if row is None:
