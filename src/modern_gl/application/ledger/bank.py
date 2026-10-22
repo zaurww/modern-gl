@@ -10,6 +10,7 @@ amount in the currency kept on the posting.
 
 from __future__ import annotations
 
+from dataclasses import fields, replace
 from decimal import Decimal
 
 from modern_gl.application.bank import (
@@ -19,6 +20,7 @@ from modern_gl.application.bank import (
     VAT_DEPOSIT_KINDS,
     BankLine,
     BankOperationInput,
+    load_bank_operation,
 )
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.currencies import rate_on
@@ -134,6 +136,47 @@ class BankCommands(ModuleDocumentCommands):
             self.conn.execute("DELETE FROM bank_operations WHERE id = ?", (operation_id,))
             self._remove_document(company_id, doc)
             self._audit(company_id, "bank_operation", operation_id, "delete", {})
+
+    def move_bank_operations(
+        self,
+        company_id: int,
+        operation_ids: list[int],
+        account_id: int,
+        subconto: tuple[int | None, ...],
+    ) -> None:
+        """Operations entered on the wrong bank account go to another one of the same
+        currency (D78): each keeps its number and its status, a posted one is posted again.
+        A transfer does not go onto the account it transfers to."""
+        target = pad_subconto(subconto)
+        with transaction(self.conn):
+            for operation_id in operation_ids:
+                op = load_bank_operation(self.conn, company_id, operation_id)
+                currency = self._place_currency(company_id, target)
+                if currency != op.currency_id:
+                    raise ValidationError(
+                        tr(
+                            "№{n}: другая валюта счёта — деньги между валютами переводит "
+                            "«Конвертация валюты»",
+                            n=op.number,
+                        )
+                    )
+                for line in op.lines:
+                    if line.account_id == account_id and pad_subconto(line.subconto) == target:
+                        raise ValidationError(
+                            tr("№{n}: перевод не переносится сам на себя", n=op.number)
+                        )
+                moved = replace(op, account_id=account_id, subconto=target)
+                data = BankOperationInput(
+                    **{f.name: getattr(moved, f.name) for f in fields(BankOperationInput)}
+                )
+                self.save_bank_operation(company_id, data, operation_id, post=op.status == "posted")
+
+    def _place_currency(self, company_id: int, subconto: tuple[int | None, ...]) -> int | None:
+        """The currency of a bank account: of its element of the directory (D47)."""
+        for value_id in subconto:
+            if value_id is not None:
+                return self._subconto_value(company_id, value_id)["currency_id"]
+        return None
 
     # ---- internals --------------------------------------------------------------------
 

@@ -41,6 +41,15 @@ KIND_TYPES = {
     SALARY: "payroll",
     TRANSFER: "bank",
 }
+# the other way: what an operation is by the type of its line's account (D78: a line typed
+# in the statement says no kind — 60 is a supplier, 70 the payroll, a bank account a transfer)
+TYPE_KINDS = {**{t: k for k, t in KIND_TYPES.items()}, "vat_deposit": TRANSFER}
+
+
+def kind_of_account(account_type: str | None) -> str:
+    return TYPE_KINDS.get(account_type or "", OTHER)
+
+
 # Bank accounts of the module: money on current accounts, and the ƏDV deposit account
 BANK_TYPES = ("bank", "vat_deposit")
 # The ƏDV deposit account pays and receives only ƏDV (D41): to a supplier's deposit

@@ -26,6 +26,7 @@ from modern_gl.application.bank import (
     IN,
     OTHER,
     OUT,
+    SALARY,
     SUPPLIER,
     TAX,
     TRANSFER,
@@ -34,6 +35,7 @@ from modern_gl.application.bank import (
     bank_operation_of_document,
     bank_places,
     find_bank_operation,
+    kind_of_account,
     last_lines,
     load_bank_operation,
     place_balance,
@@ -494,3 +496,42 @@ def test_one_payment_over_several_e_qaime_oldest_first():
     assert allocate(200_000, [141_600, 123_900]) == ([141_600, 58_400], 0)
     assert allocate(300_000, [141_600, 123_900]) == ([141_600, 123_900], 34_500)
     assert allocate(100_000, [141_600, 123_900]) == ([100_000, 0], 0)
+
+
+def test_operations_move_to_another_bank_account(ledger, firm):
+    """Paid to ALFA from Kapital AZN by mistake, 1 180.00: moved to PAŞA AZN it keeps its
+    number; Kapital AZN is back to 10 000.00, PAŞA AZN −1 180.00. A draft moves too."""
+    f = firm
+    cid, acc, v = f["cid"], f["acc"], f["v"]
+    paid = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    draft = ledger.save_bank_operation(cid, pay_alfa(f, memo="черновик"), post=False)
+    number = load_bank_operation(ledger.conn, cid, paid).number
+    ledger.move_bank_operations(cid, [paid, draft], acc["51"], (v["pasha"],))
+    moved = load_bank_operation(ledger.conn, cid, paid)
+    assert (moved.number, moved.status, moved.subconto[0]) == (number, "posted", v["pasha"])
+    assert load_bank_operation(ledger.conn, cid, draft).subconto[0] == v["pasha"]
+    assert load_bank_operation(ledger.conn, cid, draft).status == "draft"
+    places = {pl.value_id: pl for pl in bank_places(ledger.conn, cid)}
+    assert place_balance(ledger.conn, cid, places[v["azn"]], "2026-03-31") == 1_000_000
+    assert place_balance(ledger.conn, cid, places[v["pasha"]], "2026-03-31") == -118_000
+
+
+def test_an_operation_does_not_move_to_another_currency_or_onto_itself(ledger, firm):
+    f = firm
+    cid, acc, v = f["cid"], f["acc"], f["v"]
+    paid = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    with pytest.raises(ValidationError, match="валют"):
+        ledger.move_bank_operations(cid, [paid], acc["52"], (v["usd"],))
+    transfer = pay_alfa(
+        f, kind=TRANSFER, counterparty_id=None, lines=(BankLine(acc["51"], 100, (v["pasha"],)),)
+    )
+    moved = ledger.save_bank_operation(cid, transfer, post=True)
+    with pytest.raises(ValidationError, match="сам на себя"):
+        ledger.move_bank_operations(cid, [moved], acc["51"], (v["pasha"],))
+
+
+def test_the_kind_of_an_operation_by_the_account_of_its_line():
+    assert [
+        kind_of_account(t)
+        for t in ("payable", "receivable", "tax_payable", "payroll", "bank", "vat_deposit", None)
+    ] == [SUPPLIER, CUSTOMER, TAX, SALARY, TRANSFER, TRANSFER, OTHER]
