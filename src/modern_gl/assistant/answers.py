@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from modern_gl.application import queries
 from modern_gl.application.catalog import Catalog
+from modern_gl.domain.accounts import is_current
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection
@@ -46,6 +47,9 @@ def _cut(items: list, limit: int = LIMIT) -> tuple[list, int]:
     return items[:limit], max(len(items) - limit, 0)
 
 
+TERMS = {True: "current", False: "long_term", None: ""}  # domain.accounts.is_current
+
+
 def chart_of_accounts(conn: Connection, company_id: int) -> dict:
     cat = Catalog(conn, company_id)
     accounts = []
@@ -59,6 +63,7 @@ def chart_of_accounts(conn: Connection, company_id: int) -> dict:
                 "parent": parent.short if parent else "",
                 "class": a.account_class or "",
                 "type": a.account_type or "",
+                "term": TERMS[is_current(a.account_type)],
                 "contra": a.contra,
                 "two_sided": a.two_sided,
                 "currency_mode": a.currency,

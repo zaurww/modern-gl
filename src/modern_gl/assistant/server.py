@@ -76,8 +76,8 @@ def _report_tools(opened: Opened) -> list[Tool]:
     return [
         Tool(
             "chart_of_accounts",
-            "Chart of accounts: code, name, class, type, subconto directories; and the list "
-            "of directories.",
+            "Chart of accounts: code, name, class, type, term (current / long_term for "
+            "assets and liabilities), subconto directories; and the list of directories.",
             opened(answers.chart_of_accounts),
             {"company": COMPANY},
         ),

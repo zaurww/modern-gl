@@ -1,12 +1,14 @@
 """Account types (D35): what an account means, whatever its code; the class follows."""
 
+import sqlite3
+
 import pytest
 
-from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_CLASS
+from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_CLASS, is_current
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n_az import AZ
 from modern_gl.infrastructure.chart_csv import apply_chart_template, import_chart_csv
-from modern_gl.infrastructure.db import MIGRATIONS_DIR
+from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
 
 
 def kinds(conn, cid):
@@ -20,7 +22,7 @@ def kinds(conn, cid):
 
 
 def test_every_type_has_a_class_and_a_translation():
-    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 31
+    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 34
     assert {cls for _, cls, _ in ACCOUNT_TYPES} == {
         "asset",
         "liability",
@@ -153,9 +155,77 @@ def test_migration_types_old_companies_like_the_template(ledger, conn, template)
     # 0019: the transit account of conversions (a role since 0018) becomes "transit"
     sql = (MIGRATIONS_DIR / "0019_transit_type.sql").read_text(encoding="utf-8")
     conn.executescript(sql[sql.index("UPDATE accounts") :])
+    # 0035: the long-term types (D89) — 0012 typed 09 and 77 as other assets and liabilities
+    sql = (MIGRATIONS_DIR / "0035_long_term_types.sql").read_text(encoding="utf-8")
+    conn.executescript(sql[sql.index("UPDATE accounts") :])
     # 76H came with D65 (0031), the ƏDV deposit 54 with the templates later: files typed by
     # 0012 had no such accounts
     later = {"76H", "54"}
     assert {code: k for code, k in kinds(conn, cid).items() if code not in later} == {
         code: k for code, k in expected.items() if code not in later
+    }
+
+
+def test_current_or_long_term_follows_from_the_type():
+    """The balance sheet splits assets and liabilities by the type (D89)."""
+    assert is_current("cash") is True
+    assert is_current("other_asset") is True  # kept its code, now "other current assets"
+    assert is_current("investment") is True
+    assert is_current("fixed_asset") is False
+    assert is_current("long_term_investment") is False
+    assert is_current("other_noncurrent_asset") is False
+    assert is_current("other_liability") is True
+    assert is_current("long_term_loan") is False
+    assert is_current("other_long_term_liability") is False
+    assert is_current("share_capital") is None  # equity: neither
+    assert is_current("sales") is None
+    assert is_current(None) is None
+
+
+def test_1c77_template_long_term_accounts(ledger, conn):
+    cid = ledger.create_company("1С")
+    apply_chart_template(ledger, cid, "1c77")
+    k = kinds(conn, cid)
+    assert k["09"] == ("other_noncurrent_asset", "asset")  # deferred tax assets
+    assert k["77"] == ("other_long_term_liability", "liability")  # deferred tax liabilities
+    assert k["97"] == ("other_asset", "asset")  # deferred expenses: current
+    assert k["58"] == ("investment", "asset")  # short-term unless the user says otherwise
+    assert k["76"] == ("other_liability", "liability")
+
+
+def test_migration_moves_deferred_taxes_to_long_term(tmp_path):
+    """A file of version 34: 09 and 77 (and their subaccounts) become long-term; another
+    other asset stays current, and so does 090: only 09 and its subaccounts move."""
+    path = tmp_path / "old.gl"
+    old = sqlite3.connect(path)
+    for script in sorted(MIGRATIONS_DIR.glob("*.sql"))[:34]:
+        old.executescript(f"BEGIN;\n{script.read_text(encoding='utf-8')}\nCOMMIT;")
+    old.execute("PRAGMA user_version = 34")
+    old.execute("INSERT INTO companies (id, name, created_at) VALUES (1, 'Old', 'now')")
+    rows = [
+        (1, "09", "other_asset", "asset"),
+        (2, "09.1", "other_asset", "asset"),
+        (3, "77", "other_liability", "liability"),
+        (4, "97", "other_asset", "asset"),
+        (5, "76", "other_liability", "liability"),
+        (6, "090", "other_asset", "asset"),
+    ]
+    old.executemany(
+        "INSERT INTO accounts (id, company_id, code, name, account_type, account_class) "
+        "VALUES (?, 1, ?, 'x', ?, ?)",
+        rows,
+    )
+    old.commit()
+    old.close()
+
+    conn = connect(path)
+    types = dict(conn.execute("SELECT code, account_type FROM accounts").fetchall())
+    conn.close()
+    assert types == {
+        "09": "other_noncurrent_asset",
+        "09.1": "other_noncurrent_asset",
+        "77": "other_long_term_liability",
+        "97": "other_asset",
+        "76": "other_liability",
+        "090": "other_asset",
     }

@@ -174,3 +174,17 @@ def test_serves_lines_over_stdio(server):
     answers = [json.loads(line) for line in stdout.getvalue().splitlines()]
     assert [a["id"] for a in answers] == [1, 2]
     assert answers[1]["result"] == {}
+
+
+def test_chart_says_current_or_long_term(server, folder):
+    """The type gives the term of an asset or liability (D89); other accounts have none."""
+    conn = connect(folder / "Alfa.gl")
+    ledger = Ledger(conn)
+    [cid] = [c.id for c in ledger.companies.list()] if hasattr(ledger, "companies") else [1]
+    ledger.add_account(cid, "101", "Основные средства", account_type="fixed_asset")
+    ledger.add_account(cid, "102", "Касса", account_type="cash")
+    conn.close()
+    terms = {
+        a["code"]: a["term"] for a in call(server, "chart_of_accounts", company="alfa")["accounts"]
+    }
+    assert (terms["101"], terms["102"], terms["201"]) == ("long_term", "current", "")

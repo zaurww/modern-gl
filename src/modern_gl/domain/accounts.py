@@ -66,10 +66,15 @@ ACCOUNT_TYPES = (
     ("other_receivable", "asset", "Прочая дебиторская задолженность"),
     ("input_vat", "asset", "НДС к возмещению"),
     ("inventory", "asset", "Запасы"),
+    # the first types of a class are current (within a year), NONCURRENT_TYPES follow (D89);
+    # "investment", "other_asset", "other_liability" kept their codes when the long-term
+    # ones came, so charts in CSV files still load
+    ("investment", "asset", "Краткосрочные финансовые вложения"),
+    ("other_asset", "asset", "Прочие оборотные активы"),
     ("fixed_asset", "asset", "Основные средства"),
     ("intangible", "asset", "Нематериальные активы"),
-    ("investment", "asset", "Финансовые вложения"),
-    ("other_asset", "asset", "Прочие активы"),
+    ("long_term_investment", "asset", "Долгосрочные финансовые вложения"),
+    ("other_noncurrent_asset", "asset", "Прочие внеоборотные активы"),
     ("payable", "liability", "Поставщики и подрядчики"),
     ("advance_received", "liability", "Авансы полученные"),
     # not a settlement by e-qaimə: Dt 76H / Kt 60 is no payment of the invoice (D65)
@@ -77,8 +82,9 @@ ACCOUNT_TYPES = (
     ("tax_payable", "liability", "Налоги и обязательные платежи"),
     ("payroll", "liability", "Оплата труда"),
     ("short_term_loan", "liability", "Краткосрочные кредиты"),
+    ("other_liability", "liability", "Прочие краткосрочные обязательства"),
     ("long_term_loan", "liability", "Долгосрочные кредиты"),
-    ("other_liability", "liability", "Прочие обязательства"),
+    ("other_long_term_liability", "liability", "Прочие долгосрочные обязательства"),
     ("share_capital", "equity", "Уставный капитал"),
     ("retained_earnings", "equity", "Нераспределённая прибыль"),
     ("profit_loss", "equity", "Финансовый результат"),
@@ -101,11 +107,32 @@ SETTLEMENT_TYPES = frozenset(
         "advance_received",
         "other_receivable",
         "other_liability",
+        "other_long_term_liability",
+    }
+)
+# Assets and liabilities of these types are long-term (non-current: beyond a year), the
+# other assets and liabilities current; equity, revenue and expense are neither (D89).
+NONCURRENT_TYPES = frozenset(
+    {
+        "fixed_asset",
+        "intangible",
+        "long_term_investment",
+        "other_noncurrent_asset",
+        "long_term_loan",
+        "other_long_term_liability",
     }
 )
 VAT_TYPES = frozenset({"input_vat", "tax_payable"})
 TYPE_CLASS = {t: cls for t, cls, _ in ACCOUNT_TYPES}
 TYPE_NAMES = {t: name for t, _, name in ACCOUNT_TYPES}
+
+
+def is_current(account_type: str | None) -> bool | None:
+    """True for a current asset or liability, False for a long-term one, None for another
+    class or no type: the balance sheet splits by it (D89)."""
+    if TYPE_CLASS.get(account_type or "") not in ("asset", "liability"):
+        return None
+    return account_type not in NONCURRENT_TYPES
 
 
 def normal_side(account_class: str | None, contra: bool = False) -> str | None:
