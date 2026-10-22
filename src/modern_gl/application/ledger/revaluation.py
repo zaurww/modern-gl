@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import date
 from decimal import Decimal
 
@@ -14,7 +13,7 @@ from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Row, transaction
 
 
 class RevaluationCommands(DocumentCommands):
@@ -78,7 +77,7 @@ class RevaluationCommands(DocumentCommands):
             text = memo or tr("Переоценка валютных остатков на {date}", date=shown)
             return self.post_new(company_id, day, postings, text)
 
-    def _currency_balances(self, company_id: int, day: str) -> list[sqlite3.Row]:
+    def _currency_balances(self, company_id: int, day: str) -> list[Row]:
         """Balances of currency accounts on `day` (common layer), in manat and in currency,
         per account, subconto values and currency."""
         return self.conn.execute(

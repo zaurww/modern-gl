@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
+
+from modern_gl.infrastructure.db import Connection
 
 PURCHASE, SALE = "receipt", "sale"
 
@@ -28,7 +29,7 @@ class TradeDocument:
 
 
 def trade_documents(
-    conn: sqlite3.Connection, company_id: int, doc_type: str | None = None, limit: int = 500
+    conn: Connection, company_id: int, doc_type: str | None = None, limit: int = 500
 ) -> list[TradeDocument]:
     """Receipts and sales (one kind, or both), newest first, with the counterparties of
     their settlement lines and their totals."""

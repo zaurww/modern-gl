@@ -14,7 +14,6 @@ portal has none of them. Only posted documents of the common book count.
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -22,6 +21,7 @@ from datetime import date, timedelta
 from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
+from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import _DOCS_CTE, COMMON, _params
 
 MONEY_TYPES = frozenset({"cash", "bank", "vat_deposit"})
@@ -136,7 +136,7 @@ class Reconciliation:
 
 
 def book_invoices(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     outgoing: bool,
     layers: Sequence[str] = COMMON,
@@ -157,12 +157,12 @@ def book_invoices(
     ).fetchone()
     partner = kind["id"] if kind else None
 
-    def partner_at(account: sqlite3.Row) -> int | None:
+    def partner_at(account: Row) -> int | None:
         if partner is None:
             return None
         return next((i for i in (1, 2, 3) if account[f"sc{i}_kind_id"] == partner), None)
 
-    def settlement(account: sqlite3.Row) -> bool:
+    def settlement(account: Row) -> bool:
         kind = account["account_type"]
         return kind in SETTLEMENT_TYPES or (kind is None and partner_at(account) is not None)
 
@@ -216,9 +216,7 @@ def book_invoices(
     return {n: r for n, r in result.items() if r.total or r.vat}
 
 
-def known_on_portal(
-    conn: sqlite3.Connection, company_id: int, outgoing: bool
-) -> dict[str, PortalInvoice]:
+def known_on_portal(conn: Connection, company_id: int, outgoing: bool) -> dict[str, PortalInvoice]:
     """What the portal showed of each number the last time it was read."""
     return {
         r["number"]: _portal(r)
@@ -229,7 +227,7 @@ def known_on_portal(
     }
 
 
-def _portal(r: sqlite3.Row) -> PortalInvoice:
+def _portal(r: Row) -> PortalInvoice:
     return PortalInvoice(
         r["number"],
         bool(r["outgoing"]),
@@ -247,7 +245,7 @@ def _portal(r: sqlite3.Row) -> PortalInvoice:
 
 
 def portal_changes(
-    conn: sqlite3.Connection, company_id: int, outgoing: bool, after: str = ""
+    conn: Connection, company_id: int, outgoing: bool, after: str = ""
 ) -> dict[str, list[PortalChange]]:
     """Significant changes seen on the portal (after a moment), by number, oldest first."""
     result: dict[str, list[PortalChange]] = {}
@@ -276,7 +274,7 @@ def portal_changes(
 
 
 def reconcile(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     outgoing: bool,
     date_from: date | str,
@@ -375,7 +373,7 @@ class Mark:
     reconciled_at: str
 
 
-def reconciled_periods(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> list[Mark]:
+def reconciled_periods(conn: Connection, company_id: int, outgoing: bool) -> list[Mark]:
     return [
         Mark(r["date_from"], r["date_to"], r["reconciled_at"])
         for r in conn.execute(
@@ -386,7 +384,7 @@ def reconciled_periods(conn: sqlite3.Connection, company_id: int, outgoing: bool
     ]
 
 
-def reconciled_through(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> str | None:
+def reconciled_through(conn: Connection, company_id: int, outgoing: bool) -> str | None:
     """The last day reconciled without a gap from the first mark: «сверено по …»."""
     through: str | None = None
     for mark in reconciled_periods(conn, company_id, outgoing):
@@ -407,7 +405,7 @@ class ChangedMonth:
     numbers: tuple[str, ...]
 
 
-def changed_after_reconciliation(conn: sqlite3.Connection, company_id: int) -> list[ChangedMonth]:
+def changed_after_reconciliation(conn: Connection, company_id: int) -> list[ChangedMonth]:
     """E-qaimə that changed on the portal after the period of their date (old or new) was
     marked reconciled — and was not reconciled again since: the books may no longer
     agree. By month, purchases then sales."""
@@ -432,7 +430,7 @@ def changed_after_reconciliation(conn: sqlite3.Connection, company_id: int) -> l
 
 
 def portal_status(
-    conn: sqlite3.Connection, company_id: int, outgoing: bool, number: str | None
+    conn: Connection, company_id: int, outgoing: bool, number: str | None
 ) -> str | None:
     """The e-qaimə's status on the portal the last time it was read; None if never."""
     if not number:

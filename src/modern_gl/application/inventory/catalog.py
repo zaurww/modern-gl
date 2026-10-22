@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 from modern_gl.application.common import insert, where_used
 from modern_gl.application.inventory.base import InventoryBase
 from modern_gl.application.inventory.model import QUANTITY_SCALE
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import IntegrityError, transaction
 
 
 class CatalogCommands(InventoryBase):
@@ -28,7 +26,7 @@ class CatalogCommands(InventoryBase):
                     "VALUES (?, ?, ?, ?)",
                     (company_id, code, name, precision),
                 )
-            except sqlite3.IntegrityError as exc:
+            except IntegrityError as exc:
                 raise ValidationError(tr("единица с таким кодом уже существует")) from exc
             self._audit(company_id, "inventory_unit", unit_id, "create", {"code": code})
         return unit_id
@@ -69,7 +67,7 @@ class CatalogCommands(InventoryBase):
                     "VALUES (?, ?, ?, ?)",
                     (company_id, subconto_value_id, unit_id, inventory_account_id),
                 )
-            except sqlite3.IntegrityError as exc:
+            except IntegrityError as exc:
                 raise ValidationError(tr("этот товар уже подключён к складскому учёту")) from exc
             self._audit(
                 company_id,
@@ -163,7 +161,7 @@ class CatalogCommands(InventoryBase):
                     "INSERT INTO warehouses (company_id, subconto_value_id) VALUES (?, ?)",
                     (company_id, subconto_value_id),
                 )
-            except sqlite3.IntegrityError as exc:
+            except IntegrityError as exc:
                 raise ValidationError(tr("этот склад уже подключён к складскому учёту")) from exc
             self._audit(
                 company_id,
@@ -188,7 +186,7 @@ class CatalogCommands(InventoryBase):
                     "INSERT INTO landed_cost_types (company_id, code, name) VALUES (?, ?, ?)",
                     (company_id, code, name),
                 )
-            except sqlite3.IntegrityError as exc:
+            except IntegrityError as exc:
                 raise ValidationError(tr("такой вид дополнительных расходов уже есть")) from exc
             self._audit(
                 company_id,

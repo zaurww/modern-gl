@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass, field
 from itertools import chain
 
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import fold, sort_key, tr
+from modern_gl.infrastructure.db import Connection
 
 
 @dataclass(frozen=True)
@@ -81,26 +81,26 @@ class DocumentData:
         )
 
 
-def list_companies(conn: sqlite3.Connection) -> list[tuple[int, str]]:
+def list_companies(conn: Connection) -> list[tuple[int, str]]:
     return [
         (r["id"], r["name"]) for r in conn.execute("SELECT id, name FROM companies ORDER BY id")
     ]
 
 
-def company_name(conn: sqlite3.Connection, company_id: int) -> str:
+def company_name(conn: Connection, company_id: int) -> str:
     row = conn.execute("SELECT name FROM companies WHERE id = ?", (company_id,)).fetchone()
     if row is None:
         raise NotFoundError(tr("компания {id} не найдена", id=company_id))
     return row[0]
 
 
-def parallel_books(conn: sqlite3.Connection, company_id: int) -> bool:
+def parallel_books(conn: Connection, company_id: int) -> bool:
     """Whether the company keeps IFRS and tax books beside the common one (D63)."""
     row = conn.execute("SELECT parallel_books FROM companies WHERE id = ?", (company_id,))
     return bool(row.fetchone()[0])
 
 
-def list_layers(conn: sqlite3.Connection, company_id: int) -> list[tuple[str, str]]:
+def list_layers(conn: Connection, company_id: int) -> list[tuple[str, str]]:
     return [
         (r["code"], r["name"])
         for r in conn.execute(
@@ -109,7 +109,7 @@ def list_layers(conn: sqlite3.Connection, company_id: int) -> list[tuple[str, st
     ]
 
 
-def list_documents(conn: sqlite3.Connection, company_id: int) -> list[DocumentSummary]:
+def list_documents(conn: Connection, company_id: int) -> list[DocumentSummary]:
     rows = conn.execute(
         """
         SELECT d.id, d.number, d.doc_date, d.memo, l.code AS layer, d.status,
@@ -129,7 +129,7 @@ def list_documents(conn: sqlite3.Connection, company_id: int) -> list[DocumentSu
     return [DocumentSummary(**dict(r)) for r in rows]
 
 
-def load_document(conn: sqlite3.Connection, company_id: int, doc_id: int) -> DocumentData:
+def load_document(conn: Connection, company_id: int, doc_id: int) -> DocumentData:
     row = conn.execute(
         """
         SELECT d.id, d.number, d.doc_date, d.memo, l.code AS layer, d.status, d.reversal_of,
@@ -190,7 +190,7 @@ class TemplateData:
     lines: list[TemplateLineData] = field(default_factory=list)
 
 
-def list_templates(conn: sqlite3.Connection, company_id: int) -> list[TemplateData]:
+def list_templates(conn: Connection, company_id: int) -> list[TemplateData]:
     """All entry templates with their lines, alphabetically."""
     templates = {
         r["id"]: TemplateData(r["id"], r["name"], r["memo"])
@@ -215,7 +215,7 @@ def list_templates(conn: sqlite3.Connection, company_id: int) -> list[TemplateDa
     return sorted(templates.values(), key=lambda t: sort_key(t.name))
 
 
-def load_template(conn: sqlite3.Connection, company_id: int, template_id: int) -> TemplateData:
+def load_template(conn: Connection, company_id: int, template_id: int) -> TemplateData:
     found = next((t for t in list_templates(conn, company_id) if t.id == template_id), None)
     if found is None:
         raise NotFoundError(tr("шаблон не найден"))
@@ -223,7 +223,7 @@ def load_template(conn: sqlite3.Connection, company_id: int, template_id: int) -
 
 
 def recent_subconto(
-    conn: sqlite3.Connection, company_id: int, account_id: int, position: int, limit: int = 8
+    conn: Connection, company_id: int, account_id: int, position: int, limit: int = 8
 ) -> list[int]:
     """Elements most recently used at a subconto position of an account, newest first."""
     if position not in (1, 2, 3):
@@ -246,7 +246,7 @@ def recent_subconto(
     ]
 
 
-def last_memo(conn: sqlite3.Connection, company_id: int, debit: int, credit: int) -> str:
+def last_memo(conn: Connection, company_id: int, debit: int, credit: int) -> str:
     """The memo of the latest posting with this Dt/Kt pair (or of its document)."""
     row = conn.execute(
         """
@@ -268,7 +268,7 @@ class OpeningBalanceDocument:
     status: str
 
 
-def opening_document(conn: sqlite3.Connection, company_id: int) -> OpeningBalanceDocument | None:
+def opening_document(conn: Connection, company_id: int) -> OpeningBalanceDocument | None:
     row = conn.execute(
         "SELECT o.document_id, o.effective_date, d.status FROM opening_balance_documents o "
         "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
@@ -278,7 +278,7 @@ def opening_document(conn: sqlite3.Connection, company_id: int) -> OpeningBalanc
     return OpeningBalanceDocument(**dict(row)) if row is not None else None
 
 
-def is_opening_document(conn: sqlite3.Connection, company_id: int, document_id: int) -> bool:
+def is_opening_document(conn: Connection, company_id: int, document_id: int) -> bool:
     return (
         conn.execute(
             "SELECT 1 FROM opening_balance_documents WHERE company_id = ? AND document_id = ?",
@@ -289,7 +289,7 @@ def is_opening_document(conn: sqlite3.Connection, company_id: int, document_id: 
 
 
 def remembered_sale_subconto(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     item_id: int | None,
     memo: str = "",
@@ -322,7 +322,7 @@ def remembered_sale_subconto(
 
 
 def remembered_expense(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     memo: str = "",
     counterparty: int | None = None,

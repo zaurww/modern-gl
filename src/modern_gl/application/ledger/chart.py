@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 
 from modern_gl.application.common import insert, pad_subconto, where_used
@@ -11,7 +10,7 @@ from modern_gl.domain.accounts import ACCOUNT_CLASSES, ACCOUNT_ROLES, ROLE_TYPES
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY, currency_mode
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, transaction
 
 
 class ChartCommands(LedgerBase):
@@ -96,7 +95,7 @@ class ChartCommands(LedgerBase):
             )
         return account_id
 
-    def _group_parent(self, company_id: int, parent: int | str, label: str) -> sqlite3.Row:
+    def _group_parent(self, company_id: int, parent: int | str, label: str) -> Row:
         """The parent of a new account: an existing group."""
         parent_row = self._account(company_id, parent)
         if not parent_row["is_group"]:
@@ -119,7 +118,7 @@ class ChartCommands(LedgerBase):
                 "two_sided, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 values,
             )
-        except sqlite3.IntegrityError as e:
+        except IntegrityError as e:
             if "UNIQUE" in str(e):
                 raise ValidationError(tr("счёт {code} уже есть", code=label)) from e
             raise ValidationError(
@@ -269,7 +268,7 @@ class ChartCommands(LedgerBase):
                     "currency = ? WHERE id = ?",
                     (new_code, name, int(two_sided), int(group), *sc, optional, mode, acc["id"]),
                 )
-            except sqlite3.IntegrityError as e:
+            except IntegrityError as e:
                 raise ValidationError(tr("счёт {code} уже есть", code=new_code)) from e
             self._audit(
                 company_id,
@@ -297,7 +296,7 @@ class ChartCommands(LedgerBase):
             )
 
     def _check_group_change(
-        self, company_id: int, acc: sqlite3.Row, label: str, group: bool, used: bool
+        self, company_id: int, acc: Row, label: str, group: bool, used: bool
     ) -> None:
         """An account with postings does not become a group; a group with subaccounts
         stays one."""
@@ -319,7 +318,7 @@ class ChartCommands(LedgerBase):
 
     @staticmethod
     def _optional_positions(
-        acc: sqlite3.Row,
+        acc: Row,
         label: str,
         current_sc: tuple[int | None, ...],
         sc: tuple[int | None, ...],
@@ -381,7 +380,7 @@ class ChartCommands(LedgerBase):
                 {"code": acc["code"], "name": acc["name"]},
             )
 
-    def _check_currency_fits(self, account: sqlite3.Row, label: str, mode: int) -> None:
+    def _check_currency_fits(self, account: Row, label: str, mode: int) -> None:
         """Old postings must fit the new currency accounting of the account. A manat-only
         account may already have postings in a currency — of the other side (51 in
         Dt 52 / Ct 51): those would start counting in currency here, so it keeps them out."""

@@ -4,7 +4,6 @@ restored from a backup, deleted; and what opens it again (language, look, books)
 from __future__ import annotations
 
 import getpass
-import sqlite3
 import subprocess
 import sys
 from datetime import datetime
@@ -38,6 +37,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import language, set_language, tr
 from modern_gl.infrastructure import backup
+from modern_gl.infrastructure.db import Connection, DatabaseError, Error
 from modern_gl.infrastructure.workspace import SUFFIX, TRASH, Workspace
 
 
@@ -81,7 +81,7 @@ class CompanyFiles(QMainWindow):
         super().__init__()
         self.workspace = workspace
         self.settings = settings
-        self.conn: sqlite3.Connection | None = None
+        self.conn: Connection | None = None
         self.ledger: Ledger | None = None
         self.company_path: Path | None = None
         self.session: Session | None = None
@@ -124,7 +124,7 @@ class CompanyFiles(QMainWindow):
             return False
         try:
             path = self.workspace.create(name.strip(), path=target)
-        except (LedgerError, OSError, sqlite3.Error) as e:
+        except (LedgerError, OSError, Error) as e:
             QMessageBox.warning(self, tr("Новая компания"), str(e))
             return False
         self._store_files()
@@ -172,7 +172,7 @@ class CompanyFiles(QMainWindow):
             try:
                 if self.company_path is not None:
                     self.workspace.auto_backup(self.conn, self.company_path)
-            except (backup.BackupError, OSError, sqlite3.Error) as e:
+            except (backup.BackupError, OSError, Error) as e:
                 QMessageBox.warning(
                     self, tr("Резервная копия"), tr("Копия не сохранена: {error}", error=e)
                 )
@@ -193,7 +193,7 @@ class CompanyFiles(QMainWindow):
             return
         try:
             added = self.workspace.add_file(Path(path))
-        except sqlite3.DatabaseError:
+        except DatabaseError:
             QMessageBox.warning(
                 self,
                 tr("Добавить из файла"),
@@ -228,7 +228,7 @@ class CompanyFiles(QMainWindow):
             target = target.with_name(target.name + SUFFIX)
         try:
             self.workspace.save_as(self.conn, self.company_path, target, name)
-        except (LedgerError, OSError, sqlite3.Error) as e:
+        except (LedgerError, OSError, Error) as e:
             QMessageBox.warning(self, tr("Сохранить как"), str(e))
             return False
         self._store_files()
@@ -253,7 +253,7 @@ class CompanyFiles(QMainWindow):
             return
         try:
             backup.copy_to(self.conn, Path(target))
-        except (backup.BackupError, OSError, sqlite3.Error) as e:
+        except (backup.BackupError, OSError, Error) as e:
             QMessageBox.warning(self, tr("Сохранить копию"), str(e))
             return
         self.notify(tr("Копия сохранена: {file}", file=target))
@@ -298,7 +298,7 @@ class CompanyFiles(QMainWindow):
             self._close_company()
         try:
             self.workspace.restore(source, path)
-        except (backup.BackupError, OSError, sqlite3.Error) as e:
+        except (backup.BackupError, OSError, Error) as e:
             QMessageBox.warning(self, tr("Восстановить из копии"), str(e))
             return False
         self.open_company(path)

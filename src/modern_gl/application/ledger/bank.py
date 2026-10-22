@@ -10,7 +10,6 @@ amount in the currency kept on the posting.
 
 from __future__ import annotations
 
-import sqlite3
 from decimal import Decimal
 
 from modern_gl.application.bank import (
@@ -31,7 +30,7 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Row, transaction
 
 explain_owner(
     "bank",
@@ -281,7 +280,7 @@ class BankCommands(ModuleDocumentCommands):
             )
         return postings
 
-    def _bank_row(self, company_id: int, operation_id: int) -> sqlite3.Row:
+    def _bank_row(self, company_id: int, operation_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM bank_operations WHERE company_id = ? AND id = ?",
             (company_id, operation_id),

@@ -1,4 +1,8 @@
-"""SQLite connection, explicit transactions and versioned migrations."""
+"""SQLite connection, explicit transactions and versioned migrations.
+
+The only module that knows the database engine (D77): the rest of the code takes the
+connection, row and error types from here, so moving to PostgreSQL changes this package,
+not the queries' callers."""
 
 from __future__ import annotations
 
@@ -8,6 +12,13 @@ from contextlib import contextmanager
 from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+
+# A row is read both by name (row["code"]) and by position (row[0]) and has .keys()
+Connection = sqlite3.Connection
+Row = sqlite3.Row
+Error = sqlite3.Error
+DatabaseError = sqlite3.DatabaseError
+IntegrityError = sqlite3.IntegrityError
 
 
 def connect(path: str | Path) -> sqlite3.Connection:

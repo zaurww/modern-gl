@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import replace
 
@@ -13,14 +12,15 @@ from modern_gl.domain.accounts import ACCRUED_EXPENSES
 from modern_gl.domain.dates import month_name, ru_date
 from modern_gl.domain.errors import PeriodClosedError, ValidationError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Row
 
 
 class AccrualCommands(InventoryBase):
     def _accrue(
         self,
         company_id: int,
-        doc: sqlite3.Row,
-        lines: Sequence[sqlite3.Row],
+        doc: Row,
+        lines: Sequence[Row],
         postings: list[PostingInput],
     ) -> list[PostingInput]:
         """A receipt whose expense belongs to an earlier month (D65). Each line without an
@@ -128,7 +128,7 @@ class AccrualCommands(InventoryBase):
             (accrual_id, document_id),
         )
 
-    def _drop_accrual(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _drop_accrual(self, company_id: int, doc: Row) -> None:
         accrual_id = doc["accrual_document_id"]
         self.conn.execute(
             "UPDATE inventory_documents SET accrual_document_id = NULL WHERE id = ?", (doc["id"],)

@@ -3,7 +3,6 @@ issues consumed of receipts."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from datetime import date
 
@@ -15,11 +14,10 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import round_ratio
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Row
 
 
-def require_stock(
-    item: sqlite3.Row, warehouse: sqlite3.Row, requested: int, available: int
-) -> None:
+def require_stock(item: Row, warehouse: Row, requested: int, available: int) -> None:
     if requested > available:
         raise ValidationError(
             tr(
@@ -81,8 +79,8 @@ class StockCommands(DraftCommands):
     def _cost(
         self,
         company_id: int,
-        item: sqlite3.Row,
-        warehouse: sqlite3.Row,
+        item: Row,
+        warehouse: Row,
         quantity: int,
         document_id: int,
     ) -> int:
@@ -149,7 +147,7 @@ class StockCommands(DraftCommands):
             )
         ]
 
-    def _receipt_consumptions(self, company_id: int, receipt_line_id: int) -> list[sqlite3.Row]:
+    def _receipt_consumptions(self, company_id: int, receipt_line_id: int) -> list[Row]:
         return self.conn.execute(
             """
             SELECT c.issue_line_id, c.quantity, d.doc_type,
@@ -167,7 +165,7 @@ class StockCommands(DraftCommands):
             (company_id, receipt_line_id),
         ).fetchall()
 
-    def _sale_values(self, company_id: int, line: sqlite3.Row) -> tuple[int | None, ...]:
+    def _sale_values(self, company_id: int, line: Row) -> tuple[int | None, ...]:
         """What a sale line's accounts take their subconto from: the customer, the line's
         own values (a sales group), the item and the warehouse."""
         values = [line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]]

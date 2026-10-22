@@ -4,7 +4,6 @@ manat); the statement is read from postings, so every document on the account is
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -12,6 +11,7 @@ from modern_gl.application.common import pad_subconto
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import sort_key, tr
+from modern_gl.infrastructure.db import Connection, Row
 
 IN, OUT = "in", "out"  # mədaxil: money comes to the bank account; məxaric: it leaves
 SUPPLIER, CUSTOMER, TAX, SALARY, FEE, TRANSFER, OTHER = (
@@ -88,9 +88,7 @@ class BankOperation(BankOperationInput):
     status: str = "draft"
 
 
-def load_bank_operation(
-    conn: sqlite3.Connection, company_id: int, operation_id: int
-) -> BankOperation:
+def load_bank_operation(conn: Connection, company_id: int, operation_id: int) -> BankOperation:
     r = conn.execute(
         "SELECT o.*, d.number, d.doc_date, d.memo, d.status FROM bank_operations o "
         "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
@@ -125,9 +123,7 @@ def load_bank_operation(
     )
 
 
-def bank_operation_of_document(
-    conn: sqlite3.Connection, company_id: int, document_id: int
-) -> int | None:
+def bank_operation_of_document(conn: Connection, company_id: int, document_id: int) -> int | None:
     """The bank operation whose postings these are."""
     row = conn.execute(
         "SELECT id FROM bank_operations WHERE company_id = ? AND document_id = ?",
@@ -136,7 +132,7 @@ def bank_operation_of_document(
     return row[0] if row else None
 
 
-def find_bank_operation(conn: sqlite3.Connection, company_id: int, reference: str) -> int | None:
+def find_bank_operation(conn: Connection, company_id: int, reference: str) -> int | None:
     """An operation already entered for a bank statement line (future statement import)."""
     reference = reference.strip()
     if not reference:
@@ -149,7 +145,7 @@ def find_bank_operation(conn: sqlite3.Connection, company_id: int, reference: st
 
 
 def last_lines(
-    conn: sqlite3.Connection, company_id: int, direction: str, counterparty_id: int
+    conn: Connection, company_id: int, direction: str, counterparty_id: int
 ) -> list[BankLine]:
     """What the money of this counterparty went to (came from) last time: the accounts and
     subconto of its latest operation of the same direction, without amounts and e-qaimə.
@@ -219,7 +215,7 @@ class BankPlace:
         return pad_subconto(() if self.value_id is None else (self.value_id,))
 
 
-def bank_places(conn: sqlite3.Connection, company_id: int) -> list[BankPlace]:
+def bank_places(conn: Connection, company_id: int) -> list[BankPlace]:
     """Bank accounts: each element of the bank account directory under the GL accounts it
     was used on; an element never used is under the first account that fits its currency
     (a USD account under 52, not 51). A GL account without the directory is one place."""
@@ -266,7 +262,7 @@ def bank_places(conn: sqlite3.Connection, company_id: int) -> list[BankPlace]:
     return places
 
 
-def _bank_accounts(conn: sqlite3.Connection, company_id: int) -> list[sqlite3.Row]:
+def _bank_accounts(conn: Connection, company_id: int) -> list[Row]:
     """The GL accounts money is in the bank on, with the position of the bank account
     directory among their subconto (None: the account has no such directory)."""
     return conn.execute(
@@ -288,7 +284,7 @@ def _bank_accounts(conn: sqlite3.Connection, company_id: int) -> list[sqlite3.Ro
     ).fetchall()
 
 
-def _bank_values(conn: sqlite3.Connection, company_id: int) -> list[sqlite3.Row]:
+def _bank_values(conn: Connection, company_id: int) -> list[Row]:
     """The elements of the bank account directory with their currency."""
     return conn.execute(
         "SELECT v.id, v.name, v.currency_id, c.code AS currency FROM subconto_values v "
@@ -299,7 +295,7 @@ def _bank_values(conn: sqlite3.Connection, company_id: int) -> list[sqlite3.Row]
     ).fetchall()
 
 
-def _used_pairs(conn: sqlite3.Connection, company_id: int) -> set[tuple[int, int]]:
+def _used_pairs(conn: Connection, company_id: int) -> set[tuple[int, int]]:
     """(GL account, subconto value) pairs postings or bank operations have used."""
     return {
         (r[0], r[1])
@@ -322,7 +318,7 @@ def _used_pairs(conn: sqlite3.Connection, company_id: int) -> set[tuple[int, int
     }
 
 
-def _fits(account: sqlite3.Row, value: sqlite3.Row) -> bool:
+def _fits(account: Row, value: Row) -> bool:
     if account["currency"] == 0:  # manat only
         return value["currency_id"] is None
     if account["currency"] == 1:  # currency only
@@ -367,7 +363,7 @@ class Statement:
 
 
 def statement(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     place: BankPlace,
     date_from: str,
@@ -413,7 +409,7 @@ def statement(
     return result
 
 
-def _statement_rows(conn: sqlite3.Connection, place: BankPlace, params: dict) -> list[sqlite3.Row]:
+def _statement_rows(conn: Connection, place: BankPlace, params: dict) -> list[Row]:
     """One row per posted document that moved the bank account: money in and out, the
     counterparties and corr accounts, what kind of operation made it."""
     amount = "COALESCE(p.currency_amount, 0)" if place.currency_id is not None else "p.amount"
@@ -466,7 +462,7 @@ def _statement_rows(conn: sqlite3.Connection, place: BankPlace, params: dict) ->
     ).fetchall()
 
 
-def _drafts(conn: sqlite3.Connection, place: BankPlace, params: dict) -> list[StatementLine]:
+def _drafts(conn: Connection, place: BankPlace, params: dict) -> list[StatementLine]:
     rows = conn.execute(
         """
         SELECT d.id, d.number, d.doc_date, d.memo, o.kind, o.direction,
@@ -505,7 +501,7 @@ def _drafts(conn: sqlite3.Connection, place: BankPlace, params: dict) -> list[St
     ]
 
 
-def place_balance(conn: sqlite3.Connection, company_id: int, place: BankPlace, day: str) -> int:
+def place_balance(conn: Connection, company_id: int, place: BankPlace, day: str) -> int:
     """The balance of a bank account at the end of the day, in its currency."""
     amount = "COALESCE(p.currency_amount, 0)" if place.currency_id is not None else "p.amount"
     row = conn.execute(

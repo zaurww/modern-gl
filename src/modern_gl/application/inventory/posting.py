@@ -3,7 +3,6 @@ every later one is recalculated."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from datetime import date
@@ -27,7 +26,7 @@ from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Row, transaction
 
 # Within one day, arrivals come before what leaves: the sequence of posting is
 # (date, rank, number). There is no time of day.
@@ -41,7 +40,7 @@ _SEQUENCE_RANK = {
 }
 
 
-def _sequence_key(doc: sqlite3.Row) -> tuple[str, int, int]:
+def _sequence_key(doc: Row) -> tuple[str, int, int]:
     return doc["doc_date"], _SEQUENCE_RANK[doc["doc_type"]], doc["number"]
 
 
@@ -258,7 +257,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         doc = self._document(company_id, document_id)
         self._apply_in_order(company_id, document_id, self._withdraw_after(company_id, doc))
 
-    def _unpost(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _unpost(self, company_id: int, doc: Row) -> None:
         """Take a posted document out of the sequence: it becomes a draft without GL
         postings, and the documents after it are recalculated without it."""
         self._require_open_period(doc)
@@ -275,7 +274,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             self._drop_accrual(company_id, doc)
         self._apply_in_order(company_id, None, later)
 
-    def _withdraw_after(self, company_id: int, doc: sqlite3.Row) -> list[int]:
+    def _withdraw_after(self, company_id: int, doc: Row) -> list[int]:
         """Withdraw every posted document that comes after `doc` (latest first)."""
         key = _sequence_key(doc)
         later = sorted(
@@ -295,7 +294,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             self._withdraw(company_id, row)
         return [row["id"] for row in later]
 
-    def _withdraw(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _withdraw(self, company_id: int, doc: Row) -> None:
         """Remove the stock effect of a posted document; it stays a draft that still
         points to its GL document, so posting it again keeps that document's number."""
         document_id = doc["id"]
@@ -352,7 +351,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
                     )
                 ) from exc
 
-    def _apply(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _apply(self, company_id: int, doc: Row) -> None:
         """Post a draft: movements, derived amounts and its GL document."""
         lines = self.conn.execute(
             "SELECT * FROM inventory_lines WHERE document_id = ? ORDER BY line_no",

@@ -11,7 +11,6 @@ with the credit, at the rate of its day.
 
 from __future__ import annotations
 
-import sqlite3
 from decimal import Decimal
 
 from modern_gl.application.common import pad_subconto
@@ -32,7 +31,7 @@ from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Row, transaction
 
 EXCHANGE_DIFFERENCE = "Курсовая разница при конвертации"
 BANK_FEE_ITEM = "Комиссия банка"
@@ -310,7 +309,7 @@ class ConversionCommands(ModuleDocumentCommands):
             (credit_lines if fee_on_credit(data, fee) else debit_lines).append(posting)
         return debit_lines, credit_lines
 
-    def _transit_account(self, company_id: int) -> sqlite3.Row:
+    def _transit_account(self, company_id: int) -> Row:
         transit = self._role_account(
             company_id, FX_TRANSIT, tr("Не указан счёт переводов в пути (57)")
         )
@@ -370,7 +369,7 @@ class ConversionCommands(ModuleDocumentCommands):
             currency_amount=fee.amount,
         )
 
-    def _role_account(self, company_id: int, role: str, missing: str) -> sqlite3.Row:
+    def _role_account(self, company_id: int, role: str, missing: str) -> Row:
         account_id = self.account_role(company_id, role)
         if account_id is None:
             raise MissingAccountRole(
@@ -383,7 +382,7 @@ class ConversionCommands(ModuleDocumentCommands):
             return self._company(company_id)["base_currency"]
         return self._currency(company_id, currency_id)["code"]
 
-    def _conversion_row(self, company_id: int, conversion_id: int) -> sqlite3.Row:
+    def _conversion_row(self, company_id: int, conversion_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM currency_conversions WHERE company_id = ? AND id = ?",
             (company_id, conversion_id),
@@ -392,14 +391,14 @@ class ConversionCommands(ModuleDocumentCommands):
             raise ValidationError(tr("документ {id} не найден", id=conversion_id))
         return row
 
-    def _require_conversion_changeable(self, company_id: int, row: sqlite3.Row) -> None:
+    def _require_conversion_changeable(self, company_id: int, row: Row) -> None:
         for doc_id in (row["document_id"], row["credit_document_id"]):
             if doc_id is not None:
                 doc = self._document(company_id, doc_id)
                 if doc["status"] == "posted":
                     self._require_changeable(company_id, doc)
 
-    def _drop_credit_document(self, company_id: int, row: sqlite3.Row) -> None:
+    def _drop_credit_document(self, company_id: int, row: Row) -> None:
         if row["credit_document_id"] is None:
             return
         self.conn.execute(

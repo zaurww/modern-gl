@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date
@@ -9,13 +8,14 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import list_layers, parallel_books
 from modern_gl.infrastructure import cbar
+from modern_gl.infrastructure.db import Connection
 
 
 @dataclass
 class Session:
     """Everything a page needs about the open company."""
 
-    conn: sqlite3.Connection
+    conn: Connection
     ledger: Ledger
     company_id: int
     company_name: str

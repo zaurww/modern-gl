@@ -10,14 +10,13 @@ reported."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.queries import remembered_expense
 from modern_gl.domain.errors import LedgerError
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Connection, transaction
 
 
 @dataclass
@@ -75,7 +74,7 @@ def _fill_like_last_time(inventory: Inventory, company_id: int, document_id: int
     return filled
 
 
-def _counterparty(conn: sqlite3.Connection, company_id: int, document_id: int) -> int | None:
+def _counterparty(conn: Connection, company_id: int, document_id: int) -> int | None:
     row = conn.execute(
         """
         SELECT v.id FROM inventory_lines x

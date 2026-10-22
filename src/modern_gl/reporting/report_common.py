@@ -4,13 +4,13 @@ the rows of the reports, the parameters of a period, the accounts of the chart."
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections import defaultdict
 from dataclasses import dataclass, field
 
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection, Row
 
 COMMON = ("common",)
 IFRS = ("common", "ifrs_adj")
@@ -173,7 +173,7 @@ def _params(conn, company_id, date_from, date_to, layers) -> dict:
     }
 
 
-def _accounts(conn: sqlite3.Connection, company_id: int) -> dict[int, sqlite3.Row]:
+def _accounts(conn: Connection, company_id: int) -> dict[int, Row]:
     return {
         r["id"]: r
         for r in conn.execute(
@@ -183,7 +183,7 @@ def _accounts(conn: sqlite3.Connection, company_id: int) -> dict[int, sqlite3.Ro
     }
 
 
-def _subtree(accounts: dict[int, sqlite3.Row], root_id: int) -> list[int]:
+def _subtree(accounts: dict[int, Row], root_id: int) -> list[int]:
     children = defaultdict(list)
     for a in accounts.values():
         children[a["parent_id"]].append(a["id"])
@@ -195,7 +195,7 @@ def _subtree(accounts: dict[int, sqlite3.Row], root_id: int) -> list[int]:
     return result
 
 
-def _find_account(accounts: dict[int, sqlite3.Row], account: int | str) -> sqlite3.Row:
+def _find_account(accounts: dict[int, Row], account: int | str) -> Row:
     """An account by id (int) or by code (str)."""
     if isinstance(account, int) and account in accounts:
         return accounts[account]

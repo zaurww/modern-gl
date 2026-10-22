@@ -3,7 +3,6 @@ the postings. Amounts are minor units of each side's currency (None = manat)."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from fractions import Fraction
@@ -14,6 +13,7 @@ from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 
 
 @dataclass(frozen=True)
@@ -97,7 +97,7 @@ def fee_date(data: ConversionInput, fee: ConversionFee) -> str:
     return data.doc_date
 
 
-def calculate(conn: sqlite3.Connection, company_id: int, data: ConversionInput) -> ConversionCalc:
+def calculate(conn: Connection, company_id: int, data: ConversionInput) -> ConversionCalc:
     rates: dict[tuple[int, str], Rate] = {}
     missing: list[int] = []
 
@@ -132,9 +132,7 @@ def bank_rate(data: ConversionInput) -> Fraction | None:
     return Fraction(target.amount, source.amount)
 
 
-def conversion_of_document(
-    conn: sqlite3.Connection, company_id: int, document_id: int
-) -> int | None:
+def conversion_of_document(conn: Connection, company_id: int, document_id: int) -> int | None:
     """The conversion whose postings these are (either of its GL documents)."""
     row = conn.execute(
         "SELECT id FROM currency_conversions WHERE company_id = ? "
@@ -144,7 +142,7 @@ def conversion_of_document(
     return row[0] if row else None
 
 
-def find_by_reference(conn: sqlite3.Connection, company_id: int, reference: str) -> int | None:
+def find_by_reference(conn: Connection, company_id: int, reference: str) -> int | None:
     """A conversion already entered for a bank statement line (future statement import)."""
     reference = reference.strip()
     if not reference:
@@ -157,7 +155,7 @@ def find_by_reference(conn: sqlite3.Connection, company_id: int, reference: str)
     return row[0] if row else None
 
 
-def load_conversion(conn: sqlite3.Connection, company_id: int, conversion_id: int) -> Conversion:
+def load_conversion(conn: Connection, company_id: int, conversion_id: int) -> Conversion:
     r = conn.execute(
         "SELECT c.*, d.number, d.doc_date, d.memo, d.status FROM currency_conversions c "
         "JOIN documents d ON d.company_id = c.company_id AND d.id = c.document_id "

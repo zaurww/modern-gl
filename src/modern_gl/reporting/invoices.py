@@ -15,13 +15,13 @@ With `open_only` every invoice with a balance at the end of the period is shown.
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
 from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER
+from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.reports import _DOCS_CTE, COMMON, _params
 
 # documents of a status: drafts too, for the e-qaimə a payment may name
@@ -53,7 +53,7 @@ class InvoiceRow:
 
 
 def invoice_report(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     date_from: date | str,
     date_to: date | str,
@@ -68,7 +68,7 @@ def invoice_report(
 
 
 def _gathered(
-    conn: sqlite3.Connection, company_id: int, params: dict, status: str = "posted"
+    conn: Connection, company_id: int, params: dict, status: str = "posted"
 ) -> dict[tuple[str, str], InvoiceRow]:
     """The invoices of the documents of a status up to `date_to`, by (kind, number)."""
     chart = _Chart(conn, company_id)
@@ -96,7 +96,7 @@ class _Chart:
     """What each account of the company is to an invoice: a settlement with a partner
     (where its counterparty and contract are) or ƏDV."""
 
-    def __init__(self, conn: sqlite3.Connection, company_id: int) -> None:
+    def __init__(self, conn: Connection, company_id: int) -> None:
         self.accounts = {
             r["id"]: r
             for r in conn.execute(
@@ -115,12 +115,12 @@ class _Chart:
         }
         self.partner, self.contract = kinds.get("counterparty"), kinds.get("contract")
 
-    def slot(self, account: sqlite3.Row, kind: int | None) -> int | None:
+    def slot(self, account: Row, kind: int | None) -> int | None:
         if kind is None:
             return None
         return next((i for i in (1, 2, 3) if account[f"sc{i}_kind_id"] == kind), None)
 
-    def add(self, row: InvoiceRow, p: sqlite3.Row) -> None:
+    def add(self, row: InvoiceRow, p: Row) -> None:
         """One posting of the invoice: settlement turnovers, partner, contract, ƏDV."""
         vat = deposit = False
         for side, prefix in (("debit", "dt"), ("credit", "ct")):
@@ -160,7 +160,7 @@ class OpenInvoice:
 
 
 def open_invoices(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     counterparty_id: int,
     payable: bool,
@@ -217,7 +217,7 @@ def open_invoices(
     return [i for i in found if i.amount > 0 and i.invoice not in other_way]
 
 
-def _other_way(conn: sqlite3.Connection, company_id: int, payable: bool) -> set[str]:
+def _other_way(conn: Connection, company_id: int, payable: bool) -> set[str]:
     """E-qaimə known to go the other way: sales when paying, purchases when money comes
     in (a purchase or sale document, or the portal's list) — an advance paid on a purchase
     not posted yet is not offered as owed to the company."""
@@ -230,9 +230,7 @@ def _other_way(conn: sqlite3.Connection, company_id: int, payable: bool) -> set[
     return {r[0] for r in rows}
 
 
-def _same_firm(
-    conn: sqlite3.Connection, company_id: int, counterparty_id: int
-) -> tuple[set[int], str]:
+def _same_firm(conn: Connection, company_id: int, counterparty_id: int) -> tuple[set[int], str]:
     """The counterparty and the elements of its directory with its VÖEN; the VÖEN."""
     row = conn.execute(
         "SELECT kind_id, COALESCE(tax_id, '') AS tin FROM subconto_values "
@@ -249,7 +247,7 @@ def _same_firm(
 
 
 def _trade_drafts(
-    conn: sqlite3.Connection, company_id: int, on_date: str, payable: bool, parties: set[int]
+    conn: Connection, company_id: int, on_date: str, payable: bool, parties: set[int]
 ) -> list[tuple[str, str, int, int, bool, str]]:
     """Purchase (sale) drafts with an e-qaimə number: their total with ƏDV, and the ƏDV."""
     rows = conn.execute(
@@ -277,7 +275,7 @@ def _trade_drafts(
 
 
 def _portal(
-    conn: sqlite3.Connection, company_id: int, on_date: str, payable: bool, tin: str
+    conn: Connection, company_id: int, on_date: str, payable: bool, tin: str
 ) -> list[tuple[str, str, int, int, bool, str]]:
     """E-qaimə the portal showed for the VÖEN (in turnover or awaiting approval)."""
     if not tin:

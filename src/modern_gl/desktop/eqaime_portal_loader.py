@@ -3,7 +3,6 @@ changed on the portal in the months already reconciled."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -17,6 +16,7 @@ from modern_gl.application.eqaime_import import (
 from modern_gl.domain.dates import month_name
 from modern_gl.domain.eqaime import IMPORTED, PortalInvoice
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
 from modern_gl.reporting.eqaime_reconciliation import changed_after_reconciliation
 
@@ -48,7 +48,7 @@ class Fetched:
     rechecked: list[PortalInvoice]  # the reconciled months read again
 
 
-def changes_warning(conn: sqlite3.Connection, company_id: int) -> str:
+def changes_warning(conn: Connection, company_id: int) -> str:
     """'' or what changed on the portal in the months marked reconciled."""
     changed = changed_after_reconciliation(conn, company_id)
     if not changed:

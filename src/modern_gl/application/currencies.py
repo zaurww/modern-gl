@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
 
 from modern_gl.domain.currency import unit_rate
 from modern_gl.domain.dates import iso_date
+from modern_gl.infrastructure.db import Connection, Row
 
 
 @dataclass(frozen=True)
@@ -36,7 +36,7 @@ class Rate:
         return unit_rate(self.rate, self.nominal)
 
 
-def list_currencies(conn: sqlite3.Connection, company_id: int) -> list[CurrencyInfo]:
+def list_currencies(conn: Connection, company_id: int) -> list[CurrencyInfo]:
     return [
         CurrencyInfo(r["id"], r["code"], r["name"], bool(r["active"]))
         for r in conn.execute(
@@ -45,7 +45,7 @@ def list_currencies(conn: sqlite3.Connection, company_id: int) -> list[CurrencyI
     ]
 
 
-def list_rates(conn: sqlite3.Connection, company_id: int, currency_id: int) -> list[Rate]:
+def list_rates(conn: Connection, company_id: int, currency_id: int) -> list[Rate]:
     """Rate history of a currency, newest first."""
     return [
         _rate(r)
@@ -57,9 +57,7 @@ def list_rates(conn: sqlite3.Connection, company_id: int, currency_id: int) -> l
     ]
 
 
-def rate_on(
-    conn: sqlite3.Connection, company_id: int, currency_id: int, day: date | str
-) -> Rate | None:
+def rate_on(conn: Connection, company_id: int, currency_id: int, day: date | str) -> Rate | None:
     """The rate in force on a day: the latest one set on or before it."""
     row = conn.execute(
         "SELECT * FROM currency_rates WHERE company_id = ? AND currency_id = ? "
@@ -69,7 +67,7 @@ def rate_on(
     return _rate(row) if row else None
 
 
-def latest_rates(conn: sqlite3.Connection, company_id: int) -> dict[int, Rate]:
+def latest_rates(conn: Connection, company_id: int) -> dict[int, Rate]:
     """The most recent rate of every currency that has one."""
     return {
         r["currency_id"]: _rate(r)
@@ -84,5 +82,5 @@ def latest_rates(conn: sqlite3.Connection, company_id: int) -> dict[int, Rate]:
     }
 
 
-def _rate(r: sqlite3.Row) -> Rate:
+def _rate(r: Row) -> Rate:
     return Rate(r["currency_id"], r["rate_date"], r["rate"], r["nominal"], r["source"])

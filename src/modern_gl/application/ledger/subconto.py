@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Iterable
 
 from modern_gl.application.common import insert, where_used
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import fold, tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, transaction
 
 
 class SubcontoCommands(LedgerBase):
@@ -77,7 +76,7 @@ class SubcontoCommands(LedgerBase):
                     f"VALUES ({', '.join('?' * len(columns))})",
                     params,
                 )
-            except sqlite3.IntegrityError as e:
+            except IntegrityError as e:
                 raise ValidationError(
                     tr("не удалось добавить субконто {name}: {error}", name=name, error=e)
                 ) from e
@@ -147,7 +146,7 @@ class SubcontoCommands(LedgerBase):
                     "UPDATE subconto_values SET name = ?, code = ? WHERE id = ?",
                     (name, code, value_id),
                 )
-            except sqlite3.IntegrityError as e:
+            except IntegrityError as e:
                 raise ValidationError(
                     tr("не удалось добавить субконто {name}: {error}", name=name, error=e)
                 ) from e
@@ -370,7 +369,7 @@ class SubcontoCommands(LedgerBase):
                 {"from": sorted(old), "to": sorted(wanted)},
             )
 
-    def _tag(self, company_id: int, tag_id: int) -> sqlite3.Row:
+    def _tag(self, company_id: int, tag_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM tags WHERE company_id = ? AND id = ?", (company_id, tag_id)
         ).fetchone()

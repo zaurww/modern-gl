@@ -2,25 +2,25 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 
 from modern_gl.application.common import company_row, write_audit
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection, Row
 
 
 class InventoryBase:
-    def __init__(self, conn: sqlite3.Connection, actor: str = "local") -> None:
+    def __init__(self, conn: Connection, actor: str = "local") -> None:
         self.conn = conn
         self.actor = actor
         self.ledger = Ledger(conn, actor=actor)
 
-    def _company(self, company_id: int) -> sqlite3.Row:
+    def _company(self, company_id: int) -> Row:
         return company_row(self.conn, company_id)
 
-    def _unit(self, company_id: int, unit_id: int) -> sqlite3.Row:
+    def _unit(self, company_id: int, unit_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM inventory_units WHERE company_id = ? AND id = ?",
             (company_id, unit_id),
@@ -29,7 +29,7 @@ class InventoryBase:
             raise NotFoundError(tr("единица измерения не найдена"))
         return row
 
-    def _item(self, company_id: int, item_id: int) -> sqlite3.Row:
+    def _item(self, company_id: int, item_id: int) -> Row:
         row = self.conn.execute(
             """
             SELECT i.*, v.name, v.code, v.active, u.precision AS unit_precision,
@@ -47,7 +47,7 @@ class InventoryBase:
             raise ValidationError(tr("товар скрыт"))
         return row
 
-    def _warehouse(self, company_id: int, warehouse_id: int) -> sqlite3.Row:
+    def _warehouse(self, company_id: int, warehouse_id: int) -> Row:
         row = self.conn.execute(
             """
             SELECT w.*, v.name, v.code, v.active
@@ -62,7 +62,7 @@ class InventoryBase:
             raise ValidationError(tr("склад скрыт"))
         return row
 
-    def _cost_type(self, company_id: int, type_id: int) -> sqlite3.Row:
+    def _cost_type(self, company_id: int, type_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM landed_cost_types WHERE company_id = ? AND id = ? AND active = 1",
             (company_id, type_id),
@@ -71,7 +71,7 @@ class InventoryBase:
             raise NotFoundError(tr("вид дополнительных расходов не найден"))
         return row
 
-    def _account(self, company_id: int, account_id: int) -> sqlite3.Row:
+    def _account(self, company_id: int, account_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM accounts WHERE company_id = ? AND id = ?",
             (company_id, account_id),
@@ -80,7 +80,7 @@ class InventoryBase:
             raise NotFoundError(tr("счёт не найден"))
         return row
 
-    def _subconto_value(self, company_id: int, value_id: int) -> sqlite3.Row:
+    def _subconto_value(self, company_id: int, value_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM subconto_values WHERE company_id = ? AND id = ?",
             (company_id, value_id),
@@ -98,7 +98,7 @@ class InventoryBase:
             raise ValidationError(tr("не найден справочник {code}", code=code))
         return row["id"]
 
-    def _document(self, company_id: int, document_id: int) -> sqlite3.Row:
+    def _document(self, company_id: int, document_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM inventory_documents WHERE company_id = ? AND id = ?",
             (company_id, document_id),
@@ -107,7 +107,7 @@ class InventoryBase:
             raise NotFoundError(tr("складской документ не найден"))
         return row
 
-    def _receipt_line(self, company_id: int, line_id: int) -> sqlite3.Row:
+    def _receipt_line(self, company_id: int, line_id: int) -> Row:
         row = self.conn.execute(
             """
             SELECT l.* FROM inventory_lines l
@@ -121,7 +121,7 @@ class InventoryBase:
             raise ValidationError(tr("строка поступления не найдена или не проведена"))
         return row
 
-    def _charges(self, document_id: int) -> list[sqlite3.Row]:
+    def _charges(self, document_id: int) -> list[Row]:
         return self.conn.execute(
             "SELECT * FROM landed_cost_charges WHERE document_id = ? ORDER BY line_no",
             (document_id,),
@@ -135,17 +135,17 @@ class InventoryBase:
             raise NotFoundError(tr("валюта не найдена"))
         return row["id"]
 
-    def _closed(self, doc: sqlite3.Row) -> bool:
+    def _closed(self, doc: Row) -> bool:
         closed = self._company(doc["company_id"])["closed_through"]
         return closed is not None and doc["doc_date"] <= closed
 
-    def _require_inventory_draft(self, company_id: int, document_id: int) -> sqlite3.Row:
+    def _require_inventory_draft(self, company_id: int, document_id: int) -> Row:
         doc = self._document(company_id, document_id)
         if doc["status"] != "draft":
             raise ValidationError(tr("сначала отмените проведение складского документа"))
         return doc
 
-    def _require_open_period(self, doc: sqlite3.Row) -> None:
+    def _require_open_period(self, doc: Row) -> None:
         closed = self._company(doc["company_id"])["closed_through"]
         if closed is not None and doc["doc_date"] <= closed:
             raise PeriodClosedError(
@@ -157,11 +157,11 @@ class InventoryBase:
                 )
             )
 
-    def _account_kind_ids(self, account: sqlite3.Row) -> tuple[int | None, ...]:
+    def _account_kind_ids(self, account: Row) -> tuple[int | None, ...]:
         return tuple(account[f"sc{position}_kind_id"] for position in range(1, 4))
 
     def _account_kind_codes(
-        self, company_id: int, account: sqlite3.Row
+        self, company_id: int, account: Row
     ) -> tuple[str | None, str | None, str | None]:
         result: list[str | None] = []
         for position in range(1, 4):
@@ -189,7 +189,7 @@ class InventoryBase:
         return tuple(None if kind is None else by_kind.get(kind) for kind in kinds)
 
     def _inventory_subconto(
-        self, company_id: int, item: sqlite3.Row, warehouse: sqlite3.Row
+        self, company_id: int, item: Row, warehouse: Row
     ) -> tuple[int | None, ...]:
         account = self._account(company_id, item["inventory_account_id"])
         kind_codes = self._account_kind_codes(company_id, account)
@@ -235,7 +235,7 @@ class InventoryBase:
                 )
             )
 
-    def _snapshot(self, doc: sqlite3.Row) -> dict:
+    def _snapshot(self, doc: Row) -> dict:
         lines = [
             {key: row[key] for key in row.keys() if key not in {"company_id", "document_id"}}
             for row in self.conn.execute(

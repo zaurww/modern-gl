@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
+
+from modern_gl.infrastructure.db import Connection
 
 
 def code_label(code: str | None, name: str) -> str:
@@ -42,7 +43,7 @@ class ReceiptLineChoice:
     unit: str = ""
 
 
-def item_name(conn: sqlite3.Connection, company_id: int, item_id: int) -> str:
+def item_name(conn: Connection, company_id: int, item_id: int) -> str:
     """The name of an item ("" if the company has no such item)."""
     row = conn.execute(
         """
@@ -56,7 +57,7 @@ def item_name(conn: sqlite3.Connection, company_id: int, item_id: int) -> str:
     return row["name"] if row else ""
 
 
-def item_choices(conn: sqlite3.Connection, company_id: int) -> list[ItemChoice]:
+def item_choices(conn: Connection, company_id: int) -> list[ItemChoice]:
     """Active items with their unit, by name."""
     rows = conn.execute(
         """
@@ -75,7 +76,7 @@ def item_choices(conn: sqlite3.Connection, company_id: int) -> list[ItemChoice]:
     ]
 
 
-def warehouse_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+def warehouse_choices(conn: Connection, company_id: int) -> list[Choice]:
     """Active warehouses, by name."""
     rows = conn.execute(
         """
@@ -88,7 +89,7 @@ def warehouse_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]
     return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
 
 
-def unit_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+def unit_choices(conn: Connection, company_id: int) -> list[Choice]:
     """Active units of measure, by name."""
     rows = conn.execute(
         "SELECT id, code, name FROM inventory_units WHERE company_id = ? AND active = 1 "
@@ -98,7 +99,7 @@ def unit_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
     return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
 
 
-def landed_cost_type_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+def landed_cost_type_choices(conn: Connection, company_id: int) -> list[Choice]:
     """Active kinds of additional costs, by name."""
     rows = conn.execute(
         "SELECT id, code, name FROM landed_cost_types "
@@ -108,7 +109,7 @@ def landed_cost_type_choices(conn: sqlite3.Connection, company_id: int) -> list[
     return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
 
 
-def stock_account_choices(conn: sqlite3.Connection, company_id: int) -> list[Choice]:
+def stock_account_choices(conn: Connection, company_id: int) -> list[Choice]:
     """Active posting accounts that track both item and warehouse subconto."""
     rows = conn.execute(
         """
@@ -130,7 +131,7 @@ def stock_account_choices(conn: sqlite3.Connection, company_id: int) -> list[Cho
     return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
 
 
-def has_units(conn: sqlite3.Connection, company_id: int) -> bool:
+def has_units(conn: Connection, company_id: int) -> bool:
     return (
         conn.execute(
             "SELECT 1 FROM inventory_units WHERE company_id = ? LIMIT 1", (company_id,)
@@ -139,7 +140,7 @@ def has_units(conn: sqlite3.Connection, company_id: int) -> bool:
     )
 
 
-def receipt_line_choices(conn: sqlite3.Connection, company_id: int) -> list[ReceiptLineChoice]:
+def receipt_line_choices(conn: Connection, company_id: int) -> list[ReceiptLineChoice]:
     """Posted opening and receipt lines, newest first."""
     rows = conn.execute(
         """

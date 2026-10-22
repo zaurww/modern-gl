@@ -3,7 +3,6 @@ one request per status and page, fast enough for a month."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -11,6 +10,7 @@ from datetime import date, datetime, timedelta
 from modern_gl.domain.eqaime import ALL, IMPORTED, PortalInvoice, portal_invoice
 from modern_gl.domain.periods import MONTH, span_of
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
 
 
@@ -44,7 +44,7 @@ def fetch_list(
     return result
 
 
-def usual_span(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> str:
+def usual_span(conn: Connection, company_id: int, outgoing: bool) -> str:
     """How this company is usually reconciled: like its last mark, judged on the day it
     was made (this month if none, or if that period was chosen by hand)."""
     row = conn.execute(
@@ -66,7 +66,7 @@ class Recheck:
     date_to: date
 
 
-def rechecks(conn: sqlite3.Connection, company_id: int, today: date) -> list[Recheck]:
+def rechecks(conn: Connection, company_id: int, today: date) -> list[Recheck]:
     """What to read again from the portal to see changes in reconciled periods: per
     direction, from the first to the last reconciled day of the last year."""
     oldest = (today - timedelta(days=365)).isoformat()

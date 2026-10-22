@@ -3,7 +3,6 @@ postings."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
@@ -23,10 +22,10 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.currency import to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Row, transaction
 
 
-def require_complete(doc_type: str, line: sqlite3.Row) -> None:
+def require_complete(doc_type: str, line: Row) -> None:
     """A draft may be unfinished; posting needs every field of the line."""
     line_no = line["line_no"]
     if line["warehouse_id"] is None:
@@ -43,7 +42,7 @@ def require_complete(doc_type: str, line: sqlite3.Row) -> None:
         raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
 
 
-def offset_subconto(line: sqlite3.Row) -> tuple[int | None, int | None, int | None]:
+def offset_subconto(line: Row) -> tuple[int | None, int | None, int | None]:
     return (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
 
 
@@ -311,9 +310,7 @@ class MovementCommands(StockCommands):
                 self._subconto_value(company_id, value_id)
         return source.expense_account_id, pad_subconto(source.expense_subconto)
 
-    def _line_amounts(
-        self, doc: sqlite3.Row, source: ReceiptLine, line_no: int
-    ) -> tuple[int | None, int]:
+    def _line_amounts(self, doc: Row, source: ReceiptLine, line_no: int) -> tuple[int | None, int]:
         """(amount in the currency, amount in manat) of a receipt line. In a currency the
         manat amount follows from the document's rate."""
         if doc["currency_id"] is None:
@@ -389,7 +386,7 @@ class MovementCommands(StockCommands):
                 line_id=source.line_id,
             )
 
-    def _apply_line(self, company_id: int, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
+    def _apply_line(self, company_id: int, doc: Row, line: Row) -> PostingInput:
         if line["item_id"] is None:  # a receipt's service, fixed asset or expense
             return self._expense_posting(doc, line)
         require_complete(doc["doc_type"], line)
@@ -415,10 +412,10 @@ class MovementCommands(StockCommands):
     def _receipt_posting(
         self,
         company_id: int,
-        doc: sqlite3.Row,
-        line: sqlite3.Row,
-        item: sqlite3.Row,
-        warehouse: sqlite3.Row,
+        doc: Row,
+        line: Row,
+        item: Row,
+        warehouse: Row,
     ) -> PostingInput:
         """Goods come in at their amount: Dt stock / Kt the line's account."""
         amount = line["amount"]
@@ -450,10 +447,10 @@ class MovementCommands(StockCommands):
     def _issue_posting(
         self,
         company_id: int,
-        doc: sqlite3.Row,
-        line: sqlite3.Row,
-        item: sqlite3.Row,
-        warehouse: sqlite3.Row,
+        doc: Row,
+        line: Row,
+        item: Row,
+        warehouse: Row,
         amount: int,
     ) -> PostingInput:
         """Goods go out at their cost: Dt the line's account / Kt stock."""
@@ -481,10 +478,10 @@ class MovementCommands(StockCommands):
     def _transfer_posting(
         self,
         company_id: int,
-        doc: sqlite3.Row,
-        line: sqlite3.Row,
-        item: sqlite3.Row,
-        warehouse: sqlite3.Row,
+        doc: Row,
+        line: Row,
+        item: Row,
+        warehouse: Row,
         amount: int,
     ) -> PostingInput:
         """Goods move between warehouses at their cost: stock to stock."""
@@ -515,7 +512,7 @@ class MovementCommands(StockCommands):
             line["memo"],
         )
 
-    def _expense_posting(self, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
+    def _expense_posting(self, doc: Row, line: Row) -> PostingInput:
         """A receipt line without an item: Dr its account [subconto] / Cr the supplier."""
         line_no = line["line_no"]
         if not line["memo"]:

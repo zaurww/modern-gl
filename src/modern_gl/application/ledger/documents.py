@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable, Sequence
 from datetime import date
 
@@ -14,7 +13,7 @@ from modern_gl.domain.errors import NotFoundError, PeriodClosedError, Validation
 from modern_gl.domain.invoice import KINDS, normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, transaction
 
 # What a module tells the user when the journal refuses one of its GL documents:
 # (role, the GL document's number, the module document's number or None) -> text. A module
@@ -28,7 +27,7 @@ def explain_owner(module: str, text: OwnerText) -> None:
     OWNER_TEXTS[module] = text
 
 
-def _owner_text(module: str, role: str, number: int, owner: sqlite3.Row) -> str:
+def _owner_text(module: str, role: str, number: int, owner: Row) -> str:
     text = OWNER_TEXTS.get(module)
     if text is not None:
         return text(role, number, owner["owner_number"])
@@ -148,7 +147,7 @@ class DocumentCommands(PostingChecks):
 
     def _same_content(
         self,
-        doc: sqlite3.Row,
+        doc: Row,
         doc_date: date | str,
         postings: Sequence[PostingInput],
         memo: str,
@@ -232,7 +231,7 @@ class DocumentCommands(PostingChecks):
             self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
             self._audit(company_id, "document", doc_id, "delete", snapshot)
 
-    def _require_changeable(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _require_changeable(self, company_id: int, doc: Row) -> None:
         closed = self._company(company_id)["closed_through"]
         if closed is not None and doc["doc_date"] <= closed:
             raise PeriodClosedError(
@@ -260,13 +259,13 @@ class DocumentCommands(PostingChecks):
                 )
             )
 
-    def _require_not_module_document(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _require_not_module_document(self, company_id: int, doc: Row) -> None:
         """Postings a module made (warehouse, currency conversion, bank) are corrected there."""
         owner = self._owner(company_id, doc["id"], "made")
         if owner is not None:
             raise ValidationError(_owner_text(owner["module"], "made", doc["number"], owner))
 
-    def _owner(self, company_id: int, doc_id: int, role: str) -> sqlite3.Row | None:
+    def _owner(self, company_id: int, doc_id: int, role: str) -> Row | None:
         """The module that made (or takes in) a GL document, from the document_owners view."""
         return self.conn.execute(
             "SELECT module, owner_number FROM document_owners "
@@ -275,7 +274,7 @@ class DocumentCommands(PostingChecks):
             (company_id, doc_id, role),
         ).fetchone()
 
-    def _snapshot(self, doc: sqlite3.Row) -> dict:
+    def _snapshot(self, doc: Row) -> dict:
         """Everything needed to see later what a removed / unposted document contained."""
         postings = [
             {k: p[k] for k in p.keys() if k not in ("id", "company_id", "document_id")}
@@ -423,7 +422,7 @@ class DocumentCommands(PostingChecks):
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
             )
-        except sqlite3.IntegrityError as e:
+        except IntegrityError as e:
             raise ValidationError(
                 tr("счёт, субконто или валюта не существует или принадлежит другой компании")
             ) from e
@@ -444,11 +443,11 @@ class DocumentCommands(PostingChecks):
             {"number": doc["number"], "reversal_of": doc["reversal_of"]},
         )
 
-    def _require_draft(self, doc: sqlite3.Row) -> None:
+    def _require_draft(self, doc: Row) -> None:
         if doc["status"] != "draft":
             raise ValidationError(tr("документ №{n} уже проведён и не изменяется", n=doc["number"]))
 
-    def _document(self, company_id: int, doc_id: int) -> sqlite3.Row:
+    def _document(self, company_id: int, doc_id: int) -> Row:
         row = self.conn.execute(
             "SELECT d.*, l.code AS layer FROM documents d JOIN layers l ON l.id = d.layer_id "
             "WHERE d.company_id = ? AND d.id = ?",

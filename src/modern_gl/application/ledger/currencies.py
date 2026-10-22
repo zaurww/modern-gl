@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from datetime import date
 
 from modern_gl.application.common import insert
@@ -11,7 +10,7 @@ from modern_gl.domain.currency import check_code, currency_name
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import IntegrityError, transaction
 
 
 class CurrencyCommands(LedgerBase):
@@ -31,7 +30,7 @@ class CurrencyCommands(LedgerBase):
                     "INSERT INTO currencies (company_id, code, name) VALUES (?, ?, ?)",
                     (company_id, code, name),
                 )
-            except sqlite3.IntegrityError as e:
+            except IntegrityError as e:
                 raise ValidationError(tr("валюта {code} уже есть", code=code)) from e
             self._audit(company_id, "currency", currency_id, "create", {"code": code})
         return currency_id

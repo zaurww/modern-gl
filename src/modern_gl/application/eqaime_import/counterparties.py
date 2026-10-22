@@ -3,7 +3,6 @@ the legal names remembered."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -11,7 +10,7 @@ from modern_gl.application.eqaime_import.parsing import EInvoice
 from modern_gl.application.eqaime_import.planning import InvoicePlan, known_counterparty
 from modern_gl.application.ledger import Ledger
 from modern_gl.i18n import fold, tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Connection, transaction
 
 
 @dataclass
@@ -137,7 +136,7 @@ class RenamedCounterparty:
 
 
 def renamed_counterparties(
-    conn: sqlite3.Connection, company_id: int, plans: Sequence[InvoicePlan]
+    conn: Connection, company_id: int, plans: Sequence[InvoicePlan]
 ) -> list[RenamedCounterparty]:
     """Known counterparties (by VÖEN) whose e-qaimə name differs from their remembered
     official name; the latest e-qaimə of the period gives the new name. One that has no

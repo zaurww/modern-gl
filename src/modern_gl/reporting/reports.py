@@ -8,7 +8,6 @@ All amounts are int minor units.
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date
@@ -16,6 +15,7 @@ from datetime import date
 from modern_gl.domain.accounts import wrong_side
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
     COMMON,
@@ -37,7 +37,7 @@ from modern_gl.reporting.report_common import (
 
 
 def trial_balance(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     date_from: date | str,
     date_to: date | str,
@@ -62,7 +62,7 @@ def trial_balance(
     )
 
 
-def _moves_by_account(conn: sqlite3.Connection, params: dict) -> dict[int, list[sqlite3.Row]]:
+def _moves_by_account(conn: Connection, params: dict) -> dict[int, list[Row]]:
     """Opening balance and turnovers of each account per its first subconto value."""
     raw = conn.execute(
         f"""
@@ -83,14 +83,14 @@ def _moves_by_account(conn: sqlite3.Connection, params: dict) -> dict[int, list[
         """,
         params,
     ).fetchall()
-    per_account: dict[int, list[sqlite3.Row]] = defaultdict(list)
+    per_account: dict[int, list[Row]] = defaultdict(list)
     for r in raw:
         per_account[r["account_id"]].append(r)
     return per_account
 
 
 def _account_turnovers(
-    accounts: dict[int, sqlite3.Row], per_account: dict[int, list[sqlite3.Row]]
+    accounts: dict[int, Row], per_account: dict[int, list[Row]]
 ) -> tuple[
     dict[int, Turnovers],
     dict[int, tuple[bool, bool]],
@@ -128,7 +128,7 @@ def _account_turnovers(
 
 
 def _osv_rows(
-    accounts: dict[int, sqlite3.Row],
+    accounts: dict[int, Row],
     values: dict[int, Turnovers],
     flags: dict[int, tuple[bool, bool]],
 ) -> tuple[list[OsvRow], Turnovers]:
@@ -167,7 +167,7 @@ def _osv_rows(
     return rows, total
 
 
-def _currency_turnovers(conn: sqlite3.Connection, params: dict) -> dict[int, list[CurrencyRow]]:
+def _currency_turnovers(conn: Connection, params: dict) -> dict[int, list[CurrencyRow]]:
     """Turnovers of currency accounts in each currency (only sides on a currency account)."""
     raw = conn.execute(
         f"""
@@ -203,7 +203,7 @@ def _currency_turnovers(conn: sqlite3.Connection, params: dict) -> dict[int, lis
 
 
 def _name_subconto(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     by_value: dict[int, list[tuple[int | None, Turnovers]]],
 ) -> dict[int, list[SubcontoRow]]:
@@ -229,7 +229,7 @@ def _name_subconto(
 
 
 def subconto_balance(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     account: int | str,
     date_from: date | str,
@@ -288,7 +288,7 @@ def subconto_balance(
 
 
 def _subconto_currency(
-    conn: sqlite3.Connection, params: dict, position: int
+    conn: Connection, params: dict, position: int
 ) -> dict[int | None, dict[str, int]]:
     """Net balance at the end in each currency, per subconto value (currency accounts:
     a foreign partner with invoices in USD and in EUR has both)."""
@@ -320,7 +320,7 @@ def _subconto_currency(
 
 
 def account_card(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     account: int | str,
     date_from: date | str,
@@ -353,7 +353,7 @@ def account_card(
     return card
 
 
-def _card_rows(conn: sqlite3.Connection, params: dict) -> list[sqlite3.Row]:
+def _card_rows(conn: Connection, params: dict) -> list[Row]:
     """Each posting line of the accounts, either side, with its corr account and the
     running balance; currency amounts only for currency accounts."""
     return conn.execute(
@@ -393,7 +393,7 @@ def _card_rows(conn: sqlite3.Connection, params: dict) -> list[sqlite3.Row]:
     ).fetchall()
 
 
-def _card_line(r: sqlite3.Row) -> CardLine:
+def _card_line(r: Row) -> CardLine:
     return CardLine(
         doc_date=r["doc_date"],
         number=r["number"],
@@ -413,7 +413,7 @@ def _card_line(r: sqlite3.Row) -> CardLine:
 
 
 def account_analysis(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     account: int | str,
     date_from: date | str,

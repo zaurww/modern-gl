@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
+
+from modern_gl.infrastructure.db import Connection
 
 
 @dataclass(frozen=True)
@@ -31,7 +32,7 @@ class CostSource:
 
 
 def cost_sources(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     exclude_document_id: int | None = None,
     *,
@@ -128,7 +129,7 @@ class BatchCostLine:
 
 
 def batch_cost(
-    conn: sqlite3.Connection, company_id: int, document_id: int
+    conn: Connection, company_id: int, document_id: int
 ) -> tuple[list[BatchCharge], list[BatchCostLine]]:
     """«Себестоимость партии» of a posted batch document: its charges and its lines with
     the receipt price (in a currency and at what rate), each expense and the total."""

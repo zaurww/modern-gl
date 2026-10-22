@@ -3,7 +3,6 @@ split between the stock on hand and what was already issued."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -30,7 +29,7 @@ from modern_gl.domain.currency import to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor, round_ratio
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Row, transaction
 
 explain_owner(
     "landed_cost",
@@ -262,7 +261,7 @@ class LandedCostCommands(StockCommands):
         )
 
     def _apply_landed_cost(
-        self, company_id: int, doc: sqlite3.Row, lines: Sequence[sqlite3.Row]
+        self, company_id: int, doc: Row, lines: Sequence[Row]
     ) -> list[PostingInput]:
         """Allocate the charges over the batch, then split each receipt line's share between
         the stock still on hand and the expense accounts of what was already issued."""
@@ -328,9 +327,9 @@ class LandedCostCommands(StockCommands):
 
     def _landed_cost_targets(
         self,
-        doc: sqlite3.Row,
-        lines: Sequence[sqlite3.Row],
-        receipts: Mapping[int, sqlite3.Row],
+        doc: Row,
+        lines: Sequence[Row],
+        receipts: Mapping[int, Row],
         total: int,
     ) -> dict[int, int]:
         """Line id -> its share of all the charges."""
@@ -354,9 +353,9 @@ class LandedCostCommands(StockCommands):
     def _landed_cost_debits(
         self,
         company_id: int,
-        doc: sqlite3.Row,
-        line: sqlite3.Row,
-        receipt: sqlite3.Row,
+        doc: Row,
+        line: Row,
+        receipt: Row,
         allocated: int,
     ) -> tuple[list[tuple[int, Sequence[int | None], int]], int, int]:
         """Where a receipt line's share goes: (debit pieces, to stock, to expense)."""
@@ -392,7 +391,7 @@ class LandedCostCommands(StockCommands):
         inv_id: int,
         line_id: int,
         doc_date: date | str,
-        item: sqlite3.Row,
+        item: Row,
         amount: int,
     ) -> list[tuple[int, Sequence[int | None], int]] | None:
         """Add `amount` to the item's stock value in each warehouse in proportion to its
@@ -430,7 +429,7 @@ class LandedCostCommands(StockCommands):
         company_id: int,
         inv_id: int,
         line_id: int,
-        consumptions: list[sqlite3.Row],
+        consumptions: list[Row],
         amount: int,
     ) -> list[tuple[int, Sequence[int | None], int]]:
         """Charge `amount` to the expense accounts of the issues that consumed the receipt,
@@ -467,7 +466,7 @@ class LandedCostCommands(StockCommands):
             postings.append((issue["offset_account_id"], subconto, share))
         return postings
 
-    def _landed_cost_source(self, company_id: int, line_id: int) -> sqlite3.Row:
+    def _landed_cost_source(self, company_id: int, line_id: int) -> Row:
         row = self.conn.execute(
             """
             SELECT l.*, d.number, d.status FROM inventory_lines l
@@ -485,7 +484,7 @@ class LandedCostCommands(StockCommands):
             )
         return row
 
-    def _cost_source(self, company_id: int, document_id: int, line_no: int) -> sqlite3.Row:
+    def _cost_source(self, company_id: int, document_id: int, line_no: int) -> Row:
         """A GL posting an expense line takes: posted, in the common book, not one the
         warehouse made itself, with a positive amount."""
         row = self.conn.execute(
@@ -510,16 +509,14 @@ class LandedCostCommands(StockCommands):
             )
         return row
 
-    def _charge_memo(self, company_id: int, doc: sqlite3.Row, charge: sqlite3.Row) -> str:
+    def _charge_memo(self, company_id: int, doc: Row, charge: Row) -> str:
         if charge["memo"]:
             return charge["memo"]
         if charge["cost_type_id"] is not None:
             return self._cost_type(company_id, charge["cost_type_id"])["name"]
         return doc["memo"]
 
-    def _require_charge_complete(
-        self, company_id: int, doc: sqlite3.Row, charge: sqlite3.Row
-    ) -> None:
+    def _require_charge_complete(self, company_id: int, doc: Row, charge: Row) -> None:
         n = charge["line_no"]
         if charge["amount"] <= 0:
             raise ValidationError(tr("расход {n}: не указана сумма", n=n))

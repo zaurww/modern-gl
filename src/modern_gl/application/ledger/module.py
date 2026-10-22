@@ -3,7 +3,6 @@ documents are written and removed only by them, never by the journal."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Sequence
 from datetime import date
 
@@ -11,6 +10,7 @@ from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.domain.dates import iso_date
+from modern_gl.infrastructure.db import Row
 
 
 class ModuleDocumentCommands(ChartCommands, DocumentCommands):
@@ -58,7 +58,7 @@ class ModuleDocumentCommands(ChartCommands, DocumentCommands):
         self._insert_postings(company_id, doc_id, postings)
         self._post(company_id, doc_id)
 
-    def _remove_document(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _remove_document(self, company_id: int, doc: Row) -> None:
         snapshot = self._snapshot(doc)
         if doc["status"] == "posted":  # immutability triggers allow only this path
             self.conn.execute(

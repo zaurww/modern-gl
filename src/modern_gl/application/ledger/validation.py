@@ -4,7 +4,6 @@ currency amounts where the account keeps them."""
 from __future__ import annotations
 
 import json
-import sqlite3
 
 from modern_gl.application.common import MAX_SUBCONTO
 from modern_gl.application.ledger.base import account_label
@@ -15,10 +14,11 @@ from modern_gl.domain.accounts import OPENING_BALANCE
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.domain.errors import PeriodClosedError, ValidationError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Row
 
 
 class PostingChecks(SubcontoCommands):
-    def _validate_for_posting(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _validate_for_posting(self, company_id: int, doc: Row) -> None:
         self._require_open_period(company_id, doc)
         postings = self.conn.execute(
             "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
@@ -46,7 +46,7 @@ class PostingChecks(SubcontoCommands):
             self._validate_currency(p, accounts, values, currencies)
             self._validate_line(p, accounts, values, optional, is_reversal)
 
-    def _require_open_period(self, company_id: int, doc: sqlite3.Row) -> None:
+    def _require_open_period(self, company_id: int, doc: Row) -> None:
         closed = self._company(company_id)["closed_through"]
         if closed is not None and doc["doc_date"] <= closed:
             raise PeriodClosedError(
@@ -59,8 +59,8 @@ class PostingChecks(SubcontoCommands):
             )
 
     def _rows_of(
-        self, company_id: int, postings: list[sqlite3.Row]
-    ) -> tuple[dict[int, sqlite3.Row], dict[int, sqlite3.Row]]:
+        self, company_id: int, postings: list[Row]
+    ) -> tuple[dict[int, Row], dict[int, Row]]:
         """The accounts and subconto values of the postings (with the owners of contracts)."""
         accounts = self._rows_by_id(
             "accounts",
@@ -83,7 +83,7 @@ class PostingChecks(SubcontoCommands):
         return accounts, values
 
     def _require_not_opening_account(
-        self, company_id: int, doc: sqlite3.Row, accounts: dict[int, sqlite3.Row]
+        self, company_id: int, doc: Row, accounts: dict[int, Row]
     ) -> None:
         control = self.conn.execute(
             "SELECT account_id FROM account_roles WHERE company_id = ? AND role = ?",
@@ -100,9 +100,9 @@ class PostingChecks(SubcontoCommands):
 
     def _validate_line(
         self,
-        p: sqlite3.Row,
-        accounts: dict[int, sqlite3.Row],
-        values: dict[int, sqlite3.Row],
+        p: Row,
+        accounts: dict[int, Row],
+        values: dict[int, Row],
         optional: set[int],
         is_reversal: bool,
     ) -> None:
@@ -130,7 +130,7 @@ class PostingChecks(SubcontoCommands):
             if not is_reversal:
                 self._validate_owners(p, prefix, label, values)
 
-    def _rows_by_id(self, table: str, company_id: int, ids: set[int]) -> dict[int, sqlite3.Row]:
+    def _rows_by_id(self, table: str, company_id: int, ids: set[int]) -> dict[int, Row]:
         """Rows of a company table (accounts, subconto_values) with these ids, by id."""
         if not ids:
             return {}
@@ -143,11 +143,11 @@ class PostingChecks(SubcontoCommands):
 
     @staticmethod
     def _validate_subconto(
-        acc: sqlite3.Row,
-        p: sqlite3.Row,
+        acc: Row,
+        p: Row,
         prefix: str,
         label: str,
-        values: dict[int, sqlite3.Row],
+        values: dict[int, Row],
         optional: set[int],
     ) -> None:
         """Each subconto position of the account is filled with a value of its kind; one
@@ -176,9 +176,7 @@ class PostingChecks(SubcontoCommands):
                 )
 
     @staticmethod
-    def _validate_owners(
-        p: sqlite3.Row, prefix: str, label: str, values: dict[int, sqlite3.Row]
-    ) -> None:
+    def _validate_owners(p: Row, prefix: str, label: str, values: dict[int, Row]) -> None:
         """A contract of a counterparty goes only next to that counterparty."""
         side = [values[v] for i in range(1, MAX_SUBCONTO + 1) if (v := p[f"{prefix}_sc{i}"])]
         for value in side:
@@ -202,9 +200,9 @@ class PostingChecks(SubcontoCommands):
 
     @staticmethod
     def _validate_currency(
-        p: sqlite3.Row,
-        accounts: dict[int, sqlite3.Row],
-        values: dict[int, sqlite3.Row],
+        p: Row,
+        accounts: dict[int, Row],
+        values: dict[int, Row],
         currencies: dict[int, str],
     ) -> None:
         """A side on a currency account needs the posting's currency, unless the account

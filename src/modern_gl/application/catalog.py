@@ -6,7 +6,6 @@ into ids. Plain Python, no Qt, so it is unit-testable.
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
@@ -14,6 +13,7 @@ from modern_gl.application.currencies import CurrencyInfo, list_currencies
 from modern_gl.domain.accounts import OPENING_BALANCE, SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import fold, sort_key, tr
+from modern_gl.infrastructure.db import Connection
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ class SubcontoInfo:
 
 
 class Catalog:
-    def __init__(self, conn: sqlite3.Connection, company_id: int) -> None:
+    def __init__(self, conn: Connection, company_id: int) -> None:
         self.conn = conn
         self.company_id = company_id
         self.reload()

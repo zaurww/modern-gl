@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
 from datetime import date
 
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import sort_key
+from modern_gl.infrastructure.db import Connection
 
 
 @dataclass(frozen=True)
@@ -53,7 +53,7 @@ class StockCardLine:
 
 
 def stock_balances(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     as_of: date | str | None = None,
     *,
@@ -104,7 +104,7 @@ def stock_balances(
     return balances
 
 
-def group_paths(conn: sqlite3.Connection, company_id: int) -> dict[int, str]:
+def group_paths(conn: Connection, company_id: int) -> dict[int, str]:
     """For each directory element in a group: its groups, outermost first (D60)."""
     rows = conn.execute(
         "SELECT id, name, parent_id, is_group FROM subconto_values WHERE company_id = ?",
@@ -123,7 +123,7 @@ def group_paths(conn: sqlite3.Connection, company_id: int) -> dict[int, str]:
     return paths
 
 
-def item_details(conn: sqlite3.Connection, company_id: int, value_id: int) -> ItemDetails | None:
+def item_details(conn: Connection, company_id: int, value_id: int) -> ItemDetails | None:
     """The item a directory element is, if it is one."""
     row = conn.execute(
         """
@@ -146,7 +146,7 @@ def item_details(conn: sqlite3.Connection, company_id: int, value_id: int) -> It
 
 
 def stock_card(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     item_id: int,
     warehouse_id: int,

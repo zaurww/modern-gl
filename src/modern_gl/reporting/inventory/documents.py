@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from dataclasses import dataclass
+
+from modern_gl.infrastructure.db import Connection
 
 
 @dataclass(frozen=True)
@@ -20,7 +21,7 @@ class InventoryDocumentSummary:
 
 
 def list_inventory_documents(
-    conn: sqlite3.Connection, company_id: int, limit: int = 100
+    conn: Connection, company_id: int, limit: int = 100
 ) -> list[InventoryDocumentSummary]:
     """The latest inventory documents with their total amount, newest first. Purchases and
     sales without goods are left to «Покупки» and «Продажи»."""
@@ -52,9 +53,7 @@ def list_inventory_documents(
     return [InventoryDocumentSummary(**dict(r)) for r in rows]
 
 
-def inventory_document_of(
-    conn: sqlite3.Connection, company_id: int, gl_document_id: int
-) -> int | None:
+def inventory_document_of(conn: Connection, company_id: int, gl_document_id: int) -> int | None:
     """The warehouse document whose postings these are (or its accrual's, D65), if any."""
     row = conn.execute(
         "SELECT id FROM inventory_documents WHERE company_id = ? "

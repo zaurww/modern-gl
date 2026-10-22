@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 
@@ -12,6 +11,7 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import SCALE as MONEY_SCALE
 from modern_gl.domain.money import round_ratio, to_minor
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Row
 
 _QUANTITY_QUANTUM = Decimal(1).scaleb(-QUANTITY_SCALE)
 
@@ -149,7 +149,7 @@ def service_quantity(value: str | int | Decimal | None, line_no: int) -> int:
     return quantity
 
 
-def item_quantity(item: sqlite3.Row, value: str | int | Decimal | None, line_no: int) -> int:
+def item_quantity(item: Row, value: str | int | Decimal | None, line_no: int) -> int:
     if value is None or blank(value):
         raise ValidationError(tr("строка {line}: не указано количество", line=line_no))
     try:
@@ -168,5 +168,5 @@ def item_quantity(item: sqlite3.Row, value: str | int | Decimal | None, line_no:
     return quantity
 
 
-def draft_quantity(item: sqlite3.Row, value: str | int | Decimal | None, line_no: int) -> int:
+def draft_quantity(item: Row, value: str | int | Decimal | None, line_no: int) -> int:
     return 0 if blank(value) else item_quantity(item, value, line_no)

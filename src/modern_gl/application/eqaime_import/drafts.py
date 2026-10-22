@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
@@ -22,7 +21,7 @@ from modern_gl.application.inventory import (
 )
 from modern_gl.application.queries import remembered_sale_subconto
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Connection, transaction
 
 
 def import_drafts(
@@ -85,7 +84,7 @@ def import_drafts(
     return created
 
 
-def _receipt_line(conn: sqlite3.Connection, plan: LinePlan, warehouse: int | None) -> ReceiptLine:
+def _receipt_line(conn: Connection, plan: LinePlan, warehouse: int | None) -> ReceiptLine:
     line = plan.line
     goods = plan.item_id is not None
     return ReceiptLine(
@@ -101,7 +100,7 @@ def _receipt_line(conn: sqlite3.Connection, plan: LinePlan, warehouse: int | Non
 
 
 def _sale_line(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int,
     plan: LinePlan,
     warehouse: int | None,
@@ -130,9 +129,7 @@ def _amount(minor: int, zero: bool = False) -> Decimal | None:
     return Decimal(minor).scaleb(-2)
 
 
-def _quantity(
-    conn: sqlite3.Connection, item_id: int | None, quantity: Decimal | None
-) -> Decimal | None:
+def _quantity(conn: Connection, item_id: int | None, quantity: Decimal | None) -> Decimal | None:
     """The quantity if the item's unit (or a service: 6 digits) takes it, else none: the
     user types it (the e-qaimə's unit may differ from the item's)."""
     if quantity is None or quantity <= 0:
@@ -149,7 +146,7 @@ def _quantity(
     return quantity if quantity == quantity.quantize(step) else None
 
 
-def _only_warehouse(conn: sqlite3.Connection, company_id: int) -> int | None:
+def _only_warehouse(conn: Connection, company_id: int) -> int | None:
     rows = conn.execute(
         "SELECT w.id FROM warehouses w JOIN subconto_values v ON v.id = w.subconto_value_id "
         "WHERE w.company_id = ? AND v.active = 1 LIMIT 2",
@@ -158,7 +155,7 @@ def _only_warehouse(conn: sqlite3.Connection, company_id: int) -> int | None:
     return rows[0]["id"] if len(rows) == 1 else None
 
 
-def _settlement_account(conn: sqlite3.Connection, company_id: int, outgoing: bool) -> int | None:
+def _settlement_account(conn: Connection, company_id: int, outgoing: bool) -> int | None:
     """The suppliers' (customers') account: of the payable (receivable) type, the one with
     a counterparty subconto first, by code."""
     kind = conn.execute(
@@ -176,7 +173,7 @@ def _settlement_account(conn: sqlite3.Connection, company_id: int, outgoing: boo
 
 
 def _place(
-    conn: sqlite3.Connection, account_id: int | None, kind_id: int, value_id: int
+    conn: Connection, account_id: int | None, kind_id: int, value_id: int
 ) -> tuple[int | None, int | None, int | None]:
     """The counterparty at its kind's position of the account (the contract stays empty)."""
     if account_id is None:

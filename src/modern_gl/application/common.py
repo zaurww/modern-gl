@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection, Row
 
 MAX_SUBCONTO = 3
 
@@ -32,7 +32,7 @@ def pad_subconto(values: Sequence[int | None], line_no: int | None = None) -> Su
     return first, second, third
 
 
-def insert(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) -> int:
+def insert(conn: Connection, sql: str, params: Sequence[object] = ()) -> int:
     """Run an INSERT and return the id of the new row."""
     row_id = conn.execute(sql, params).lastrowid
     if row_id is None:  # only when the statement inserted nothing
@@ -40,7 +40,7 @@ def insert(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) ->
     return row_id
 
 
-def company_row(conn: sqlite3.Connection, company_id: int) -> sqlite3.Row:
+def company_row(conn: Connection, company_id: int) -> Row:
     row = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
     if row is None:
         raise NotFoundError(tr("компания {id} не найдена", id=company_id))
@@ -48,7 +48,7 @@ def company_row(conn: sqlite3.Connection, company_id: int) -> sqlite3.Row:
 
 
 def write_audit(
-    conn: sqlite3.Connection,
+    conn: Connection,
     company_id: int | None,
     actor: str,
     entity: str,
@@ -93,7 +93,7 @@ USAGE_TEXTS: dict[str, str] = {
 }
 
 
-def where_used(conn: sqlite3.Connection, company_id: int, table: str, row_id: int) -> str | None:
+def where_used(conn: Connection, company_id: int, table: str, row_id: int) -> str | None:
     """Why the row cannot be deleted: the first place that refers to it (postings first),
     or None when nothing does. The places are read from the foreign keys, so a new
     table that refers to accounts or directory elements is checked without changes here."""
@@ -112,7 +112,7 @@ def where_used(conn: sqlite3.Connection, company_id: int, table: str, row_id: in
     return None
 
 
-def _references(conn: sqlite3.Connection, table: str) -> list[tuple[str, list[str]]]:
+def _references(conn: Connection, table: str) -> list[tuple[str, list[str]]]:
     """The tables that refer to the table, each with its columns that do."""
     found: dict[str, list[str]] = {}
     for referrer, column in UNCHECKED_REFERENCES.get(table, []):
@@ -129,7 +129,7 @@ def _references(conn: sqlite3.Connection, table: str) -> list[tuple[str, list[st
     return sorted(found.items(), key=lambda ref: first.get(ref[0], 2))
 
 
-def _usage_text(conn: sqlite3.Connection, referrer: str, row: sqlite3.Row) -> str:
+def _usage_text(conn: Connection, referrer: str, row: Row) -> str:
     if referrer == "accounts":  # its parent_id
         return tr("у счёта есть субсчета")
     if referrer == "subconto_values":  # its owner_id

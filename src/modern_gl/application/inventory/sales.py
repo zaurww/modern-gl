@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Mapping, Sequence
 from datetime import date
 
@@ -21,10 +20,10 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import COST_OF_SALES, OUTPUT_VAT, SALES_REVENUE, SALES_VAT
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import Row, transaction
 
 
-def require_sale_line(line: sqlite3.Row) -> None:
+def require_sale_line(line: Row) -> None:
     line_no = line["line_no"]
     if line["item_id"] is not None:
         if line["warehouse_id"] is None:
@@ -163,9 +162,7 @@ class SaleCommands(StockCommands):
                     result.append(kind_id)
         return result
 
-    def _apply_sale(
-        self, company_id: int, doc: sqlite3.Row, lines: Sequence[sqlite3.Row]
-    ) -> list[PostingInput]:
+    def _apply_sale(self, company_id: int, doc: Row, lines: Sequence[Row]) -> list[PostingInput]:
         """A sale's postings: Dr customer / Cr revenue for each line (with its VAT when the
         VAT is charged from another account), the VAT to pay once per customer (and per
         subconto of the VAT charge account), and for goods Dr cost of sales / Cr inventory
@@ -237,9 +234,9 @@ class SaleCommands(StockCommands):
     def _sale_cost(
         self,
         company_id: int,
-        doc: sqlite3.Row,
-        line: sqlite3.Row,
-        item: sqlite3.Row,
+        doc: Row,
+        line: Row,
+        item: Row,
         memo: str,
         values: Sequence[int | None],
     ) -> PostingInput:

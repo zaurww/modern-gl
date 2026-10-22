@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
-
 from modern_gl.application.common import company_row, write_audit
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection, Row
 
 
 def clean_code(code: str | None) -> str | None:
@@ -14,20 +13,20 @@ def clean_code(code: str | None) -> str | None:
     return (code or "").strip() or None
 
 
-def account_label(account: sqlite3.Row) -> str:
+def account_label(account: Row) -> str:
     """How an account is named in messages: its code, or its name if it has none."""
     return account["code"] or account["name"]
 
 
 class LedgerBase:
-    def __init__(self, conn: sqlite3.Connection, actor: str = "local") -> None:
+    def __init__(self, conn: Connection, actor: str = "local") -> None:
         self.conn = conn
         self.actor = actor
 
-    def _company(self, company_id: int) -> sqlite3.Row:
+    def _company(self, company_id: int) -> Row:
         return company_row(self.conn, company_id)
 
-    def _account(self, company_id: int, account: int | str) -> sqlite3.Row:
+    def _account(self, company_id: int, account: int | str) -> Row:
         """An account by id (int) or by code (str)."""
         column = "id" if isinstance(account, int) else "code"
         row = self.conn.execute(
@@ -38,7 +37,7 @@ class LedgerBase:
             raise NotFoundError(tr("счёт {code} не найден", code=account))
         return row
 
-    def _currency(self, company_id: int, currency: int | str) -> sqlite3.Row:
+    def _currency(self, company_id: int, currency: int | str) -> Row:
         column = "id" if isinstance(currency, int) else "code"
         row = self.conn.execute(
             f"SELECT * FROM currencies WHERE company_id = ? AND {column} = ?",
@@ -48,7 +47,7 @@ class LedgerBase:
             raise NotFoundError(tr("валюта {code} не найдена", code=currency))
         return row
 
-    def _subconto_value(self, company_id: int, value_id: int) -> sqlite3.Row:
+    def _subconto_value(self, company_id: int, value_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM subconto_values WHERE company_id = ? AND id = ?", (company_id, value_id)
         ).fetchone()

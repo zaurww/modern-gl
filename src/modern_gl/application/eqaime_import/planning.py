@@ -3,12 +3,12 @@ item of the same name, or nothing yet."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from modern_gl.application.eqaime_import.parsing import RETURN_KINDS, EInvoice, EInvoiceLine
 from modern_gl.i18n import fold, tr
+from modern_gl.infrastructure.db import Connection, Row
 
 
 @dataclass
@@ -50,7 +50,7 @@ class InvoicePlan:
 
 
 def plan_import(
-    conn: sqlite3.Connection, company_id: int, invoices: Sequence[EInvoice]
+    conn: Connection, company_id: int, invoices: Sequence[EInvoice]
 ) -> list[InvoicePlan]:
     """What each e-qaimə would become, before anything is written."""
     items = {
@@ -85,7 +85,7 @@ def plan_import(
 
 def _line_plan(
     line: EInvoiceLine,
-    history: Mapping[str, sqlite3.Row],
+    history: Mapping[str, Row],
     items: Mapping[str, int],
     outgoing: bool,
 ) -> LinePlan:
@@ -107,7 +107,7 @@ def _line_plan(
 
 
 def known_counterparty(
-    conn: sqlite3.Connection, company_id: int, tax_id: str, name: str = ""
+    conn: Connection, company_id: int, tax_id: str, name: str = ""
 ) -> int | None:
     """The company's counterparty with this VÖEN; one without a VÖEN (a non-resident,
     a person) by exactly the same name."""
@@ -134,12 +134,12 @@ def known_counterparty(
 
 
 def _history(
-    conn: sqlite3.Connection, company_id: int, doc_type: str, counterparty: int | None
-) -> dict[str, sqlite3.Row]:
+    conn: Connection, company_id: int, doc_type: str, counterparty: int | None
+) -> dict[str, Row]:
     """What each line name of this counterparty became the last time: memo -> line."""
     if counterparty is None:
         return {}
-    result: dict[str, sqlite3.Row] = {}
+    result: dict[str, Row] = {}
     for row in conn.execute(
         """
         SELECT l.memo, l.item_id, l.cost_account_id, l.cost_sc1, l.cost_sc2, l.cost_sc3
