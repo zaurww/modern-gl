@@ -48,7 +48,13 @@ from modern_gl.desktop.bank_page.reconcile import ReconcileBar
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
 from modern_gl.desktop.reports_page import ReportPage
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import EmptyState, button, more_button, ru_date
+from modern_gl.desktop.widgets import (
+    EmptyState,
+    button,
+    hide_when_viewing,
+    more_button,
+    ru_date,
+)
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -145,7 +151,9 @@ class BankPage(ReportPage):
             self.money_out,
         ):
             self.header.add_action(control)
-        self.header.add_action(more_button(self._more))
+        self.more = more_button(self._more)
+        self.header.add_action(self.more)
+        hide_when_viewing(self.s.read_only, self.more)
 
     def _more(self) -> list:
         items: list = []
@@ -321,15 +329,16 @@ class BankPage(ReportPage):
         self.entry.show_for(account.place, s.date_from, s.date_to, self.amount_mode())
 
     def _show_level(self) -> None:
-        level = self.level
-        self.new_account_button.setVisible(level == ACCOUNTS)
-        self.new_statement_button.setVisible(level == JOURNAL)
-        self.money_in.setVisible(level != ACCOUNTS)
-        self.money_out.setVisible(level != ACCOUNTS)
+        level, writes = self.level, not self.s.read_only  # viewing only (D80): nothing new
+        self.new_account_button.setVisible(writes and level == ACCOUNTS)
+        self.new_statement_button.setVisible(writes and level == JOURNAL)
+        self.money_in.setVisible(writes and level != ACCOUNTS)
+        self.money_out.setVisible(writes and level != ACCOUNTS)
         self.previous.setVisible(level == STATEMENT)
         self.following.setVisible(level == STATEMENT)
         self.reconcile.setVisible(level == STATEMENT)
-        self.entry.setVisible(level == STATEMENT)
+        self.entry.setVisible(writes and level == STATEMENT)
+        self.reconcile.bank.setReadOnly(not writes)
         self.table.setSelectionMode(  # lines are marked to move them to another account
             QAbstractItemView.SelectionMode.ExtendedSelection
             if level == STATEMENT

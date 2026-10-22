@@ -105,7 +105,7 @@ def test_what_would_stop_posting_is_said(server):
     no_supplier = {"debit": "531", "credit": "221", "amount": "500.00"}
     draft = call(server, "create_draft", date="2026-02-25", memo="?", postings=[no_supplier])
     assert draft["would_post"] is False
-    assert draft["problem"] == "строка 1, Дт 531: не заполнено субконто 1"
+    assert draft["problem"] == "строка 1, Дт 531: не заполнено «Контрагенты»"
 
 
 def test_names_must_exist_and_amounts_are_text(server):

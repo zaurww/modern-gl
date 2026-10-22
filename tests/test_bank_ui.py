@@ -711,3 +711,17 @@ def test_the_vat_part_goes_from_the_deposit_account(qtbot, session):
     assert [tuple(r) for r in on_deposit] == [(acc(session, "55"), 18_000, "MT7")]
     left = open_invoices(session.conn, cid, alfa, True, "2026-03-05")
     assert [i.invoice for i in left] == []
+
+
+def test_viewing_only_shows_the_statements_and_changes_nothing(qtbot, session):
+    """A company open for viewing (D80): no entry line, no new money, the bank's
+    balance is read, not typed."""
+    session.read_only = True
+    page = BankPage(session)
+    qtbot.addWidget(page)
+    page.show()
+    page.open_account(page.model.rows[1].place.key)
+    page.drill(page.model.rows[0])
+    assert page.level == "statement"
+    assert page.entry.isHidden() and page.money_in.isHidden() and page.money_out.isHidden()
+    assert page.more.isHidden() and page.reconcile.bank.isReadOnly()
