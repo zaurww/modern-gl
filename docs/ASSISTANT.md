@@ -15,7 +15,7 @@
 {
   "mcpServers": {
     "modern-gl": {
-      "command": "D:\GL AZE\.venv\Scripts\modern-gl-mcp.exe"
+      "command": "D:\\GL AZE\\.venv\\Scripts\\modern-gl-mcp.exe"
     }
   }
 }
@@ -54,7 +54,7 @@
 
 ```json
 "modern-gl": {
-  "command": "D:\GL AZE\.venv\Scripts\modern-gl-mcp.exe",
+  "command": "D:\\GL AZE\\.venv\\Scripts\\modern-gl-mcp.exe",
   "args": ["--allow-drafts"]
 }
 ```
