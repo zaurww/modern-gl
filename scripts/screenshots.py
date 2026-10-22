@@ -536,6 +536,22 @@ def main() -> None:
     loop.exec()
     period.grab().save(str(out / "16_period_dialog.png"))
     period.close()
+    from modern_gl.application.history import document_history
+    from modern_gl.desktop.history_dialog import HistoryDialog
+
+    first = session.conn.execute(
+        "SELECT id, number FROM documents WHERE company_id = ? ORDER BY id LIMIT 1",
+        (session.company_id,),
+    ).fetchone()
+    story = HistoryDialog(  # «История изменений» (D96)
+        f"№{first['number']}", document_history(session.conn, session.company_id, first["id"]), win
+    )
+    story.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    story.grab().save(str(out / "17_history_dialog.png"))
+    story.close()
     from modern_gl.desktop.backups_dialog import BackupsDialog
 
     assert win.conn is not None and win.company_path is not None

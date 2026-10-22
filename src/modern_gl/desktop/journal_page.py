@@ -32,6 +32,7 @@ from modern_gl.application.queries import (
     list_documents,
 )
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
+from modern_gl.desktop.reason_dialog import confirm_delete
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
@@ -326,19 +327,11 @@ class JournalPage(QWidget):
         doc = next((d for d in self.model.docs if d.id == doc_id), None)
         if doc is None or self.s.read_only:
             return
-        question = (
-            tr("Удалить черновик №{n}?", n=doc.number)
-            if doc.status == "draft"
-            else tr(
-                "Удалить проведённый документ №{n}? Его проводки исчезнут из отчётов, "
-                "а полная копия останется в журнале действий.",
-                n=doc.number,
-            )
-        )
-        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+        reason = confirm_delete(self, doc.number, doc.status == "posted")
+        if reason is None:
             return
         try:
-            self.s.ledger.delete_document(self.s.company_id, doc.id)
+            self.s.ledger.delete_document(self.s.company_id, doc.id, reason)
         except LedgerError as e:
             QMessageBox.warning(self, tr("Удалить"), str(e))
             return

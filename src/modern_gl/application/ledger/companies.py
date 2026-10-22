@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from modern_gl.application.common import insert, now
+from modern_gl.application.common import insert, now, with_reason
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.application.ledger.inputs import DEFAULT_LAYERS
 from modern_gl.domain.company import COMPANY_MODES
@@ -93,8 +93,11 @@ class CompanyCommands(LedgerBase):
             self.conn.execute("UPDATE companies SET mode = ? WHERE id = ?", (mode, company_id))
             self._audit(company_id, "company", company_id, "set_mode", {"from": old, "to": mode})
 
-    def set_closed_through(self, company_id: int, through: date | str | None) -> None:
-        """Close the period up to `through` inclusive; None reopens everything. Audited."""
+    def set_closed_through(
+        self, company_id: int, through: date | str | None, reason: str = ""
+    ) -> None:
+        """Close the period up to `through` inclusive; None reopens everything. Audited,
+        with why it was done (`reason`, asked when a closed period is opened again)."""
         value = None if through is None else iso_date(through)
         with transaction(self.conn):
             old = self._company(company_id)["closed_through"]
@@ -102,5 +105,9 @@ class CompanyCommands(LedgerBase):
                 "UPDATE companies SET closed_through = ? WHERE id = ?", (value, company_id)
             )
             self._audit(
-                company_id, "company", company_id, "set_closed_through", {"from": old, "to": value}
+                company_id,
+                "company",
+                company_id,
+                "set_closed_through",
+                with_reason({"from": old, "to": value}, reason),
             )

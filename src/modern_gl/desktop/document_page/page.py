@@ -6,12 +6,10 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import (
-    QMessageBox,
-)
 from shiboken6 import isValid
 
 from modern_gl.application.authorship import authors_text, document_authors
+from modern_gl.application.history import document_history
 from modern_gl.application.queries import (
     DocumentData,
     TemplateData,
@@ -20,10 +18,12 @@ from modern_gl.application.queries import (
 from modern_gl.desktop.document_page.clipboard import ClipboardPart
 from modern_gl.desktop.document_page.rates import RatesPart
 from modern_gl.desktop.document_page.templates import TemplatesPart
+from modern_gl.desktop.history_dialog import HistoryDialog
 from modern_gl.desktop.postings import (
     DT,
     PostingRow,
 )
+from modern_gl.desktop.reason_dialog import ask_reason, confirm_delete
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     MenuItem,
@@ -183,10 +183,11 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         if doc is None:  # not saved yet
             return [(tr("Сделать шаблоном"), self.save_as_template)]
         source = doc.inventory_number
-        if self.s.read_only:  # viewing (D80): only where the postings came from
+        history = (tr("История изменений"), self.show_history)
+        if self.s.read_only:  # viewing (D80): where the postings came from, their story
             if source is None:
-                return []
-            return [(tr("Складской документ №{n}", n=source), self._open_source)]
+                return [history]
+            return [(tr("Складской документ №{n}", n=source), self._open_source), history]
         copy = (tr("Копировать"), lambda: self.copy_requested.emit(self._as_template()))
         if doc.conversion_id is not None or doc.bank_operation_id is not None:
             return [copy]  # corrected in the conversion or the bank operation itself
@@ -203,7 +204,12 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         items.append((tr("Сделать шаблоном"), self.save_as_template))
         if posted and doc.reversal_of is None and doc.reversed_by is None:
             items += [None, (tr("Сторно…"), self.reverse)]
-        return [*items, None, (tr("Удалить"), self.delete)]
+        return [*items, history, None, (tr("Удалить"), self.delete)]
+
+    def show_history(self) -> None:
+        if self.doc is not None:
+            events = document_history(self.s.conn, self.s.company_id, self.doc.id)
+            HistoryDialog(tr("Документ №{n}", n=self.doc.number), events, self).exec()
 
     def _open_source(self) -> None:
         if self.doc is not None and self.doc.inventory_document_id is not None:
@@ -272,20 +278,12 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         if self.doc is None:
             return
         n = self.doc.number
-        question = (
-            tr("Удалить черновик №{n}?", n=n)
-            if self.doc.status == "draft"
-            else tr(
-                "Удалить проведённый документ №{n}? Его проводки исчезнут из отчётов, "
-                "а полная копия останется в журнале действий.",
-                n=n,
-            )
-        )
-        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+        reason = confirm_delete(self, n, self.doc.status == "posted")
+        if reason is None:
             return
         reversed_id = self.doc.reversal_of
         try:
-            self.s.ledger.delete_document(self.s.company_id, self.doc.id)
+            self.s.ledger.delete_document(self.s.company_id, self.doc.id, reason)
         except LedgerError as e:
             self.show_error(str(e))
             return
@@ -297,8 +295,16 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
     def unpost(self) -> None:
         if self.doc is None:
             return
+        reason = ask_reason(
+            self,
+            tr("Отменить проведение"),
+            tr("Отменить проведение документа №{n}?", n=self.doc.number),
+            tr("Отменить проведение"),
+        )
+        if reason is None:
+            return
         try:
-            self.s.ledger.unpost(self.s.company_id, self.doc.id)
+            self.s.ledger.unpost(self.s.company_id, self.doc.id, reason)
         except LedgerError as e:
             self.show_error(str(e))
             return
