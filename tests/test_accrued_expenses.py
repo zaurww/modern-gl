@@ -296,3 +296,28 @@ def test_receipt_page_asks_for_the_month_of_a_service(shop, conn, qtbot):
     assert [p[:3] for p in shop.postings(page.doc.id)] == [("76H", "60", 5_000), ("19", "60", 900)]
     assert page.expense_month.currentData() == "2026-09-30"  # loaded back
     assert not page.btn_accrual.isHidden()
+
+
+def test_the_accrual_is_not_a_landed_cost_source(shop):
+    """The accrual document is the warehouse's own (D65): the list of sources leaves it out,
+    and posting a landed cost refuses it the same way."""
+    from modern_gl.application.inventory import LandedCostCharge, LandedCostTarget
+    from modern_gl.reporting.inventory import cost_sources
+
+    receipt = purchase(shop, [rent(shop)], expense_date="2026-09-30")
+    accrual_doc = shop.inventory.load_document(shop.company_id, receipt).accrual_document_id
+    assert accrual_doc not in {
+        s.document_id for s in cost_sources(shop.ledger.conn, shop.company_id)
+    }
+
+    goods = shop.receipt("2026-10-06", "10", "100")
+    line = shop.inventory.load_document(shop.company_id, goods).lines[0].id
+    with pytest.raises(ValidationError, match="складского документа"):
+        shop.inventory.create_landed_cost_draft(
+            shop.company_id,
+            "2026-10-07",
+            [LandedCostTarget(line)],
+            [LandedCostCharge("10", source_document_id=accrual_doc, source_line_no=1)],
+            "value",
+            "Партия",
+        )

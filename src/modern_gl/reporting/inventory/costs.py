@@ -62,8 +62,9 @@ def cost_sources(
         JOIN accounts da ON da.id = p.debit_account_id
         JOIN accounts ca ON ca.id = p.credit_account_id
         WHERE p.company_id = ? AND d.status = 'posted' AND l.code = 'common' AND p.amount > 0
-          AND NOT EXISTS (SELECT 1 FROM inventory_documents i
-                          WHERE i.gl_document_id = d.id OR i.accrual_document_id = d.id)
+          AND NOT EXISTS (SELECT 1 FROM document_owners o
+                          WHERE o.company_id = d.company_id AND o.document_id = d.id
+                            AND o.module = 'inventory' AND o.role = 'made')
         ORDER BY d.doc_date DESC, d.number DESC, p.line_no
         """,
         (exclude_document_id, company_id),

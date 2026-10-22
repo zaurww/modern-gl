@@ -490,8 +490,9 @@ class LandedCostCommands(StockCommands):
         row = self.conn.execute(
             """
             SELECT p.*, d.number, d.status, l.code AS layer,
-                   EXISTS (SELECT 1 FROM inventory_documents i
-                           WHERE i.gl_document_id = d.id) AS from_inventory
+                   EXISTS (SELECT 1 FROM document_owners o
+                           WHERE o.company_id = d.company_id AND o.document_id = d.id
+                             AND o.module = 'inventory' AND o.role = 'made') AS from_inventory
             FROM postings p
             JOIN documents d ON d.id = p.document_id
             JOIN layers l ON l.id = d.layer_id
