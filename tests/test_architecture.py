@@ -58,8 +58,8 @@ CORE_TABLE_ALLOWED = {
         "bank_operations",
     },
 }
-# Debt 3: a widget still runs its own query.
-SQL_IN_WIDGETS_ALLOWED = {"desktop/eqaime_import_page.py"}
+# A widget never runs its own query (debt 3 paid in session 22); a new one is not allowed.
+SQL_IN_WIDGETS_ALLOWED: set[str] = set()
 
 
 def rel(path: Path) -> str:

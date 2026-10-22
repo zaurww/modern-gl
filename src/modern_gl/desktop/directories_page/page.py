@@ -23,21 +23,15 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QCheckBox,
-    QComboBox,
-    QCompleter,
     QDialog,
-    QFormLayout,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
     QLabel,
-    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMenu,
     QMessageBox,
-    QPushButton,
     QStackedLayout,
     QTableView,
     QVBoxLayout,
@@ -46,373 +40,25 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.application.inventory import Inventory
+from modern_gl.desktop.directories_page.tags import TagsDialog
+from modern_gl.desktop.directories_page.values import (
+    ValueDialog,
+    has_currency,
+    new_value,
+    tax_id_taken,
+)
 from modern_gl.desktop.icons import icon
 from modern_gl.desktop.inventory_page import open_item
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, FlowLayout, PageHeader, button
+from modern_gl.desktop.widgets import EmptyState, PageHeader, button
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import transaction
 from modern_gl.reporting.inventory import item_details
 
 KIND_ROLE = Qt.ItemDataRole.UserRole
-
-
-class TagPicker(QWidget):
-    """The tags of an element as pills: a click puts one on or off; «+ Метка» makes a new
-    one (it is on at once); the menu of a pill renames or deletes it for the company."""
-
-    def __init__(self, session: Session, chosen: frozenset[int] = frozenset()) -> None:
-        super().__init__()
-        self.s = session
-        self._chosen = set(chosen)
-        self.flow = FlowLayout(self)
-        self.pills: dict[int, QPushButton] = {}
-        self.add = button(tr("+ Метка"), "flat", tr("Новая метка, например «Связанная сторона»"))
-        self.add.clicked.connect(self.new_tag)
-        self._fill()
-
-    def chosen(self) -> set[int]:
-        return {tag_id for tag_id, pill in self.pills.items() if pill.isChecked()}
-
-    def _fill(self) -> None:
-        while self.flow.count():
-            item = self.flow.takeAt(0)
-            widget = item.widget() if item else None
-            if widget is not None and widget is not self.add:
-                widget.deleteLater()
-        self.pills = {}
-        for tag_id, name in self.s.catalog.sorted_tags():
-            pill = button(name, "tag")
-            pill.setCheckable(True)
-            pill.setChecked(tag_id in self._chosen)
-            pill.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-            pill.customContextMenuRequested.connect(
-                lambda pos, tag_id=tag_id, pill=pill: self._menu(tag_id, pill, pos)
-            )
-            self.pills[tag_id] = pill
-            self.flow.addWidget(pill)
-        self.flow.addWidget(self.add)
-        self.updateGeometry()
-
-    def _ask(self, title: str, text: str = "") -> str | None:
-        name, ok = QInputDialog.getText(self, title, tr("Название метки:"), text=text)
-        return name.strip() if ok and name.strip() else None
-
-    def new_tag(self) -> None:
-        name = self._ask(tr("Новая метка"))
-        if name is None:
-            return
-        try:
-            tag_id = self.s.ledger.add_tag(self.s.company_id, name)
-        except LedgerError as e:
-            self.s.notify(str(e))
-            return
-        self._chosen = self.chosen() | {tag_id}
-        self.s.catalog.reload()
-        self._fill()
-
-    def _menu(self, tag_id: int, pill: QPushButton, pos) -> None:
-        menu = QMenu(self)
-        menu.addAction(tr("Переименовать…")).triggered.connect(lambda: self._rename(tag_id))
-        menu.addAction(tr("Удалить метку…")).triggered.connect(lambda: self._delete(tag_id))
-        menu.exec(pill.mapToGlobal(pos))
-
-    def _rename(self, tag_id: int) -> None:
-        name = self._ask(tr("Переименовать"), self.s.catalog.tags[tag_id])
-        if name is None:
-            return
-        self._change(lambda: self.s.ledger.rename_tag(self.s.company_id, tag_id, name))
-
-    def _delete(self, tag_id: int) -> None:
-        name = self.s.catalog.tags[tag_id]
-        question = tr("Удалить метку «{name}»? Она снимется со всех элементов.", name=name)
-        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
-            return
-        self._change(lambda: self.s.ledger.delete_tag(self.s.company_id, tag_id))
-
-    def _change(self, action) -> None:
-        try:
-            action()
-        except LedgerError as e:
-            self.s.notify(str(e))
-            return
-        self._chosen = self.chosen()
-        self.s.catalog.reload()
-        self._fill()
-
-
-class TagsDialog(QDialog):
-    """The tags of an element of a directory that has no window of its own (cost items)."""
-
-    def __init__(self, session: Session, value: SubcontoInfo, parent: QWidget | None) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(tr("Метки"))
-        self.setMinimumWidth(420)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(28, 24, 28, 20)
-        lay.setSpacing(16)
-        heading = QLabel(value.name)
-        heading.setFont(fonts().heading)
-        lay.addWidget(heading)
-        self.picker = TagPicker(session, value.tags)
-        lay.addWidget(self.picker)
-        note = QLabel(tr("По метке отбирается ОСВ по субконто: например, все связанные стороны."))
-        note.setObjectName("secondary")
-        note.setWordWrap(True)
-        lay.addWidget(note)
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
-        cancel = button(tr("Отмена"))
-        save = button(tr("Сохранить"), "primary")
-        save.setDefault(True)
-        cancel.clicked.connect(self.reject)
-        save.clicked.connect(self.accept)
-        buttons.addWidget(cancel)
-        buttons.addWidget(save)
-        lay.addLayout(buttons)
-
-
-class ValueDialog(QDialog):
-    """Name of an element and what else it has: for a contract, the counterparty it
-    belongs to; for a counterparty, its VÖEN (or, for a non-resident, its country and
-    tax number); for an element of a currency account (a bank account on 52, a foreign
-    supplier on 60), its currency."""
-
-    def __init__(
-        self,
-        session: Session,
-        kind_id: int,
-        title: str,
-        name: str = "",
-        owner_id: int | None = None,
-        parent: QWidget | None = None,
-        currency_id: int | None = None,
-        value: SubcontoInfo | None = None,
-    ) -> None:
-        super().__init__(parent)
-        cat = session.catalog
-        self.setWindowTitle(title)
-        self.setMinimumWidth(460)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(28, 24, 28, 20)
-        lay.setSpacing(16)
-        heading = QLabel(title)
-        heading.setFont(fonts().heading)
-        lay.addWidget(heading)
-        form = QFormLayout()
-        form.setHorizontalSpacing(18)
-        form.setVerticalSpacing(10)
-        self.name = QLineEdit(name)
-        form.addRow(tr("Наименование"), self.name)
-        notes = []
-        self.tax_id: QLineEdit | None = None
-        self.nonresident: QCheckBox | None = None
-        self.country: QLineEdit | None = None
-        if cat.has_tax_id(kind_id):
-            self._tax_rows(form, value)
-        self.owner: QComboBox | None = None
-        if kind_id in cat.owner_kinds:
-            self.owner = self._owner_box(session, kind_id, owner_id)
-            form.addRow(cat.owner_title(kind_id), self.owner)
-            notes.append(
-                tr("Договор предлагается только вместе со своим контрагентом. Общий — с любым.")
-            )
-        self.currency: QComboBox | None = None
-        if has_currency(session, kind_id):
-            self.currency = QComboBox()
-            self.currency.addItem(tr("— без валюты"), None)
-            for c in cat.active_currencies:
-                self.currency.addItem(c.label, c.id)
-            self.currency.setCurrentIndex(max(self.currency.findData(currency_id), 0))
-            form.addRow(tr("Валюта"), self.currency)
-            notes.append(tr("С валютой строка сама берёт её, и проводка проверяется по ней."))
-        self.tags = TagPicker(session, value.tags if value else frozenset())
-        form.addRow(tr("Метки"), self.tags)
-        lay.addLayout(form)
-        for text in notes:
-            note = QLabel(text)
-            note.setObjectName("secondary")
-            note.setWordWrap(True)
-            lay.addWidget(note)
-        buttons = QHBoxLayout()  # like the account dialog: quiet Cancel, blue Save
-        buttons.addStretch(1)
-        cancel = button(tr("Отмена"))
-        save = button(tr("Сохранить"), "primary")
-        save.setDefault(True)
-        cancel.clicked.connect(self.reject)
-        save.clicked.connect(self.accept)
-        buttons.addWidget(cancel)
-        buttons.addWidget(save)
-        lay.addLayout(buttons)
-        self.name.setFocus()
-
-    def _tax_rows(self, form: QFormLayout, value: SubcontoInfo | None) -> None:
-        """VÖEN of a resident; country and own tax number of a non-resident."""
-        nonresident = QCheckBox(tr("Нерезидент — иностранная компания или лицо"))
-        nonresident.setChecked(bool(value and value.nonresident))
-        form.addRow("", nonresident)
-        tax_id = QLineEdit((value.tax_id if value else None) or "")
-        form.addRow(tr("VÖEN"), tax_id)
-        country = QLineEdit((value.country if value else None) or "")
-        form.addRow(tr("Страна"), country)
-        self.nonresident, self.tax_id, self.country = nonresident, tax_id, country
-
-        def switch() -> None:
-            foreign = nonresident.isChecked()
-            label = form.labelForField(tax_id)
-            if isinstance(label, QLabel):
-                label.setText(tr("Налоговый номер") if foreign else tr("VÖEN"))
-            tax_id.setPlaceholderText(
-                tr("EIN, VAT ID, TIN… — как в документах") if foreign else tr("10 цифр")
-            )
-            form.setRowVisible(country, foreign)
-
-        nonresident.toggled.connect(switch)
-        switch()
-
-    def tax(self) -> tuple[str | None, bool, str | None]:
-        """(tax number, non-resident, country) as typed; a VÖEN without spaces."""
-        if self.tax_id is None or self.nonresident is None or self.country is None:
-            return None, False, None
-        foreign = self.nonresident.isChecked()
-        text = " ".join(self.tax_id.text().split())
-        if not foreign:
-            text = text.replace(" ", "")
-        country = self.country.text().strip() if foreign else ""
-        return text or None, foreign, country or None
-
-    def _owner_box(self, session: Session, kind_id: int, owner_id: int | None) -> QComboBox:
-        cat = session.catalog
-        box = QComboBox()
-        box.setEditable(True)  # type to find among hundreds of counterparties
-        box.addItem(tr("— общий для всех"), None)
-        for v in cat.values(cat.owner_kinds[kind_id]):
-            box.addItem(v.name, v.id)
-        completer = QCompleter([box.itemText(i) for i in range(box.count())], self)
-        box.setCompleter(completer)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        box.setCurrentIndex(max(box.findData(owner_id), 0))
-        return box
-
-    def owner_id(self) -> int | None:
-        """The chosen counterparty; text that names none of them means common."""
-        if self.owner is None:
-            return None
-        text = self.owner.currentText().strip()
-        index = self.owner.findText(text, Qt.MatchFlag.MatchFixedString)
-        return self.owner.itemData(index) if index > 0 else None
-
-    def currency_id(self) -> int | None:
-        return self.currency.currentData() if self.currency is not None else None
-
-
-def has_currency(session: Session, kind_id: int) -> bool:
-    """Elements of the directory may have a currency: it is used on a currency account."""
-    return any(a.currency for a in session.catalog.accounts_using(kind_id))
-
-
-def tax_id_taken(
-    session: Session,
-    parent: QWidget,
-    kind_id: int,
-    tax: tuple[str | None, bool, str | None],
-    value_id: int | None = None,
-) -> bool:
-    """A VÖEN another counterparty already has: save anyway (a branch) or go back."""
-    tax_id, foreign, _ = tax
-    if tax_id is None or foreign:
-        return False
-    others = session.catalog.same_tax_id(kind_id, tax_id, value_id)
-    if not others:
-        return False
-    question = tr(
-        "VÖEN {tax_id} уже есть у «{name}». Всё равно сохранить?", tax_id=tax_id, name=others[0]
-    )
-    return QMessageBox.question(parent, tr("VÖEN"), question) != QMessageBox.StandardButton.Yes
-
-
-def new_value(
-    session: Session,
-    parent: QWidget,
-    kind_id: int,
-    typed: str = "",
-    owner_id: int | None = None,
-    currency_id: int | None = None,
-) -> int | None:
-    """A new element in the window of its directory, also right where it is needed (D49):
-    what was typed is its name — or its VÖEN, if it is digits. The new id, or None."""
-    cat = session.catalog
-    kind = cat.kinds[kind_id]
-    dlg = ValueDialog(
-        session,
-        kind_id,
-        tr("Новый элемент"),
-        owner_id=owner_id,
-        parent=parent,
-        currency_id=currency_id,
-    )
-    digits = typed.replace(" ", "")
-    if dlg.tax_id is not None and digits.isdigit():
-        dlg.tax_id.setText(digits)
-    else:
-        dlg.name.setText(typed.strip())
-    if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
-        return None
-    name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
-    tax = dlg.tax()
-    if tax_id_taken(session, parent, kind_id, tax):
-        return None
-    cid = session.company_id
-    try:
-        with transaction(session.conn):
-            value_id = session.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner)
-            if currency is not None:
-                session.ledger.set_subconto_value_currency(cid, value_id, currency)
-            if tax != (None, False, None):
-                session.ledger.set_subconto_value_tax(cid, value_id, *tax)
-            if dlg.tags.chosen():
-                session.ledger.set_subconto_value_tags(cid, value_id, dlg.tags.chosen())
-    except LedgerError as e:
-        session.notify(str(e))
-        return None
-    cat.reload()
-    session.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=name))
-    return value_id
-
-
-def added_value(
-    session: Session,
-    parent: QWidget,
-    kind_id: int,
-    typed: str,
-    owner_id: int | None = None,
-    currency_id: int | None = None,
-) -> int | None:
-    """ "+ Добавить «…»" picked from a list: the name goes in at once, no window, as in the
-    journal (D54). Digits are a VÖEN, not a name: those still open the window."""
-    name = typed.strip()
-    if not name:
-        return None
-    if name.replace(" ", "").isdigit():
-        return new_value(session, parent, kind_id, name, owner_id, currency_id)
-    cid = session.company_id
-    try:
-        with transaction(session.conn):
-            value_id = session.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner_id)
-            if currency_id is not None:
-                session.ledger.set_subconto_value_currency(cid, value_id, currency_id)
-    except LedgerError as e:
-        session.notify(str(e))
-        return None
-    session.catalog.reload()
-    kind = session.catalog.kinds[kind_id]
-    session.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=name))
-    return value_id
 
 
 class DirectoriesPage(QWidget):
@@ -458,20 +104,7 @@ class DirectoriesPage(QWidget):
         self.used_in.setWordWrap(True)
         right.addWidget(self.used_in)
 
-        self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setObjectName("list")
-        self.table.setModel(self.model)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(34)
-        self.table.horizontalHeader().setHighlightSections(False)
-        self.table.doubleClicked.connect(lambda idx: self.rename_value(self._value_at(idx)))
-        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self._context_menu)
+        self._build_table()
         self.empty = EmptyState(
             "○", tr("Справочник пуст"), tr("Нажмите «+ Новый элемент» или Ins.")
         )
@@ -499,6 +132,23 @@ class DirectoriesPage(QWidget):
         delete.setContext(Qt.ShortcutContext.WidgetShortcut)
         delete.activated.connect(lambda: self.delete_value(self._current_value()))
         self.refresh()
+
+    def _build_table(self) -> None:
+        """The elements: rows to pick, no grid, F2 or a double click to edit."""
+        self.model = ReportModel()
+        self.table = QTableView()
+        self.table.setObjectName("list")
+        self.table.setModel(self.model)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(34)
+        self.table.horizontalHeader().setHighlightSections(False)
+        self.table.doubleClicked.connect(lambda idx: self.rename_value(self._value_at(idx)))
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._context_menu)
 
     def title(self) -> str:
         return tr("Справочники")

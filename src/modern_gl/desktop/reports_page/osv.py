@@ -6,12 +6,14 @@ from PySide6.QtWidgets import (
     QCheckBox,
 )
 
+from modern_gl.desktop.reports_page.table import (
+    SectionRow,
+)
 from modern_gl.desktop.reports_page.view import (
     Column,
     MenuAction,
     ReportPage,
     ReportParams,
-    SectionRow,
     turnover_columns,
 )
 from modern_gl.desktop.session import Session

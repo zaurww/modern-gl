@@ -19,7 +19,7 @@ from modern_gl.desktop.bank_operation_page.common import (
     offer_invoices,
     select_data,
 )
-from modern_gl.desktop.conversion_page import amount_text
+from modern_gl.desktop.conversion_page.common import amount_text
 from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import button

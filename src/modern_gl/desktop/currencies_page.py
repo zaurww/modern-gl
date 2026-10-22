@@ -134,20 +134,7 @@ class CurrenciesPage(QWidget):
         self.latest.setObjectName("secondary")
         right.addWidget(self.latest)
 
-        self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setObjectName("list")
-        self.table.setModel(self.model)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(34)
-        self.table.horizontalHeader().setHighlightSections(False)
-        self.table.doubleClicked.connect(lambda idx: self.edit_rate(self._rate_at(idx)))
-        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self._rate_menu)
+        self._build_table()
         self.empty = EmptyState(
             "○",
             tr("Курсов пока нет"),
@@ -172,6 +159,22 @@ class CurrenciesPage(QWidget):
             sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             sc.activated.connect(fn)
         self.refresh()
+
+    def _build_table(self) -> None:
+        self.model = ReportModel()
+        self.table = QTableView()
+        self.table.setObjectName("list")
+        self.table.setModel(self.model)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().hide()
+        self.table.verticalHeader().setDefaultSectionSize(34)
+        self.table.horizontalHeader().setHighlightSections(False)
+        self.table.doubleClicked.connect(lambda idx: self.edit_rate(self._rate_at(idx)))
+        self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table.customContextMenuRequested.connect(self._rate_menu)
 
     def title(self) -> str:
         return tr("Валюты")

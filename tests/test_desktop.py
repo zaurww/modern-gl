@@ -238,7 +238,7 @@ def test_reverse_from_document_opens_storno(window, monkeypatch):
     window.open_document(first.id)
     page = current_page(window)
     monkeypatch.setattr(
-        "modern_gl.desktop.document_page.ask_date", lambda *a, **k: date(2026, 3, 5)
+        "modern_gl.desktop.document_page.page.ask_date", lambda *a, **k: date(2026, 3, 5)
     )
     page.reverse()
     storno = current_page(window)
@@ -638,7 +638,7 @@ def test_delete_mistaken_storno_from_its_page(window, monkeypatch):
     original = journal.model.docs[0]
     window.open_document(original.id)
     monkeypatch.setattr(
-        "modern_gl.desktop.document_page.ask_date", lambda *a, **k: date(2026, 3, 5)
+        "modern_gl.desktop.document_page.page.ask_date", lambda *a, **k: date(2026, 3, 5)
     )
     current_page(window).reverse()
     storno_page = current_page(window)
@@ -750,7 +750,7 @@ def test_new_user_directory(window, monkeypatch):
     window.show_place(("directories",))
     page = current_page(window)
     monkeypatch.setattr(
-        "modern_gl.desktop.directories_page.QInputDialog.getText",
+        "modern_gl.desktop.directories_page.page.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("Проекты", True)),
     )
     before = len(window.session.catalog.kinds)
@@ -824,7 +824,7 @@ def test_document_from_template_follows_operation_amount(window, qtbot):
 
 def test_make_template_from_document_and_edit_formula(window, monkeypatch):
     monkeypatch.setattr(
-        "modern_gl.desktop.document_page.QInputDialog.getText",
+        "modern_gl.desktop.document_page.templates.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("Kassaya mədaxil", True)),
     )
     window.new_document()

@@ -8,6 +8,10 @@ from __future__ import annotations
 from modern_gl.desktop.reports_page.account import REPORTS, CardPage, SubcontoPage
 from modern_gl.desktop.reports_page.chart import ChartPage
 from modern_gl.desktop.reports_page.osv import OsvPage
+from modern_gl.desktop.reports_page.table import (
+    SectionRow,
+    figure,
+)
 from modern_gl.desktop.reports_page.view import (
     NAME_MAX,
     NAME_MIN,
@@ -16,8 +20,6 @@ from modern_gl.desktop.reports_page.view import (
     ReportModel,
     ReportPage,
     ReportParams,
-    SectionRow,
-    figure,
     month_of,
 )
 

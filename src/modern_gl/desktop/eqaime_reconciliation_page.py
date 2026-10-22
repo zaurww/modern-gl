@@ -23,7 +23,8 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.eqaime_portal import fetch_list, read_again, rechecks, usual_span
-from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog, PortalLoader, changes_warning
+from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+from modern_gl.desktop.eqaime_portal_loader import PortalLoader, changes_warning
 from modern_gl.desktop.period_bar import PeriodBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -103,6 +104,31 @@ class EqaimeReconciliationDialog(QDialog):
         root.setContentsMargins(28, 22, 28, 20)
         root.setSpacing(12)
 
+        self._build_head(root, title_text)
+        self._build_bar(root)
+
+        self.warning = QLabel()
+        self.warning.setObjectName("warning")
+        self.warning.setWordWrap(True)
+        self.warning.hide()
+        root.addWidget(self.warning)
+
+        self._build_totals(root)
+        self._build_tree(root)
+
+        self.status = QLabel(
+            tr(
+                "Выберите период и нажмите «Сверить с порталом»: откроется вход через ASAN İmza. "
+                "Программа сравнит e-qaimə портала с проведёнными документами по номеру."
+            )
+        )
+        self.status.setObjectName("secondary")
+        self.status.setWordWrap(True)
+        root.addWidget(self.status)
+
+        self._build_actions(root)
+
+    def _build_head(self, root: QVBoxLayout, title_text: str) -> None:
         title = QLabel(title_text)
         title.setFont(fonts().title)
         root.addWidget(title)
@@ -118,11 +144,12 @@ class EqaimeReconciliationDialog(QDialog):
         line.addWidget(self.through)
         root.addLayout(line)
 
+    def _build_bar(self, root: QVBoxLayout) -> None:
         bar = QHBoxLayout()
         bar.setSpacing(8)
         # the usual period at a click: the one this company was last marked with
         self.period_bar = PeriodBar(
-            self.today, usual_span(session.conn, session.company_id, self.outgoing)
+            self.today, usual_span(self.s.conn, self.s.company_id, self.outgoing)
         )
         bar.addWidget(self.period_bar)
         bar.addStretch(1)
@@ -132,12 +159,7 @@ class EqaimeReconciliationDialog(QDialog):
         root.addLayout(bar)
         self._show_through()
 
-        self.warning = QLabel()
-        self.warning.setObjectName("warning")
-        self.warning.setWordWrap(True)
-        self.warning.hide()
-        root.addWidget(self.warning)
-
+    def _build_totals(self, root: QVBoxLayout) -> None:
         # the answer first (Jon Moon): does the period agree, and the totals
         self.verdict = QLabel()
         self.verdict.setFont(fonts().heading)
@@ -167,6 +189,7 @@ class EqaimeReconciliationDialog(QDialog):
         self.totals_box.hide()
         root.addWidget(self.totals_box)
 
+    def _build_tree(self, root: QVBoxLayout) -> None:
         self.tree = QTreeWidget()
         self.tree.setColumnCount(len(COLUMNS))
         self.tree.setHeaderLabels([tr(c) for c in COLUMNS])
@@ -185,16 +208,7 @@ class EqaimeReconciliationDialog(QDialog):
         self.tree.itemDoubleClicked.connect(self._open)
         root.addWidget(self.tree, 1)
 
-        self.status = QLabel(
-            tr(
-                "Выберите период и нажмите «Сверить с порталом»: откроется вход через ASAN İmza. "
-                "Программа сравнит e-qaimə портала с проведёнными документами по номеру."
-            )
-        )
-        self.status.setObjectName("secondary")
-        self.status.setWordWrap(True)
-        root.addWidget(self.status)
-
+    def _build_actions(self, root: QVBoxLayout) -> None:
         actions = QHBoxLayout()
         self.import_button = button(tr("Загрузить недостающие…"), "flat")
         self.import_button.setToolTip(tr("Черновики из e-qaimə, которых нет в книге"))

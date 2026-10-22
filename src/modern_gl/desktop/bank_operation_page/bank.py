@@ -17,7 +17,7 @@ from modern_gl.desktop.bank_operation_page.common import (
     select_data,
 )
 from modern_gl.desktop.bank_operation_page.form import BankOperationForm
-from modern_gl.desktop.conversion_page import fit_currency
+from modern_gl.desktop.conversion_page.common import fit_currency
 from modern_gl.desktop.widgets import (
     edited_date,
 )

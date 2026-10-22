@@ -16,7 +16,7 @@ from modern_gl.desktop.bank_operation_page.common import (
     SEVERAL,
 )
 from modern_gl.desktop.bank_operation_page.form import BankOperationForm
-from modern_gl.desktop.conversion_page import amount_text
+from modern_gl.desktop.conversion_page.common import amount_text
 from modern_gl.desktop.widgets import (
     edited_date,
 )
