@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
 )
@@ -20,6 +21,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     CLASS_ORDER,
+    button,
     class_icon,
     class_name,
 )
@@ -32,6 +34,7 @@ from modern_gl.reporting.reports import OsvRow
 
 class OsvPage(ReportPage):
     key = ("osv",)
+    compare_books = Signal()  # «Сравнение книг» (D98)
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Оборотно-сальдовая ведомость"), params)
@@ -52,6 +55,10 @@ class OsvPage(ReportPage):
         self.in_currency.toggled.connect(self.refresh)
         self.in_currency.setVisible(session.catalog.has_currency_accounts)
         self.header.add_action(self.in_currency)
+        if session.parallel_books:  # D98: the three books side by side
+            compare = button(tr("Сравнить книги"), "flat")
+            compare.clicked.connect(lambda _=False: self.compare_books.emit())
+            self.header.add_action(compare)
         self.refresh()
 
     def title(self) -> str:

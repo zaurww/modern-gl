@@ -148,6 +148,10 @@ def main() -> None:
         option.setChecked(True)
         shot(name)
         option.setChecked(False)
+    win.open_books()  # «Сравнение книг» (D98): the demo's IFRS write-down of stock
+    shot("19_books_compare")
+    win.close_current()
+    win.show_place(("osv",))
     win.show_place(("opening",))
     opening = cast(OpeningBalancesPage, win.pages[("opening",)])
     QApplication.clipboard().setText("Счёт\tДебет\tКредит\n50\t1750\t\n51\t5200\t\n80\t\t5000\n")
