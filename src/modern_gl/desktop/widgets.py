@@ -344,18 +344,15 @@ class EmptyState(QWidget):
         lay = QVBoxLayout(self)
         lay.addStretch(2)
         for text, font, color in (
-            (glyph, None, P.hairline),
+            (glyph, fonts().glyph, P.hairline),
             (title, fonts().heading, P.secondary),
             (hint, fonts().body, P.tertiary),
         ):
             label = QLabel(text)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             label.setWordWrap(True)
-            if font is None:
-                label.setStyleSheet(f"color: {color}; font-size: 48pt;")
-            else:
-                label.setFont(font)
-                label.setStyleSheet(f"color: {color};")
+            label.setStyleSheet(f"color: {color};")
+            label.setFont(font)
             lay.addWidget(label)
         lay.addStretch(3)
 

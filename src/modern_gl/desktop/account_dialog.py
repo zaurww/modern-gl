@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -129,8 +128,6 @@ class AccountDialog(QDialog):
         # the type, or the class for a class alone ("" — not set); see _choice()
         self.account_type = QComboBox()
         self.account_type.setMaxVisibleItems(20)
-        bold = QFont(self.account_type.font())
-        bold.setBold(True)
         self.account_type.setToolTip(
             tr("Тип говорит программе, что это за счёт, при любом коде: по нему строятся отчёты")
         )
@@ -140,7 +137,7 @@ class AccountDialog(QDialog):
             self.account_type.addItem(class_icon(cls), text, t or cls or "")
             if cls and not t:
                 self.account_type.setItemData(
-                    self.account_type.count() - 1, bold, Qt.ItemDataRole.FontRole
+                    self.account_type.count() - 1, fonts().cell_bold, Qt.ItemDataRole.FontRole
                 )
 
     def _build_subconto(self) -> None:

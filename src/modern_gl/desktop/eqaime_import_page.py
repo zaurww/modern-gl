@@ -36,7 +36,7 @@ from modern_gl.desktop.eqaime_portal_loader import (
 )
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import P
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.dates import earlier_months, month_name, ru_date
 from modern_gl.domain.errors import LedgerError
@@ -160,9 +160,7 @@ class EqaimeImportDialog(EqaimeImportForm):
             ]
         )
         item.setData(0, Qt.ItemDataRole.UserRole, plan)
-        bold = item.font(2)
-        bold.setBold(True)
-        item.setFont(2, bold)
+        item.setFont(2, fonts().cell_bold)
         for column in (5, 6):
             item.setTextAlignment(
                 column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter

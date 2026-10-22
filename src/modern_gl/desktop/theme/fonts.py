@@ -62,6 +62,7 @@ class Fonts:
         self.bold = _font(text, 10, semi)
         # Table cells: only the property is set, the rest comes from the view's font.
         self.cell_bold = _font(weight=semi, tabular=True)
+        self.glyph = _font(display, 48)  # the big sign of an empty page
 
 
 FONTS: Fonts | None = None
