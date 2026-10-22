@@ -227,7 +227,7 @@ def test_post_errors_are_shown_and_nothing_is_lost(window):
         PostingRow(debit=cat.by_code["26"].id, credit=cat.by_code["50"].id, amount=100)
     ]  # 26 needs a cost item
     assert not page.save(post=True)
-    assert "не заполнено субконто" in page.error.text()
+    assert "не заполнено «" in page.error.text()
     assert page.doc is None
     assert page.model.rows[0].amount == 100
 

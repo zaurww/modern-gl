@@ -141,8 +141,8 @@ class PostingChecks(SubcontoCommands):
         )
         return {r["id"]: r for r in rows}
 
-    @staticmethod
     def _validate_subconto(
+        self,
         acc: Row,
         p: Row,
         prefix: str,
@@ -163,7 +163,11 @@ class PostingChecks(SubcontoCommands):
             if value_id is None:
                 if kind_id in optional or acc["sc_optional"] & (1 << (i - 1)):
                     continue
-                raise ValidationError(tr("{label}: не заполнено субконто {i}", label=label, i=i))
+                kind = self.conn.execute(
+                    "SELECT name FROM subconto_kinds WHERE company_id = ? AND id = ?",
+                    (acc["company_id"], kind_id),
+                ).fetchone()["name"]
+                raise ValidationError(tr("{label}: не заполнено «{kind}»", label=label, kind=kind))
             if values[value_id]["kind_id"] != kind_id:
                 raise ValidationError(tr("{label}: субконто {i} не того вида", label=label, i=i))
             if values[value_id]["is_group"]:

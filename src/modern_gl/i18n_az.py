@@ -24,7 +24,7 @@ AZ: dict[str, str] = {
     "{label}: нельзя проводить на группу счетов": "{label}: hesablar qrupuna yazılış olmaz",
     "{label}: счёт не активен": "{label}: hesab aktiv deyil",
     "{label}: у счёта нет субконто {i}": "{label}: hesabın {i}-ci subkontosu yoxdur",
-    "{label}: не заполнено субконто {i}": "{label}: {i}-ci subkonto doldurulmayıb",
+    "{label}: не заполнено «{kind}»": "{label}: «{kind}» doldurulmayıb",
     "{label}: субконто {i} не того вида": "{label}: {i}-ci subkonto səhv növdəndir",
     "документ №{n} уже проведён и не изменяется": "sənəd №{n} artıq keçirilib və dəyişdirilmir",
     "компания {id} не найдена": "şirkət {id} tapılmadı",

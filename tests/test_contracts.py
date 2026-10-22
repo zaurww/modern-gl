@@ -272,7 +272,7 @@ def test_a_posting_without_a_contract_is_allowed_but_not_without_a_counterparty(
     )
     rows = subconto_balance(ledger.conn, cid, "60", "2026-03-01", "2026-03-31", position=2)
     assert [(r.name, r.closing_ct) for r in rows] == [("<не указано>", 30_000)]
-    with pytest.raises(ValidationError, match="не заполнено субконто 1"):
+    with pytest.raises(ValidationError, match="не заполнено «Контрагенты»"):
         ledger.post_new(
             cid, "2026-03-05", [PostingInput(acc["26"], acc["60"], "1", rent, (None, v["Общий"]))]
         )

@@ -110,7 +110,7 @@ def test_problems_are_reported_per_row_and_nothing_is_written(books):
     assert problems[4] == ["«реклама» нет в справочнике «Статьи затрат»"]
     assert any("не число" in e for e in problems[5])
     check(ledger, cid, plan)
-    assert any("не заполнено субконто" in e for e in plan.rows[4].errors)
+    assert any("не заполнено «" in e for e in plan.rows[4].errors)
     assert not plan.rows[5].errors
     # even the good rows are not written while others have problems
     assert run(ledger, cid, plan) == []
@@ -223,7 +223,7 @@ def test_page_shows_problems_and_refuses(import_page):
     page = import_page
     page.paste("Дата\tДебет\tКредит\tСумма\n05.03.2026\t71\t50\t10\n05.03.2026\t50\t80\t10\n")
     assert not page.run_button.isEnabled()
-    assert "не заполнено субконто" in page.model.index(0, 7).data()
+    assert "не заполнено «" in page.model.index(0, 7).data()
     assert page.model.index(1, 7).data() == "✓"
     assert "Строк с ошибками: 1" in page.summary.text()
     assert page.run() == []
