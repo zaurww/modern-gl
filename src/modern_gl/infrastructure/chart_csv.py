@@ -25,7 +25,7 @@ import csv
 from pathlib import Path
 
 from modern_gl.application.ledger import Ledger, TemplateLine
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import language, tr
 from modern_gl.infrastructure.db import transaction
 
@@ -147,7 +147,7 @@ def import_chart_csv(
                 for role in (row.get("role") or "").split(","):  # "fx_loss,bank_fee"
                     if role.strip():
                         ledger.set_account_role(company_id, role.strip(), account_id)
-            except Exception as e:
+            except (LedgerError, ValueError) as e:  # a mistake in the file, not a bug
                 raise ValidationError(
                     tr(
                         "{file}, строка {line}: {error}",

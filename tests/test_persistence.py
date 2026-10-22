@@ -52,3 +52,25 @@ def test_import_is_atomic(ledger, conn, tmp_path):
     with pytest.raises(ValidationError, match="строка 3"):
         import_chart_csv(ledger, cid, bad)
     assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0
+
+
+def test_import_names_the_line_of_a_bad_value(ledger, tmp_path):
+    cid = ledger.create_company("Импорт")
+    bad = tmp_path / "bad.csv"
+    bad.write_text("code;name;parent;group;subconto;currency\n10;Ок;;;;x\n", encoding="utf-8")
+    with pytest.raises(ValidationError, match="строка 2"):
+        import_chart_csv(ledger, cid, bad)
+
+
+def test_import_does_not_hide_a_program_error(ledger, tmp_path, monkeypatch):
+    """A bug is not a mistake in the file: it must not turn into "file, line N"."""
+    cid = ledger.create_company("Импорт")
+    good = tmp_path / "good.csv"
+    good.write_text("code;name;parent;group;subconto\n10;Ок;;;\n", encoding="utf-8")
+
+    def broken(*args, **kwargs):
+        raise TypeError("bug")
+
+    monkeypatch.setattr(ledger, "add_account", broken)
+    with pytest.raises(TypeError):
+        import_chart_csv(ledger, cid, good)
