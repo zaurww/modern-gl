@@ -485,7 +485,7 @@ QTableView#list::item {{ border-bottom: 1px solid transparent; }}
 QTableView::item {{ border-bottom: 1px solid {P.hairline}; padding: 0 8px; }}
 QTableView::item:hover {{ background: {P.subtle}; }}
 QTableView::item:selected {{ background: {P.selection}; color: {P.text}; }}
-/* reports: no rules either; soft bands of three rows (the model) and a clear hover */
+/* reports: no rules either; soft zebra rows (the model) and a clear hover */
 QTableView#report::item {{ border-bottom: 1px solid transparent; }}
 QTableView#report::item:hover {{ background: {P.accent_soft}; }}
 QTableView#report::item:selected {{ background: {P.selection}; color: {P.text}; }}
