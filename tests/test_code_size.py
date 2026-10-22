@@ -22,8 +22,6 @@ OVER_LIMIT = {
     "application/bank.py::statement": 92,
     "application/catalog.py::Catalog.reload": 83,
     "application/eqaime_import.py": 641,
-    "application/inventory/drafts.py::DraftCommands._insert_line": 86,
-    "application/inventory/movements.py::MovementCommands._apply_line": 96,
     "application/quick_entry.py": 602,
     "demo_data.py::create_demo_company": 124,
     "desktop/theme.py::stylesheet": 186,
