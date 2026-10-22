@@ -1,7 +1,11 @@
 import sqlite3
+from pathlib import Path
+
+import pytest
 
 from modern_gl.application.ledger import Ledger
-from modern_gl.infrastructure.db import connect
+from modern_gl.demo_data import create_demo_company
+from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, latest_version
 from modern_gl.infrastructure.workspace import TRASH, Workspace, open_company
 from modern_gl.reporting.reports import trial_balance
 from tests.conftest import build_demo
@@ -75,3 +79,90 @@ def test_add_file_opens_a_company_file_in_place(tmp_path):
     Ledger(conn).rename_company(cid, "Alfa MMC")
     conn.close()
     assert [c.name for c in ws.companies()] == ["Alfa MMC"]
+
+
+def company_ids_by_table(path: Path) -> dict[str, set[int]]:
+    """Which companies each table of a file holds rows of."""
+    conn = sqlite3.connect(path)
+    try:
+        tables = [
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            if r[0] != "companies"
+        ]
+        found = {}
+        for table in tables:
+            columns = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if "company_id" in columns:
+                ids = {r[0] for r in conn.execute(f"SELECT DISTINCT company_id FROM {table}")}
+                found[table] = ids - {None}
+        return found
+    finally:
+        conn.close()
+
+
+def test_split_leaves_no_row_of_another_company(tmp_path):
+    """Every table, the modules' too (stock, bank, conversions, tags…), keeps only its
+    own company's rows in the file split off a shared one."""
+    shared = tmp_path / "old.db"
+    conn = connect(shared)
+    first = create_demo_company(Ledger(conn), "Alfa")
+    second = create_demo_company(Ledger(conn), "Beta")
+    conn.close()
+    held = company_ids_by_table(shared)
+    assert {t for t, ids in held.items() if second in ids} - {"audit_events"} >= {
+        "inventory_items",
+        "inventory_documents",
+    }  # the demo company has module data to leave behind
+
+    paths = Workspace(tmp_path / "data").add_file(shared)
+    by_name = {p.stem: p for p in paths}
+    for name, cid in (("Alfa", first), ("Beta", second)):
+        others = {t: ids - {cid} for t, ids in company_ids_by_table(by_name[name]).items()}
+        assert {t: ids for t, ids in others.items() if ids} == {}, name
+
+
+def file_at_version(path: Path, version: int, companies: list[str]) -> None:
+    """A shared file as an older program left it: the migrations up to `version`."""
+    old = sqlite3.connect(path, isolation_level=None)
+    old.execute("PRAGMA foreign_keys = OFF")
+    for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        number = int(migration.name.split("_", 1)[0])
+        if number > version:
+            break
+        sql = migration.read_text(encoding="utf-8")
+        old.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {number};\nCOMMIT;")
+    for name in companies:
+        old.execute("INSERT INTO companies (name, created_at) VALUES (?, 'now')", (name,))
+    old.close()
+
+
+@pytest.mark.parametrize("version", range(1, latest_version() + 1))
+def test_shared_file_of_every_version_is_split(tmp_path, version):
+    """A shared file of any older schema is brought up to date before it is split; each
+    company gets a current file of its own, and nothing is left half-written."""
+    shared = tmp_path / "old.db"
+    file_at_version(shared, version, ["Alfa", "Beta"])
+    ws = Workspace(tmp_path / "data")
+    paths = ws.add_file(shared)
+    assert sorted(p.name for p in paths) == ["Alfa.gl", "Beta.gl"]
+    for path in paths:
+        conn, _cid = open_company(path)
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == latest_version()
+        assert [r[0] for r in conn.execute("SELECT name FROM companies")] == [path.stem]
+        conn.close()
+    assert list(ws.folder.glob("*.part")) == []
+
+
+def test_failed_split_leaves_no_file(tmp_path, monkeypatch):
+    shared = tmp_path / "old.db"
+    file_at_version(shared, latest_version(), ["Alfa", "Beta"])
+    ws = Workspace(tmp_path / "data")
+
+    def broken(*_args):
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr("modern_gl.infrastructure.workspace.connect", broken)
+    with pytest.raises(sqlite3.OperationalError):
+        ws.add_file(shared)
+    assert sorted(p.name for p in ws.folder.iterdir()) == []

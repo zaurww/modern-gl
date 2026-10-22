@@ -23,20 +23,6 @@ from modern_gl.infrastructure.db import connect, latest_version
 
 SUFFIX = ".gl"
 TRASH = "Silinmiş"
-# Every table that belongs to a company (used when splitting an old shared file).
-COMPANY_TABLES = (
-    "audit_events",
-    "entry_template_lines",
-    "entry_templates",
-    "postings",
-    "documents",
-    "accounts",
-    "subconto_values",
-    "currency_rates",
-    "currencies",
-    "subconto_kinds",
-    "layers",
-)
 
 
 @dataclass(frozen=True)
@@ -210,35 +196,28 @@ class Workspace:
     # ---- internals -------------------------------------------------------------------
 
     def _extract(self, source: Path, company_id: int, name: str) -> Path:
+        """One company of a shared file into a file of its own. The copy is made in a
+        `.part` file and brought up to the current schema first, so every table is there
+        to be cleared of the other companies; it takes the company's name only once whole."""
         target = self._free_path(name)
-        src = sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)
-        dst = sqlite3.connect(target, isolation_level=None)
+        partial = target.with_name(target.name + ".part")
+        for leftover in (partial, *_sidecars(partial)):
+            leftover.unlink(missing_ok=True)
         try:
-            src.backup(dst)  # consistent copy even of a file in use
-            # Remove other companies. Immutability triggers would refuse to delete posted
-            # documents, so they are lifted for this copy only and restored right after.
-            triggers = dst.execute(
-                "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'"
-            ).fetchall()
-            dst.execute("PRAGMA foreign_keys = OFF")
-            dst.execute("BEGIN")
-            for trigger, _ in triggers:
-                dst.execute(f'DROP TRIGGER "{trigger}"')
-            existing = {
-                r[0] for r in dst.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-            }
-            for table in COMPANY_TABLES:
-                if table in existing:  # an older file may not have the newer tables yet
-                    dst.execute(f"DELETE FROM {table} WHERE company_id IS NOT ?", (company_id,))
-            dst.execute("DELETE FROM companies WHERE id != ?", (company_id,))
-            for _, sql in triggers:
-                dst.execute(sql)
-            dst.execute("COMMIT")
-            dst.execute("VACUUM")
-        finally:
-            src.close()
-            dst.close()
-        connect(target).close()  # bring an older file up to the current schema
+            src = sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)
+            dst = sqlite3.connect(partial)
+            try:
+                src.backup(dst)  # consistent copy even of a file in use
+            finally:
+                src.close()
+                dst.close()
+            connect(partial).close()  # an older file: the current schema, every table
+            _keep_only(partial, company_id)
+            partial.replace(target)
+        except BaseException:
+            for leftover in (partial, *_sidecars(partial)):
+                leftover.unlink(missing_ok=True)
+            raise
         return target
 
     def new_path(self, name: str, folder: Path | None = None) -> Path:
@@ -255,6 +234,42 @@ class Workspace:
             path = folder / f"{stem} ({n}){SUFFIX}"
             n += 1
         return path
+
+
+def _keep_only(path: Path, company_id: int) -> None:
+    """Delete every other company's rows from every table that has company_id. The
+    immutability triggers would refuse to delete posted documents, so they are lifted for
+    this copy only and put back; references left dangling stop it."""
+    conn = sqlite3.connect(path, isolation_level=None)
+    try:
+        triggers = conn.execute("SELECT name, sql FROM sqlite_master WHERE type = 'trigger'")
+        triggers = triggers.fetchall()
+        tables = [
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+            if r[0] != "companies" and not r[0].startswith("sqlite_")
+        ]
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("BEGIN")
+        for trigger, _ in triggers:
+            conn.execute(f'DROP TRIGGER "{trigger}"')
+        for table in tables:
+            columns = {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+            if "company_id" in columns:
+                conn.execute(f'DELETE FROM "{table}" WHERE company_id IS NOT ?', (company_id,))
+        conn.execute("DELETE FROM companies WHERE id != ?", (company_id,))
+        for _, sql in triggers:
+            conn.execute(sql)
+        broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if broken:
+            conn.execute("ROLLBACK")
+            raise sqlite3.IntegrityError(
+                f"{path.name}: broken references {[tuple(r) for r in broken][:5]}"
+            )
+        conn.execute("COMMIT")
+        conn.execute("VACUUM")
+    finally:
+        conn.close()
 
 
 def _sidecars(path: Path) -> tuple[Path, Path]:
