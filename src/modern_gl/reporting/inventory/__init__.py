@@ -35,10 +35,13 @@ from modern_gl.reporting.inventory.documents import (
 )
 from modern_gl.reporting.inventory.stock import (
     ItemDetails,
+    MovementSource,
     StockBalance,
     StockCardLine,
+    StockSource,
     group_paths,
     item_details,
+    last_receipts,
     stock_balances,
     stock_card,
 )
@@ -53,9 +56,11 @@ __all__ = [
     "ItemChoice",
     "ItemDetails",
     "LandedLine",
+    "MovementSource",
     "ReceiptLineChoice",
     "StockBalance",
     "StockCardLine",
+    "StockSource",
     "batch_cost",
     "code_label",
     "cost_sources",
@@ -67,6 +72,7 @@ __all__ = [
     "item_name",
     "landed_cost_report",
     "landed_cost_type_choices",
+    "last_receipts",
     "list_inventory_documents",
     "percent_added",
     "receipt_line_choices",

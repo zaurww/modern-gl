@@ -23,11 +23,22 @@ from modern_gl.desktop.inventory_page.dialogs import (
     open_item,
 )
 from modern_gl.desktop.inventory_page.form import InventoryForm
+from modern_gl.desktop.inventory_page.movements import source_text
 from modern_gl.desktop.reports_page import Column, ReportModel
-from modern_gl.desktop.widgets import EmptyState, money
+from modern_gl.desktop.widgets import EmptyState, money, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.reporting.inventory import StockBalance, code_label, has_units, stock_balances
+from modern_gl.reporting.inventory import (
+    StockBalance,
+    code_label,
+    has_units,
+    last_receipts,
+    stock_balances,
+)
+
+
+def row_key(row: StockBalance) -> tuple[int, int]:
+    return row.item_id, row.warehouse_id
 
 
 @dataclass(frozen=True)
@@ -55,18 +66,27 @@ class StockPart(InventoryForm):
         self.empty = EmptyState(
             "□",
             tr("На складе пока пусто"),
-            tr("Добавьте товар и склад, затем введите покупку в «Покупках и продажах»."),
+            tr("Добавьте товар и склад, затем введите покупку кнопкой «+ Покупка»."),
         )
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
         root.addLayout(self.stack, 2)
+        self.table.selectionModel().currentRowChanged.connect(lambda *_: self._show_movements())
 
     def focus_table(self) -> None:
         self.table.setFocus()
 
+    def chosen_balance(self) -> StockBalance | None:
+        """The stock row the movements are of; a group header or nothing — none."""
+        index = self.table.currentIndex()
+        row = index.data(Qt.ItemDataRole.UserRole) if index.isValid() else None
+        return row if isinstance(row, StockBalance) else None
+
     def refresh(self) -> None:
+        chosen = self.chosen_balance()
         balances = stock_balances(self.s.conn, self.s.company_id)
+        sources = last_receipts(self.s.conn, self.s.company_id)
         rows: list[StockBalance | StockGroup] = []
         if any(b.group for b in balances):  # each group under its header with its value
             for group, members in groupby(balances, key=lambda b: b.group):
@@ -83,6 +103,13 @@ class StockPart(InventoryForm):
             quotient, remainder = divmod(numerator, row.quantity)
             return quotient + int(remainder * 2 >= row.quantity)
 
+        def source(row) -> str:
+            """Where the goods last came from: «İdxal · YGB 12345 · 12.03.2026»."""
+            last = None if isinstance(row, StockGroup) else sources.get(row_key(row))
+            if last is None:
+                return ""
+            return f"{source_text(last.source, counterparty=False)} · {ru_date(last.doc_date)}"
+
         self.model.set(
             [
                 Column(
@@ -92,9 +119,10 @@ class StockPart(InventoryForm):
                         if isinstance(row, StockGroup)
                         else code_label(row.item_code, row.item_name)
                     ),
-                    width=260,
+                    width=240,
                 ),
-                Column(tr("Склад"), lambda row: getattr(row, "warehouse_name", ""), width=220),
+                Column(tr("Склад"), lambda row: getattr(row, "warehouse_name", ""), width=170),
+                Column(tr("Источник"), lambda row: source(row), width=250),
                 Column(
                     tr("Количество"),
                     lambda row: (
@@ -119,6 +147,7 @@ class StockPart(InventoryForm):
                 self.table.setColumnWidth(index, column.width)
         header.setStretchLastSection(True)
         self.stack.setCurrentWidget(self.table if rows else self.empty)
+        self._choose(chosen)
         self.header.subtitle.setText(
             tr(
                 "{items} позиций · {amount}",
@@ -126,7 +155,17 @@ class StockPart(InventoryForm):
                 amount=money(sum(r.amount for r in balances), False),
             )
         )
+        self._show_movements()
         self._show_documents()
+
+    def _choose(self, balance: StockBalance | None) -> None:
+        """The row chosen before a refresh, chosen again (its quantities may differ now)."""
+        if balance is None:
+            return
+        for index, row in enumerate(self.model.rows):
+            if isinstance(row, StockBalance) and row_key(row) == row_key(balance):
+                self.table.selectRow(index)
+                return
 
     def add_unit(self) -> None:
         code, ok = QInputDialog.getText(self, tr("Новая единица"), tr("Краткое обозначение:"))

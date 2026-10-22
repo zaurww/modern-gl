@@ -7,7 +7,7 @@ from datetime import date
 
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import sort_key
-from modern_gl.infrastructure.db import Connection
+from modern_gl.infrastructure.db import Connection, Row
 
 
 @dataclass(frozen=True)
@@ -37,13 +37,35 @@ class ItemDetails:
 
 
 @dataclass(frozen=True)
+class MovementSource:
+    """Where goods came from or went to: the document's kind and what names it — the
+    e-qaimə or the customs declaration, the supplier or customer, the other warehouse of a
+    transfer, the kind of expense."""
+
+    doc_type: str
+    movement_type: str
+    invoice: str | None = None
+    invoice_kind: str | None = None  # 'customs': a declaration (YGB), not an e-qaimə
+    counterparty: str | None = None
+    other_warehouse: str | None = None
+    cost_type: str | None = None
+
+
+@dataclass(frozen=True)
+class StockSource:
+    """The last receipt of an item into a warehouse."""
+
+    doc_date: str
+    source: MovementSource
+
+
+@dataclass(frozen=True)
 class StockCardLine:
     doc_date: str
     document_id: int
     number: int
-    doc_type: str
     memo: str
-    movement_type: str
+    source: MovementSource
     quantity_in: int
     quantity_out: int
     amount_in: int
@@ -145,6 +167,68 @@ def item_details(conn: Connection, company_id: int, value_id: int) -> ItemDetail
     )
 
 
+# what names a movement's source; with MOVEMENT_JOINS over stock_movements m and
+# inventory_documents d
+MOVEMENT_SOURCE = """
+    d.doc_type, m.movement_type, d.invoice, d.invoice_kind,
+    (SELECT v.name FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id
+     WHERE v.company_id = m.company_id AND k.code = 'counterparty'
+       AND v.id IN (l.offset_sc1, l.offset_sc2, l.offset_sc3)
+     ORDER BY v.id LIMIT 1) AS counterparty,
+    (SELECT wv.name FROM warehouses w JOIN subconto_values wv ON wv.id = w.subconto_value_id
+     WHERE w.company_id = m.company_id AND w.id = CASE m.movement_type
+         WHEN 'transfer_in' THEN l.warehouse_id WHEN 'transfer_out' THEN l.to_warehouse_id
+     END) AS other_warehouse,
+    COALESCE(ct.name, (
+        SELECT string_agg(t.name, ', ') FROM landed_cost_charges c
+        JOIN landed_cost_types t ON t.id = c.cost_type_id
+        WHERE c.document_id = d.id
+    )) AS cost_type
+"""
+MOVEMENT_JOINS = """
+    LEFT JOIN inventory_lines l ON l.company_id = m.company_id AND l.id = m.line_id
+    LEFT JOIN landed_cost_types ct
+      ON ct.company_id = d.company_id AND ct.id = d.landed_cost_type_id
+"""
+
+
+def movement_source(row: Row) -> MovementSource:
+    return MovementSource(
+        row["doc_type"],
+        row["movement_type"],
+        row["invoice"],
+        row["invoice_kind"],
+        row["counterparty"],
+        row["other_warehouse"],
+        row["cost_type"],
+    )
+
+
+def last_receipts(conn: Connection, company_id: int) -> dict[tuple[int, int], StockSource]:
+    """For each item and warehouse: where its goods last came from (posted movements in)."""
+    rows = conn.execute(
+        f"""
+        SELECT * FROM (
+            SELECT m.item_id, m.warehouse_id, m.doc_date, {MOVEMENT_SOURCE},
+                   ROW_NUMBER() OVER (
+                       PARTITION BY m.item_id, m.warehouse_id
+                       ORDER BY m.doc_date DESC, m.id DESC
+                   ) AS place
+            FROM stock_movements m
+            JOIN inventory_documents d ON d.id = m.document_id
+            {MOVEMENT_JOINS}
+            WHERE m.company_id = ? AND d.status = 'posted' AND m.quantity > 0
+        ) latest
+        WHERE place = 1
+        """,
+        (company_id,),
+    ).fetchall()
+    return {
+        (row["item_id"], row["warehouse_id"]): StockSource(row["doc_date"], movement_source(row))
+        for row in rows
+    }
+
+
 def stock_card(
     conn: Connection,
     company_id: int,
@@ -166,10 +250,11 @@ def stock_card(
         params.append(iso_date(date_to))
     rows = conn.execute(
         f"""
-        SELECT m.doc_date, d.id AS document_id, d.number, d.doc_type, d.memo,
-               m.movement_type, m.quantity, m.amount, m.id
+        SELECT m.doc_date, d.id AS document_id, d.number, d.memo, {MOVEMENT_SOURCE},
+               m.quantity, m.amount, m.id
         FROM stock_movements m
         JOIN inventory_documents d ON d.id = m.document_id
+        {MOVEMENT_JOINS}
         WHERE {" AND ".join(clauses)}
         ORDER BY m.doc_date, d.id, m.id
         """,
@@ -188,9 +273,8 @@ def stock_card(
                 row["doc_date"],
                 row["document_id"],
                 row["number"],
-                row["doc_type"],
                 row["memo"],
-                row["movement_type"],
+                movement_source(row),
                 max(row["quantity"], 0),
                 max(-row["quantity"], 0),
                 max(row["amount"], 0),

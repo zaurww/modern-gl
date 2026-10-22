@@ -1,12 +1,23 @@
-"""The stock page's frame: the header, the operations and the layout; its parts fill it."""
+"""The stock page's frame: the header, the operations and the layout; its parts fill it.
+
+Everything the warehouse does starts here (D86): a client may keep only the warehouse,
+so purchases and sales are typed from this page too, and the postings make themselves."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QButtonGroup,
+    QHBoxLayout,
+    QLabel,
+    QStackedLayout,
+    QVBoxLayout,
+    QWidget,
+)
 
 from modern_gl.application.inventory import Inventory
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     PageHeader,
     button,
@@ -15,6 +26,30 @@ from modern_gl.desktop.widgets import (
     more_button,
 )
 from modern_gl.i18n import tr
+from modern_gl.reporting.inventory import StockBalance
+
+# what each operation does, in one phrase for a beginner
+OPERATIONS = (
+    (
+        "+ Покупка",
+        "receipt",
+        "Товар пришёл от поставщика — по e-qaimə или таможенной декларации; "
+        "проводки создаются сами",
+    ),
+    (
+        "+ Продажа",
+        "sale",
+        "Товар продан покупателю: выручка, ƏDV и себестоимость проводятся сами",
+    ),
+    ("Списание", "issue", "Товар израсходован или испорчен: его стоимость уходит в расходы"),
+    ("Перемещение", "transfer", "Товар переехал на другой склад; стоимость не меняется"),
+    (
+        "Дополнительные расходы",
+        "landed_cost",
+        "Доставка, таможня, сертификация — увеличивают стоимость полученного товара",
+    ),
+    ("Начальные остатки", "opening", "Что было на складе в день начала учёта в программе"),
+)
 
 
 class InventoryForm(QWidget):
@@ -54,24 +89,69 @@ class InventoryForm(QWidget):
 
         self._build_operations(root)
         self._build_stock(root)
-        self._build_documents(root)
+        self._build_below(root)
+        hint = QLabel(
+            tr(
+                "Остатки считаются по проведённым документам; "
+                "проводки в бухгалтерии создаются сами."
+            )
+        )
+        hint.setObjectName("tertiary")
+        hint.setFont(fonts().small)
+        hint.setWordWrap(True)
+        root.addWidget(hint)
         self.refresh()
 
     def _build_operations(self, root: QVBoxLayout) -> None:
         operations = QHBoxLayout()
         operations.setSpacing(6)
-        for title, operation, kind in (
-            ("Начальные остатки", "opening", "flat"),
-            ("Списание", "issue", "primary"),
-            ("Перемещение", "transfer", "flat"),
-            ("Дополнительные расходы", "landed_cost", "flat"),
-        ):
-            control = button(tr(title), kind)
+        self.operation_buttons: dict[str, QWidget] = {}
+        for title, operation, tip in OPERATIONS:
+            control = button(tr(title), "flat", tr(tip))
             control.clicked.connect(lambda _=False, op=operation: self.operation(op))
             operations.addWidget(control)
             hide_when_viewing(self.s.read_only, control)
+            self.operation_buttons[operation] = control
         operations.addStretch(1)
         root.addLayout(operations)
+
+    def _build_below(self, root: QVBoxLayout) -> None:
+        """Under the stock: the chosen item's movements, or all the warehouse documents."""
+        bar = QHBoxLayout()
+        bar.setSpacing(6)
+        self.views = QButtonGroup(self)
+        self.movements_button = button(tr("Движения"), "segment")
+        self.documents_button = button(tr("Документы"), "segment")
+        for view in (self.movements_button, self.documents_button):
+            view.setCheckable(True)
+            view.clicked.connect(self._show_view)
+            self.views.addButton(view)
+            bar.addWidget(view)
+        self.movements_button.setChecked(True)
+        bar.addSpacing(12)
+        self.below_title = QLabel()  # «Printer kartrici 85A · Mərkəzi anbar»
+        self.below_title.setFont(fonts().heading)
+        keep_room = self.below_title.sizePolicy()
+        keep_room.setRetainSizeWhenHidden(True)  # hidden, it still holds the switch left
+        self.below_title.setSizePolicy(keep_room)
+        bar.addWidget(self.below_title, 1)
+        self.remove = button(tr("Удалить документ"), "danger")
+        self.remove.clicked.connect(self.delete_document)
+        bar.addWidget(self.remove)
+        root.addLayout(bar)
+        self.below = QStackedLayout()
+        self.movements_page = self._build_movements()
+        self.documents_page = self._build_documents()
+        self.below.addWidget(self.movements_page)
+        self.below.addWidget(self.documents_page)
+        root.addLayout(self.below, 1)
+        self._show_view()
+
+    def _show_view(self) -> None:
+        documents = self.documents_button.isChecked()
+        self.below.setCurrentWidget(self.documents_page if documents else self.movements_page)
+        self.remove.setVisible(documents and not self.s.read_only)
+        self.below_title.setVisible(not documents)
 
     def title(self) -> str:
         return tr("Склад")
@@ -87,13 +167,25 @@ class InventoryForm(QWidget):
     def _build_stock(self, root: QVBoxLayout) -> None:
         raise NotImplementedError
 
-    def _build_documents(self, root: QVBoxLayout) -> None:
+    def _build_movements(self) -> QWidget:
+        raise NotImplementedError
+
+    def _build_documents(self) -> QWidget:
         raise NotImplementedError
 
     def refresh(self) -> None:
         raise NotImplementedError
 
+    def chosen_balance(self) -> StockBalance | None:
+        raise NotImplementedError
+
+    def _show_movements(self) -> None:
+        raise NotImplementedError
+
     def _show_documents(self) -> None:
+        raise NotImplementedError
+
+    def delete_document(self) -> None:
         raise NotImplementedError
 
     def add_item(self) -> None:

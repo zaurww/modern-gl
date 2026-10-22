@@ -1,38 +1,20 @@
-"""The warehouse documents under the stock list: open one, delete one."""
+"""All the warehouse documents, under the stock list: open one, delete one."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QHBoxLayout,
-    QHeaderView,
-    QLabel,
-    QMessageBox,
-    QTableView,
-    QVBoxLayout,
-)
+from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QMessageBox, QTableView
 
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.reports_page import Column, ReportModel
-from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button, hide_when_viewing, ru_date
+from modern_gl.desktop.widgets import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import InventoryDocumentSummary, list_inventory_documents
 
 
 class DocumentsPart(InventoryForm):
-    def _build_documents(self, root: QVBoxLayout) -> None:
-        recent = QHBoxLayout()
-        recent_title = QLabel(tr("Последние складские документы"))
-        recent_title.setFont(fonts().heading)
-        recent.addWidget(recent_title, 1)
-        remove = button(tr("Удалить документ"), "danger")
-        remove.clicked.connect(self.delete_document)
-        recent.addWidget(remove)
-        hide_when_viewing(self.s.read_only, remove)
-        root.addLayout(recent)
+    def _build_documents(self) -> QTableView:
         self.documents_model = ReportModel()
         self.documents = QTableView()
         self.documents.setObjectName("list")
@@ -46,21 +28,15 @@ class DocumentsPart(InventoryForm):
         self.documents.doubleClicked.connect(
             lambda index: self._open_document(index.data(Qt.ItemDataRole.UserRole))
         )
-        root.addWidget(self.documents, 1)
-        hint = QLabel(
-            tr(
-                "Количество и стоимость рассчитаны по проведённым складским документам; "
-                "проводки создаются автоматически."
-            )
-        )
-        hint.setObjectName("tertiary")
-        hint.setFont(fonts().small)
-        hint.setWordWrap(True)
-        root.addWidget(hint)
+        return self.documents
 
     def _show_documents(self) -> None:
-        """The warehouse documents."""
+        """The warehouse documents; the drafts are counted on the switch, not to be lost."""
         documents = list_inventory_documents(self.s.conn, self.s.company_id)
+        drafts = sum(d.status != "posted" for d in documents)
+        self.documents_button.setText(
+            tr("Документы · черновиков: {n}", n=drafts) if drafts else tr("Документы")
+        )
         self.documents_model.set(
             [
                 Column(tr("Дата"), lambda row: ru_date(row.doc_date), width=110),

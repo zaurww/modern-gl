@@ -42,6 +42,7 @@ from modern_gl.reporting.inventory import (
     has_units,
     item_choices,
     item_name,
+    last_receipts,
     list_inventory_documents,
     receipt_line_choices,
     stock_account_choices,
@@ -600,6 +601,39 @@ def test_stock_card_has_running_balances(inventory_demo, conn):
     ]
 
 
+def test_stock_card_and_last_receipts_name_where_goods_came_from(inventory_demo, conn):
+    demo = inventory_demo
+    demo.inventory.post_receipt(  # 10 pcs for 100.00 by a customs declaration
+        demo.company_id,
+        "2026-01-10",
+        [ReceiptLine(demo.item, demo.main, "10", "100.00")],
+        demo.payable_account,
+        [demo.supplier],
+        invoice="12345",
+        invoice_kind="customs",
+    )
+    demo.inventory.post_transfer(
+        demo.company_id, "2026-01-11", [TransferLine(demo.item, demo.main, demo.reserve, "4")]
+    )
+    card = stock_card(conn, demo.company_id, demo.item, demo.main)
+    received, moved = (line.source for line in card)
+    assert (received.doc_type, received.invoice, received.invoice_kind) == (
+        "receipt",
+        "12345",
+        "customs",
+    )
+    assert received.counterparty == "Поставщик"
+    assert (moved.movement_type, moved.other_warehouse) == ("transfer_out", "Резервный")
+    # 10 in at 10.00 each, 4 out: 6 pcs worth 60.00 stay
+    assert (card[-1].quantity_balance, card[-1].amount_balance) == (6 * QUANTITY_FACTOR, 6_000)
+
+    sources = last_receipts(conn, demo.company_id)
+    assert sources[(demo.item, demo.main)].source.invoice == "12345"
+    reserve = sources[(demo.item, demo.reserve)]
+    assert (reserve.doc_date, reserve.source.movement_type) == ("2026-01-11", "transfer_in")
+    assert reserve.source.other_warehouse == "Основной"
+
+
 def test_linked_gl_document_must_be_corrected_through_inventory(inventory_demo, conn):
     demo = inventory_demo
     inv_doc = receipt(demo)
@@ -687,8 +721,55 @@ def test_inventory_page_shows_balance(inventory_demo, conn, qtbot):
     qtbot.addWidget(page)
     assert page.model.rowCount() == 1
     assert page.model.index(0, 0).data().endswith("Товар A")
-    assert page.model.index(0, 2).data() == "3"
-    assert page.model.index(0, 5).data() == "45.00"
+    assert page.model.index(0, 2).data() == "Покупка · 10.01.2026"  # where it came from
+    assert page.model.index(0, 3).data() == "3"
+    assert page.model.index(0, 6).data() == "45.00"
+
+
+def test_inventory_page_shows_the_chosen_items_movements(inventory_demo, conn, qtbot):
+    demo = inventory_demo
+    receipt(demo, "3", "45")
+    demo.inventory.post_issue(
+        demo.company_id,
+        "2026-01-12",
+        [IssueLine(demo.item, demo.main, "1", demo.expense_account)],
+    )
+    demo.inventory.create_issue_draft(
+        demo.company_id,
+        "2026-01-13",
+        [IssueLine(demo.item, demo.main, "1", demo.expense_account)],
+    )
+    session = Session(
+        conn, demo.inventory.ledger, demo.company_id, "Склад", Catalog(conn, demo.company_id)
+    )
+    page = InventoryPage(session)
+    qtbot.addWidget(page)
+    assert page.card_stack.currentWidget() is page.card_empty  # nothing chosen: the hint
+    page.table.selectRow(0)
+    assert page.below_title.text() == "Товар A · Основной"
+    card = page.card_model
+    assert [card.index(r, 2).data() for r in range(card.rowCount())] == [
+        "Покупка · Поставщик",
+        "Списание",
+    ]
+    # 3 in for 45.00, 1 out at 15.00: 2 stay worth 30.00
+    assert [card.index(r, 5).data() for r in range(card.rowCount())] == ["3", "2"]
+    assert card.index(1, 6).data() == "30.00"
+    with qtbot.waitSignal(page.open_inventory_document) as opened:
+        page.card.doubleClicked.emit(card.index(0, 0))
+    assert opened.args == [card.rows[0].document_id]
+
+    page.refresh()  # the same row stays chosen
+    assert page.chosen_balance() is not None
+    assert page.documents_button.text() == "Документы · черновиков: 1"
+    assert not page.remove.isVisibleTo(page)  # deleting is for the documents' view
+    page.documents_button.click()
+    assert page.below.currentWidget() is page.documents_page
+    assert page.remove.isVisibleTo(page)
+
+    with qtbot.waitSignal(page.new_inventory_document) as new:
+        page.operation_buttons["receipt"].click()  # a purchase from the warehouse itself
+    assert new.args == ["receipt"]
 
 
 def test_multiline_inventory_document_page_posts_rows(inventory_demo, conn, qtbot):
