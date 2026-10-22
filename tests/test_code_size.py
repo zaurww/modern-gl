@@ -53,8 +53,6 @@ OVER_LIMIT = {
     "desktop/inventory_page.py::InventoryPage.__init__": 93,
     "desktop/inventory_page.py::InventoryPage.refresh": 88,
     "desktop/landed_cost_page/page.py::LandedCostPage.__init__": 152,
-    "desktop/main_window.py": 1144,
-    "desktop/main_window.py::MainWindow": 869,
     "desktop/opening_balances_page.py::OpeningBalancesPage.__init__": 127,
     "desktop/postings/model.py": 673,
     "desktop/postings/model.py::PostingsModel": 617,
