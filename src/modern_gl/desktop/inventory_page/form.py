@@ -23,6 +23,7 @@ from modern_gl.desktop.widgets import (
     button,
     hide_when_viewing,
     menu_button,
+    trailing_icon,
 )
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import StockBalance
@@ -72,7 +73,7 @@ class InventoryForm(QWidget):
         root.setSpacing(14)
         self.header = PageHeader(tr("Склад"), "")
         reports = menu_button(  # the warehouse's own reports, not the sidebar's
-            button(tr("Отчёты") + "  ▾", "flat"),
+            trailing_icon(button(tr("Отчёты"), "flatMenu")),
             lambda: [(tr("Дополнительные расходы по декларациям"), self.open_landed_report.emit)],
         )
         self.header.add_action(reports)

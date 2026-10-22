@@ -14,11 +14,12 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.conversions import Conversion
+from modern_gl.desktop import icons
 from modern_gl.desktop.conversion_page.common import BASE
 from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.side_panel import SidePanel, Stat
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
     Chip,
     MenuItem,
@@ -100,9 +101,8 @@ class ConversionForm(QWidget):
         self.target = SidePanel(self.s, tr("Зачислено на"), credit=True)
         self.date = self.source.date
         self._last_date = self.date.date()
-        arrow = QLabel("→")
-        arrow.setObjectName("tertiary")
-        arrow.setFont(fonts().title)
+        arrow = QLabel()
+        arrow.setPixmap(icons.icon("forward", P.tertiary, 24).pixmap(24, 24))
         sides.addWidget(self.source, 1)
         sides.addWidget(arrow, 0, Qt.AlignmentFlag.AlignVCenter)
         sides.addWidget(self.target, 1)

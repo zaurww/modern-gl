@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import (
+    QGuiApplication,
     QKeySequence,
     QShortcut,
 )
@@ -23,10 +24,12 @@ from modern_gl.application.queries import (
 from modern_gl.desktop import theme
 from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.bank_page import BankPage
+from modern_gl.desktop.command_palette import CommandPalette
 from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.import_page import ImportPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
@@ -34,6 +37,7 @@ from modern_gl.desktop.invoices_page import InvoicesPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.landed_cost_page import LandedCostPage
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
+from modern_gl.desktop.main_window.commands import palette_entries
 from modern_gl.desktop.main_window.open_pages import OpenPages
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
@@ -68,8 +72,21 @@ class MainWindow(OpenPages):
             ("Ctrl+-", lambda: self.show_place(("sales",))),
             ("Ctrl+B", lambda: self.show_place(("bank",))),
             ("Ctrl+L", self.quick_entry),
+            ("Ctrl+K", self.command_palette),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
+        hints = QGuiApplication.styleHints()
+        if hints is not None:
+            hints.colorSchemeChanged.connect(lambda _scheme: self.follow_system_theme())
+
+    def command_palette(self) -> CommandPalette | None:
+        """Ctrl+K: find and do anything (D86)."""
+        if self.session is None:
+            return None
+        palette = CommandPalette(self, lambda query: palette_entries(self, query))
+        palette.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        palette.open()
+        return palette
 
     def _company_menu(self) -> None:
         menu = QMenu(self)
@@ -99,6 +116,12 @@ class MainWindow(OpenPages):
             act = languages.addAction(("✓  " if code == language() else "    ") + title)
             act.triggered.connect(lambda _=False, c=code: self.set_ui_language(c))
         looks = menu.addMenu(tr("Оформление"))
+        system = theme.SYSTEM_THEME
+        mark = "✓  " if theme.current_theme() == system else "    "
+        looks.addAction(mark + tr(theme.SYSTEM_TITLE)).triggered.connect(
+            lambda: self.set_ui_theme(system)
+        )
+        looks.addSeparator()
         for name, (title, _) in theme.THEMES.items():
             act = looks.addAction(("✓  " if name == theme.current_theme() else "    ") + tr(title))
             act.triggered.connect(lambda _=False, n=name: self.set_ui_theme(n))
@@ -132,6 +155,10 @@ class MainWindow(OpenPages):
 
     def _make_place(self, key) -> QWidget:
         s = self.open_session
+        if key == ("home",):
+            page = HomePage(s)
+            page.open_place.connect(self.show_place)
+            return page
         if key == ("journal",):
             page = JournalPage(s)
             page.open_document.connect(self.open_document)

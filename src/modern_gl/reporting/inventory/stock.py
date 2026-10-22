@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from datetime import date
 
 from modern_gl.domain.dates import iso_date
-from modern_gl.i18n import sort_key
+from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import Connection, Row
+from modern_gl.reporting.overview import Attention, attention_source
 
 
 @dataclass(frozen=True)
@@ -286,3 +287,10 @@ def stock_card(
             )
         )
     return result
+
+
+@attention_source
+def negative_stock(conn: Connection, company_id: int, day: str) -> list[Attention]:
+    """«Bu gün» (D86): goods that went below zero on a warehouse."""
+    count = sum(1 for b in stock_balances(conn, company_id, day) if b.quantity < 0)
+    return [Attention(tr("Отрицательный остаток на складе"), count, ("inventory",))]

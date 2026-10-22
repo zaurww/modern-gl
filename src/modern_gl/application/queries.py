@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from itertools import chain
 
 from modern_gl.application.common import company_row
+from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import fold, sort_key, tr
 from modern_gl.infrastructure.db import Connection
@@ -132,6 +134,64 @@ def list_documents(
         {"company_id": company_id, "date_from": date_from, "date_to": date_to},
     ).fetchall()
     return [DocumentSummary(**dict(r)) for r in rows]
+
+
+@dataclass(frozen=True)
+class FoundDocument:
+    id: int
+    number: int
+    doc_date: str
+    memo: str
+    status: str
+
+
+def find_documents(
+    conn: Connection, company_id: int, text: str, limit: int = 8
+) -> list[FoundDocument]:
+    """Ctrl+K (D86): a document by its number («15», «№15»), or by words of its title
+    (letters folded: «odenis» finds «Ödəniş») — the latest first. The rows are read one
+    by one, newest first, until `limit` are found: no list of all documents is built."""
+    text = text.strip().lstrip("№#").strip()
+    if not text:
+        return []
+    if text.isdigit():
+        row = conn.execute(
+            "SELECT id, number, doc_date, memo, status FROM documents "
+            "WHERE company_id = ? AND number = ?",
+            (company_id, int(text)),
+        ).fetchone()
+        return [FoundDocument(**dict(row))] if row else []
+    words = fold(text).split()
+    cursor = conn.execute(
+        "SELECT id, number, doc_date, memo, status FROM documents "
+        "WHERE company_id = ? ORDER BY doc_date DESC, number DESC",
+        (company_id,),
+    )
+    found: list[FoundDocument] = []
+    while len(found) < limit and (rows := cursor.fetchmany(200)):
+        found += [
+            FoundDocument(**dict(r)) for r in rows if all(w in fold(r["memo"]) for w in words)
+        ]
+    return found[:limit]
+
+
+def journal_drafts(conn: Connection, company_id: int, day: date | str) -> list[int]:
+    """Drafts of the journal dated up to the day, oldest first — not those a module made
+    (a bank operation, a purchase): they are posted in their own form."""
+    return [
+        r["id"]
+        for r in conn.execute(
+            """
+            SELECT d.id FROM documents d
+            WHERE d.company_id = ? AND d.status = 'draft' AND d.doc_date <= ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM document_owners o
+                  WHERE o.company_id = d.company_id AND o.document_id = d.id)
+            ORDER BY d.doc_date, d.number
+            """,
+            (company_id, iso_date(day)),
+        )
+    ]
 
 
 def document_by_number(conn: Connection, company_id: int, number: int) -> int:

@@ -61,7 +61,7 @@ def main() -> None:
             (
                 w
                 for w in QApplication.topLevelWidgets()
-                if w.objectName() == "completer" and w.isVisible()
+                if w.objectName() in ("completer", "palette") and w.isVisible()
             ),
             None,
         )
@@ -74,6 +74,9 @@ def main() -> None:
         image.save(str(out / f"{name}.png"))
         print(out / f"{name}.png")
 
+    win.show_place(("home",))  # read again on the working date set above
+    shot("0_home")  # «Bu gün», the first page (D86)
+    win.show_place(("journal",))
     shot("1_journal")
     journal = cast(JournalPage, win.pages[("journal",)])
     journal.quick.edit.setText("71 " + i18n.tr("Мамедов Р.").split()[0][:5] + " / 50 120 Avans")
@@ -85,6 +88,11 @@ def main() -> None:
     shot("1d_quick_suggest")
     journal.quick.completer.popup().hide()
     journal.quick.edit.clear()
+    palette = win.command_palette()  # Ctrl+K: find and do anything (D86)
+    assert palette is not None
+    palette.search.setText("60")
+    shot("14_command_palette")
+    palette.close()
     win.show_import()
     importer = win.pages[("import",)]
     alfa = i18n.tr("Альфа Трейд").split()[0]
@@ -664,6 +672,8 @@ def main() -> None:
     payment.line_rows[1].amount.setText("1.20")
     payment._changed()
     shot("12b2_bank_payment_lines")
+    win.notify(i18n.tr("Документ №{n} проведён", n=14), lambda: None)
+    shot("15_toast")  # what was done, at the bottom, with «Undo» (D86)
     shoot_vat_deposit(session, win, ledger, shot)
     shoot_sale_groups(session, win, ledger, shot)
     shoot_stock_only(win, ledger, shot)
@@ -691,6 +701,7 @@ def shoot_viewing(win, shot) -> None:
     win.view_company(win.company_path)
     s = win.open_session
     s.working_date = date(2026, 2, 28)
+    win.show_place(("journal",))
     shot("13_viewing_journal")
     journal = cast(JournalPage, win.pages[("journal",)])
     journal.table.selectRow(2)

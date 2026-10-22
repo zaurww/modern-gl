@@ -41,7 +41,8 @@ class DirectoriesForm(QWidget):
         root.setSpacing(18)
 
         self.header = PageHeader(tr("Справочники"), "")
-        add_kind = self.header.primary(tr("+ Новый справочник"), self.add_kind)
+        # one blue button on the page (D86): «+ New element»; a new directory is rare
+        add_kind = self.header.more(lambda: [(tr("+ Новый справочник"), self.add_kind)])
         root.addWidget(self.header)
 
         body = QHBoxLayout()

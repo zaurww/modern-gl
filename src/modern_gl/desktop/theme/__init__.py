@@ -3,12 +3,14 @@
 All colors and fonts live here as tokens; widgets never hardcode them.
 
 Themes (THEMES) change some colors of the one palette; the user picks one in the
-company menu. A new theme is one more entry there.
+company menu, or «as the system» (light or dark, following the system). A new theme is
+one more entry there.
 """
 
 from __future__ import annotations
 
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication
 
 from modern_gl.desktop.theme.css import stylesheet
@@ -16,15 +18,20 @@ from modern_gl.desktop.theme.fonts import Fonts, fonts
 from modern_gl.desktop.theme.icons import check_icon, dot_icon
 from modern_gl.desktop.theme.palette import (
     DEFAULT_THEME,
+    SYSTEM_THEME,
+    SYSTEM_TITLE,
     THEMES,
     P,
     Palette,
     current_theme,
     set_theme,
+    shown_theme,
 )
 
 __all__ = [
     "DEFAULT_THEME",
+    "SYSTEM_THEME",
+    "SYSTEM_TITLE",
     "THEMES",
     "Fonts",
     "P",
@@ -35,8 +42,21 @@ __all__ = [
     "dot_icon",
     "fonts",
     "set_theme",
+    "shown_theme",
     "stylesheet",
+    "system_is_dark",
+    "use_theme",
 ]
+
+
+def system_is_dark() -> bool:
+    hints = QGuiApplication.styleHints()
+    return hints is not None and hints.colorScheme() == Qt.ColorScheme.Dark
+
+
+def use_theme(name: str) -> str:
+    """set_theme() with the system's light or dark (for «as the system»)."""
+    return set_theme(name, system_is_dark())
 
 
 def apply(app: QApplication) -> None:

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.queries import load_document
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.directories_page import DirectoriesPage
@@ -50,8 +51,9 @@ def window(qtbot, workspace):
     theme.apply(QApplication.instance())
     win = MainWindow(workspace)
     qtbot.addWidget(win)
-    win.start()
+    win.start()  # it opens on «Bu gün» (D86); these tests start from the journal
     win.session.working_date = date(2026, 3, 5)
+    win.show_place(("journal",))
     win.show()
     yield win
     win.shutdown()
@@ -217,6 +219,35 @@ def test_post_from_form_updates_journal_and_reports(window):
     assert journal.model.docs[-1].memo == "Пополнение кассы"
     osv = trial_balance(window.conn, window.session.company_id, "2026-03-01", "2026-03-31")
     assert {r.code: r.turnover_dt for r in osv.rows}["50"] == 50000
+
+
+def test_posting_says_so_in_a_toast_and_undo_makes_a_draft_again(window):
+    """D86: no status bar — a toast at the bottom; «Undo» takes the posting back."""
+    window.new_document()
+    page = current_page(window)
+    cat = window.session.catalog
+    page.model.rows = [
+        PostingRow(
+            debit=cat.by_code["50"].id,
+            credit=cat.by_code["51"].id,
+            credit_sc=[cat.values(cat.by_code["51"].sc_kinds[0])[0].id, None, None],
+            amount=50000,
+        )
+    ]
+    assert page.save(post=True)
+    assert window.toast.message() == "Документ №14 проведён"
+    assert window.toast.undo_button.isVisibleTo(window.toast)
+    assert window.statusBar().currentMessage() == ""
+    doc_id = page.doc_id
+    window.toast.undo_button.click()
+    assert load_document(window.conn, window.session.company_id, doc_id).status == "draft"
+    assert page.status.text() == "Черновик"
+    assert not window.toast.message()
+
+    assert page.save(post=True)  # posted again; corrected in place has no «Undo»
+    page.memo.setText("Исправлено")
+    assert page.save(post=True)
+    assert not window.toast.undo_button.isVisibleTo(window.toast)
 
 
 def test_post_errors_are_shown_and_nothing_is_lost(window):
@@ -410,7 +441,7 @@ def test_switch_language_rebuilds_interface(window):
     try:
         assert current_page(window).title() == "Jurnal"
         assert window.sidebar.item_for(("osv",)).text() == "Dövriyyə-qalıq"
-        assert window.sidebar.hint.text().startswith("Ctrl+N  yeni sənəd")
+        assert "Ctrl+N  yeni sənəd" in window.sidebar.hint.text()
     finally:
         window.set_ui_language("ru")
     assert current_page(window).title() == "Журнал"
@@ -581,10 +612,13 @@ def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch)
     assert offered == [str(workspace.folder / "Yeni MMC.gl")]
     assert window.session.company_name == "Yeni MMC"
     assert window.company_path == workspace.folder / "Yeni MMC.gl"
+    assert current_page(window).title() == "Сегодня"  # a company opens on «Bu gün»
+    window.show_place(("journal",))
     assert current_page(window).model.rowCount() == 0  # new company: empty journal
     assert [c.name for c in workspace.companies()] == ["Yeni MMC", "ДЕМО ООО"]
     demo = next(c for c in workspace.companies() if c.name == "ДЕМО ООО")
     window.open_company(demo.path)
+    window.show_place(("journal",))
     assert current_page(window).model.rowCount() == 13
     # no page is left over from the company that was closed (its file is closed too)
     assert all(getattr(p, "s", window.session) is window.session for p in window.pages.values())
@@ -898,6 +932,32 @@ def test_theme_switches_at_once_and_keeps_the_company(window):
     finally:
         theme.set_theme(theme.DEFAULT_THEME)
     assert theme.P.canvas == "#FFFFFF"
+
+
+def test_system_theme_follows_the_system_light_or_dark(window, monkeypatch):
+    """«As the system» (the default, D86): Things when the system is light, Catppuccin
+    Mocha when it turns dark — at once, the company stays open."""
+    from modern_gl.desktop import theme
+
+    dark = False
+    monkeypatch.setattr(theme, "system_is_dark", lambda: dark)
+    try:
+        assert theme.DEFAULT_THEME == theme.SYSTEM_THEME
+        window.set_ui_theme("craft")
+        window.set_ui_theme(theme.SYSTEM_THEME)
+        assert theme.shown_theme() == "things"
+        assert theme.P.canvas == "#FFFFFF"
+        dark = True
+        window.follow_system_theme()
+        assert theme.current_theme() == theme.SYSTEM_THEME
+        assert theme.shown_theme() == "catppuccin_mocha"
+        assert theme.P.window == theme.THEMES["catppuccin_mocha"][1]["window"]
+        assert current_page(window).model.rowCount() == 13
+        window.set_ui_theme("craft")
+        window.follow_system_theme()  # a chosen theme does not follow the system
+        assert theme.shown_theme() == "craft"
+    finally:
+        theme.set_theme(theme.DEFAULT_THEME)
 
 
 def test_every_theme_colors_the_whole_stylesheet():

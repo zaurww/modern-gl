@@ -232,7 +232,11 @@ class QuickEntryBar(QWidget):
         if entry.new_values:
             self.s.catalog.reload()
         number = load_document(self.s.conn, cid, doc_id).number
-        self.s.notify(tr("Документ №{n} проведён" if post else "Документ №{n} сохранён", n=number))
+        if post:  # «Undo»: back to a draft
+            message = tr("Документ №{n} проведён", n=number)
+            self.s.notify_undoable(message, lambda: led.unpost(cid, doc_id))
+        else:
+            self.s.notify(tr("Документ №{n} сохранён", n=number))
         self.history.append(text)
         self._back = 0
         self.edit.clear()
