@@ -20,8 +20,6 @@ SKIP = {"i18n_az.py"}  # translations: data, not code
 OVER_LIMIT = {
     "application/eqaime_import.py": 641,
     "application/quick_entry.py": 602,
-    "demo_data.py::create_demo_company": 124,
-    "desktop/theme.py::stylesheet": 186,
 }
 
 
