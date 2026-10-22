@@ -194,13 +194,16 @@ class CompanyFiles(QMainWindow):
             self.notify(tr("Файл перечитан"))
 
     def _reopen(self) -> None:
-        """The same company again (another language, look or books)."""
+        """The same company again (another language, look or books), on the same place."""
         if self.session is None or self.company_path is None:
             return
+        place = self._current_place()
         if self.session.read_only:
             self.view_company(self.company_path)
         else:
             self.open_company(self.company_path)
+        if place is not None:
+            self.show_place(place)
 
     def _use_company(self, conn: Connection, company_id: int, path: Path, read_only: bool) -> None:
         old_date = self.session.working_date if self.session else None
@@ -492,6 +495,12 @@ class CompanyFiles(QMainWindow):
             self._reopen()
 
     def _dirty_pages(self) -> list[QWidget]:
+        raise NotImplementedError
+
+    def _current_place(self) -> tuple | None:
+        raise NotImplementedError
+
+    def show_place(self, key) -> None:
         raise NotImplementedError
 
     # ---- the window shows the company; made by the window ----------------------------

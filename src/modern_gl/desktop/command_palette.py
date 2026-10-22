@@ -98,7 +98,6 @@ class CommandPalette(QDialog):
         self.list.itemClicked.connect(self._clicked)
         self.list.setItemDelegate(HintDelegate(self.list))
         lay.addWidget(self.list)
-        self.list.setFixedHeight(32 * SHOWN_ROWS)
         self.refresh("")
 
     def open(self) -> None:  # type: ignore[override]
@@ -120,6 +119,10 @@ class CommandPalette(QDialog):
                 self._add_heading(group)
             self._add_entry(entry)
         self._select(self._rows()[0] if self._rows() else -1)
+        # as tall as its rows, up to SHOWN_ROWS: no empty sheet under a few results
+        height = sum(self.list.sizeHintForRow(i) for i in range(self.list.count()))
+        self.list.setFixedHeight(min(max(height, 32), 32 * SHOWN_ROWS) + 4)
+        self.adjustSize()
 
     def _add_heading(self, title: str) -> None:
         item = QListWidgetItem(upper(title))

@@ -34,6 +34,7 @@ QPushButton#company {{
     text-align: left; padding: 10px 12px; margin: 14px 10px 8px 10px; border: none;
     border-radius: 8px; color: {P.text}; background: transparent;
 }}
+QPushButton#company {{ padding-right: 32px; }}
 QPushButton#company:hover {{ background: {P.sidebar_hover}; }}
 QPushButton#company::menu-indicator {{ image: none; }}
 """
@@ -63,9 +64,13 @@ QPushButton#crumb {{  /* a step of a page's path: «Bank › ABB › 22.10» (D7
 }}
 QPushButton#crumb:hover {{ text-decoration: underline; }}
 QPushButton#more {{
-    background: transparent; border: none; color: {P.secondary}; padding: 2px 10px 6px 10px;
-    font-size: 14pt; border-radius: 7px;
+    background: transparent; border: none; color: {P.secondary}; padding: 6px 8px;
+    border-radius: 7px;
 }}
+QPushButton#flatMenu {{
+    background: transparent; border: none; color: {P.accent}; padding: 6px 28px 6px 8px;
+}}
+QPushButton#flatMenu:hover {{ background: {P.accent_soft}; }}
 QPushButton#more:hover {{ background: {P.field}; color: {P.text}; }}
 QPushButton#danger {{ background: transparent; border: none; color: {P.red}; padding: 6px 8px; }}
 QPushButton#danger:hover {{ background: {P.red_soft}; }}
@@ -207,6 +212,9 @@ QLabel#tertiary {{ color: {P.tertiary}; }}
 QLabel#columnCaption {{ color: {P.header_text}; }}
 QLabel#success {{ color: {P.green}; }}
 QLabel#caution {{ color: {P.amber}; }}
+QLabel#negative {{ color: {P.red}; }}
+QFrame#hairline {{ background: {P.hairline}; border: none; }}
+QFrame#homeLine:hover {{ background: {P.subtle}; border-radius: 6px; }}
 QFrame#rule {{ background: {P.hairline}; border: none; }}
 /* a form's lines folded into one: where the money goes */
 QFrame#summary {{ background: {P.subtle}; border: none; border-radius: 8px; }}

@@ -29,6 +29,7 @@ from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.import_page import ImportPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
@@ -154,6 +155,10 @@ class MainWindow(OpenPages):
 
     def _make_place(self, key) -> QWidget:
         s = self.open_session
+        if key == ("home",):
+            page = HomePage(s)
+            page.open_place.connect(self.show_place)
+            return page
         if key == ("journal",):
             page = JournalPage(s)
             page.open_document.connect(self.open_document)

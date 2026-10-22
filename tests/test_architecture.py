@@ -32,6 +32,7 @@ CORE = [
     SRC / "reporting" / "report_common.py",
     SRC / "reporting" / "plaintext.py",
     SRC / "reporting" / "handover.py",
+    SRC / "reporting" / "overview.py",
     *(SRC / "domain").glob("*.py"),
 ]
 

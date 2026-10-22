@@ -27,12 +27,14 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.directories_page import DirectoriesPage
+from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window.company_files import CompanyFiles
 from modern_gl.desktop.main_window.sidebar import (
     ALL_OPEN,
     KEY_ROLE,
+    PLACE_KEYS,
     FocusablePage,
     NavDelegate,
     PageT,
@@ -80,7 +82,7 @@ class OpenPages(CompanyFiles):
 
     def _show_company(self, name: str) -> None:
         read_only = self.open_session.read_only
-        self.sidebar.company.setText(f"{name}   ▾")
+        self.sidebar.company.setText(name)
         viewing = f" — {tr('только просмотр')}" if read_only else ""
         self.setWindowTitle(f"{name}{viewing} — Modern GL")
         stock_only = self.open_session.stock_only
@@ -91,7 +93,7 @@ class OpenPages(CompanyFiles):
             for key, text in places:
                 self.sidebar.add_item(key, tr(text), place_icon(key))
         self.sidebar.add_section(tr("Открытые"))
-        self.show_place(("inventory",) if stock_only else ("journal",))
+        self.show_place(("home",))
 
     def _drop_pages(self) -> None:
         # quietly: clearing moves the current item, and that would open a page again
@@ -165,7 +167,7 @@ class OpenPages(CompanyFiles):
             self.sidebar.nav.blockSignals(True)
             self.sidebar.nav.setCurrentItem(item)
             self.sidebar.nav.blockSignals(False)
-        if isinstance(page, JournalPage):
+        if isinstance(page, JournalPage | HomePage):
             page.refresh()
         if isinstance(page, InventoryPage):
             page.refresh()
@@ -268,6 +270,11 @@ class OpenPages(CompanyFiles):
             return page.save(post=False)
         return answer == QMessageBox.StandardButton.Discard
 
+    def _current_place(self) -> tuple | None:
+        """The sidebar place shown (not an open document): kept when the window is rebuilt."""
+        key = self._key_of(self.stack.currentWidget())
+        return key if isinstance(key, tuple) and key in PLACE_KEYS else None
+
     def _dirty_pages(self) -> list[QWidget]:
         return [p for p in self.pages.values() if getattr(p, "is_dirty", lambda: False)()]
 
@@ -326,7 +333,7 @@ class OpenPages(CompanyFiles):
         self._activate(key)
 
     def _show_no_company(self) -> None:
-        self.sidebar.company.setText(tr("Нет компании") + "   ▾")
+        self.sidebar.company.setText(tr("Нет компании"))
         self.sidebar.retranslate()
         self.setWindowTitle("Modern GL")
         page = EmptyState("○", tr("Нет компании"), tr("Создайте компанию в меню слева вверху."))

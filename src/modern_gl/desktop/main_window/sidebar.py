@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop import icons
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import Chip
+from modern_gl.desktop.widgets import Chip, trailing_icon
 from modern_gl.i18n import tr, upper
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
@@ -38,6 +38,7 @@ KEY_ROLE = Qt.ItemDataRole.UserRole
 # reports, then the lists the books are kept with; key and title (translated on display).
 # Icons are grey, the selected place's — the accent (D86)
 PLACES = [
+    (("home",), "Сегодня"),
     (("journal",), "Журнал"),
     (("opening",), "Начальные остатки"),
 ]
@@ -68,7 +69,15 @@ SECTIONS = [
 PLACE_KEYS = [key for _, places in SECTIONS for key, _ in places]
 # «Только склад» (D90): the warehouse first, then the lists it needs; the books are not shown
 STOCK_SECTIONS = [
-    (None, [(("inventory",), "Склад"), (("purchases",), "Покупки"), (("sales",), "Продажи")]),
+    (
+        None,
+        [
+            (("home",), "Сегодня"),
+            (("inventory",), "Склад"),
+            (("purchases",), "Покупки"),
+            (("sales",), "Продажи"),
+        ],
+    ),
     ("Списки", [(("directories",), "Справочники"), (("currencies",), "Валюты")]),
 ]
 
@@ -98,6 +107,8 @@ def open_icon(key) -> QIcon:
 
 
 def place_icon(key) -> QIcon:
+    if key == ("home",):  # «Bu gün»: the one place in color, yellow as the sun (D86)
+        return icons.icon("today", P.amber)
     return icons.icon(key[0], P.secondary, selected=P.accent)
 
 
@@ -160,6 +171,7 @@ class Sidebar(QWidget):
         self.company.setObjectName("company")
         self.company.setFont(fonts().heading)
         self.company.setCursor(Qt.CursorShape.PointingHandCursor)
+        trailing_icon(self.company)  # it opens the company menu
         lay.addWidget(self.company)
         # a company open for viewing only (D80): said once, under its name
         self.viewing = Chip(tr("Только просмотр"), "blue")

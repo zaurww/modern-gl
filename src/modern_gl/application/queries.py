@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 from itertools import chain
 
 from modern_gl.application.common import company_row
+from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import fold, sort_key, tr
 from modern_gl.infrastructure.db import Connection
@@ -171,6 +173,25 @@ def find_documents(
             FoundDocument(**dict(r)) for r in rows if all(w in fold(r["memo"]) for w in words)
         ]
     return found[:limit]
+
+
+def journal_drafts(conn: Connection, company_id: int, day: date | str) -> list[int]:
+    """Drafts of the journal dated up to the day, oldest first — not those a module made
+    (a bank operation, a purchase): they are posted in their own form."""
+    return [
+        r["id"]
+        for r in conn.execute(
+            """
+            SELECT d.id FROM documents d
+            WHERE d.company_id = ? AND d.status = 'draft' AND d.doc_date <= ?
+              AND NOT EXISTS (
+                  SELECT 1 FROM document_owners o
+                  WHERE o.company_id = d.company_id AND o.document_id = d.id)
+            ORDER BY d.doc_date, d.number
+            """,
+            (company_id, iso_date(day)),
+        )
+    ]
 
 
 def document_by_number(conn: Connection, company_id: int, number: int) -> int:

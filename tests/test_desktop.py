@@ -51,8 +51,9 @@ def window(qtbot, workspace):
     theme.apply(QApplication.instance())
     win = MainWindow(workspace)
     qtbot.addWidget(win)
-    win.start()
+    win.start()  # it opens on «Bu gün» (D86); these tests start from the journal
     win.session.working_date = date(2026, 3, 5)
+    win.show_place(("journal",))
     win.show()
     yield win
     win.shutdown()
@@ -440,7 +441,7 @@ def test_switch_language_rebuilds_interface(window):
     try:
         assert current_page(window).title() == "Jurnal"
         assert window.sidebar.item_for(("osv",)).text() == "Dövriyyə-qalıq"
-        assert window.sidebar.hint.text().startswith("Ctrl+N  yeni sənəd")
+        assert "Ctrl+N  yeni sənəd" in window.sidebar.hint.text()
     finally:
         window.set_ui_language("ru")
     assert current_page(window).title() == "Журнал"
@@ -611,10 +612,13 @@ def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch)
     assert offered == [str(workspace.folder / "Yeni MMC.gl")]
     assert window.session.company_name == "Yeni MMC"
     assert window.company_path == workspace.folder / "Yeni MMC.gl"
+    assert current_page(window).title() == "Сегодня"  # a company opens on «Bu gün»
+    window.show_place(("journal",))
     assert current_page(window).model.rowCount() == 0  # new company: empty journal
     assert [c.name for c in workspace.companies()] == ["Yeni MMC", "ДЕМО ООО"]
     demo = next(c for c in workspace.companies() if c.name == "ДЕМО ООО")
     window.open_company(demo.path)
+    window.show_place(("journal",))
     assert current_page(window).model.rowCount() == 13
     # no page is left over from the company that was closed (its file is closed too)
     assert all(getattr(p, "s", window.session) is window.session for p in window.pages.values())

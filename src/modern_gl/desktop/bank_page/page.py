@@ -52,6 +52,7 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     button,
     hide_when_viewing,
+    icon_button,
     more_button,
     ru_date,
 )
@@ -138,9 +139,9 @@ class BankPage(ReportPage):
         self.money_in.clicked.connect(lambda: self.new_operation(IN))
         self.money_out = button(tr("+ Расход денег"), "", tr("Оплата поставщику, налоги…"))
         self.money_out.clicked.connect(lambda: self.new_operation(OUT))
-        self.previous = button("←", "more", tr("Предыдущая выписка") + " (Alt+←)")
+        self.previous = icon_button("back", tr("Предыдущая выписка") + " (Alt+←)")
         self.previous.clicked.connect(lambda: self.step(-1))
-        self.following = button("→", "more", tr("Следующая выписка") + " (Alt+→)")
+        self.following = icon_button("forward", tr("Следующая выписка") + " (Alt+→)")
         self.following.clicked.connect(lambda: self.step(1))
         for control in (
             self.previous,

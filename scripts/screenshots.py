@@ -74,6 +74,9 @@ def main() -> None:
         image.save(str(out / f"{name}.png"))
         print(out / f"{name}.png")
 
+    win.show_place(("home",))  # read again on the working date set above
+    shot("0_home")  # «Bu gün», the first page (D86)
+    win.show_place(("journal",))
     shot("1_journal")
     journal = cast(JournalPage, win.pages[("journal",)])
     journal.quick.edit.setText("71 " + i18n.tr("Мамедов Р.").split()[0][:5] + " / 50 120 Avans")
@@ -698,6 +701,7 @@ def shoot_viewing(win, shot) -> None:
     win.view_company(win.company_path)
     s = win.open_session
     s.working_date = date(2026, 2, 28)
+    win.show_place(("journal",))
     shot("13_viewing_journal")
     journal = cast(JournalPage, win.pages[("journal",)])
     journal.table.selectRow(2)
