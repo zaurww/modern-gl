@@ -293,7 +293,7 @@ def _sides(side: str, positions: tuple[int, ...]) -> str:
     return ", ".join(f"p.{side}_sc{i} AS sc{n}" for n, i in enumerate(positions))
 
 
-def _value_names(conn: Connection, company_id: int, ids: set[int | None]) -> dict[int, str]:
+def _value_names(conn: Connection, company_id: int, ids: set[int | None]) -> dict[int | None, str]:
     return {
         r["id"]: r["name"]
         for r in conn.execute(
@@ -307,7 +307,7 @@ def _value_names(conn: Connection, company_id: int, ids: set[int | None]) -> dic
 def _subconto_tree(
     sums: dict[tuple[int | None, ...], list[int]],
     in_currency: dict[tuple[int | None, ...], dict[str, int]],
-    names: dict[int, str],
+    names: dict[int | None, str],
     levels: int,
 ) -> list[SubcontoRow]:
     """The rows in tree order: each value, then the values under it; «не указано» first,
