@@ -15,25 +15,9 @@ SRC = Path(__file__).parent.parent / "src" / "modern_gl"
 LIMITS = {"module": 600, "class": 500, "function": 80}  # lines, docstrings included
 SKIP = {"i18n_az.py"}  # translations: data, not code
 
-# Code over the limit today and its size: the debt to pay off (STATUS, «Архитектурный
-# аудит», п. 7). Lower a number when the code shrinks; never raise it.
-OVER_LIMIT = {
-    "application/bank.py::bank_places": 92,
-    "application/bank.py::statement": 92,
-    "application/catalog.py::Catalog.reload": 83,
-    "application/eqaime_import.py": 641,
-    "application/inventory/drafts.py::DraftCommands._insert_line": 86,
-    "application/inventory/movements.py::MovementCommands._apply_line": 96,
-    "application/ledger/chart.py::ChartCommands.add_account": 98,
-    "application/ledger/chart.py::ChartCommands.update_account": 101,
-    "application/ledger/conversion.py::ConversionCommands._conversion_postings": 115,
-    "application/ledger/validation.py::PostingChecks._validate_for_posting": 92,
-    "application/quick_entry.py": 602,
-    "demo_data.py::create_demo_company": 124,
-    "desktop/theme.py::stylesheet": 186,
-    "reporting/reports.py::trial_balance": 103,
-    "reporting/reports.py::account_card": 83,
-}
+# Code over the limit and its size: the debt to pay off (STATUS, «Архитектурный аудит»,
+# п. 7). Empty since session 26; an entry may only shrink, never grow.
+OVER_LIMIT: dict[str, int] = {}
 
 
 def sizes() -> Iterator[tuple[str, str, int]]:

@@ -22,7 +22,7 @@ from datetime import date, timedelta
 from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
-from modern_gl.reporting.reports import _DOCS_CTE, COMMON, _params
+from modern_gl.reporting.report_common import _DOCS_CTE, COMMON, _params
 
 MONEY_TYPES = frozenset({"cash", "bank", "vat_deposit"})
 

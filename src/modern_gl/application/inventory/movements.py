@@ -43,6 +43,10 @@ def require_complete(doc_type: str, line: sqlite3.Row) -> None:
         raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
 
 
+def offset_subconto(line: sqlite3.Row) -> tuple[int | None, int | None, int | None]:
+    return (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
+
+
 class MovementCommands(StockCommands):
     def create_receipt_draft(
         self,
@@ -386,41 +390,14 @@ class MovementCommands(StockCommands):
             )
 
     def _apply_line(self, company_id: int, doc: sqlite3.Row, line: sqlite3.Row) -> PostingInput:
-        document_id = doc["id"]
         if line["item_id"] is None:  # a receipt's service, fixed asset or expense
             return self._expense_posting(doc, line)
         require_complete(doc["doc_type"], line)
         item = self._item(company_id, line["item_id"])
         warehouse = self._warehouse(company_id, line["warehouse_id"])
-        offset_sc = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
         if doc["doc_type"] in {"opening", "receipt"}:
-            amount = line["amount"]
-            self._insert_movement(
-                company_id,
-                document_id,
-                line["id"],
-                doc["doc_date"],
-                item["id"],
-                warehouse["id"],
-                doc["doc_type"],
-                line["quantity"],
-                amount,
-            )
-            in_currency = doc["currency_id"] is not None and doc["doc_type"] == "receipt"
-            return PostingInput(
-                item["inventory_account_id"],
-                line["offset_account_id"],
-                money(amount),
-                self._inventory_subconto(company_id, item, warehouse),
-                offset_sc,
-                line["memo"],
-                doc["currency_id"] if in_currency else None,
-                money(line["currency_amount"] or 0) if in_currency else None,
-                doc["invoice"] or "",
-                doc["invoice_kind"] or "",
-            )
-
-        amount = self._cost(company_id, item, warehouse, line["quantity"], document_id)
+            return self._receipt_posting(company_id, doc, line, item, warehouse)
+        amount = self._cost(company_id, item, warehouse, line["quantity"], doc["id"])
         self.conn.execute(
             "UPDATE inventory_lines SET amount = ?, inventory_amount = ?, "
             "expense_amount = ? WHERE id = ?",
@@ -432,29 +409,85 @@ class MovementCommands(StockCommands):
             ),
         )
         if doc["doc_type"] == "issue":
-            self._consume_receipts(
-                company_id, document_id, line["id"], item["id"], line["quantity"]
-            )
-            self._insert_movement(
-                company_id,
-                document_id,
-                line["id"],
-                doc["doc_date"],
-                item["id"],
-                warehouse["id"],
-                "issue",
-                -line["quantity"],
-                -amount,
-            )
-            return PostingInput(
-                line["offset_account_id"],
-                item["inventory_account_id"],
-                money(amount),
-                offset_sc,
-                self._inventory_subconto(company_id, item, warehouse),
-                line["memo"],
-            )
+            return self._issue_posting(company_id, doc, line, item, warehouse, amount)
+        return self._transfer_posting(company_id, doc, line, item, warehouse, amount)
 
+    def _receipt_posting(
+        self,
+        company_id: int,
+        doc: sqlite3.Row,
+        line: sqlite3.Row,
+        item: sqlite3.Row,
+        warehouse: sqlite3.Row,
+    ) -> PostingInput:
+        """Goods come in at their amount: Dt stock / Kt the line's account."""
+        amount = line["amount"]
+        self._insert_movement(
+            company_id,
+            doc["id"],
+            line["id"],
+            doc["doc_date"],
+            item["id"],
+            warehouse["id"],
+            doc["doc_type"],
+            line["quantity"],
+            amount,
+        )
+        in_currency = doc["currency_id"] is not None and doc["doc_type"] == "receipt"
+        return PostingInput(
+            item["inventory_account_id"],
+            line["offset_account_id"],
+            money(amount),
+            self._inventory_subconto(company_id, item, warehouse),
+            offset_subconto(line),
+            line["memo"],
+            doc["currency_id"] if in_currency else None,
+            money(line["currency_amount"] or 0) if in_currency else None,
+            doc["invoice"] or "",
+            doc["invoice_kind"] or "",
+        )
+
+    def _issue_posting(
+        self,
+        company_id: int,
+        doc: sqlite3.Row,
+        line: sqlite3.Row,
+        item: sqlite3.Row,
+        warehouse: sqlite3.Row,
+        amount: int,
+    ) -> PostingInput:
+        """Goods go out at their cost: Dt the line's account / Kt stock."""
+        self._consume_receipts(company_id, doc["id"], line["id"], item["id"], line["quantity"])
+        self._insert_movement(
+            company_id,
+            doc["id"],
+            line["id"],
+            doc["doc_date"],
+            item["id"],
+            warehouse["id"],
+            "issue",
+            -line["quantity"],
+            -amount,
+        )
+        return PostingInput(
+            line["offset_account_id"],
+            item["inventory_account_id"],
+            money(amount),
+            offset_subconto(line),
+            self._inventory_subconto(company_id, item, warehouse),
+            line["memo"],
+        )
+
+    def _transfer_posting(
+        self,
+        company_id: int,
+        doc: sqlite3.Row,
+        line: sqlite3.Row,
+        item: sqlite3.Row,
+        warehouse: sqlite3.Row,
+        amount: int,
+    ) -> PostingInput:
+        """Goods move between warehouses at their cost: stock to stock."""
         to_warehouse = self._warehouse(company_id, line["to_warehouse_id"])
         if warehouse["id"] == to_warehouse["id"]:
             raise ValidationError(tr("склад отправитель и получатель совпадают"))
@@ -464,7 +497,7 @@ class MovementCommands(StockCommands):
         ):
             self._insert_movement(
                 company_id,
-                document_id,
+                doc["id"],
                 line["id"],
                 doc["doc_date"],
                 item["id"],

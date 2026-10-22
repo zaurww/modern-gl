@@ -223,56 +223,9 @@ def bank_places(conn: sqlite3.Connection, company_id: int) -> list[BankPlace]:
     """Bank accounts: each element of the bank account directory under the GL accounts it
     was used on; an element never used is under the first account that fits its currency
     (a USD account under 52, not 51). A GL account without the directory is one place."""
-    accounts = conn.execute(
-        """
-        SELECT a.id, COALESCE(a.code, a.name) AS code, a.name, a.currency, a.account_type,
-               CASE WHEN k1.code = 'bank_account' THEN 1
-                    WHEN k2.code = 'bank_account' THEN 2
-                    WHEN k3.code = 'bank_account' THEN 3 END AS position
-        FROM accounts a
-        LEFT JOIN subconto_kinds k1 ON k1.id = a.sc1_kind_id
-        LEFT JOIN subconto_kinds k2 ON k2.id = a.sc2_kind_id
-        LEFT JOIN subconto_kinds k3 ON k3.id = a.sc3_kind_id
-        WHERE a.company_id = ? AND a.is_group = 0 AND a.active = 1
-          AND (a.account_type IN ('bank', 'vat_deposit')
-               OR (a.account_type IS NULL AND 'bank_account' IN (k1.code, k2.code, k3.code)))
-        ORDER BY a.code IS NULL, a.code, a.name
-        """,
-        (company_id,),
-    ).fetchall()
-    values = conn.execute(
-        "SELECT v.id, v.name, v.currency_id, c.code AS currency FROM subconto_values v "
-        "JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'bank_account' "
-        "LEFT JOIN currencies c ON c.id = v.currency_id "
-        "WHERE v.company_id = ? AND v.active = 1 AND v.is_group = 0",
-        (company_id,),
-    ).fetchall()
-    used = {
-        (r[0], r[1])
-        for r in conn.execute(
-            """
-            SELECT debit_account_id, value FROM (
-                SELECT debit_account_id, dt_sc1 AS value FROM postings WHERE company_id = :c
-                UNION SELECT debit_account_id, dt_sc2 FROM postings WHERE company_id = :c
-                UNION SELECT debit_account_id, dt_sc3 FROM postings WHERE company_id = :c
-                UNION SELECT credit_account_id, ct_sc1 FROM postings WHERE company_id = :c
-                UNION SELECT credit_account_id, ct_sc2 FROM postings WHERE company_id = :c
-                UNION SELECT credit_account_id, ct_sc3 FROM postings WHERE company_id = :c
-                UNION SELECT account_id, sc1 FROM bank_operations WHERE company_id = :c
-                UNION SELECT account_id, sc2 FROM bank_operations WHERE company_id = :c
-                UNION SELECT account_id, sc3 FROM bank_operations WHERE company_id = :c
-            ) WHERE value IS NOT NULL
-            """,
-            {"c": company_id},
-        )
-    }
-
-    def fits(account: sqlite3.Row, value: sqlite3.Row) -> bool:
-        if account["currency"] == 0:  # manat only
-            return value["currency_id"] is None
-        if account["currency"] == 1:  # currency only
-            return value["currency_id"] is not None
-        return True
+    accounts = _bank_accounts(conn, company_id)
+    values = _bank_values(conn, company_id)
+    used = _used_pairs(conn, company_id)
 
     with_directory = [a for a in accounts if a["position"] is not None]
     places: list[BankPlace] = []
@@ -294,7 +247,7 @@ def bank_places(conn: sqlite3.Connection, company_id: int) -> list[BankPlace]:
             here = (account["id"], value["id"]) in used
             if not here:
                 anywhere = any((a["id"], value["id"]) in used for a in with_directory)
-                first = next((a for a in with_directory if fits(a, value)), None)
+                first = next((a for a in with_directory if _fits(a, value)), None)
                 here = not anywhere and first is not None and first["id"] == account["id"]
             if here:
                 places.append(
@@ -311,6 +264,70 @@ def bank_places(conn: sqlite3.Connection, company_id: int) -> list[BankPlace]:
     order = {a["id"]: i for i, a in enumerate(accounts)}
     places.sort(key=lambda p: (order[p.account_id], sort_key(p.name)))
     return places
+
+
+def _bank_accounts(conn: sqlite3.Connection, company_id: int) -> list[sqlite3.Row]:
+    """The GL accounts money is in the bank on, with the position of the bank account
+    directory among their subconto (None: the account has no such directory)."""
+    return conn.execute(
+        """
+        SELECT a.id, COALESCE(a.code, a.name) AS code, a.name, a.currency, a.account_type,
+               CASE WHEN k1.code = 'bank_account' THEN 1
+                    WHEN k2.code = 'bank_account' THEN 2
+                    WHEN k3.code = 'bank_account' THEN 3 END AS position
+        FROM accounts a
+        LEFT JOIN subconto_kinds k1 ON k1.id = a.sc1_kind_id
+        LEFT JOIN subconto_kinds k2 ON k2.id = a.sc2_kind_id
+        LEFT JOIN subconto_kinds k3 ON k3.id = a.sc3_kind_id
+        WHERE a.company_id = ? AND a.is_group = 0 AND a.active = 1
+          AND (a.account_type IN ('bank', 'vat_deposit')
+               OR (a.account_type IS NULL AND 'bank_account' IN (k1.code, k2.code, k3.code)))
+        ORDER BY a.code IS NULL, a.code, a.name
+        """,
+        (company_id,),
+    ).fetchall()
+
+
+def _bank_values(conn: sqlite3.Connection, company_id: int) -> list[sqlite3.Row]:
+    """The elements of the bank account directory with their currency."""
+    return conn.execute(
+        "SELECT v.id, v.name, v.currency_id, c.code AS currency FROM subconto_values v "
+        "JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'bank_account' "
+        "LEFT JOIN currencies c ON c.id = v.currency_id "
+        "WHERE v.company_id = ? AND v.active = 1 AND v.is_group = 0",
+        (company_id,),
+    ).fetchall()
+
+
+def _used_pairs(conn: sqlite3.Connection, company_id: int) -> set[tuple[int, int]]:
+    """(GL account, subconto value) pairs postings or bank operations have used."""
+    return {
+        (r[0], r[1])
+        for r in conn.execute(
+            """
+            SELECT debit_account_id, value FROM (
+                SELECT debit_account_id, dt_sc1 AS value FROM postings WHERE company_id = :c
+                UNION SELECT debit_account_id, dt_sc2 FROM postings WHERE company_id = :c
+                UNION SELECT debit_account_id, dt_sc3 FROM postings WHERE company_id = :c
+                UNION SELECT credit_account_id, ct_sc1 FROM postings WHERE company_id = :c
+                UNION SELECT credit_account_id, ct_sc2 FROM postings WHERE company_id = :c
+                UNION SELECT credit_account_id, ct_sc3 FROM postings WHERE company_id = :c
+                UNION SELECT account_id, sc1 FROM bank_operations WHERE company_id = :c
+                UNION SELECT account_id, sc2 FROM bank_operations WHERE company_id = :c
+                UNION SELECT account_id, sc3 FROM bank_operations WHERE company_id = :c
+            ) WHERE value IS NOT NULL
+            """,
+            {"c": company_id},
+        )
+    }
+
+
+def _fits(account: sqlite3.Row, value: sqlite3.Row) -> bool:
+    if account["currency"] == 0:  # manat only
+        return value["currency_id"] is None
+    if account["currency"] == 1:  # currency only
+        return value["currency_id"] is not None
+    return True
 
 
 @dataclass
@@ -365,6 +382,40 @@ def statement(
         "from": iso_date(date_from),
         "to": iso_date(date_to),
     }
+    rows = _statement_rows(conn, place, params)
+    result = Statement(opening=0, currency=place.currency)
+    balance = 0
+    for r in rows:
+        balance += r["money_in"] - r["money_out"]
+        if r["doc_date"] < params["from"]:
+            result.opening = balance
+            continue
+        kind = r["kind"] or ("conversion" if r["conversion"] else "")
+        result.lines.append(
+            StatementLine(
+                r["id"],
+                r["number"],
+                r["doc_date"],
+                r["memo"],
+                "posted",
+                r["money_in"],
+                r["money_out"],
+                balance,
+                r["counterparty"] or "",
+                r["corr"] or "",
+                kind,
+                r["direction"] or "",
+            )
+        )
+    for d in _drafts(conn, place, params):
+        result.lines.append(d)
+    result.lines.sort(key=lambda line: (line.doc_date, line.number))
+    return result
+
+
+def _statement_rows(conn: sqlite3.Connection, place: BankPlace, params: dict) -> list[sqlite3.Row]:
+    """One row per posted document that moved the bank account: money in and out, the
+    counterparties and corr accounts, what kind of operation made it."""
     amount = "COALESCE(p.currency_amount, 0)" if place.currency_id is not None else "p.amount"
     sides = []
     for own, other, sign in (("dt", "ct", 1), ("ct", "dt", -1)):
@@ -380,7 +431,7 @@ def statement(
             """
         )
     moves = " UNION ALL ".join(sides)
-    rows = conn.execute(
+    return conn.execute(
         f"""
         WITH moves AS ({moves}),
         docs AS (
@@ -413,34 +464,6 @@ def statement(
         """,
         params,
     ).fetchall()
-    result = Statement(opening=0, currency=place.currency)
-    balance = 0
-    for r in rows:
-        balance += r["money_in"] - r["money_out"]
-        if r["doc_date"] < params["from"]:
-            result.opening = balance
-            continue
-        kind = r["kind"] or ("conversion" if r["conversion"] else "")
-        result.lines.append(
-            StatementLine(
-                r["id"],
-                r["number"],
-                r["doc_date"],
-                r["memo"],
-                "posted",
-                r["money_in"],
-                r["money_out"],
-                balance,
-                r["counterparty"] or "",
-                r["corr"] or "",
-                kind,
-                r["direction"] or "",
-            )
-        )
-    for d in _drafts(conn, place, params):
-        result.lines.append(d)
-    result.lines.sort(key=lambda line: (line.doc_date, line.number))
-    return result
 
 
 def _drafts(conn: sqlite3.Connection, place: BankPlace, params: dict) -> list[StatementLine]:

@@ -25,6 +25,30 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import EQAIME, KINDS, normalize_invoice
 from modern_gl.i18n import tr
 
+# the columns of a line a draft writes, in the order _insert_line gives their values
+LINE_COLUMNS = (
+    "line_no",
+    "item_id",
+    "warehouse_id",
+    "to_warehouse_id",
+    "quantity",
+    "amount",
+    "inventory_amount",
+    "expense_amount",
+    "offset_account_id",
+    "offset_sc1",
+    "offset_sc2",
+    "offset_sc3",
+    "source_receipt_line_id",
+    "memo",
+    "vat_amount",
+    "currency_amount",
+    "cost_account_id",
+    "cost_sc1",
+    "cost_sc2",
+    "cost_sc3",
+)
+
 
 class DraftCommands(InventoryBase):
     def load_document(self, company_id: int, document_id: int) -> InventoryDocumentData:
@@ -199,68 +223,38 @@ class DraftCommands(InventoryBase):
         cost_account_id: int | None = None,
         cost_subconto: Sequence[int | None] = (),
     ) -> int:
-        sc = pad_subconto(offset_subconto)
-        cost_sc = pad_subconto(cost_subconto)
+        values = (
+            line_no,
+            item_id,
+            warehouse_id,
+            to_warehouse_id,
+            quantity,
+            amount,
+            inventory_amount,
+            expense_amount,
+            offset_account_id,
+            *pad_subconto(offset_subconto),
+            source_receipt_line_id,
+            memo,
+            vat_amount,
+            currency_amount,
+            cost_account_id,
+            *pad_subconto(cost_subconto),
+        )
         if line_id is not None:  # an edited line keeps its id: landed cost refers to it
             updated = self.conn.execute(
-                "UPDATE inventory_lines SET line_no = ?, item_id = ?, warehouse_id = ?, "
-                "to_warehouse_id = ?, quantity = ?, amount = ?, inventory_amount = ?, "
-                "expense_amount = ?, offset_account_id = ?, offset_sc1 = ?, offset_sc2 = ?, "
-                "offset_sc3 = ?, source_receipt_line_id = ?, memo = ?, vat_amount = ?, "
-                "currency_amount = ?, cost_account_id = ?, cost_sc1 = ?, cost_sc2 = ?, "
-                "cost_sc3 = ? WHERE company_id = ? AND document_id = ? AND id = ?",
-                (
-                    line_no,
-                    item_id,
-                    warehouse_id,
-                    to_warehouse_id,
-                    quantity,
-                    amount,
-                    inventory_amount,
-                    expense_amount,
-                    offset_account_id,
-                    *sc,
-                    source_receipt_line_id,
-                    memo,
-                    vat_amount,
-                    currency_amount,
-                    cost_account_id,
-                    *cost_sc,
-                    company_id,
-                    document_id,
-                    line_id,
-                ),
+                f"UPDATE inventory_lines SET {', '.join(f'{c} = ?' for c in LINE_COLUMNS)} "
+                "WHERE company_id = ? AND document_id = ? AND id = ?",
+                (*values, company_id, document_id, line_id),
             ).rowcount
             if updated:
                 return line_id
+        columns = ("company_id", "document_id", *LINE_COLUMNS)
         return insert(
             self.conn,
-            "INSERT INTO inventory_lines (company_id, document_id, line_no, item_id, "
-            "warehouse_id, to_warehouse_id, quantity, amount, inventory_amount, "
-            "expense_amount, offset_account_id, offset_sc1, offset_sc2, offset_sc3, "
-            "source_receipt_line_id, memo, vat_amount, currency_amount, cost_account_id, "
-            "cost_sc1, cost_sc2, cost_sc3) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                company_id,
-                document_id,
-                line_no,
-                item_id,
-                warehouse_id,
-                to_warehouse_id,
-                quantity,
-                amount,
-                inventory_amount,
-                expense_amount,
-                offset_account_id,
-                *sc,
-                source_receipt_line_id,
-                memo,
-                vat_amount,
-                currency_amount,
-                cost_account_id,
-                *cost_sc,
-            ),
+            f"INSERT INTO inventory_lines ({', '.join(columns)}) "
+            f"VALUES ({', '.join('?' for _ in columns)})",
+            (company_id, document_id, *values),
         )
 
     def _release_lines(

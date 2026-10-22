@@ -362,6 +362,12 @@ def _check_mark(color: str) -> str:
 
 
 def stylesheet() -> str:
+    """The whole look of the program, in the current theme's colors."""
+    return _window_css() + _controls_css() + _tables_css() + _panels_css()
+
+
+def _window_css() -> str:
+    """The window, tooltips and the sidebar."""
     return f"""
 * {{ outline: 0; }}
 QMainWindow, QWidget#page {{ background: {P.canvas}; }}
@@ -385,7 +391,12 @@ QPushButton#company {{
 }}
 QPushButton#company:hover {{ background: {P.sidebar_hover}; }}
 QPushButton#company::menu-indicator {{ image: none; }}
+"""
 
+
+def _controls_css() -> str:
+    """Buttons, segments, tags and inputs."""
+    return f"""
 /* Buttons */
 QPushButton {{
     background: {P.surface}; color: {P.text}; border: 1px solid {P.hairline};
@@ -453,7 +464,12 @@ QComboBox QAbstractItemView {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 8px;
     selection-background-color: {P.selection}; selection-color: {P.text}; padding: 4px;
 }}
+"""
 
+
+def _tables_css() -> str:
+    """Tables, lists, reports, check boxes and menus."""
+    return f"""
 /* Tables */
 QTableView {{
     background: {P.surface}; border: 1px solid {P.sheet_border}; border-radius: 12px;
@@ -509,7 +525,12 @@ QCheckBox::indicator:checked {{
 }}
 QCheckBox::indicator:disabled {{ background: {P.subtle}; border-color: {P.hairline}; }}
 QCheckBox::indicator:checked:disabled {{ background: {P.accent_soft}; }}
+"""
 
+
+def _panels_css() -> str:
+    """Folded lines, notes and the bank's panels."""
+    return f"""
 QMenu {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 10px; padding: 6px;
 }}
