@@ -41,6 +41,7 @@ from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
 from modern_gl.reporting.inventory import (
     has_units,
     item_choices,
+    item_name,
     list_inventory_documents,
     receipt_line_choices,
     stock_account_choices,
@@ -331,6 +332,15 @@ def test_catalogs_share_subconto_values(inventory_demo, conn):
     ).fetchone()
     assert (item["name"], item["code"]) == ("Товар A", "A")
     assert warehouse["name"] == "Основной"
+
+
+def test_item_name_is_read_within_the_company(inventory_demo, ledger, conn):
+    """The name of an item by its id; another company's id gives nothing."""
+    demo = inventory_demo
+    assert item_name(conn, demo.company_id, demo.item) == "Товар A"
+    other = ledger.create_company("Другая")
+    assert item_name(conn, other, demo.item) == ""
+    assert item_name(conn, demo.company_id, 999_999) == ""
 
 
 def test_receipt_posts_stock_and_gl_atomically(inventory_demo, conn):

@@ -275,6 +275,20 @@ def stock_card(
     return result
 
 
+def item_name(conn: sqlite3.Connection, company_id: int, item_id: int) -> str:
+    """The name of an item ("" if the company has no such item)."""
+    row = conn.execute(
+        """
+        SELECT v.name
+        FROM inventory_items i
+        JOIN subconto_values v ON v.company_id = i.company_id AND v.id = i.subconto_value_id
+        WHERE i.company_id = ? AND i.id = ?
+        """,
+        (company_id, item_id),
+    ).fetchone()
+    return row["name"] if row else ""
+
+
 def item_choices(conn: sqlite3.Connection, company_id: int) -> list[ItemChoice]:
     """Active items with their unit, by name."""
     rows = conn.execute(

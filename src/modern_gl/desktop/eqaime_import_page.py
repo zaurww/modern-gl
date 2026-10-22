@@ -52,6 +52,7 @@ from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
 from modern_gl.reporting.eqaime_reconciliation import changed_after_reconciliation
+from modern_gl.reporting.inventory import item_name
 
 COLUMNS = [
     "Дата",
@@ -500,7 +501,7 @@ class EqaimeImportDialog(QDialog):
         catalog = self.s.catalog
         how = {"history": tr("как в прошлый раз"), "name": tr("по названию")}.get(plan.found, "")
         if plan.item_id is not None:
-            name = self._item_name(plan.item_id)
+            name = item_name(self.s.conn, self.s.company_id, plan.item_id)
             text = tr("товар «{name}»", name=name)
         elif plan.account_id is not None:
             account = catalog.accounts.get(plan.account_id)
@@ -511,14 +512,6 @@ class EqaimeImportDialog(QDialog):
         else:
             return tr("выберите товар или счёт")
         return f"{text} · {how}" if how else text
-
-    def _item_name(self, item_id: int) -> str:
-        row = self.s.conn.execute(
-            "SELECT v.name FROM inventory_items i JOIN subconto_values v "
-            "ON v.id = i.subconto_value_id WHERE i.id = ?",
-            (item_id,),
-        ).fetchone()
-        return row["name"] if row else ""
 
     def _checked(self) -> list[InvoicePlan]:
         result = []
