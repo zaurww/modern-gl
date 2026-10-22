@@ -1309,4 +1309,12 @@ AZ: dict[str, str] = {
     "счёт как в прошлый раз — строк: {n}": "hesab əvvəlki kimi — sətir: {n}",
     "Остались черновиками: {n}\n\n{reasons}": "Qaralama qaldı: {n}\n\n{reasons}",
     "счёт затрат указывается только в покупке": "xərc hesabı yalnız alışda göstərilir",
+    # plain-text journal for hledger (D79); the lower-case words are tag names
+    "Журнал проводок по {date} — книга: {book}": "{date} tarixinədək yazılışlar jurnalı "
+    "— kitab: {book}",
+    "Выгружено {date} из Modern GL": "{date} Modern GL-dən çıxarılıb",
+    "валюта": "valyuta",
+    "сторно": "storno",
+    "слой": "qat",
+    "примечание": "qeyd",
 }
