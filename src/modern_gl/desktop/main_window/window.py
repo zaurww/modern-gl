@@ -38,6 +38,8 @@ from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
+from modern_gl.desktop.widgets import EmptyState
+from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import LANGUAGES, language, tr
 from modern_gl.infrastructure.workspace import Workspace
 from modern_gl.reporting.inventory import inventory_document_of
@@ -70,25 +72,22 @@ class MainWindow(OpenPages):
 
     def _company_menu(self) -> None:
         menu = QMenu(self)
+        viewing = self.session is not None and self.session.read_only
         for company in self.workspace.companies():
-            current = company.path == self.company_path
+            current = company.path == self.company_path and not viewing
             act = menu.addAction(("✓  " if current else "    ") + company.name)
             act.triggered.connect(lambda _=False, p=company.path: self.open_company(p))
         menu.addSeparator()
         menu.addAction(tr("Новая компания…")).triggered.connect(lambda: self.create_company())
         menu.addAction(tr("Добавить из файла…")).triggered.connect(self.add_company_file)
+        menu.addAction(tr("Открыть для просмотра…")).triggered.connect(self.ask_view_company)
         if self.session is not None:
             menu.addSeparator()
+            if viewing:
+                menu.addAction(tr("Перечитать файл")).triggered.connect(self.reread)
             menu.addAction(tr("Показать файл компании")).triggered.connect(self.show_company_file)
-            menu.addAction(tr("Сохранить как…")).triggered.connect(self.save_as)
-            menu.addAction(tr("Сохранить копию…")).triggered.connect(self.save_copy)
-            menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
-            menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
-            menu.addSeparator()
-            books = menu.addAction(tr("Параллельные книги (МСФО, налог)"))
-            books.setCheckable(True)
-            books.setChecked(self.session.parallel_books)
-            books.toggled.connect(self.set_parallel_books)
+            if not viewing:
+                self._file_actions(menu)
         menu.addSeparator()
         languages = menu.addMenu(tr("Язык интерфейса"))
         for code, title in LANGUAGES.items():
@@ -100,6 +99,26 @@ class MainWindow(OpenPages):
             act.triggered.connect(lambda _=False, n=name: self.set_ui_theme(n))
         btn = self.sidebar.company
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _file_actions(self, menu: QMenu) -> None:
+        """What changes the open company's file (not shown while viewing)."""
+        s = self.open_session
+        menu.addAction(tr("Сохранить как…")).triggered.connect(self.save_as)
+        menu.addAction(tr("Сохранить копию…")).triggered.connect(self.save_copy)
+        menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
+        menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
+        menu.addSeparator()
+        books = menu.addAction(tr("Параллельные книги (МСФО, налог)"))
+        books.setCheckable(True)
+        books.setChecked(s.parallel_books)
+        books.toggled.connect(self.set_parallel_books)
+
+    def _viewing(self) -> bool:
+        """Viewing only (D80): nothing new is started; the status bar says why."""
+        if self.session is None or not self.session.read_only:
+            return False
+        self.notify(tr("Компания открыта только для просмотра"))
+        return True
 
     def _make_place(self, key) -> QWidget:
         s = self.open_session
@@ -121,7 +140,10 @@ class MainWindow(OpenPages):
         if key == ("directories",):
             return DirectoriesPage(s)
         if key == ("opening",):
-            page = OpeningBalancesPage(s)
+            try:
+                page = OpeningBalancesPage(s)
+            except NotFoundError as e:  # viewing a company that has none (D80)
+                return EmptyState("○", tr("Начальные остатки"), str(e))
             page.saved.connect(self._postings_changed)
             return page
         if key == ("currencies",):
@@ -155,6 +177,8 @@ class MainWindow(OpenPages):
         return page
 
     def show_import(self) -> None:
+        if self._viewing():
+            return
         key = ImportPage.key
         if key not in self.pages:
             page = ImportPage(self.open_session)
@@ -170,7 +194,7 @@ class MainWindow(OpenPages):
 
     def quick_entry(self) -> None:
         """Ctrl+L anywhere: the journal with the cursor in the quick entry line."""
-        if self.session is None:
+        if self.session is None or self._viewing():
             return
         self.show_place(("journal",))
         journal = self._page(("journal",), JournalPage)
@@ -240,6 +264,8 @@ class MainWindow(OpenPages):
         self._activate(key)
 
     def new_document(self, template=None, entry=None) -> None:
+        if self._viewing():
+            return
         page = DocumentPage(self.open_session, template=template, entry=entry)
         self._wire_document(page)
         self._add_page(page.key, page, open_item=True)
@@ -264,6 +290,8 @@ class MainWindow(OpenPages):
         self._activate(key)
 
     def new_conversion(self, prefill=None) -> None:
+        if self._viewing():
+            return
         page = ConversionPage(self.open_session, prefill=prefill)
         self._wire_conversion(page)
         self._add_page(page.key, page, open_item=True)
@@ -290,6 +318,8 @@ class MainWindow(OpenPages):
         self._activate(key)
 
     def new_bank_operation(self, prefill=None) -> None:
+        if self._viewing():
+            return
         page = BankOperationPage(self.open_session, prefill=prefill)
         self._wire_bank_operation(page)
         self._add_page(page.key, page, open_item=True)
@@ -323,6 +353,8 @@ class MainWindow(OpenPages):
         self._activate(key)
 
     def new_inventory_document(self, doc_type: str) -> None:
+        if self._viewing():
+            return
         page: InventoryDocumentPage | LandedCostPage = (
             LandedCostPage(self.open_session)
             if doc_type == "landed_cost"
@@ -357,6 +389,8 @@ class MainWindow(OpenPages):
         key = ("template", template_id)
         if template_id is not None and key in self.pages:
             self._activate(key)
+            return
+        if template_id is None and self._viewing():
             return
         page = TemplatePage(self.open_session, template_id)
         key = page.key

@@ -73,9 +73,11 @@ class OpenPages(CompanyFiles):
     # ---- the company shown -----------------------------------------------------------
 
     def _show_company(self, name: str) -> None:
+        read_only = self.open_session.read_only
         self.sidebar.company.setText(f"{name}   ▾")
-        self.setWindowTitle(f"{name} — Modern GL")
-        self.sidebar.retranslate()
+        viewing = f" — {tr('только просмотр')}" if read_only else ""
+        self.setWindowTitle(f"{name}{viewing} — Modern GL")
+        self.sidebar.retranslate(read_only)
         for heading, places in SECTIONS:
             if heading is not None:
                 self.sidebar.add_section(tr(heading))
@@ -266,6 +268,7 @@ class OpenPages(CompanyFiles):
 
     def _show_no_company(self) -> None:
         self.sidebar.company.setText(tr("Нет компании") + "   ▾")
+        self.sidebar.retranslate()
         self.setWindowTitle("Modern GL")
         page = EmptyState("○", tr("Нет компании"), tr("Создайте компанию в меню слева вверху."))
         self.pages[("empty",)] = page

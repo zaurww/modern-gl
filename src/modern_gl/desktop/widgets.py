@@ -112,6 +112,13 @@ def button(text: str, kind: str = "", tooltip: str = "") -> QPushButton:
     return b
 
 
+def hide_when_viewing(read_only: bool, *widgets: QWidget) -> None:
+    """A company open for viewing only (D80): what would change it is not shown."""
+    if read_only:
+        for w in widgets:
+            w.hide()
+
+
 MenuItem = tuple[str, Callable[[], object]] | None  # None: a separator
 
 
@@ -121,8 +128,11 @@ def more_button(items: Callable[[], list[MenuItem]], tooltip: str = "") -> QPush
     b = button("⋯", "more", tooltip or tr("Ещё"))
 
     def show() -> None:
+        entries = items()
+        if not entries:  # nothing to do now (a company open for viewing…)
+            return
         menu = QMenu(b)
-        for item in items():
+        for item in entries:
             if item is None:
                 menu.addSeparator()
                 continue

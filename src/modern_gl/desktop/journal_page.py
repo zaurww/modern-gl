@@ -26,7 +26,14 @@ from modern_gl.application.queries import DocumentSummary, list_documents
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money, ru_date
+from modern_gl.desktop.widgets import (
+    EmptyState,
+    PageHeader,
+    button,
+    hide_when_viewing,
+    money,
+    ru_date,
+)
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -166,7 +173,11 @@ class JournalPage(QWidget):
         self.fab.setParent(self)
         self.fab.setFixedSize(52, 52)
         self.fab.clicked.connect(self.new_document.emit)
+        hide_when_viewing(session.read_only, import_button, self.quick, self.fab)
+        self._bind_keys()
+        self.refresh()
 
+    def _bind_keys(self) -> None:
         for keys, fn in (
             ("Ins", self.new_document.emit),
             ("F5", self.refresh),
@@ -184,7 +195,6 @@ class JournalPage(QWidget):
             sc = QShortcut(QKeySequence(keys), self.table)
             sc.setContext(Qt.ShortcutContext.WidgetShortcut)
             sc.activated.connect(fn)
-        self.refresh()
 
     def title(self) -> str:
         return tr("Журнал")
@@ -231,7 +241,7 @@ class JournalPage(QWidget):
     def _delete_current(self) -> None:
         doc_id = self._current_id()
         doc = next((d for d in self.model.docs if d.id == doc_id), None)
-        if doc is None:
+        if doc is None or self.s.read_only:
             return
         question = (
             tr("Удалить черновик №{n}?", n=doc.number)

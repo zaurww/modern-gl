@@ -302,7 +302,7 @@ class LandedCostPage(LandedCostForm):
             for line in self.doc.lines
             if line.source_receipt_line_id in receipts
         ]
-        read_only = not self.doc.editable
+        read_only = not self.doc.editable or self.s.read_only  # viewing (D80)
         self._set_models(charges, targets, read_only)
         if self.doc.status == "posted":
             self.status.set(tr("Проведён"), "green")
@@ -325,7 +325,7 @@ class LandedCostPage(LandedCostForm):
             control.setVisible(not read_only)
         self.btn_save.setVisible(not read_only and not posted)
         self.btn_post.setVisible(not read_only)
-        self.btn_delete.setVisible(self.doc is not None)
+        self.btn_delete.setVisible(self.doc is not None and not self.s.read_only)
         self.btn_unpost.setVisible(posted and not read_only)
         self.btn_gl.setVisible(self.doc is not None and self.doc.gl_document_id is not None)
         self.btn_report.setVisible(posted)  # the shares exist once it is posted

@@ -12,6 +12,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from modern_gl.domain.errors import ReadOnlyError
+from modern_gl.i18n import tr
+
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 # A row is read both by name (row["code"]) and by position (row[0]) and has .keys()
@@ -34,12 +37,48 @@ def connect(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def open_snapshot(path: str | Path) -> sqlite3.Connection:
+    """A company file for viewing only (D80): a copy in memory, brought up to the current
+    schema there, that refuses every write. The file is only read — no lock is kept, no
+    migration, no backup — so it may be open by its owner meanwhile. A damaged file raises
+    sqlite3.DatabaseError."""
+    path = Path(path)
+    # open by its owner (there is a -wal): read through the owner's WAL; otherwise as an
+    # unchanging file, which leaves no -wal/-shm beside it and works on a read-only share
+    in_use = path.with_name(path.name + "-wal").exists()
+    mode = "mode=ro" if in_use else "immutable=1"
+    source = sqlite3.connect(f"file:{path.as_posix()}?{mode}", uri=True)
+    conn = sqlite3.connect(":memory:", isolation_level=None)
+    try:
+        source.backup(conn)  # consistent even while the owner is writing
+        found = [r[0] for r in conn.execute("PRAGMA quick_check(5)")]
+        if found != ["ok"]:
+            raise sqlite3.DatabaseError("; ".join(found))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        migrate(conn)
+    except BaseException:
+        conn.close()
+        raise
+    finally:
+        source.close()
+    conn.execute("PRAGMA query_only = ON")
+    return conn
+
+
+def is_read_only(conn: sqlite3.Connection) -> bool:
+    return bool(conn.execute("PRAGMA query_only").fetchone()[0])
+
+
 @contextmanager
 def transaction(conn: sqlite3.Connection) -> Iterator[None]:
-    """Run the block atomically. Joins the outer transaction if one is already open."""
+    """Run the block atomically. Joins the outer transaction if one is already open.
+    A company open for viewing refuses at once, with a message for the user."""
     if conn.in_transaction:
         yield
         return
+    if is_read_only(conn):
+        raise ReadOnlyError(tr("Компания открыта только для просмотра — изменения не сохраняются"))
     conn.execute("BEGIN IMMEDIATE")
     try:
         yield

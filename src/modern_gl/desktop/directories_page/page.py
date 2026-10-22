@@ -52,7 +52,7 @@ from modern_gl.desktop.inventory_page import open_item
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button
+from modern_gl.desktop.widgets import EmptyState, PageHeader, button, hide_when_viewing
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import transaction
@@ -98,6 +98,7 @@ class DirectoriesPage(QWidget):
         add = button(tr("+ Новый элемент"), "primary", "Ins")
         add.clicked.connect(lambda: self.add_value())
         top.addWidget(add)
+        hide_when_viewing(session.read_only, add_kind, add_group, add)
         right.addLayout(top)
         self.used_in = QLabel()
         self.used_in.setObjectName("secondary")

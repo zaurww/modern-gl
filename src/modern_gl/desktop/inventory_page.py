@@ -37,6 +37,7 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
     button,
+    hide_when_viewing,
     money,
     more_button,
     ru_date,
@@ -260,16 +261,16 @@ class InventoryPage(QWidget):
         add_item = button(tr("+ Товар"), "flat")
         add_item.clicked.connect(self.add_item)
         self.header.add_action(add_item)
-        self.header.add_action(  # what is set up once, rarely
-            more_button(
-                lambda: [
-                    (tr("+ Единица"), self.add_unit),
-                    (tr("+ Склад"), self.add_warehouse),
-                    (tr("+ Вид расходов"), self.add_landed_cost_type),
-                    (tr("Настройки склада…"), self.settings),
-                ]
-            )
+        more = more_button(  # what is set up once, rarely
+            lambda: [
+                (tr("+ Единица"), self.add_unit),
+                (tr("+ Склад"), self.add_warehouse),
+                (tr("+ Вид расходов"), self.add_landed_cost_type),
+                (tr("Настройки склада…"), self.settings),
+            ]
         )
+        self.header.add_action(more)
+        hide_when_viewing(session.read_only, add_item, more)
         root.addWidget(self.header)
 
         self._build_operations(root)
@@ -289,6 +290,7 @@ class InventoryPage(QWidget):
             control = button(tr(title), kind)
             control.clicked.connect(lambda _=False, op=operation: self.operation(op))
             operations.addWidget(control)
+            hide_when_viewing(self.s.read_only, control)
         operations.addStretch(1)
         root.addLayout(operations)
 
@@ -323,6 +325,7 @@ class InventoryPage(QWidget):
         remove = button(tr("Удалить документ"), "danger")
         remove.clicked.connect(self.delete_document)
         recent.addWidget(remove)
+        hide_when_viewing(self.s.read_only, remove)
         root.addLayout(recent)
         self.documents_model = ReportModel()
         self.documents = QTableView()

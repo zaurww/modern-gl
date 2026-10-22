@@ -130,7 +130,8 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         self.memo.setText(d.memo)
         self.date.setDate(to_qdate(date.fromisoformat(d.doc_date)))
         self._select_layer(d.layer)
-        read_only = not d.editable  # a posted document is edited in place, as in 1C
+        # a posted document is edited in place, as in 1C; not while viewing (D80)
+        read_only = not d.editable or self.s.read_only
         self.model.beginResetModel()
         self.model.rows = [PostingRow.from_data(p) for p in d.postings] or [PostingRow()]
         self.model.read_only = read_only
@@ -156,6 +157,7 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         posted = self.doc is not None and self.doc.status == "posted"
         self.btn_save.setVisible(not read_only and not posted)  # Ctrl+S reposts it
         self.btn_post.setVisible(not read_only)
+        self.btn_more.setVisible(bool(self.menu_items()))  # viewing: often nothing to do
         source = self.doc.inventory_number if self.doc else None
         self.btn_source.setVisible(source is not None)
         if source is not None:
@@ -170,6 +172,11 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         doc = self.doc
         if doc is None:  # not saved yet
             return [(tr("Сделать шаблоном"), self.save_as_template)]
+        source = doc.inventory_number
+        if self.s.read_only:  # viewing (D80): only where the postings came from
+            if source is None:
+                return []
+            return [(tr("Складской документ №{n}", n=source), self._open_source)]
         copy = (tr("Копировать"), lambda: self.copy_requested.emit(self._as_template()))
         if doc.conversion_id is not None or doc.bank_operation_id is not None:
             return [copy]  # corrected in the conversion or the bank operation itself

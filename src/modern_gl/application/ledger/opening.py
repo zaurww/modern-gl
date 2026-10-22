@@ -11,7 +11,7 @@ from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.queries import opening_document
 from modern_gl.domain.accounts import OPENING_BALANCE
 from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
@@ -20,13 +20,18 @@ OPENING_CODE = "00"
 
 
 class OpeningBalanceCommands(ChartCommands, DocumentCommands):
-    def opening_account(self, company_id: int) -> int:
-        """The counter-account of opening balances ("00", as in 1C), created on first use.
+    def opening_account(self, company_id: int, create: bool = True) -> int:
+        """The counter-account of opening balances ("00", as in 1C), created on first use;
+        `create=False` (a company open for viewing, D80) only finds it, or NotFoundError.
 
         It is shown in the chart and in reports, but only the opening balances post to it:
         while it is not zero, the balances entered so far do not agree.
         """
         existing = self.account_role(company_id, OPENING_BALANCE)
+        if not create:
+            if existing is None:
+                raise NotFoundError(tr("Начальные остатки не вводились"))
+            return existing
         taken = self.conn.execute(
             "SELECT 1 FROM accounts WHERE company_id = ? AND code = ?",
             (company_id, OPENING_CODE),

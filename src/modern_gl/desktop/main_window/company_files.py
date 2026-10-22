@@ -151,18 +151,59 @@ class CompanyFiles(QMainWindow):
         except backup.BackupError as e:
             self._offer_restore(Path(path), str(e))
             return
+        self._use_company(conn, company_id, Path(path), read_only=False)
+        if self.settings:
+            self.settings.setValue("company_file", str(path))
+
+    def ask_view_company(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            tr("Открыть для просмотра"),
+            str(self.workspace.folder),
+            tr("Файлы компаний (*.gl *.db);;Все файлы (*)"),
+        )
+        if path:
+            self.view_company(Path(path))
+
+    def view_company(self, path: Path) -> None:
+        """A company file for viewing only (D80): a snapshot of it; the file is not changed,
+        not listed and not backed up, so it may be a colleague's file in use."""
+        if not self._confirm_close_all():
+            return
+        try:
+            conn, company_id = self.workspace.view(path)
+        except (LedgerError, OSError, Error) as e:
+            QMessageBox.warning(self, tr("Открыть для просмотра"), str(e))
+            return
+        self._use_company(conn, company_id, Path(path), read_only=True)
+
+    def reread(self) -> None:
+        """Viewing: a new snapshot of the file, with what was saved in it since."""
+        if self.session is not None and self.company_path is not None:
+            self.view_company(self.company_path)
+            self.notify(tr("Файл перечитан"))
+
+    def _reopen(self) -> None:
+        """The same company again (another language, look or books)."""
+        if self.session is None or self.company_path is None:
+            return
+        if self.session.read_only:
+            self.view_company(self.company_path)
+        else:
+            self.open_company(self.company_path)
+
+    def _use_company(self, conn: Connection, company_id: int, path: Path, read_only: bool) -> None:
         old_date = self.session.working_date if self.session else None
         self._close_company()
-        self.conn, self.company_path = conn, Path(path)
+        self.conn, self.company_path = conn, path
         self.ledger = Ledger(conn, actor=getpass.getuser())
         name = company_name(conn, company_id)
         self.session = Session(
             conn, self.ledger, company_id, name, Catalog(conn, company_id), notify=self.notify
         )
+        self.session.read_only = read_only
         if old_date:
             self.session.working_date = old_date
-        if self.settings:
-            self.settings.setValue("company_file", str(path))
         self._show_company(name)
 
     def _close_company(self) -> None:
@@ -170,7 +211,8 @@ class CompanyFiles(QMainWindow):
         self._drop_pages()
         if self.conn is not None:
             try:
-                if self.company_path is not None:
+                viewed = self.session is not None and self.session.read_only
+                if self.company_path is not None and not viewed:
                     self.workspace.auto_backup(self.conn, self.company_path)
             except (backup.BackupError, OSError, Error) as e:
                 QMessageBox.warning(
@@ -339,8 +381,7 @@ class CompanyFiles(QMainWindow):
         set_language(code)
         if self.settings:
             self.settings.setValue("language", code)
-        if self.company_path is not None:
-            self.open_company(self.company_path)
+        self._reopen()
 
     def set_parallel_books(self, on: bool) -> None:
         """Books on or off (D63): the pages are built again with or without the field."""
@@ -363,8 +404,7 @@ class CompanyFiles(QMainWindow):
         app = QApplication.instance()
         if isinstance(app, QApplication):
             theme.apply(app)
-        if self.company_path is not None:
-            self.open_company(self.company_path)
+        self._reopen()
 
     # ---- the window shows the company; made by the window ----------------------------
 

@@ -64,7 +64,10 @@ class OpeningBalancesPage(QWidget):
         self.doc_status: str | None = None
         self.dirty = False
 
-        self.control_account = session.ledger.opening_account(session.company_id)
+        # viewing (D80): the account is not made; none yet — NotFoundError
+        self.control_account = session.ledger.opening_account(
+            session.company_id, create=not session.read_only
+        )
         session.catalog.reload()
         control_code = session.catalog.accounts[self.control_account].short
 
@@ -251,7 +254,7 @@ class OpeningBalancesPage(QWidget):
             self._set_rows([])
             self.status.set(tr("Новый"), "blue")
             self.header.subtitle.setText(tr("Сальдо до первой операции"))
-            self._set_read_only(False, posted=False)
+            self._set_read_only(self.s.read_only, posted=False)
             self._update_totals()
             return
         doc = load_document(self.s.conn, self.s.company_id, marker.document_id)
@@ -272,7 +275,8 @@ class OpeningBalancesPage(QWidget):
                 date=ru_date(marker.effective_date),
             )
         )
-        self._set_read_only(not doc.editable, posted=doc.status == "posted")
+        read_only = not doc.editable or self.s.read_only  # viewing (D80)
+        self._set_read_only(read_only, posted=doc.status == "posted")
         self.dirty = False
         self._update_totals()
 

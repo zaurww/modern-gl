@@ -15,7 +15,7 @@ from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import EmptyState, button, status_icon
+from modern_gl.desktop.widgets import EmptyState, button, hide_when_viewing, status_icon
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
@@ -95,6 +95,7 @@ class TradePage(ReportPage):
         self.new_button = button(tr(self.kind.new))
         self.new_button.clicked.connect(lambda: self.new_inventory_document.emit(doc_type))
         self.header.add_action(self.new_button)
+        hide_when_viewing(session.read_only, load, check, self.new_button)
         self.stack.removeWidget(self.empty)
         self.empty = EmptyState("○", tr(self.kind.empty), tr(self.kind.empty_hint))
         self.stack.addWidget(self.empty)
@@ -149,7 +150,7 @@ class TradePage(ReportPage):
     def _show_post_button(self) -> None:
         n = len(self.drafts_to_post())
         self.post_button.setText(tr("Провести черновики: {n}", n=n))
-        self.post_button.setVisible(n > 0)
+        self.post_button.setVisible(n > 0 and not self.s.read_only)
 
     def post_drafts(self) -> None:
         drafts = self.drafts_to_post()

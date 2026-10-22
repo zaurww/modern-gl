@@ -173,7 +173,8 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
             )
             for line in self.doc.lines
         ] or [InventoryGridRow()]
-        read_only = not self.doc.editable  # a posted document is edited in place, as in 1C
+        # a posted document is edited in place, as in 1C; not while viewing (D80)
+        read_only = not self.doc.editable or self.s.read_only
         self.model = InventoryLinesModel(
             self.s, self.doc_type, rows, read_only=read_only, vat_rate=vat_rate
         )
@@ -211,8 +212,9 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         editable = not read_only and self.doc_type != "landed_cost"
         self.btn_save.setVisible(editable and not posted)  # Ctrl+S reposts a posted one
         self.btn_post.setVisible(editable)
-        self.btn_delete.setVisible(self.doc is not None)
-        self.btn_unpost.setVisible(posted and self.doc_type != "landed_cost")
+        viewing = self.s.read_only
+        self.btn_delete.setVisible(self.doc is not None and not viewing)
+        self.btn_unpost.setVisible(posted and self.doc_type != "landed_cost" and not viewing)
         self.btn_gl.setVisible(self.doc is not None and self.doc.gl_document_id is not None)
         self.btn_accrual.setVisible(
             self.doc is not None and self.doc.accrual_document_id is not None

@@ -605,6 +605,24 @@ def main() -> None:
     shot("12b2_bank_payment_lines")
     shoot_vat_deposit(session, win, ledger, shot)
     shoot_sale_groups(session, win, ledger, shot)
+    shoot_viewing(win, shot)
+
+
+def shoot_viewing(win, shot) -> None:
+    """D80: the same company open for viewing only — nothing offers to change it."""
+    win._confirm_close_all = lambda: True  # the bank payment above is left unsaved
+    win.view_company(win.company_path)
+    s = win.open_session
+    s.working_date = date(2026, 2, 28)
+    shot("13_viewing_journal")
+    journal = cast(JournalPage, win.pages[("journal",)])
+    journal.table.selectRow(2)
+    win.open_document(journal.model.docs[2].id)
+    shot("13b_viewing_document")
+    win.show_place(("purchases",))
+    shot("13c_viewing_purchases")
+    win.show_place(("bank",))
+    shot("13d_viewing_bank")
 
 
 def shoot_vat_deposit(session, win, ledger, shot) -> None:
