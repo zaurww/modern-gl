@@ -171,6 +171,60 @@ class BankCommands(ModuleDocumentCommands):
                 )
                 self.save_bank_operation(company_id, data, operation_id, post=op.status == "posted")
 
+    def offset_advances(
+        self,
+        company_id: int,
+        day: str,
+        counterparty_id: int,
+        settlement_account: int,
+        advance_account: int,
+        parts: list[tuple[str, int]],
+        contract_id: int | None = None,
+    ) -> int:
+        """An advance set against the e-qaimə that came after it (D78): per e-qaimə,
+        paid to a supplier Dt 60.1 [e-qaimə] / Ct 60.2, from a customer Dt 62.2 / Ct 62.1
+        [e-qaimə]. The payment itself and its statement stay as they were."""
+        parts = [(number, amount) for number, amount in parts if amount]
+        if not parts or any(amount < 0 for _, amount in parts):
+            raise ValidationError(tr("нечего зачитывать"))
+        settlement = self._account(company_id, settlement_account)
+        received = settlement["account_type"] == "receivable"
+        own = self._partner_subconto(company_id, settlement, counterparty_id, contract_id)
+        advance = self._partner_subconto(
+            company_id, self._account(company_id, advance_account), counterparty_id, contract_id
+        )
+        name = self._subconto_value(company_id, counterparty_id)["name"]
+        postings = [
+            PostingInput(
+                advance_account,
+                settlement_account,
+                Decimal(amount).scaleb(-2),
+                advance,
+                own,
+                invoice=number,
+            )
+            if received
+            else PostingInput(
+                settlement_account,
+                advance_account,
+                Decimal(amount).scaleb(-2),
+                own,
+                advance,
+                invoice=number,
+            )
+            for number, amount in parts
+        ]
+        return self.post_new(company_id, day, postings, tr("Зачёт аванса: {name}", name=name))
+
+    def _partner_subconto(
+        self, company_id: int, account: Row, counterparty_id: int, contract_id: int | None
+    ) -> tuple[int | None, ...]:
+        """The counterparty and its contract in their positions of the account."""
+        kinds = {self._subconto_value(company_id, counterparty_id)["kind_id"]: counterparty_id}
+        if contract_id is not None:
+            kinds[self._subconto_value(company_id, contract_id)["kind_id"]] = contract_id
+        return tuple(kinds.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3))
+
     def _place_currency(self, company_id: int, subconto: tuple[int | None, ...]) -> int | None:
         """The currency of a bank account: of its element of the directory (D47)."""
         for value_id in subconto:

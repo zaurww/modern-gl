@@ -14,6 +14,11 @@ from modern_gl.application.bank.accounts import (
     bank_accounts,
     default_kind,
 )
+from modern_gl.application.bank.advances import (
+    SETTLES,
+    counterparty_balance,
+    payment_lines,
+)
 from modern_gl.application.bank.operations import (
     BANK_TYPES,
     CUSTOMER,
@@ -78,6 +83,7 @@ __all__ = [
     "OTHER",
     "OUT",
     "SALARY",
+    "SETTLES",
     "SUPPLIER",
     "TAX",
     "TRANSFER",
@@ -97,6 +103,7 @@ __all__ = [
     "bank_operation_of_document",
     "bank_places",
     "bank_statements",
+    "counterparty_balance",
     "default_kind",
     "default_memo",
     "find_bank_operation",
@@ -104,6 +111,7 @@ __all__ = [
     "last_lines",
     "latest_direction",
     "load_bank_operation",
+    "payment_lines",
     "place_balance",
     "statement",
 ]

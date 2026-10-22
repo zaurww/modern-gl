@@ -123,6 +123,10 @@ class _Chart:
     def add(self, row: InvoiceRow, p: Row) -> None:
         """One posting of the invoice: settlement turnovers, partner, contract, ƏDV."""
         vat = deposit = False
+        types = {self.accounts[p[f"{side}_account_id"]]["account_type"] for side in SIDES}
+        # an advance set against the e-qaimə (D78: Dt 60.1 [e-qaimə] / Ct 60.2): only the
+        # settlement side pays it, the advance side is no turnover of the e-qaimə
+        offset = bool(types & ADVANCE_TYPES) and bool(types & {"payable", "receivable"})
         for side, prefix in (("debit", "dt"), ("credit", "ct")):
             account = self.accounts[p[f"{side}_account_id"]]
             vat |= account["account_type"] in VAT_TYPES
@@ -130,6 +134,8 @@ class _Chart:
             partner_at = self.slot(account, self.partner)
             kind = account["account_type"]
             if not (kind in SETTLEMENT_TYPES or (kind is None and partner_at is not None)):
+                continue
+            if offset and kind in ADVANCE_TYPES:
                 continue
             if side == "debit":
                 row.debit += p["amount"]
@@ -145,6 +151,10 @@ class _Chart:
             row.vat += p["amount"]
         if deposit:
             row.deposit += p["amount"]
+
+
+SIDES = ("debit", "credit")
+ADVANCE_TYPES = frozenset({"advance_paid", "advance_received"})
 
 
 DRAFT, PORTAL = "draft", "portal"  # where an open e-qaimə is known from, but the books

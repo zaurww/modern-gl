@@ -20,6 +20,10 @@ OUTPUT_VAT = "output_vat"
 SALES_VAT = "sales_vat"
 # A purchase whose expense belongs to an earlier month (D65): the accrual is credited here
 ACCRUED_EXPENSES = "accrued_expenses"
+# A payment beyond what is owed (D78): an advance paid to a supplier (60.2), received from
+# a customer (62.2); without such an account it stays on the settlement account itself
+ADVANCE_PAID = "advance_paid"
+ADVANCE_RECEIVED = "advance_received"
 ACCOUNT_ROLES = (
     INPUT_VAT,
     OPENING_BALANCE,
@@ -32,6 +36,8 @@ ACCOUNT_ROLES = (
     OUTPUT_VAT,
     SALES_VAT,
     ACCRUED_EXPENSES,
+    ADVANCE_PAID,
+    ADVANCE_RECEIVED,
 )
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {
@@ -43,6 +49,8 @@ ROLE_TYPES = {
     SALES_REVENUE: "sales",
     COST_OF_SALES: "cost_of_sales",
     ACCRUED_EXPENSES: "accrued_expenses",
+    ADVANCE_PAID: "advance_paid",
+    ADVANCE_RECEIVED: "advance_received",
 }
 
 # Account types: what an account means, whatever its code (D35). The list is fixed by the

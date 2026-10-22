@@ -34,19 +34,23 @@ from modern_gl.application.bank import (
     BankOperationInput,
     bank_operation_of_document,
     bank_places,
+    counterparty_balance,
     find_bank_operation,
     kind_of_account,
     last_lines,
     load_bank_operation,
+    payment_lines,
     place_balance,
     statement,
 )
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import load_document
+from modern_gl.domain.accounts import ADVANCE_PAID
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.money import to_minor
 from modern_gl.infrastructure.chart_csv import apply_chart_template
-from modern_gl.reporting.invoices import invoice_report
+from modern_gl.reporting.invoices import invoice_report, open_invoices
 from modern_gl.reporting.reports import trial_balance
 
 
@@ -535,3 +539,99 @@ def test_the_kind_of_an_operation_by_the_account_of_its_line():
         kind_of_account(t)
         for t in ("payable", "receivable", "tax_payable", "payroll", "bank", "vat_deposit", None)
     ] == [SUPPLIER, CUSTOMER, TAX, SALARY, TRANSFER, TRANSFER, OTHER]
+
+
+def lines_of(ledger, f, amount: str, invoices=(), advance=True, account="60.1"):
+    acc, v = f["acc"], f["v"]
+    return [
+        (
+            ledger.conn.execute(
+                "SELECT code FROM accounts WHERE id = ?", (x.account_id,)
+            ).fetchone()[0],
+            x.amount,
+            x.invoice,
+        )
+        for x in payment_lines(
+            ledger.conn,
+            f["cid"],
+            account_id=acc[account],
+            account_type="payable",
+            subconto=(None, v["contract"]),
+            counterparty_id=v["alfa"],
+            amount=to_minor(amount),
+            direction=OUT,
+            day="2026-03-05",
+            invoices=invoices,
+            advance_account=ledger.account_role(f["cid"], ADVANCE_PAID) if advance else None,
+            advance_subconto=(None, v["contract"]),
+        )
+    ]
+
+
+def test_a_payment_spread_over_e_qaime_debt_and_advance(ledger, firm):
+    """ALFA is owed 1 180.00 on 60.1, all of it by MT001 (02.03), hand-calculated:
+    1 500.00 for MT001 → 1 180.00 MT001, 320.00 advance on 60.2;
+    500.00 with no e-qaimə → 500.00 of the debt on 60.1;
+    1 500.00 with no e-qaimə → 1 180.00 debt, 320.00 advance;
+    without an advance account 1 500.00 for MT001 → 1 180.00 MT001, 320.00 on 60.1."""
+    f = firm
+    assert ledger.account_role(f["cid"], ADVANCE_PAID) == ledger.account_id(f["cid"], "60.2")
+    mt001 = [("MT001", 118_000)]
+    assert lines_of(ledger, f, "1500", mt001) == [("60.1", 118_000, "MT001"), ("60.2", 32_000, "")]
+    assert lines_of(ledger, f, "500") == [("60.1", 50_000, "")]
+    assert lines_of(ledger, f, "1500") == [("60.1", 118_000, ""), ("60.2", 32_000, "")]
+    assert lines_of(ledger, f, "1500", mt001, advance=False) == [
+        ("60.1", 118_000, "MT001"),
+        ("60.1", 32_000, ""),
+    ]
+    # an e-qaimə the list does not know takes the whole amount
+    assert lines_of(ledger, f, "700", [("MT999", None)]) == [("60.1", 70_000, "MT999")]
+
+
+def test_an_advance_is_offset_against_a_later_e_qaime(ledger, firm):
+    """320.00 paid ahead to ALFA (60.2); MT002 for 400.00 comes: offset 320.00 —
+    Dt 60.1 [ALFA, MT002] / Ct 60.2 [ALFA]; MT002 still owes 80.00, 60.2 is zero."""
+    f = firm
+    cid, acc, v = f["cid"], f["acc"], f["v"]
+    ledger.save_bank_operation(
+        cid,
+        pay_alfa(
+            f,
+            lines=(
+                BankLine(acc["60.1"], 118_000, (None, v["contract"]), "MT001"),
+                BankLine(ledger.account_id(cid, "60.2"), 32_000, (None, v["contract"])),
+            ),
+        ),
+        post=True,
+    )
+    ledger.post_new(
+        cid,
+        "2026-03-06",
+        [
+            PostingInput(
+                acc["26"],
+                acc["60.1"],
+                "400",
+                [v["rent"]],
+                [v["alfa"], v["contract"]],
+                invoice="MT002",
+            )
+        ],
+    )
+    a602 = ledger.account_id(cid, "60.2")
+    assert counterparty_balance(ledger.conn, cid, a602, v["alfa"], "2026-03-31") == 32_000
+    ledger.offset_advances(
+        cid,
+        "2026-03-07",
+        v["alfa"],
+        acc["60.1"],
+        a602,
+        [("MT002", 32_000)],
+        contract_id=v["contract"],
+    )
+    assert counterparty_balance(ledger.conn, cid, a602, v["alfa"], "2026-03-31") == 0
+    left = {
+        i.invoice: i.amount
+        for i in open_invoices(ledger.conn, cid, v["alfa"], payable=True, on_date="2026-03-31")
+    }
+    assert left == {"MT002": 8_000}
