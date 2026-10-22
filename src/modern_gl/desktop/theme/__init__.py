@@ -43,6 +43,8 @@ def apply(app: QApplication) -> None:
     app.setStyle("Fusion")
     f = fonts()
     app.setFont(f.body)
+    # the stub asks for bytes, PySide takes only a str
+    app.setFont(f.table, "QAbstractItemView")  # pyright: ignore[reportArgumentType]
     pal = app.palette()
     pal.setColor(QPalette.ColorRole.Window, QColor(P.window))
     pal.setColor(QPalette.ColorRole.Base, QColor(P.surface))

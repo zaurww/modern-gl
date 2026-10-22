@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.desktop import icons
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.inventory_page import InventoryPage
@@ -39,9 +38,9 @@ from modern_gl.desktop.main_window.sidebar import (
     Sidebar,
     TitledPage,
     open_icon,
+    place_icon,
 )
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
-from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.workspace import Workspace
@@ -81,8 +80,8 @@ class OpenPages(CompanyFiles):
         for heading, places in SECTIONS:
             if heading is not None:
                 self.sidebar.add_section(tr(heading))
-            for key, text, color in places:
-                self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
+            for key, text in places:
+                self.sidebar.add_item(key, tr(text), place_icon(key))
         self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
 

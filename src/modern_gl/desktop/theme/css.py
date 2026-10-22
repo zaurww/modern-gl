@@ -29,7 +29,7 @@ QListWidget#nav::item {{
 }}
 QListWidget#nav::item:hover {{ background: {P.sidebar_hover}; }}
 QListWidget#nav::item:selected {{ background: {P.sidebar_selection}; color: {P.text}; }}
-QListWidget#nav::item:disabled {{ color: {P.tertiary}; background: transparent; }}
+QListWidget#nav::item:disabled {{ color: {P.text}; background: transparent; }}
 QPushButton#company {{
     text-align: left; padding: 10px 12px; margin: 14px 10px 8px 10px; border: none;
     border-radius: 8px; color: {P.text}; background: transparent;
