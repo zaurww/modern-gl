@@ -413,6 +413,10 @@ QPushButton#primary:disabled {{
 }}
 QPushButton#flat {{ background: transparent; border: none; color: {P.accent}; padding: 6px 8px; }}
 QPushButton#flat:hover {{ background: {P.accent_soft}; }}
+QPushButton#crumb {{  /* a step of a page's path: «Bank › ABB › 22.10» (D78) */
+    background: transparent; border: none; color: {P.accent}; padding: 2px 4px 2px 0;
+}}
+QPushButton#crumb:hover {{ text-decoration: underline; }}
 QPushButton#more {{
     background: transparent; border: none; color: {P.secondary}; padding: 2px 10px 6px 10px;
     font-size: 14pt; border-radius: 7px;
@@ -551,6 +555,10 @@ QFrame#summary QLabel {{ background: transparent; }}
 QLabel#error {{
     color: {P.red}; background: {P.red_soft}; border-radius: 7px; padding: 7px 10px;
 }}
+/* a bank statement agrees with the bank (D78) */
+QLabel#reconciled {{
+    color: {P.green}; background: {P.green_soft}; border-radius: 7px; padding: 7px 10px;
+}}
 /* something to look at, not an error: changes on the portal after a reconciliation */
 QLabel#warning {{
     color: {P.text}; background: {P.amber_soft}; border-radius: 7px; padding: 7px 10px;
@@ -562,11 +570,6 @@ QFrame#card {{
 QFrame#card QLabel {{ background: transparent; border: none; }}
 QFrame#note QLabel {{ color: {P.text}; background: transparent; }}
 QFrame#note QPushButton#flat:hover {{ background: {P.selection}; }}
-/* the bank accounts beside their statement */
-QListWidget#places {{ background: transparent; border: none; outline: none; }}
-QListWidget#places::item {{ border-radius: 8px; color: {P.text}; }}
-QListWidget#places::item:hover {{ background: {P.subtle}; }}
-QListWidget#places::item:selected {{ background: {P.selection}; color: {P.text}; }}
 """
 
 

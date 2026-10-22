@@ -300,14 +300,31 @@ def test_errors_stay_on_the_page_and_a_draft_is_saved(qtbot, session):
     assert page.doc is not None and page.doc.status == "draft"
 
 
-def test_bank_page_statement(qtbot, session):
+def test_bank_page_goes_from_the_accounts_to_a_statement(qtbot, session):
+    """The accounts by group → the statements of Kapital AZN → the day 01.03 with its line
+    (10 000.00 in); the bank's balance typed in reconciles it; Backspace goes back up."""
     page = BankPage(session)
     qtbot.addWidget(page)
-    places = [page.places.item(i).text() for i in range(page.places.count())]
-    assert places == ["Kapital AZN", "Kapital USD"]
-    assert page.place is not None and page.place.name == "Kapital AZN"
-    assert page.model.rowCount() == 1  # the opening entry of 01.03
-    assert "остаток на конец 10 000.00 AZN" in page.footer.text()
+    assert [r.title for r in page.model.rows] == [
+        "Расчётные счета",
+        "Kapital AZN",
+        "Валютные счета",
+        "Kapital USD",
+    ]
+    assert page.place is not None and page.place.name == "Kapital AZN"  # the cursor
+    page.drill(page.model.rows[1])
+    assert page.level == "journal"
+    assert [(s.date_from, s.closing, s.status) for s in page.model.rows] == [
+        ("2026-03-01", 1_000_000, "open")
+    ]
+    page.drill(page.model.rows[0])
+    assert page.level == "statement" and page.model.rowCount() == 1
+    assert page.reconcile.figures["closing"].text() == "10 000.00"
+    page.reconcile.bank.setText("10 000")
+    page.reconcile.bank.editingFinished.emit()
+    assert page.current is not None and page.current.status == "ok"
+    assert "Сверена" in page.reconcile.verdict.text()
+
     emitted: list[BankOperationInput] = []
     page.new_bank_operation.connect(emitted.append)
     page.new_operation(IN)
@@ -315,13 +332,36 @@ def test_bank_page_statement(qtbot, session):
     assert (prefill.direction, prefill.account_id, prefill.doc_date) == (
         IN,
         acc(session, "51"),
-        "2026-03-05",
+        "2026-03-01",  # the statement's day
     )
     assert prefill.subconto[0] == value(session, "Kapital AZN")
     # the form takes what is known: the account and its bank account
     form = new_page(qtbot, session, prefill)
     assert form.btn_in.isChecked() and form.sc[0].currentText() == "Kapital AZN"
     assert not form.is_dirty()
+
+    page.up()
+    assert page.level == "journal" and page.model.rows[0].status == "ok"
+    page.up()
+    assert page.level == "accounts" and page.place is not None
+    assert page.place.name == "Kapital AZN"  # back where it came from
+
+
+def test_a_new_statement_and_a_new_card(qtbot, session, monkeypatch):
+    """«+ Выписка» opens the next working day after the last statement (01.03 is a Sunday:
+    02.03); a card on 55 goes to its own group."""
+    page = BankPage(session)
+    qtbot.addWidget(page)
+    page.open_account(page.model.rows[1].place.key)
+    page.new_statement()
+    assert page.level == "statement" and page.current is not None
+    assert (page.current.date_from, page.current.opening) == ("2026-03-02", 1_000_000)
+    session.ledger.add_bank_account(
+        session.company_id, "ABB Visa", acc(session, "55"), "card", card_digits="4417"
+    )
+    page.go("accounts")
+    titles = [r.title for r in page.model.rows]
+    assert titles[-2:] == ["Бизнес-карты", "ABB Visa ·· 4417"]
 
 
 def test_the_journal_opens_the_operation(qtbot, tmp_path):
@@ -345,7 +385,9 @@ def test_the_journal_opens_the_operation(qtbot, tmp_path):
         account, bank_value = page.account.currentData(), page.bank_subconto()
         assert page.save(post=True)
         doc = page.doc
-        assert doc is not None and bank.model.rowCount() == 2  # the statement follows
+        assert doc is not None
+        bank.open_account(bank.place.key if bank.place else (account, bank_value[0]))
+        assert [s.date_from for s in bank.model.rows] == ["2026-03-05", "2026-03-01"]
         # the next one of the statement opens in its place: the same account and day
         following = win.stack.currentWidget()
         assert isinstance(following, BankOperationPage) and following is not page

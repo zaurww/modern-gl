@@ -16,7 +16,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if sys.platform == "win32":  # the offscreen platform doesn't see system fonts by itself
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["WINDIR"], "Fonts"))
 
-from PySide6.QtCore import QDate, QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication, QLineEdit
 
@@ -602,8 +602,26 @@ def main() -> None:
 
     win.show_place(("bank",))
     bank = cast(BankPage, win.pages[("bank",)])
-    bank.date_from.setDate(QDate(2026, 1, 1))
+    # D78: the accounts by group (a business card too), the statements, one statement
+    ledger.add_bank_account(session.company_id, "ABB Visa", "51", "card", card_digits="4417")
+    session.catalog.reload()
+    bank.refresh()
     shot("12_bank")
+    first = next(r for r in bank.model.rows if hasattr(r, "place"))
+    bank.open_account(first.place.key)
+    oldest = bank.statements[0]
+    ledger.set_bank_closing(
+        session.company_id,
+        first.place.account_id,
+        first.place.value_id,
+        oldest.date_from,
+        oldest.date_to,
+        oldest.closing,
+    )
+    bank.refresh()
+    shot("12a_bank_statements")
+    bank.drill(bank.model.rows[0])
+    shot("12a2_bank_statement")
     bank.new_operation("out")
     payment = cast(BankOperationPage, win.stack.currentWidget())
     payment.counterparty_edit.setText(i18n.tr("Альфа Трейд"))
