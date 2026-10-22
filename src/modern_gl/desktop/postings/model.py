@@ -22,7 +22,7 @@ from modern_gl.desktop.postings.columns import (
     PostingRow,
     column_role,
 )
-from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.theme import P
 from modern_gl.domain import formula
 from modern_gl.domain.accounts import SETTLEMENT_TYPES
 from modern_gl.domain.currency import (
@@ -49,8 +49,6 @@ class PostingsModel(PostingsClipboard):
             return self._text(row, col, display=role == Qt.ItemDataRole.DisplayRole)
         if role == Qt.ItemDataRole.ForegroundRole:
             return self._foreground(row, col)
-        if role == Qt.ItemDataRole.FontRole and self._is_placeholder(row, col):
-            return fonts().cell_italic
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return ALIGN_RIGHT if self.is_number(col) else ALIGN_LEFT
         if role == Qt.ItemDataRole.ToolTipRole:

@@ -1012,3 +1012,19 @@ def test_directories_show_counterparties_added_elsewhere_on_return(window):
     assert new_id in {v.id for v in s.catalog.all_values(kind)}
     current = page._current_value()
     assert current is not None and current.id == chosen.id
+
+
+def test_journal_done_rows_quieter_no_italics(window):
+    """D86: a posted row's text is a bit quieter than a draft's; nothing in italics."""
+    from modern_gl.desktop.journal_page import MEMO as JOURNAL_MEMO
+    from modern_gl.desktop.journal_page import TOTAL
+    from modern_gl.desktop.theme import P
+
+    model = current_page(window).model
+    draft = next(i for i, d in enumerate(model.docs) if d.status == "draft")
+    posted = next(i for i, d in enumerate(model.docs) if d.status == "posted")
+    fg = Qt.ItemDataRole.ForegroundRole
+    for col in (JOURNAL_MEMO, TOTAL):
+        assert model.data(model.index(posted, col), fg).name().upper() == P.muted.upper()
+        assert model.data(model.index(draft, col), fg) is None
+        assert model.data(model.index(draft, col), Qt.ItemDataRole.FontRole) is None

@@ -61,8 +61,6 @@ class Fonts:
         self.total = _font(display, 15, semi, tabular=True)
         self.bold = _font(text, 10, semi)
         # Table cells: only the property is set, the rest comes from the view's font.
-        self.cell_italic = _font(tabular=True)
-        self.cell_italic.setItalic(True)
         self.cell_bold = _font(weight=semi, tabular=True)
 
 

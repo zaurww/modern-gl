@@ -26,7 +26,7 @@ from modern_gl.application.authorship import journal_authors
 from modern_gl.application.queries import DocumentSummary, list_documents
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
@@ -106,8 +106,9 @@ class JournalModel(QAbstractTableModel):
                 return QColor(P.red)
             if col in (DATE, NUMBER, BOOK, AUTHOR):
                 return QColor(P.secondary)
-        if role == Qt.ItemDataRole.FontRole and d.status == "draft" and col == MEMO:
-            return fonts().cell_italic
+            # done is quieter, a draft — still to do — in the full text color (D86)
+            if col in (MEMO, TOTAL) and d.status != "draft":
+                return QColor(P.muted)
         return None
 
 

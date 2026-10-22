@@ -16,6 +16,7 @@ class Palette:
     subtle: str = "#F7F8FA"  # hover, zebra, input wells
     hairline: str = "#E8EAED"
     text: str = "#1D2025"
+    muted: str = "#535965"  # done rows: a bit quieter than the text (D86)
     secondary: str = "#6B7280"
     tertiary: str = "#A0A6AF"
     accent: str = "#2D6BE4"
@@ -77,6 +78,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "field": "#E6E9EF",
             "field_hover": "#DCE0E8",
             "text": "#4C4F69",
+            "muted": "#5C5F77",
             "secondary": "#6C6F85",
             "tertiary": "#9CA0B0",
             "header_text": "#8C8FA1",
@@ -112,6 +114,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "field": "#F2E9E1",
             "field_hover": "#ECE2D9",
             "text": "#575279",
+            "muted": "#6E6A86",
             "secondary": "#797593",
             "tertiary": "#9893A5",
             "header_text": "#9893A5",
@@ -147,6 +150,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "field": "#E5E9F0",
             "field_hover": "#DEE3EB",
             "text": "#2E3440",
+            "muted": "#434C5E",
             "secondary": "#4C566A",
             "tertiary": "#8A93A5",
             "header_text": "#7B8598",
@@ -182,6 +186,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "field": "#292A3B",
             "field_hover": "#313244",
             "text": "#CDD6F4",
+            "muted": "#AEB5D0",
             "secondary": "#A6ADC8",
             "tertiary": "#6C7086",
             "header_text": "#7F849C",
