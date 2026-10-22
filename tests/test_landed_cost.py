@@ -9,6 +9,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCompleter
 
+from modern_gl.application import queries
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
     Inventory,
@@ -524,3 +525,11 @@ def test_input_vat_account_comes_from_the_account_type(batch):
     assert b.ledger.account_role(b.company_id, INPUT_VAT) is None  # two: choose one
     b.ledger.set_account_role(b.company_id, INPUT_VAT, other)
     assert b.ledger.account_role(b.company_id, INPUT_VAT) == other
+
+
+def test_gl_document_taken_as_charge_opens_read_only(batch, conn):
+    """The form shows what the ledger allows: a document a batch takes is not edited."""
+    b = batch
+    assert queries.load_document(conn, b.company_id, b.broker_doc).editable
+    post_batch(b, [broker_fee(b)])
+    assert not queries.load_document(conn, b.company_id, b.broker_doc).editable

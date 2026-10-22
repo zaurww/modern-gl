@@ -64,6 +64,7 @@ class DocumentData:
     inventory_number: int | None = None
     conversion_id: int | None = None  # made by a currency conversion: corrected there
     bank_operation_id: int | None = None  # made by a bank operation: corrected there
+    used: bool = False  # a module takes it in (a batch's expense): released there first
     postings: list[PostingData] = field(default_factory=list)
 
     @property
@@ -78,6 +79,7 @@ class DocumentData:
             and self.inventory_document_id is None
             and self.conversion_id is None
             and self.bank_operation_id is None
+            and not self.used
         )
 
 
@@ -153,7 +155,10 @@ def load_document(conn: Connection, company_id: int, doc_id: int) -> DocumentDat
                (SELECT v.id FROM currency_conversions v
                 WHERE v.document_id = d.id OR v.credit_document_id = d.id) AS conversion_id,
                (SELECT b.id FROM bank_operations b WHERE b.document_id = d.id)
-                   AS bank_operation_id
+                   AS bank_operation_id,
+               EXISTS (SELECT 1 FROM document_owners o
+                       WHERE o.company_id = d.company_id AND o.document_id = d.id
+                         AND o.role = 'uses') AS used
         FROM documents d
         JOIN layers l ON l.id = d.layer_id
         JOIN companies c ON c.id = d.company_id
@@ -165,7 +170,7 @@ def load_document(conn: Connection, company_id: int, doc_id: int) -> DocumentDat
     ).fetchone()
     if row is None:
         raise NotFoundError(tr("документ {id} не найден", id=doc_id))
-    doc = DocumentData(**{**dict(row), "closed": bool(row["closed"])})
+    doc = DocumentData(**{**dict(row), "closed": bool(row["closed"]), "used": bool(row["used"])})
     for p in conn.execute(
         "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc_id,)
     ):
