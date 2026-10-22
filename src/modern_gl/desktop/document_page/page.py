@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
+from modern_gl.application.authorship import authors_text, document_authors
 from modern_gl.application.queries import (
     DocumentData,
     TemplateData,
@@ -145,10 +146,19 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         else:
             self.status.set(tr("Проведён"), "green")
         self._apply_mode(read_only)
+        self._show_authors(d.id)
         self.dirty = False
         self._update_total()
         self._update_rate_note()
         self.title_changed.emit()
+
+    def _show_authors(self, doc_id: int) -> None:
+        authors = document_authors(self.s.conn, self.s.company_id, doc_id)
+        self.authors.setVisible(authors is not None)
+        if authors is not None:
+            line, story = authors_text(authors)
+            self.authors.setText(line)
+            self.authors.setToolTip(story)
 
     def _apply_mode(self, read_only: bool) -> None:
         for w in (self.memo, self.date, self.layer):

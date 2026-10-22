@@ -89,6 +89,9 @@ class MainWindow(OpenPages):
             if not viewing:
                 self._file_actions(menu)
         menu.addSeparator()
+        menu.addAction(tr("Ваше имя: {name}…", name=self.user_name())).triggered.connect(
+            self.ask_user_name
+        )
         languages = menu.addMenu(tr("Язык интерфейса"))
         for code, title in LANGUAGES.items():
             act = languages.addAction(("✓  " if code == language() else "    ") + title)

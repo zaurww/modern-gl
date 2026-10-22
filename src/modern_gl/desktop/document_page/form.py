@@ -136,6 +136,12 @@ class DocumentForm(QWidget):
         self.amount_caption.hide()
         self.amount.hide()
         meta.addStretch(1)
+        # who entered and who posted it, quietly on the right (D82); a new one: nobody yet
+        self.authors = QLabel()
+        self.authors.setObjectName("tertiary")
+        self.authors.setFont(fonts().small)
+        self.authors.hide()
+        meta.addWidget(self.authors)
         root.addLayout(meta)
 
     def _build_table(self, root: QVBoxLayout) -> None:

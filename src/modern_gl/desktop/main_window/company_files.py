@@ -196,7 +196,7 @@ class CompanyFiles(QMainWindow):
         old_date = self.session.working_date if self.session else None
         self._close_company()
         self.conn, self.company_path = conn, path
-        self.ledger = Ledger(conn, actor=getpass.getuser())
+        self.ledger = Ledger(conn, actor=self.user_name())
         name = company_name(conn, company_id)
         self.session = Session(
             conn, self.ledger, company_id, name, Catalog(conn, company_id), notify=self.notify
@@ -374,6 +374,30 @@ class CompanyFiles(QMainWindow):
         self.notify(
             tr("Компания «{name}» удалена (файл в папке «{trash}»)", name=name, trash=TRASH)
         )
+
+    def user_name(self) -> str:
+        """Who is working (D82): the name set in the program, else the Windows user."""
+        name = str(self.settings.value("user_name", "")) if self.settings else ""
+        return name.strip() or getpass.getuser()
+
+    def ask_user_name(self) -> None:
+        name, ok = QInputDialog.getText(
+            self,
+            tr("Ваше имя"),
+            tr("Имя в журнале действий и в документах («Провёл …»):"),
+            text=self.user_name(),
+        )
+        if ok and name.strip() and name.strip() != self.user_name():
+            self.set_user_name(name.strip())
+
+    def set_user_name(self, name: str) -> None:
+        """The pages are built again: each module took the name when it opened."""
+        if not self._confirm_close_all():
+            return
+        if self.settings:
+            self.settings.setValue("user_name", name)
+        self._reopen()
+        self.notify(tr("Ваше имя: {name}", name=name))
 
     def set_ui_language(self, code: str) -> None:
         if code == language() or not self._confirm_close_all():

@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.authorship import journal_authors
 from modern_gl.application.queries import DocumentSummary, list_documents
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
@@ -37,8 +38,8 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
-COLUMNS = ["Дата", "№", "Содержание", "Книга", "Сумма", ""]
-DATE, NUMBER, MEMO, BOOK, TOTAL, STATUS = range(6)
+COLUMNS = ["Дата", "№", "Содержание", "Книга", "Автор", "Сумма", ""]
+DATE, NUMBER, MEMO, BOOK, AUTHOR, TOTAL, STATUS = range(7)
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
@@ -47,12 +48,18 @@ class JournalModel(QAbstractTableModel):
     def __init__(self, layer_names: dict[str, str]) -> None:
         super().__init__()
         self.docs: list[DocumentSummary] = []
+        self.authors: dict[int, str] = {}  # document → who entered or posted it last (D82)
         self.layer_names = layer_names
 
-    def set_docs(self, docs: list[DocumentSummary]) -> None:
+    def set_docs(self, docs: list[DocumentSummary], authors: dict[int, str]) -> None:
         self.beginResetModel()
         self.docs = docs
+        self.authors = authors
         self.endResetModel()
+
+    def several_authors(self) -> bool:
+        """The column «Author» is shown only when more than one person works here."""
+        return len(set(self.authors.values())) > 1
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         return 0 if parent is not None and parent.isValid() else len(self.docs)
@@ -78,6 +85,7 @@ class JournalModel(QAbstractTableModel):
                 NUMBER: str(d.number),
                 MEMO: d.memo or "—",
                 BOOK: "" if d.layer == "common" else self.layer_names.get(d.layer, d.layer),
+                AUTHOR: self.authors.get(d.id, ""),
                 TOTAL: money(d.total),
                 STATUS: d.status_text
                 if d.status == "draft" or d.reversal_of_number or d.reversed_by_number
@@ -96,7 +104,7 @@ class JournalModel(QAbstractTableModel):
                 return QColor(P.tertiary)
             if col == TOTAL and d.reversal_of_number:
                 return QColor(P.red)
-            if col in (DATE, NUMBER, BOOK):
+            if col in (DATE, NUMBER, BOOK, AUTHOR):
                 return QColor(P.secondary)
         if role == Qt.ItemDataRole.FontRole and d.status == "draft" and col == MEMO:
             return fonts().cell_italic
@@ -154,7 +162,14 @@ class JournalPage(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(36)
         hh = self.table.horizontalHeader()
         hh.setHighlightSections(False)
-        for col, width in ((DATE, 110), (NUMBER, 60), (BOOK, 190), (TOTAL, 140), (STATUS, 160)):
+        for col, width in (
+            (DATE, 110),
+            (NUMBER, 60),
+            (BOOK, 190),
+            (AUTHOR, 130),
+            (TOTAL, 140),
+            (STATUS, 160),
+        ):
             self.table.setColumnWidth(col, width)
         hh.setSectionResizeMode(MEMO, QHeaderView.ResizeMode.Stretch)
         self.table.setColumnHidden(BOOK, not session.parallel_books)  # one book (D63)
@@ -209,7 +224,9 @@ class JournalPage(QWidget):
 
     def refresh(self, select_id: int | None = None) -> None:
         current = select_id or self._current_id()
-        self.model.set_docs(list_documents(self.s.conn, self.s.company_id))
+        conn, cid = self.s.conn, self.s.company_id
+        self.model.set_docs(list_documents(conn, cid), journal_authors(conn, cid))
+        self.table.setColumnHidden(AUTHOR, not self.model.several_authors())
         self.stack.setCurrentWidget(self.table if self.model.docs else self.empty)
         row = next((i for i, d in enumerate(self.model.docs) if d.id == current), None)
         if row is None:

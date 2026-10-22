@@ -331,6 +331,17 @@ AZ: dict[str, str] = {
     "Закрыть": "Bağla",
     "Несохранённые изменения": "Saxlanılmamış dəyişikliklər",
     "Сохранить «{title}»?": "«{title}» saxlanılsın?",
+    # ---- who entered and posted (D82) ------------------------------------------------------
+    "Ввёл: {who}, {when}": "Daxil etdi: {who}, {when}",
+    "Провёл: {who}, {when}": "Keçirdi: {who}, {when}",
+    "Ввёл {who} · {when}": "{who} daxil etdi · {when}",
+    "Провёл {who} · {when}": "{who} keçirdi · {when}",
+    "Ввёл {entered} · провёл {posted} · {when}": "{entered} daxil etdi · {posted} keçirdi · {when}",
+    "Автор": "Müəllif",
+    "Ваше имя": "Adınız",
+    "Имя в журнале действий и в документах («Провёл …»):": "Əməliyyatlar jurnalında və sənədlərdə ad («… keçirdi»):",
+    "Ваше имя: {name}": "Adınız: {name}",
+    "Ваше имя: {name}…": "Adınız: {name}…",
     # ---- viewing only (D80) ----------------------------------------------------------------
     "Компания открыта только для просмотра — изменения не сохраняются": "Şirkət yalnız baxış üçün açılıb — dəyişikliklər saxlanılmır",
     "Компания открыта только для просмотра": "Şirkət yalnız baxış üçün açılıb",
