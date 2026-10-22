@@ -22,6 +22,12 @@ from modern_gl.reporting.inventory.costs import (
     batch_cost,
     cost_sources,
 )
+from modern_gl.reporting.inventory.declarations import (
+    Declaration,
+    LandedLine,
+    landed_cost_report,
+    percent_added,
+)
 from modern_gl.reporting.inventory.documents import (
     InventoryDocumentSummary,
     inventory_document_of,
@@ -42,9 +48,11 @@ __all__ = [
     "BatchCostLine",
     "Choice",
     "CostSource",
+    "Declaration",
     "InventoryDocumentSummary",
     "ItemChoice",
     "ItemDetails",
+    "LandedLine",
     "ReceiptLineChoice",
     "StockBalance",
     "StockCardLine",
@@ -57,8 +65,10 @@ __all__ = [
     "item_choices",
     "item_details",
     "item_name",
+    "landed_cost_report",
     "landed_cost_type_choices",
     "list_inventory_documents",
+    "percent_added",
     "receipt_line_choices",
     "stock_account_choices",
     "stock_balances",

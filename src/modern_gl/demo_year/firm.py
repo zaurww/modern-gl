@@ -83,10 +83,30 @@ PRODUCTS = (
             20, 60, 3, (2, 12), (40, 2)),
     Product("lamp", "Masa lampası", 2800, 4100, 4700, "furniture",
             40, 110, 6, (5, 15), (60, 5)),
-    Product("laminator", "Laminator A3", 8500, 23000, 26500, "import",
-            0, 0, 3, (1, 4)),
-    Product("shredder", "Kağız doğrayan", 12000, 32000, 36900, "import",
-            0, 0, 2, (1, 3)),
+    # imported: the cost is in euro cents (Germany) or dollar cents (China)
+    Product("laminator", "Laminator A3", 8500, 23000, 26500, "import", 0, 0, 3, (1, 4)),
+    Product("shredder", "Kağız doğrayan", 12000, 32000, 36900, "import", 0, 0, 2, (1, 3)),
+    Product("binder", "Spiral cildləmə aparatı", 6400, 17500, 19900, "import", 0, 0, 2, (1, 3)),
+    Product("projector", "Proyektor Full HD", 38000, 98000, 112000, "import", 0, 0, 1, (1, 2)),
+    Product("cutter", "Kağız kəsən gilyotin A3", 5200, 14500, 16900, "import", 0, 0, 2, (1, 3)),
+    Product("scanner", "Sənəd skaneri", 21000, 56000, 63900, "import", 0, 0, 1, (1, 2)),
+    Product("labeler", "Etiket printeri", 7400, 19500, 22900, "import", 0, 0, 2, (1, 4)),
+    Product("whiteboard", "Maqnit lövhə 120×90", 4300, 11900, 13900, "import", 0, 0, 2, (1, 4)),
+    Product("confphone", "Konfrans telefonu", 26500, 69000, 78900, "import", 0, 0, 1, (1, 2)),
+    Product("safe", "Ofis seyfi", 31000, 82000, 93900, "import", 0, 0, 1, (1, 2)),
+    Product("counter", "Əskinas sayan aparat", 14500, 38500, 43900, "import", 0, 0, 1, (1, 2)),
+    Product("pointer", "Prezentasiya pultu", 2900, 7900, 9200, "import", 0, 0, 3, (2, 6)),
+    Product("calculator", "Kalkulyator 12 rəqəmli", 450, 1500, 1790, "china",
+            0, 0, 20, (10, 40)),
+    Product("stapler", "Stepler 24/6", 280, 950, 1150, "china", 0, 0, 20, (10, 40)),
+    Product("punch", "Deşikaçan", 350, 1150, 1350, "china", 0, 0, 15, (10, 30)),
+    Product("ledlamp", "LED masa lampası", 1200, 3600, 4200, "china", 0, 0, 6, (3, 12)),
+    Product("usbhub", "USB hub 4 port", 650, 2000, 2400, "china", 0, 0, 10, (5, 20)),
+    Product("headset", "Qulaqlıq mikrofonla", 1500, 4400, 5200, "china", 0, 0, 6, (3, 12)),
+    Product("webcam", "Veb-kamera Full HD", 2200, 6400, 7500, "china", 0, 0, 5, (3, 10)),
+    Product("powerstrip", "Uzadıcı 5 rozetka", 800, 2400, 2900, "china", 0, 0, 10, (5, 20)),
+    Product("mousepad", "Siçan altlığı", 120, 450, 590, "china", 0, 0, 25, (20, 60)),
+    Product("organizer", "Masaüstü orqanayzer", 520, 1600, 1900, "china", 0, 0, 10, (5, 20)),
 )
 # fmt: on
 MATERIALS = (("box", "Karton qutu", 45), ("tape", "Qablaşdırma lenti", 180))
@@ -106,6 +126,11 @@ PARTNERS = (
     PartnerData("tech", "Texnoplus MMC", "1700394521", "Tədarük müqaviləsi №7-T", 21),
     PartnerData("furniture", "Mebel Evi MMC", "2001437819", "Müqavilə №M-25/3", 14),
     PartnerData("import", "Büro Handel GmbH", None, "Contract BH-2026/01", 30),
+    PartnerData("china", "Shenzhen Bright Office Co., Ltd", None, "Contract SBO-2026/07", 30),
+    PartnerData("cargo", "Silk Road Cargo LLC", None, "Freight contract SRC-114", 15),
+    PartnerData(
+        "standard", "AzStandart Sertifikat MMC", "1404771205", "Xidmət müqaviləsi №S-9", 10
+    ),
     PartnerData("logistics", "Baku Logistics MMC", "1503962274", "Daşınma müqaviləsi №4", 10),
     PartnerData("customs", "Dövlət Gömrük Komitəsi", "1500173341", "Gömrük ödənişləri"),
     PartnerData("landlord", "Gəncə Plaza MMC", "1300577412", "İcarə müqaviləsi №2/2025"),
@@ -161,7 +186,8 @@ class Open:
     net: int
     vat: int
     invoice: str = ""
-    eur: int = 0  # a supplier's invoice in euro: the amount in cents
+    fx: int = 0  # a supplier's invoice in a currency: the amount in cents
+    fx_code: str = "EUR"
 
 
 @dataclass
@@ -171,7 +197,7 @@ class State:
     bank: int = 0  # 51, qəpik
     deposit: int = 0  # 54, the ƏDV deposit account
     cash: int = 0  # 50
-    eur: int = 0  # 52, euro cents
+    fx: dict[str, int] = field(default_factory=lambda: defaultdict(int))  # 52, cents
     stock: dict[tuple[str, str], int] = field(default_factory=lambda: defaultdict(int))
     materials: dict[str, int] = field(default_factory=lambda: defaultdict(int))
     receivable: list[Open] = field(default_factory=list)
@@ -212,6 +238,7 @@ class Firm:
         self.acc = Accounts(ledger, cid)
         self.state = State()
         self.customs_due = 0  # the import's duty and ƏDV, paid the same day
+        self.certify_later: list[tuple[date, list[int]]] = []  # when, the receipt lines
         self.eur_id = ledger.currency_id(cid, "EUR")
         self.usd_id = ledger.currency_id(cid, "USD")
         self.eur_rates: dict[date, Decimal] = {}
@@ -227,6 +254,9 @@ class Firm:
         self, dt: str, ct: str, amount: int, dt_sc=(), ct_sc=(), memo: str = "", **more
     ) -> PostingInput:
         return PostingInput(self.acc[dt], self.acc[ct], money(amount), dt_sc, ct_sc, memo, **more)
+
+    def rate(self, code: str, day: date) -> Decimal:
+        return self.eur_rate(day) if code == "EUR" else Decimal("1.7")
 
     def eur_rate(self, day: date) -> Decimal:
         """The Central Bank's rate of the day (a weekend has Friday's)."""
@@ -263,12 +293,21 @@ class Firm:
             cid, self.partner["import"].id, "DE318726405", nonresident=True, country="DE"
         )
         led.set_subconto_value_currency(cid, self.partner["import"].contract, self.eur_id)
+        for key, tin, country in (("china", "91440300MA5F", "CN"), ("cargo", "SRC0114", "CN")):
+            led.set_subconto_value_tax(
+                cid, self.partner[key].id, tin, nonresident=True, country=country
+            )
+            led.set_subconto_value_currency(cid, self.partner[key].contract, self.usd_id)
         related, landlords = led.add_tag(cid, "Əlaqəli tərəf"), led.add_tag(cid, "İcarəyə verən")
         led.set_subconto_value_tags(cid, self.partner["founder"].id, [related])
         led.set_subconto_value_tags(cid, self.partner["landlord"].id, [landlords])
         self.bank_azn = self.value("bank_account", "Kapital Bank AZN")
         self.bank_eur = self.value("bank_account", "Kapital Bank EUR")
         led.set_subconto_value_currency(cid, self.bank_eur, self.eur_id)
+        self.bank_usd = self.value("bank_account", "Kapital Bank USD")
+        led.set_subconto_value_currency(cid, self.bank_usd, self.usd_id)
+        self.fx_id = {"EUR": self.eur_id, "USD": self.usd_id}
+        self.fx_bank = {"EUR": self.bank_eur, "USD": self.bank_usd}
         self.deposit = self.value("bank_account", "ƏDV depozit hesabı")
         self.cost = {name: self.value("cost_item", name) for name in COST_ITEMS}
         self.employee = {name: self.value("employee", name) for name, _, _ in EMPLOYEES}
@@ -293,5 +332,13 @@ class Firm:
         self.material = {
             key: inv.add_item(cid, name, pieces, self.acc["10"]) for key, name, _ in MATERIALS
         }
-        self.duty_type = inv.add_landed_cost_type(cid, "Gömrük rüsumu", "DUTY")
-        self.freight_type = inv.add_landed_cost_type(cid, "Daşınma", "FREIGHT")
+        self.cost_type = {
+            key: inv.add_landed_cost_type(cid, name, code)
+            for key, name, code in (
+                ("duty", "Gömrük rüsumu", "DUTY"),
+                ("fee", "Gömrük yığımı", "FEE"),
+                ("freight", "Daşınma", "FREIGHT"),
+                ("insurance", "Sığorta", "INSUR"),
+                ("certificate", "Sertifikatlaşdırma", "CERT"),
+            )
+        }

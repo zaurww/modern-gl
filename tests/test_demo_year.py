@@ -9,6 +9,7 @@ import pytest
 from modern_gl.application.ledger import Ledger
 from modern_gl.demo_year import create_year_demo
 from modern_gl.infrastructure.db import connect
+from modern_gl.reporting.inventory import landed_cost_report
 from modern_gl.reporting.reports import trial_balance
 
 
@@ -96,3 +97,35 @@ def test_every_module_is_used(year):
             conn, f"SELECT COUNT(*) FROM documents WHERE company_id = ? AND {condition}", cid
         )
     assert count(conn, "SELECT closed_through FROM companies WHERE id = ?", cid) == "2026-06-30"
+
+
+def test_imports_on_declarations_carry_their_expenses(year):
+    conn, cid = year
+    kinds, rows = landed_cost_report(conn, cid, "2026-01-01", "2026-12-31")
+    assert kinds == ["Gömrük rüsumu", "Gömrük yığımı", "Daşınma", "Sığorta", "Sertifikatlaşdırma"]
+    declarations = [d for d in rows if d.invoice_kind == "customs"]
+    assert len(declarations) == 7
+    assert {d.currency for d in declarations} == {"EUR", "USD"}
+    assert all(len(d.lines) >= 10 and d.added > 0 for d in declarations)
+    charged = count(
+        conn,
+        "SELECT SUM(c.amount) FROM landed_cost_charges c JOIN inventory_documents d "
+        "ON d.id = c.document_id WHERE d.company_id = ? AND d.status = 'posted'",
+        cid,
+    )
+    assert sum(d.added for d in rows) == charged  # every qəpik reached a line
+    certified = {
+        line.item_name
+        for d in declarations
+        for line in d.lines
+        if "Sertifikatlaşdırma" in line.expenses
+    }
+    assert "Proyektor Full HD" in certified and "Laminator A3" not in certified
+    # the certification comes when part of the goods is sold: that share is cost of sales
+    assert count(
+        conn,
+        "SELECT COUNT(*) FROM inventory_lines l JOIN inventory_documents d "
+        "ON d.id = l.document_id WHERE d.company_id = ? AND d.doc_type = 'landed_cost' "
+        "AND l.expense_amount > 0",
+        cid,
+    )

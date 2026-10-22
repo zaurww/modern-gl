@@ -38,6 +38,7 @@ from modern_gl.desktop.widgets import (
     PageHeader,
     button,
     hide_when_viewing,
+    menu_button,
     money,
     more_button,
     ru_date,
@@ -248,6 +249,7 @@ class InventoryPage(QWidget):
     key = ("inventory",)
     open_inventory_document = Signal(int)
     new_inventory_document = Signal(str)
+    open_landed_report = Signal()
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -258,6 +260,11 @@ class InventoryPage(QWidget):
         root.setContentsMargins(40, 30, 40, 24)
         root.setSpacing(14)
         self.header = PageHeader(tr("Склад"), "")
+        reports = menu_button(  # the warehouse's own reports, not the sidebar's
+            button(tr("Отчёты") + "  ▾", "flat"),
+            lambda: [(tr("Дополнительные расходы по декларациям"), self.open_landed_report.emit)],
+        )
+        self.header.add_action(reports)
         add_item = button(tr("+ Товар"), "flat")
         add_item.clicked.connect(self.add_item)
         self.header.add_action(add_item)

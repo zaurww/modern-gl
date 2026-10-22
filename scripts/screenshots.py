@@ -324,6 +324,8 @@ def main() -> None:
     loop.exec()
     report.grab().save(str(out / "8c6_batch_cost.png"))
     report.close()
+    win.open_landed_report()
+    shot("8c7_landed_report")
     win.new_inventory_document("receipt")
     receipt_page = cast(InventoryDocumentPage, win.stack.currentWidget())
     receipt_page.currency.setCurrentIndex(

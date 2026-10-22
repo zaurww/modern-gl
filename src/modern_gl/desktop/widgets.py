@@ -125,7 +125,11 @@ MenuItem = tuple[str, Callable[[], object]] | None  # None: a separator
 def more_button(items: Callable[[], list[MenuItem]], tooltip: str = "") -> QPushButton:
     """ "⋯": the less frequent actions of a page in a menu, so one main action stands
     out (as in Things). `items()` is asked each time, so the menu fits the moment."""
-    b = button("⋯", "more", tooltip or tr("Ещё"))
+    return menu_button(button("⋯", "more", tooltip or tr("Ещё")), items)
+
+
+def menu_button(b: QPushButton, items: Callable[[], list[MenuItem]]) -> QPushButton:
+    """A button that opens a menu of `items()` under it."""
 
     def show() -> None:
         entries = items()

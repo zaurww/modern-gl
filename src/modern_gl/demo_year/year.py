@@ -20,8 +20,8 @@ from modern_gl.demo_year.firm import (
     vat18,
     workday,
 )
+from modern_gl.demo_year.imports import CERTIFICATE_DAYS, IMPORT_DAYS, Imports
 from modern_gl.demo_year.money import Money
-from modern_gl.demo_year.trade import IMPORT_DAYS, Trade
 from modern_gl.domain.eqaime import PortalInvoice
 
 # monthly services: supplier, what (the line's memo), amount, account and cost item
@@ -33,7 +33,7 @@ SERVICES = (
 VAN = 4_200_000
 
 
-class Year(Trade, Money):
+class Year(Imports, Money):
     def run(self) -> None:
         self.opening_balances()
         self.opening_stock()
@@ -52,6 +52,7 @@ class Year(Trade, Money):
         plan[date(YEAR, 2, 3)].append(self.take_loan)
         for d in sorted(IMPORT_DAYS):
             plan[d] += [self.import_goods, self.pay_customs]
+            plan[d + timedelta(days=CERTIFICATE_DAYS)].append(self.certify)
         plan[date(YEAR, 4, 14)].append(self.buy_van)
         plan[date(YEAR, 4, 20)].append(self.van_in_use)
         plan[date(YEAR, 7, 15)].append(self.mistake)

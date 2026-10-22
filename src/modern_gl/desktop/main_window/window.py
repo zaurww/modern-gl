@@ -33,6 +33,7 @@ from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.invoices_page import InvoicesPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.landed_cost_page import LandedCostPage
+from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
 from modern_gl.desktop.main_window.open_pages import OpenPages
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
@@ -158,6 +159,7 @@ class MainWindow(OpenPages):
             page = InventoryPage(s)
             page.open_inventory_document.connect(self.open_inventory_document)
             page.new_inventory_document.connect(self.new_inventory_document)
+            page.open_landed_report.connect(self.open_landed_report)
             return page
         if key in (("purchases",), ("sales",)):
             page = TradePage(s, PURCHASE if key == ("purchases",) else SALE)
@@ -380,6 +382,9 @@ class MainWindow(OpenPages):
         inventory = self._page(("inventory",), InventoryPage)
         if inventory is not None:
             inventory.refresh()
+        report = self._page(LandedCostReportPage.key, LandedCostReportPage)
+        if report is not None:
+            report.refresh()
         self._refresh_trade()
 
     def _refresh_trade(self) -> None:
@@ -417,6 +422,15 @@ class MainWindow(OpenPages):
         journal = self._page(("journal",), JournalPage)
         if journal is not None:
             journal.refresh(select_id=page.doc_id)
+
+    def open_landed_report(self) -> None:
+        """«Əlavə xərclər» by declaration, from the warehouse."""
+        key = LandedCostReportPage.key
+        if key not in self.pages:
+            page = LandedCostReportPage(self.open_session)
+            page.open_inventory_document.connect(self.open_inventory_document)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
 
     def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
         page = REPORTS[kind](self.open_session, account_id, params)

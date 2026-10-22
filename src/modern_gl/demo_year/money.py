@@ -88,8 +88,10 @@ class Money(Firm):
         *,
         account: str = "51",
         currency: int | None = None,
+        bank: int | None = None,
     ) -> None:
-        bank = {"51": self.bank_azn, "52": self.bank_eur, "54": self.deposit}[account]
+        if bank is None:
+            bank = {"51": self.bank_azn, "52": self.bank_eur, "54": self.deposit}[account]
         self.ledger.save_bank_operation(
             self.cid,
             BankOperationInput(
@@ -135,19 +137,21 @@ class Money(Firm):
         s = self.state
         for bill in [b for b in s.payable if b.due <= day]:
             name = self.partner[bill.partner].data.name
-            if bill.eur:
-                if s.eur < bill.eur:
-                    self.buy_euro(day, bill.eur - s.eur)
+            if bill.fx:
+                code = bill.fx_code
+                if s.fx[code] < bill.fx:
+                    self.buy_currency(day, code, bill.fx - s.fx[code])
                 self.bank_op(
                     day,
                     OUT,
                     SUPPLIER,
-                    [BankLine(self.acc["60"], bill.eur, self.partner["import"].sc)],
-                    f"{name}: invoice {bill.invoice}",
+                    [BankLine(self.acc["60"], bill.fx, self.partner[bill.partner].sc)],
+                    f"{name}: invoice {bill.invoice}".rstrip(),
                     account="52",
-                    currency=self.eur_id,
+                    currency=self.fx_id[code],
+                    bank=self.fx_bank[code],
                 )
-                s.eur -= bill.eur
+                s.fx[code] -= bill.fx
             else:
                 if s.bank < bill.net + 2_000_000:
                     continue  # waits for the customers' money
@@ -170,23 +174,25 @@ class Money(Firm):
         )
         s.bank, s.deposit = s.bank - amount, s.deposit + amount
 
-    def buy_euro(self, day: date, eur: int) -> None:
-        """Euro for a supplier abroad: the bank sells it 1.2% above the Central Bank."""
-        eur = -(-eur // 10_000) * 10_000  # whole hundreds of euro
-        manat = int((eur * self.eur_rate(day) * 1012 / 1000).to_integral_value())
+    def buy_currency(self, day: date, code: str, cents: int) -> None:
+        """Euro or dollars for a supplier abroad: the bank sells them 1.2% above the
+        Central Bank."""
+        cents = -(-cents // 10_000) * 10_000  # whole hundreds
+        manat = int((cents * self.rate(code, day) * 1012 / 1000).to_integral_value())
         self.ledger.save_conversion(
             self.cid,
             ConversionInput(
                 day.isoformat(),
                 ConversionSide(self.acc["51"], manat, (self.bank_azn,)),
-                ConversionSide(self.acc["52"], eur, (self.bank_eur,), self.eur_id),
+                ConversionSide(self.acc["52"], cents, (self.fx_bank[code],), self.fx_id[code]),
                 fees=(ConversionFee(self.acc["51"], 1_500, (self.bank_azn,)),),
-                memo="Avronun alınması",
+                memo="Avronun alınması" if code == "EUR" else "Dolların alınması",
             ),
             post=True,
         )
         s = self.state
-        s.bank, s.eur = s.bank - manat - 1_500, s.eur + eur
+        s.bank = s.bank - manat - 1_500
+        s.fx[code] += cents
 
     def bank_fee(self, day: date) -> None:
         amount = 2_500 + self.rng.randrange(0, 1_500)

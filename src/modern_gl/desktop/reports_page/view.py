@@ -117,6 +117,7 @@ class ReportPage(QWidget):
     open_report = Signal(str, int, object)  # kind, account id, ReportParams
 
     has_period = True
+    has_book = True  # the book choice, when the company keeps parallel books
     summary_on_top = True
 
     def __init__(self, session: Session, title: str, params: ReportParams | None = None) -> None:
@@ -181,7 +182,7 @@ class ReportPage(QWidget):
                 bar.addWidget(label)
                 bar.addWidget(w)
                 bar.addSpacing(6)
-                if w is self.book and not self.s.parallel_books:  # one book (D63)
+                if w is self.book and not (self.s.parallel_books and self.has_book):  # D63
                     label.hide()
                     w.hide()
             run = button(tr("Сформировать"), "primary", "F5")
@@ -240,7 +241,8 @@ class ReportPage(QWidget):
                 self.book.currentIndex(),
                 self.params.subconto,
             )
-            self.header.subtitle.setText(self.params.describe(self.s.parallel_books))
+            book = self.s.parallel_books and self.has_book
+            self.header.subtitle.setText(self.params.describe(book))
         try:
             self.build()
         except LedgerError as e:

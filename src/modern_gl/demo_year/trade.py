@@ -1,5 +1,5 @@
-"""The year demo's goods: purchases when stock runs low, an import with customs and
-freight, Monday's transfer to the shop, wholesale on credit and the shop's daily sales."""
+"""The year demo's goods: purchases when stock runs low, Monday's transfer to the shop,
+wholesale on credit and the shop's daily sales (the imports are in `imports`)."""
 
 from __future__ import annotations
 
@@ -26,8 +26,6 @@ from modern_gl.demo_year.firm import (
 )
 
 LOCAL_SUPPLIERS = ("paper", "tech", "furniture")
-IMPORT_DAYS = {date(YEAR, 3, 10), date(YEAR, 6, 9), date(YEAR, 9, 8), date(YEAR, 11, 24)}
-IMPORT_ORDER = {"laminator": 24, "shredder": 18}
 
 
 class Trade(Firm):
@@ -146,86 +144,6 @@ class Trade(Firm):
         for key, qty in used.items():
             self.state.materials[key] -= qty
 
-    # ---- import -----------------------------------------------------------------------
-
-    def import_goods(self, day: date) -> None:
-        """Goods from Germany in euro: the receipt at the day's rate, then customs duty
-        (15%) and freight on the batch, and the customs ƏDV on the declaration."""
-        rate = self.eur_rate(day)
-        partner = self.partner["import"]
-        lines, eur = [], 0
-        for key, qty in IMPORT_ORDER.items():
-            cents = qty * self.product[key].cost
-            lines.append(
-                ReceiptLine(
-                    self.item[key], self.warehouse[MAIN], qty, None, currency_amount=money(cents)
-                )
-            )
-            eur += cents
-            self.state.stock[key, MAIN] += qty
-        declaration = f"AZ{day:%y%m%d}{self.rng.randrange(1000, 9999)}"
-        receipt = self.inventory.post_receipt(
-            self.cid,
-            day,
-            lines,
-            self.acc["60"],
-            partner.sc,
-            "İdxal: ofis texnikası",
-            currency_id=self.eur_id,
-            currency_rate=rate,
-            invoice=declaration,
-            invoice_kind="customs",
-        )
-        value = int((eur * rate).to_integral_value())
-        due = day + timedelta(days=partner.data.days)
-        self.state.payable.append(Open("import", due, value, 0, declaration, eur))
-        targets = [line.id for line in self.inventory.load_document(self.cid, receipt).lines]
-        duty = value * 15 // 100
-        customs = self.partner["customs"]
-        self.inventory.post_landed_cost(
-            self.cid,
-            day,
-            targets,
-            money(duty),
-            self.acc["76"],
-            customs.sc,
-            "Gömrük rüsumu",
-            cost_type_id=self.duty_type,
-        )
-        freight = 95_000 + self.rng.randrange(0, 30_000)
-        self.inventory.post_landed_cost(
-            self.cid,
-            day + timedelta(days=1),
-            targets,
-            money(freight),
-            self.acc["60"],
-            self.partner["logistics"].sc,
-            "Daşınma xərcləri",
-            method="quantity",
-            cost_type_id=self.freight_type,
-        )
-        self.owe(day + timedelta(days=1), "logistics", freight, 0, "")
-        customs_vat = vat18(value + duty)
-        self.ledger.post_new(
-            self.cid,
-            day,
-            [
-                self.p(
-                    "19",
-                    "76",
-                    customs_vat,
-                    [customs.id],
-                    customs.sc,
-                    "Gömrük ƏDV-si",
-                    invoice=declaration,
-                    invoice_kind="customs",
-                ),
-            ],
-            "Gömrük bəyannaməsi üzrə ƏDV",
-        )
-        self.state.input_vat["customs"] += customs_vat
-        self.customs_due = duty + customs_vat
-
     # ---- selling ----------------------------------------------------------------------
 
     def to_shop(self, day: date) -> None:
@@ -246,7 +164,8 @@ class Trade(Firm):
         rng, stock = self.rng, self.state.stock
         customer = rng.choice(CUSTOMERS)
         lines, net, vat = [], 0, 0
-        for p in rng.sample(PRODUCTS, rng.randint(2, 4)):
+        in_stock = [p for p in PRODUCTS if stock[p.key, MAIN] > 0]
+        for p in rng.sample(in_stock, min(len(in_stock), rng.randint(2, 5))):
             qty = min(rng.randint(*p.order), stock[p.key, MAIN])
             if qty <= 0:
                 continue
