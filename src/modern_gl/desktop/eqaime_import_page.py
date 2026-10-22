@@ -3,24 +3,14 @@ what each line would become, then imported as purchase and sale drafts (D45)."""
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import date
 
-from PySide6.QtCore import QObject, Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QDialog,
-    QHBoxLayout,
-    QHeaderView,
-    QLabel,
-    QTableWidget,
     QTableWidgetItem,
-    QTreeWidget,
     QTreeWidgetItem,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -28,114 +18,34 @@ from modern_gl.application.eqaime_import import (
     EInvoice,
     InvoicePlan,
     LinePlan,
-    NewCounterparty,
-    RenamedCounterparty,
     add_counterparties,
     apply_renames,
     import_drafts,
     new_counterparties,
-    parse_invoice,
     plan_import,
     renamed_counterparties,
 )
 from modern_gl.application.eqaime_portal import read_again, rechecks
-from modern_gl.application.inventory import Inventory, format_quantity, to_quantity
-from modern_gl.desktop.period_bar import PeriodBar
+from modern_gl.application.inventory import format_quantity, to_quantity
+from modern_gl.desktop.eqaime_import_form import BECOMES, COLUMNS, EXPENSE_MONTH, EqaimeImportForm
+from modern_gl.desktop.eqaime_portal_loader import (
+    Fetched,
+    PortalLoader,
+    changes_warning,
+    fetch_invoices,
+)
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import button, money
+from modern_gl.desktop.theme import P
+from modern_gl.desktop.widgets import money
 from modern_gl.domain.dates import earlier_months, month_name, ru_date
-from modern_gl.domain.eqaime import IMPORTED, PortalInvoice
 from modern_gl.domain.errors import LedgerError
-from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError
-from modern_gl.reporting.eqaime_reconciliation import changed_after_reconciliation
+from modern_gl.infrastructure.etaxes import EtaxesClient
 from modern_gl.reporting.inventory import item_name
 
-COLUMNS = [
-    "Дата",
-    "E-qaimə",
-    "Контрагент / строка",
-    "VÖEN / код",
-    "Вид",
-    "Сумма",
-    "ƏDV",
-    "Расход за",
-    "Станет",
-]
-EXPENSE_MONTH = COLUMNS.index("Расход за")
-BECOMES = COLUMNS.index("Станет")
 
-
-def fetch_invoices(
-    client: EtaxesClient,
-    date_from: date,
-    date_to: date,
-    purchases: bool,
-    sales: bool,
-    progress: Callable[[str], None],
-) -> list[EInvoice]:
-    """The e-qaimə of the period with their lines: received (purchases), sent (sales)."""
-    result = []
-    for outgoing, wanted in ((False, purchases), (True, sales)):
-        if not wanted:
-            continue
-        rows = list(client.invoices(outgoing, date_from, date_to, IMPORTED))
-        for n, row in enumerate(rows, 1):
-            progress(tr("Загружено e-qaimə: {n} из {total}", n=n, total=len(rows)))
-            detail = client.detail(str(row.get("id")), str(row.get("sourceSystem") or "avis"))
-            result.append(parse_invoice(row, detail, outgoing))
-    return result
-
-
-@dataclass
-class Fetched:
-    invoices: list[EInvoice]
-    rechecked: list[PortalInvoice]  # the reconciled months read again
-
-
-def changes_warning(conn: sqlite3.Connection, company_id: int) -> str:
-    """'' or what changed on the portal in the months marked reconciled."""
-    changed = changed_after_reconciliation(conn, company_id)
-    if not changed:
-        return ""
-    months = [
-        tr(
-            "{month}, {direction}: {n}",
-            month=month_name(c.month),
-            direction=tr("продажи") if c.outgoing else tr("покупки"),
-            n=len(c.numbers),
-        )
-        for c in changed
-    ]
-    return tr(
-        "После сверки на портале изменились e-qaimə — {months}. "
-        "Откройте «Сверку с порталом» за этот месяц.",
-        months="; ".join(months),
-    )
-
-
-class PortalLoader(QObject):
-    """Runs a job that talks to the portal off the window's thread."""
-
-    progress = Signal(str)
-    loaded = Signal(object)
-    failed = Signal(str)
-
-    def __init__(self, job: Callable[[Callable[[str], None]], object]) -> None:
-        super().__init__()
-        self.job = job
-
-    def run(self) -> None:
-        try:
-            self.loaded.emit(self.job(self.progress.emit))
-        except PortalError as exc:
-            self.failed.emit(str(exc))
-
-
-class EqaimeImportDialog(QDialog):
+class EqaimeImportDialog(EqaimeImportForm):
     """Period and direction → sign in → the e-qaimə with their lines → drafts."""
 
     def __init__(
@@ -146,179 +56,14 @@ class EqaimeImportDialog(QDialog):
         direction: str | None = None,  # "receipt" / "sale": one direction only, from its section
         today: date | None = None,
     ) -> None:
-        super().__init__(parent)
-        self.s = session
-        self.inventory = Inventory(session.conn, actor=session.ledger.actor)
-        self.sign_in = sign_in
-        self.token: str | None = None
-        self.plans: list[InvoicePlan] = []
-        self.created: list[int] = []
-        self.worker: QThread | None = None
-        self.setWindowTitle(tr("E-qaimə с портала"))
-        self.resize(1180, 720)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(28, 22, 28, 20)
-        root.setSpacing(12)
-
-        title = QLabel(tr("E-qaimə с портала"))
-        title.setFont(fonts().title)
-        root.addWidget(title)
-        self.company = QLabel()
-        self.company.setObjectName("secondary")
-        root.addWidget(self.company)
-
-        bar = QHBoxLayout()
-        bar.setSpacing(8)
-        self.period_bar = PeriodBar(today or date.today(), MONTH, through_today=True)
-        bar.addWidget(self.period_bar)
-        bar.addStretch(1)
-        self.load_button = button(tr("Загрузить с портала"), "primary")
+        super().__init__(session, parent, sign_in, direction, today)
         self.load_button.clicked.connect(self.load)
-        bar.addWidget(self.load_button)
-        root.addLayout(bar)
-
-        both = QHBoxLayout()  # the directions, when not opened from one section
-        both.setSpacing(16)
-        self.purchases = QCheckBox(tr("Полученные (покупки)"))
-        self.purchases.setChecked(True)
-        self.sales = QCheckBox(tr("Отправленные (продажи)"))
-        self.sales.setChecked(True)
-        both.addWidget(self.purchases)
-        both.addWidget(self.sales)
-        both.addStretch(1)
-        if direction is not None:
-            self.purchases.setChecked(direction == "receipt")
-            self.sales.setChecked(direction == "sale")
-            self.purchases.hide()
-            self.sales.hide()
-        else:
-            root.addLayout(both)
-
-        self.tree = QTreeWidget()
-        self.tree.setColumnCount(len(COLUMNS))
-        self.tree.setHeaderLabels([tr(c) for c in COLUMNS])
-        self.tree.setRootIsDecorated(True)
-        self.tree.setUniformRowHeights(True)
-        self.tree.setAlternatingRowColors(False)
-        header = self.tree.header()
-        for column, width in enumerate((118, 140, 0, 104, 64, 90, 76, 130, 0)):
-            if width:
-                self.tree.setColumnWidth(column, width)
-            else:
-                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
-        for column in (5, 6):
-            self.tree.headerItem().setTextAlignment(
-                column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-            )
-        self.tree.headerItem().setToolTip(
-            EXPENSE_MONTH,
-            tr(
-                "Месяц расхода по услугам, если e-qaimə пришла позже: расход начисляется "
-                "последним днём этого месяца (Дт затрат / Кт 76H), долг поставщику и НДС — "
-                "датой e-qaimə"
-            ),
-        )
         self.tree.itemChanged.connect(lambda *_: self._show_count())
-        root.addWidget(self.tree, 3)
-
-        # new counterparties: the VÖEN identifies them, the name is the user's to shorten
-        parties = QHBoxLayout()
-        self.parties_title = QLabel()
-        self.parties_title.setFont(fonts().heading)
-        parties.addWidget(self.parties_title, 1)
-        self.add_parties_button = button(tr("Добавить контрагентов"), "flat")
-        self.add_parties_button.setToolTip(tr("Только контрагенты, без документов"))
         self.add_parties_button.clicked.connect(self.add_parties)
-        parties.addWidget(self.add_parties_button)
-        root.addLayout(parties)
-        self.parties = QTableWidget(0, 4)
-        self.parties.setHorizontalHeaderLabels(
-            [tr("VÖEN"), tr("Название на портале"), tr("Название в программе"), tr("E-qaimə")]
-        )
-        self.parties.verticalHeader().hide()
-        self.parties.setShowGrid(False)
-        parties_header = self.parties.horizontalHeader()
-        parties_header.setDefaultAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        for column, mode in enumerate(
-            (
-                QHeaderView.ResizeMode.Interactive,
-                QHeaderView.ResizeMode.Stretch,
-                QHeaderView.ResizeMode.Stretch,
-                QHeaderView.ResizeMode.Interactive,
-            )
-        ):
-            parties_header.setSectionResizeMode(column, mode)
-        self.parties.setColumnWidth(0, 120)
-        self.parties.setColumnWidth(3, 80)
-        self.parties.setToolTip(tr("Название в программе можно исправить — двойной щелчок"))
-        root.addWidget(self.parties, 1)
-        self.new_parties: list[NewCounterparty] = []
-        self.invoices: list[EInvoice] = []
-        self._show_parties()
-
-        # the same VÖEN under a new name on the portal: rename here, or keep the name
-        renames = QHBoxLayout()
-        self.renames_title = QLabel()
-        self.renames_title.setFont(fonts().heading)
-        renames.addWidget(self.renames_title, 1)
-        self.renames_button = button(tr("Применить названия"), "flat")
-        self.renames_button.setToolTip(
-            tr("Отмеченные — переименовать в программе; у всех запомнить новое название портала")
-        )
         self.renames_button.clicked.connect(self.apply_renames)
-        renames.addWidget(self.renames_button)
-        root.addLayout(renames)
-        self.renames = QTableWidget(0, 5)
-        self.renames.setHorizontalHeaderLabels(
-            [
-                tr("VÖEN"),
-                tr("Было на портале"),
-                tr("Стало на портале"),
-                tr("Сейчас в программе"),
-                tr("Новое название в программе"),
-            ]
-        )
-        self.renames.verticalHeader().hide()
-        self.renames.setShowGrid(False)
-        renames_header = self.renames.horizontalHeader()
-        renames_header.setDefaultAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-        )
-        for column in range(1, 5):
-            renames_header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
-        self.renames.setColumnWidth(0, 140)
-        root.addWidget(self.renames, 1)
-        self.renamed: list[RenamedCounterparty] = []
-        self._show_renames()
-
-        self.warning = QLabel()
-        self.warning.setObjectName("warning")
-        self.warning.setWordWrap(True)
-        self.warning.hide()
-        root.addWidget(self.warning)
-
-        self.status = QLabel(
-            tr(
-                "Выберите период и нажмите «Загрузить с портала»: откроется вход через ASAN İmza. "
-                "Импорт создаёт только черновики — каждый проверьте и проведите."
-            )
-        )
-        self.status.setObjectName("secondary")
-        self.status.setWordWrap(True)
-        root.addWidget(self.status)
-
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        close = button(tr("Закрыть"), "flat")
-        close.clicked.connect(self.reject)
-        actions.addWidget(close)
-        self.import_button = button(tr("Создать черновики"), "primary")
-        self.import_button.setEnabled(False)
         self.import_button.clicked.connect(self.create_drafts)
-        actions.addWidget(self.import_button)
-        root.addLayout(actions)
+        self._show_parties()
+        self._show_renames()
 
     # ---- loading -------------------------------------------------------------------
 

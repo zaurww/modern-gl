@@ -23,7 +23,8 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.eqaime_portal import fetch_list, read_again, rechecks, usual_span
-from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog, PortalLoader, changes_warning
+from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
+from modern_gl.desktop.eqaime_portal_loader import PortalLoader, changes_warning
 from modern_gl.desktop.period_bar import PeriodBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
