@@ -44,7 +44,6 @@ from modern_gl.desktop.widgets import (
     date_edit,
     edited_date,
     hide_when_viewing,
-    more_button,
     ru_date,
 )
 from modern_gl.domain.currency import KNOWN, currency_name, format_rate, parse_rate
@@ -96,18 +95,17 @@ class CurrenciesPage(QWidget):
         root.setSpacing(18)
 
         self.header = PageHeader(tr("Валюты"), "")
-        rates = button(
-            tr("Курсы ЦБА…"), "flat", tr("Загрузить официальные курсы Центрального банка (cbar.az)")
+        rates = self.header.primary(
+            tr("Курсы ЦБА…"),
+            self.load_cbar,
+            tr("Загрузить официальные курсы Центрального банка (cbar.az)"),
         )
-        rates.clicked.connect(self.load_cbar)
-        self.header.add_action(rates)
-        more = more_button(
+        more = self.header.more(
             lambda: [
                 (tr("Добавить валюту"), self.add_currency),
                 (tr("Переоценка…"), self.revalue),
             ]
         )
-        self.header.add_action(more)
         root.addWidget(self.header)
 
         body = QHBoxLayout()

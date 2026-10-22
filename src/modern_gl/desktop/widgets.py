@@ -297,7 +297,9 @@ class CutCellTips(QObject):
 
 
 class PageHeader(QWidget):
-    """Large title, quiet subtitle, actions on the right."""
+    """Large title, quiet subtitle, actions on the right — the same on every page (D86):
+    filters and search, then the one main action in blue (`primary`), then «⋯» (`more`)
+    for the rest. Actions are added left to right in that order."""
 
     def __init__(self, title: str, subtitle: str = "") -> None:
         super().__init__()
@@ -319,6 +321,19 @@ class PageHeader(QWidget):
     def add_action(self, widget: QWidget) -> QWidget:
         self.action_row.addWidget(widget, 0, Qt.AlignmentFlag.AlignBottom)
         return widget
+
+    def primary(self, text: str, slot: Callable[[], object], tooltip: str = "") -> QPushButton:
+        """The page's one main action: a blue button."""
+        b = button(text, "primary", tooltip)
+        b.clicked.connect(lambda _=False: slot())
+        self.add_action(b)
+        return b
+
+    def more(self, items: Callable[[], list[MenuItem]], tooltip: str = "") -> QPushButton:
+        """«⋯»: the page's less frequent actions."""
+        b = more_button(items, tooltip)
+        self.add_action(b)
+        return b
 
 
 class EmptyState(QWidget):

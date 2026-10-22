@@ -75,11 +75,6 @@ QPushButton#dangerSolid {{
 QPushButton#dangerSolid:disabled {{
     background: {P.red_soft}; border: 1px solid {P.red_soft}; color: {P.surface};
 }}
-QPushButton#fab {{
-    background: {P.accent}; color: {P.on_accent}; border: none; border-radius: 26px;
-    font-size: 22pt; padding: 0 0 4px 0;
-}}
-QPushButton#fab:hover {{ background: {P.accent_hover}; }}
 /* a choice of two or three: Mədaxil | Məxaric */
 QPushButton#segment {{
     background: {P.field}; border: none; border-radius: 7px; color: {P.secondary};

@@ -40,7 +40,6 @@ from modern_gl.desktop.widgets import (
     hide_when_viewing,
     menu_button,
     money,
-    more_button,
     ru_date,
 )
 from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
@@ -265,10 +264,8 @@ class InventoryPage(QWidget):
             lambda: [(tr("Дополнительные расходы по декларациям"), self.open_landed_report.emit)],
         )
         self.header.add_action(reports)
-        add_item = button(tr("+ Товар"), "flat")
-        add_item.clicked.connect(self.add_item)
-        self.header.add_action(add_item)
-        more = more_button(  # what is set up once, rarely
+        add_item = self.header.primary(tr("+ Товар"), self.add_item)
+        more = self.header.more(  # what is set up once, rarely
             lambda: [
                 (tr("+ Единица"), self.add_unit),
                 (tr("+ Склад"), self.add_warehouse),
@@ -276,7 +273,6 @@ class InventoryPage(QWidget):
                 (tr("Настройки склада…"), self.settings),
             ]
         )
-        self.header.add_action(more)
         hide_when_viewing(session.read_only, add_item, more)
         root.addWidget(self.header)
 
@@ -287,14 +283,16 @@ class InventoryPage(QWidget):
 
     def _build_operations(self, root: QVBoxLayout) -> None:
         operations = QHBoxLayout()
-        operations.setSpacing(6)
-        for title, operation, kind in (
-            ("Начальные остатки", "opening", "flat"),
-            ("Списание", "issue", "primary"),
-            ("Перемещение", "transfer", "flat"),
-            ("Дополнительные расходы", "landed_cost", "flat"),
+        operations.setSpacing(8)
+        # new warehouse documents: four equal buttons — not tabs, and not a second main
+        # action beside the header's blue one (D86)
+        for title, operation in (
+            ("Начальные остатки", "opening"),
+            ("Списание", "issue"),
+            ("Перемещение", "transfer"),
+            ("Дополнительные расходы", "landed_cost"),
         ):
-            control = button(tr(title), kind)
+            control = button(tr(title))
             control.clicked.connect(lambda _=False, op=operation: self.operation(op))
             operations.addWidget(control)
             hide_when_viewing(self.s.read_only, control)

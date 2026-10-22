@@ -74,14 +74,6 @@ class TradePage(ReportPage):
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda _text: self.refresh())
         self.header.add_action(self.search)
-        load = button(tr("E-qaimə с портала…"), "flat")
-        load.setToolTip(tr("Вход через ASAN İmza, e-qaimə за период — черновиками"))
-        load.clicked.connect(self.import_eqaime)
-        self.header.add_action(load)
-        check = button(tr("Сверка с порталом…"), "flat")
-        check.setToolTip(tr("E-qaimə месяца на портале против книги: что забыто, что изменилось"))
-        check.clicked.connect(self.reconcile)
-        self.header.add_action(check)
         # drafts of one supplier are booked alike: filter them, post them at once (D73)
         self.post_button = button("", "flat")
         self.post_button.setToolTip(
@@ -92,10 +84,17 @@ class TradePage(ReportPage):
         )
         self.post_button.clicked.connect(self.post_drafts)
         self.header.add_action(self.post_button)
-        self.new_button = button(tr(self.kind.new))
-        self.new_button.clicked.connect(lambda: self.new_inventory_document.emit(doc_type))
-        self.header.add_action(self.new_button)
-        hide_when_viewing(session.read_only, load, check, self.new_button)
+        self.new_button = self.header.primary(
+            tr(self.kind.new), lambda: self.new_inventory_document.emit(doc_type)
+        )
+        # the portal (ASAN İmza): e-qaimə of a period as drafts; the month against the book
+        self.more = self.header.more(
+            lambda: [
+                (tr("E-qaimə с портала…"), self.import_eqaime),
+                (tr("Сверка с порталом…"), self.reconcile),
+            ]
+        )
+        hide_when_viewing(session.read_only, self.new_button, self.more)
         self.stack.removeWidget(self.empty)
         self.empty = EmptyState("○", tr(self.kind.empty), tr(self.kind.empty_hint))
         self.stack.addWidget(self.empty)
@@ -117,7 +116,7 @@ class TradePage(ReportPage):
             [
                 Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100),
                 Column(tr("№"), lambda r: r.number, width=60),
-                Column(tr(self.kind.counterparty), lambda r: r.counterparties),
+                Column(tr(self.kind.counterparty), lambda r: r.counterparties, fill=True),
                 Column(tr("E-qaimə"), lambda r: r.invoice, width=150),
                 Column(tr("Сумма"), lambda r: r.amount, money=True, width=120),
                 Column(tr("ƏDV"), lambda r: r.vat, money=True, width=100),

@@ -406,7 +406,9 @@ AZ: dict[str, str] = {
     "№": "№",
     "Поиск по содержанию или номеру   Ctrl+F": "Məzmun və ya nömrə üzrə axtarış   Ctrl+F",
     "Документов пока нет": "Hələ sənəd yoxdur",
-    "Нажмите + или Ins, чтобы ввести первую операцию.": "İlk əməliyyatı daxil etmək üçün + və ya Ins düyməsini basın.",
+    "Нажмите «+ Новый документ» или Ins, чтобы ввести первую операцию.": "İlk əməliyyatı daxil etmək üçün «+ Yeni sənəd» və ya Ins düyməsini basın.",
+    "+ Новый документ": "+ Yeni sənəd",
+    "Все ({n})…": "Hamısı ({n})…",
     "Новый документ (Ins)": "Yeni sənəd (Ins)",
     "Проведённый документ не удаляется — используйте сторно": "Keçirilmiş sənəd silinmir — stornodan istifadə edin",
     # ---- reports ---------------------------------------------------------------------------
