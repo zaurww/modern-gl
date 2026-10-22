@@ -121,6 +121,7 @@ def test_journal_opens_the_conversion_and_its_postings_are_read_only(qtbot, tmp_
     qtbot.addWidget(win)
     win.start()
     win.open_session.working_date = date(2026, 3, 5)
+    win.show_place(("journal",))
     try:
         win.show_place(("bank",))  # conversions start in the bank module
         win.pages[("bank",)].new_conversion.emit()

@@ -172,8 +172,8 @@ def book_invoices(
         f"""
         WITH {_DOCS_CTE}
         SELECT p.*, docs.doc_date, docs.number
-        FROM postings p JOIN docs ON docs.id = p.document_id
-        WHERE p.company_id = :company_id AND p.invoice IS NOT NULL
+        FROM postings p CROSS JOIN docs
+        WHERE docs.id = p.document_id AND p.company_id = :company_id AND p.invoice IS NOT NULL
           AND COALESCE(p.invoice_kind, '') = ''
         ORDER BY docs.doc_date, docs.number, p.line_no
         """,

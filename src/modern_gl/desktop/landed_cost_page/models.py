@@ -13,6 +13,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor
 
+from modern_gl.application.default_accounts import SUPPLIER, default_account
 from modern_gl.application.inventory import (
     LandedCostCharge,
     LandedCostTarget,
@@ -98,12 +99,7 @@ class ChargesModel(QAbstractTableModel):
         ]
 
     def default_row(self) -> ChargeRow:
-        account = self.s.catalog.by_code.get("60")
-        if account is not None and account.is_group:
-            account = next(
-                (a for a in self.s.catalog.leaf_accounts if a.code.startswith("60.")), None
-            )
-        return ChargeRow(account_id=account.id if account else None)
+        return ChargeRow(account_id=default_account(self.s.ledger, self.s.company_id, SUPPLIER))
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         return 0 if parent is not None and parent.isValid() else len(self.rows)

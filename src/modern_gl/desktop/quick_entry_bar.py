@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
 from modern_gl.application import quick_entry
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.currencies import rate_on
-from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import (
     DocumentData,
     PastPosting,
@@ -41,9 +40,7 @@ from modern_gl.desktop.quick_entry_card import EntryCard
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain.errors import LedgerError
-from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
 
 HELP = (
     "Enter — провести   ·   Shift+Enter — черновик   ·   Ctrl+Enter — открыть в форме   ·   "
@@ -263,12 +260,7 @@ class QuickEntryBar(QWidget):
         led, cid = self.s.ledger, self.s.company_id
         try:
             entry = self.parse()
-            with transaction(self.s.conn):
-                self._add_new_values(entry)
-                inputs = [self._input(n, ln) for n, ln in enumerate(entry.lines, start=1)]
-                day = entry.doc_date or self.s.working_date
-                create = led.post_new if post else led.create_draft
-                doc_id = create(cid, day, inputs, entry.memo)
+            doc_id = quick_entry.save_quick_entry(led, cid, entry, self.s.working_date, post)
         except LedgerError as e:
             self.s.catalog.reload()  # elements added in the rolled back transaction
             self._show(str(e), error=True)
@@ -276,7 +268,11 @@ class QuickEntryBar(QWidget):
         if entry.new_values:
             self.s.catalog.reload()
         number = load_document(self.s.conn, cid, doc_id).number
-        self.s.notify(tr("Документ №{n} проведён" if post else "Документ №{n} сохранён", n=number))
+        if post:  # «Undo»: back to a draft
+            message = tr("Документ №{n} проведён", n=number)
+            self.s.notify_undoable(message, lambda: led.unpost(cid, doc_id))
+        else:
+            self.s.notify(tr("Документ №{n} сохранён", n=number))
         self.history.append(text)
         self._back = 0
         self._past = None
@@ -312,37 +308,6 @@ class QuickEntryBar(QWidget):
         self.history.append(self.edit.text())
         self.edit.clear()
         self.open_form.emit(doc)
-
-    def _add_new_values(self, entry: quick_entry.QuickEntry) -> None:
-        for new in entry.new_values:  # a new counterparty comes before its new contract
-            owner = new.owner.id if isinstance(new.owner, quick_entry.NewValue) else new.owner
-            value_id = self.s.ledger.add_subconto_value(
-                self.s.company_id, new.kind_id, new.name, owner_id=owner
-            )
-            new.id = value_id
-            self.s.catalog.add_value(value_id, new.kind_id, new.name, owner_id=owner)
-            for index, side, pos in new.cells:
-                getattr(entry.lines[index], f"{side}_sc")[pos] = value_id
-
-    @staticmethod
-    def _input(n: int, ln: quick_entry.QuickLine) -> PostingInput:
-        if ln.debit is None or ln.credit is None:
-            raise LedgerError(
-                tr("строка {n}: в шаблоне не указан счёт — Ctrl+Enter откроет форму", n=n)
-            )
-        if ln.amount is None:
-            raise LedgerError(tr("строка {n}: не указана сумма", n=n))
-        return PostingInput(
-            ln.debit,
-            ln.credit,
-            from_minor(ln.amount),
-            tuple(ln.debit_sc),
-            tuple(ln.credit_sc),
-            ln.memo,
-            ln.currency_id,
-            None if ln.currency_amount is None else from_minor(ln.currency_amount),
-            ln.invoice,
-        )
 
 
 def _format(mark: Mark) -> QTextCharFormat:

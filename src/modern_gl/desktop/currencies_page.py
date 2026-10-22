@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.currencies import CurrencyInfo, Rate, latest_rates, list_rates
+from modern_gl.application.default_accounts import EXCHANGE_GAIN, EXCHANGE_LOSS, default_account
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -441,12 +442,12 @@ class CurrenciesPage(QWidget):
         dlg, lay, form = _dialog(self, tr("Переоценка валютных остатков"))
         day = date_edit(month_of(self.s.working_date).date_to, dlg)
         gain, loss = QComboBox(), QComboBox()
-        for box in (gain, loss):
+        for box, purpose in ((gain, EXCHANGE_GAIN), (loss, EXCHANGE_LOSS)):
             for a in accounts:
                 box.addItem(a.label, a.id)
-            default = cat.by_code.get("80")  # прибыли и убытки in the classic chart
-            if default is not None and box.findData(default.id) >= 0:
-                box.setCurrentIndex(box.findData(default.id))
+            default = default_account(self.s.ledger, self.s.company_id, purpose)
+            if default is not None and box.findData(default) >= 0:
+                box.setCurrentIndex(box.findData(default))
         form.addRow(tr("На дату"), day)
         form.addRow(tr("Положительные разницы (Кт)"), gain)
         form.addRow(tr("Отрицательные разницы (Дт)"), loss)

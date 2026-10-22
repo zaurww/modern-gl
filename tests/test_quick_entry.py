@@ -301,6 +301,7 @@ def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
     qtbot.addWidget(win)
     win.start()
     win.session.working_date = TODAY
+    win.show_place(("journal",))
     win.show()
     win.activateWindow()
     qtbot.waitUntil(win.isActiveWindow)

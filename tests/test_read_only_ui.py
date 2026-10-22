@@ -106,7 +106,7 @@ def test_nothing_new_is_started(viewer):
     viewer.open_template(None)
     viewer.show_import()
     assert len(viewer.pages) == pages
-    assert viewer.statusBar().currentMessage() == tr("Компания открыта только для просмотра")
+    assert viewer.toast.message() == tr("Компания открыта только для просмотра")
 
 
 def test_the_file_is_left_as_it_was(qtbot, company):

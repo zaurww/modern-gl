@@ -12,11 +12,12 @@
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка>` — после любых изменений UI смотреть их
 - Демо в консоли: `uv run python scripts/demo.py`
 - Размеры кода (самые большие места): `uv run python tests/test_code_size.py`
+- Замеры на большой базе: `uv run python scripts/benchmark.py <папка> --postings 100000`
 - AI-помощник (MCP): `uv run modern-gl-mcp` (только чтение; `--allow-drafts` — AI готовит черновики) — подключение в `docs/ASSISTANT.md`
 
 ## Структура
 - `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt.
-- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart` (+ `account_types` — классы и типы счетов), `templates`, `documents`, `validation`, `document_import`, `revaluation`, `opening`, `conversion`, `bank`; общее модулей — `module.py`); общие помощники — `application/common.py`.
+- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart` (+ `account_types` — классы и типы счетов), `templates`, `documents`, `validation`, `document_import`, `revaluation`, `opening`, `subconto_details`, `account_form`); модули — отдельные объекты над тем же соединением: `ledger.bank` (`bank`, `bank_statements`), `ledger.conversion`, `ledger.eqaime` (D93; общее модулей — `module.py`); счёт по умолчанию — `application/default_accounts.py` (по роли/типу, не по коду); общие помощники — `application/common.py`.
 - `src/modern_gl/application/inventory/` — склад: `Inventory` собран так же из групп (`catalog`, `drafts`, `stock`, `receipts` — черновики поступления, `movements`, `sales`, `landed_cost`, `accruals`, `posting`); `model` — константы и dataclass-строки, `amounts` — чистая арифметика.
 - `src/modern_gl/reporting/reports.py` — ОСВ, ОСВ по субконто, карточка, анализ счёта (агрегация в SQL); `reporting/report_common.py` — общее отчётов; `reporting/plaintext.py` — журнал для hledger (D79); `reporting/handover.py` — пакет «Передача дел» (D81); `reporting/inventory/` — склад (`choices`, `stock`, `documents`, `costs`, `declarations` — отчёт «Əlavə xərclər», D85).
 - `src/modern_gl/assistant` — MCP-сервер для AI (D83): `protocol` (JSON-RPC по stdio), `companies` (снимки файлов), `answers` (отчёты в JSON), `server` (инструменты, `main`); `drafts` + `draft_tools` — черновики от AI (D84, флаг `--allow-drafts`).
@@ -31,6 +32,7 @@
 - Схема меняется только новой миграцией; старые миграции не редактировать.
 - **База за одним модулем (D77):** `sqlite3` импортирует только `infrastructure`; типы `Connection`/`Row`/ошибки — из `infrastructure.db`; SQL — общий для SQLite и PostgreSQL (`string_agg`, не `GROUP_CONCAT`; без `PRAGMA`, `rowid`, `INSERT OR`) — следит `test_architecture.py`.
 - **Только склад (D90):** `session.stock_only` — страницы книг, корр. счета и ссылки на проводки не показываются; проводки создаются как обычно. Новая страница книг — в `SECTIONS`, но не в `STOCK_SECTIONS` (`main_window/sidebar.py`).
+- **Окно не открывает транзакцию (D93):** сценарий — один метод `Ledger`/`Inventory`; правила учёта — в `application`, не в виджете (`test_architecture.py`). Тяжёлое чтение страницы — через `Session.read` (у большой компании — в фоновом потоке, `desktop/background.py`); `fetch(conn)` читает только SQL, `present(data)` заполняет страницу.
 - **Только просмотр (D80):** компания может быть открыта снимком без права записи (`session.read_only`). Новая кнопка, которая что-то меняет, — через `hide_when_viewing(session.read_only, …)`; форма документа учитывает `session.read_only`; страница при открытии ничего не пишет — следит `tests/test_read_only_ui.py`.
 - Любое изменение логики учёта — с тестом, в котором ожидаемые цифры посчитаны вручную.
 - Сообщения об ошибках для пользователя — по-русски.

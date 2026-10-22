@@ -88,7 +88,9 @@ class LinesPart(BankOperationForm):
         conversion makes it)."""
         if account_id is None:
             return ()
-        values = self.s.ledger.named_subconto(self.s.company_id, account_id, tr("Комиссия банка"))
+        values = self.s.ledger.bank.named_subconto(
+            self.s.company_id, account_id, tr("Комиссия банка")
+        )
         self.s.catalog.reload()
         return values
 

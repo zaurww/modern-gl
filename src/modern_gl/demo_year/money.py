@@ -92,7 +92,7 @@ class Money(Firm):
     ) -> None:
         if bank is None:
             bank = {"51": self.bank_azn, "52": self.bank_eur, "54": self.deposit}[account]
-        self.ledger.save_bank_operation(
+        self.ledger.bank.save_bank_operation(
             self.cid,
             BankOperationInput(
                 day.isoformat(),
@@ -179,7 +179,7 @@ class Money(Firm):
         Central Bank."""
         cents = -(-cents // 10_000) * 10_000  # whole hundreds
         manat = int((cents * self.rate(code, day) * 1012 / 1000).to_integral_value())
-        self.ledger.save_conversion(
+        self.ledger.conversion.save_conversion(
             self.cid,
             ConversionInput(
                 day.isoformat(),

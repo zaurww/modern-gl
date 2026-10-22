@@ -3,6 +3,7 @@ and reports as open items that close back to where they were opened from."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import cast
 
 from PySide6.QtCore import (
@@ -26,12 +27,14 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.directories_page import DirectoriesPage
+from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window.company_files import CompanyFiles
 from modern_gl.desktop.main_window.sidebar import (
     ALL_OPEN,
     KEY_ROLE,
+    PLACE_KEYS,
     FocusablePage,
     NavDelegate,
     PageT,
@@ -43,7 +46,9 @@ from modern_gl.desktop.main_window.sidebar import (
     shown_places,
 )
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.toast import Toast
 from modern_gl.desktop.widgets import EmptyState
+from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.workspace import Workspace
 
@@ -66,7 +71,7 @@ class OpenPages(CompanyFiles):
         self.stack.currentChanged.connect(self._size_by_current_page)
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(central)
-        self.statusBar().setSizeGripEnabled(False)
+        self.toast = Toast(self)
 
         self.sidebar.nav.currentItemChanged.connect(self._on_nav)
         self.sidebar.nav.itemClicked.connect(self._on_nav_click)
@@ -77,7 +82,7 @@ class OpenPages(CompanyFiles):
 
     def _show_company(self, name: str) -> None:
         read_only = self.open_session.read_only
-        self.sidebar.company.setText(f"{name}   ▾")
+        self.sidebar.company.setText(name)
         viewing = f" — {tr('только просмотр')}" if read_only else ""
         self.setWindowTitle(f"{name}{viewing} — Modern GL")
         stock_only = self.open_session.stock_only
@@ -88,7 +93,7 @@ class OpenPages(CompanyFiles):
             for key, text in places:
                 self.sidebar.add_item(key, tr(text), place_icon(key))
         self.sidebar.add_section(tr("Открытые"))
-        self.show_place(("inventory",) if stock_only else ("journal",))
+        self.show_place(("home",))
 
     def _drop_pages(self) -> None:
         # quietly: clearing moves the current item, and that would open a page again
@@ -162,7 +167,7 @@ class OpenPages(CompanyFiles):
             self.sidebar.nav.blockSignals(True)
             self.sidebar.nav.setCurrentItem(item)
             self.sidebar.nav.blockSignals(False)
-        if isinstance(page, JournalPage):
+        if isinstance(page, JournalPage | HomePage):
             page.refresh()
         if isinstance(page, InventoryPage):
             page.refresh()
@@ -265,6 +270,14 @@ class OpenPages(CompanyFiles):
             return page.save(post=False)
         return answer == QMessageBox.StandardButton.Discard
 
+    def _current_place(self) -> tuple | None:
+        """The sidebar place shown (not an open document): kept when the window is rebuilt."""
+        key = self._key_of(self.stack.currentWidget())
+        return key if isinstance(key, tuple) and key in PLACE_KEYS else None
+
+    def _dirty_pages(self) -> list[QWidget]:
+        return [p for p in self.pages.values() if getattr(p, "is_dirty", lambda: False)()]
+
     def _confirm_close_all(self) -> bool:
         return all(self._confirm_close(p) for p in list(self.pages.values()))
 
@@ -298,8 +311,19 @@ class OpenPages(CompanyFiles):
                     return True
         return super().eventFilter(obj, event)
 
-    def notify(self, message: str) -> None:
-        self.statusBar().showMessage(message, 6000)
+    def notify(self, message: str, undo: Callable[[], None] | None = None) -> None:
+        self.toast.show_message(message, None if undo is None else lambda: self._undo(undo))
+
+    def _undo(self, undo: Callable[[], None]) -> None:
+        """«Undo» on the toast: done, then the page shown reads it again."""
+        try:
+            undo()
+        except LedgerError as e:
+            self.toast.show_message(str(e))
+            return
+        key = self._key_of(self.stack.currentWidget())
+        if key is not None:
+            self._activate(key)
 
     def show_place(self, key) -> None:
         if self.session is not None and key not in shown_places(self.session.stock_only):
@@ -309,7 +333,7 @@ class OpenPages(CompanyFiles):
         self._activate(key)
 
     def _show_no_company(self) -> None:
-        self.sidebar.company.setText(tr("Нет компании") + "   ▾")
+        self.sidebar.company.setText(tr("Нет компании"))
         self.sidebar.retranslate()
         self.setWindowTitle("Modern GL")
         page = EmptyState("○", tr("Нет компании"), tr("Создайте компанию в меню слева вверху."))

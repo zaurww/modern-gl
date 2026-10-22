@@ -21,7 +21,9 @@ from datetime import date
 
 from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
+from modern_gl.reporting.overview import Attention, attention_source
 from modern_gl.reporting.reports import _DOCS_CTE, COMMON, _params
 
 # documents of a status: drafts too, for the e-qaimə a payment may name
@@ -70,15 +72,18 @@ def invoice_report(
 def _gathered(
     conn: Connection, company_id: int, params: dict, status: str = "posted"
 ) -> dict[tuple[str, str], InvoiceRow]:
-    """The invoices of the documents of a status up to `date_to`, by (kind, number)."""
+    """The invoices of the documents of a status up to `date_to`, by (kind, number).
+    Postings with an invoice come first (CROSS JOIN keeps SQLite to that order): with
+    the documents first it read every invoice posting again for each document."""
     chart = _Chart(conn, company_id)
     rows: dict[tuple[str, str], InvoiceRow] = {}
     for p in conn.execute(
         f"""
         WITH {_STATUS_DOCS_CTE}
         SELECT p.*, docs.doc_date, docs.number
-        FROM postings p JOIN docs ON docs.id = p.document_id
-        WHERE p.company_id = :company_id AND p.invoice IS NOT NULL
+        FROM postings p CROSS JOIN docs
+        WHERE docs.id = p.document_id AND p.company_id = :company_id
+          AND p.invoice IS NOT NULL
         ORDER BY docs.doc_date, docs.number, p.line_no
         """,
         {**params, "status": status},
@@ -114,6 +119,11 @@ class _Chart:
             )
         }
         self.partner, self.contract = kinds.get("counterparty"), kinds.get("contract")
+        # per account, once: its type and where its partner and contract are
+        self.info = {
+            account_id: (a["account_type"], self.slot(a, self.partner), self.slot(a, self.contract))
+            for account_id, a in self.accounts.items()
+        }
 
     def slot(self, account: Row, kind: int | None) -> int | None:
         if kind is None:
@@ -123,16 +133,17 @@ class _Chart:
     def add(self, row: InvoiceRow, p: Row) -> None:
         """One posting of the invoice: settlement turnovers, partner, contract, ƏDV."""
         vat = deposit = False
-        types = {self.accounts[p[f"{side}_account_id"]]["account_type"] for side in SIDES}
+        sides = (
+            ("debit", "dt", self.info[p["debit_account_id"]]),
+            ("credit", "ct", self.info[p["credit_account_id"]]),
+        )
+        types = {info[0] for _, _, info in sides}
         # an advance set against the e-qaimə (D78: Dt 60.1 [e-qaimə] / Ct 60.2): only the
         # settlement side pays it, the advance side is no turnover of the e-qaimə
         offset = bool(types & ADVANCE_TYPES) and bool(types & {"payable", "receivable"})
-        for side, prefix in (("debit", "dt"), ("credit", "ct")):
-            account = self.accounts[p[f"{side}_account_id"]]
-            vat |= account["account_type"] in VAT_TYPES
-            deposit |= account["account_type"] == "vat_deposit"
-            partner_at = self.slot(account, self.partner)
-            kind = account["account_type"]
+        for side, prefix, (kind, partner_at, contract_at) in sides:
+            vat |= kind in VAT_TYPES
+            deposit |= kind == "vat_deposit"
             if not (kind in SETTLEMENT_TYPES or (kind is None and partner_at is not None)):
                 continue
             if offset and kind in ADVANCE_TYPES:
@@ -144,7 +155,6 @@ class _Chart:
             who = p[f"{prefix}_sc{partner_at}"] if partner_at else None
             if who is not None and who not in row.counterparties:
                 row.counterparties.append(who)
-            contract_at = self.slot(account, self.contract)
             if contract_at and row.contract_id is None:
                 row.contract_id = p[f"{prefix}_sc{contract_at}"]
         if vat:
@@ -301,3 +311,15 @@ def _portal(
         (company_id, int(not payable), tin, on_date, *statuses),
     )
     return [(r["number"], r["doc_date"], r["total"], r["vat"], True, PORTAL) for r in rows]
+
+
+@attention_source
+def unpaid_invoices(conn: Connection, company_id: int, day: str) -> list[Attention]:
+    """«Bu gün» (D86): e-qaimə not settled on the day — to suppliers, and from buyers."""
+    rows = invoice_report(conn, company_id, day, day, open_only=True)
+    owed = [r.balance for r in rows if r.balance < 0]
+    due = [r.balance for r in rows if r.balance > 0]
+    return [
+        Attention(tr("Неоплаченные e-qaimə поставщиков"), len(owed), ("invoices",), -sum(owed)),
+        Attention(tr("Неоплаченные e-qaimə покупателей"), len(due), ("invoices",), sum(due)),
+    ]

@@ -10,6 +10,7 @@ from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_mode
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
+from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_document_page.columns import ACCOUNT, ITEM, SC1
 from modern_gl.desktop.inventory_document_page.lines_base import InventoryGridRow
@@ -87,13 +88,15 @@ def test_new_company_file_may_be_a_warehouse_only(tmp_path):
 
 def test_sidebar_shows_only_the_warehouse_and_its_lists(window):
     assert places(window) == [
+        ("home",),
         ("inventory",),
         ("purchases",),
         ("sales",),
         ("directories",),
         ("currencies",),
     ]
-    assert isinstance(window.stack.currentWidget(), InventoryPage)  # it opens on the stock
+    assert isinstance(window.stack.currentWidget(), HomePage)  # «Bu gün» first (D86)
+    window.show_place(("inventory",))
     window.show_place(("journal",))  # Ctrl+1: the books are not shown
     window.new_document()  # Ctrl+N: no journal document
     assert isinstance(window.stack.currentWidget(), InventoryPage)

@@ -8,6 +8,7 @@ from datetime import date
 from modern_gl.application.common import closed_on, insert, now, pad_subconto
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.validation import PostingChecks
+from modern_gl.application.queries import journal_drafts
 from modern_gl.domain.dates import iso_date, ru_date
 from modern_gl.domain.errors import (
     LedgerError,
@@ -296,6 +297,37 @@ class DocumentCommands(PostingChecks):
     def post(self, company_id: int, doc_id: int) -> None:
         with transaction(self.conn):
             self._post(company_id, doc_id)
+
+    def update_and_post(
+        self,
+        company_id: int,
+        doc_id: int,
+        doc_date: date | str,
+        postings: Sequence[PostingInput],
+        memo: str = "",
+        layer: str = "common",
+    ) -> None:
+        """A draft saved with its edits and posted at once: all or nothing (a draft
+        that does not post keeps what it had)."""
+        with transaction(self.conn):
+            self.update_draft(company_id, doc_id, doc_date, postings, memo, layer)
+            self._post(company_id, doc_id)
+
+    def post_drafts(
+        self, company_id: int, day: date | str
+    ) -> tuple[list[int], list[tuple[int, str]]]:
+        """«Провести все» (D86): the journal's drafts dated up to the day, each in its own
+        transaction; one that does not post stays a draft. Returns the ids posted, and
+        (number, why) of those left."""
+        posted, left = [], []
+        for doc_id in journal_drafts(self.conn, company_id, day):
+            try:
+                self.post(company_id, doc_id)
+            except LedgerError as e:
+                left.append((self._document(company_id, doc_id)["number"], str(e)))
+            else:
+                posted.append(doc_id)
+        return posted, left
 
     def posting_problem(self, company_id: int, doc_id: int) -> str | None:
         """Why the draft would not post — the checks of posting, nothing written; None: it

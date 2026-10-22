@@ -52,6 +52,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.reports import COMMON, IFRS, TAX
 
 BOOKS = [("Общий учёт", COMMON), ("МСФО", IFRS), ("Налоговый учёт", TAX)]
@@ -217,7 +218,22 @@ class ReportPage(QWidget):
     # ---- to implement ----------------------------------------------------------------
 
     def build(self) -> None:
+        """Read and show the report on the window's thread (a page with fetch/show)."""
+        self.present(self.fetch(self.s.conn))
+
+    def fetch(self, conn: Connection) -> Any:
+        """What the report reads — on `conn`, which is a worker's own connection for a
+        large company (desktop.background): only SQL here, no widgets."""
         raise NotImplementedError
+
+    def present(self, data: Any) -> None:
+        """Fill the page with what fetch() read."""
+        raise NotImplementedError
+
+    def job(self) -> Callable[[Connection], Any]:
+        """fetch() with what it needs from the widgets taken now, on the window's thread
+        (a worker must not touch them); a page whose fetch reads widgets overrides it."""
+        return self.fetch
 
     def drill(self, row: Any) -> None:
         pass
@@ -243,11 +259,25 @@ class ReportPage(QWidget):
             )
             book = self.s.parallel_books and self.has_book
             self.header.subtitle.setText(self.params.describe(book))
+        if type(self).fetch is ReportPage.fetch:  # builds by itself (the chart)
+            try:
+                self.build()
+            except LedgerError as e:
+                self.s.notify(str(e))
+                return
+            self._shown()
+            return
+        self.s.read(self, self.job(), self._show_read, lambda e: self.s.notify(str(e)))
+
+    def _show_read(self, data: Any) -> None:
         try:
-            self.build()
+            self.present(data)
         except LedgerError as e:
             self.s.notify(str(e))
             return
+        self._shown()
+
+    def _shown(self) -> None:
         self.stack.setCurrentWidget(self.table if self.model.rows else self.empty)
         self._layout_columns()
         self.footer.setVisible(bool(self.footer.text()))

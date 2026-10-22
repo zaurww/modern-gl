@@ -23,6 +23,7 @@ ALLOCATION_METHODS = ("value", "quantity", "manual")
 # VAT rates are in hundredths of a percent; a receipt starts with the standard rate.
 VAT_RATE_SCALE = 10_000
 STANDARD_VAT_RATE = 1800
+VAT_DOCUMENTS = frozenset({"receipt", "sale"})  # the documents a line's VAT is on
 # the account a receipt's accrual goes to when the chart has none (D65)
 ACCRUED_CODE = "76H"
 # the accounts a sale posts to (roles) as the settings name them

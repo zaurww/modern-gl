@@ -115,7 +115,7 @@ class EqaimeImportDialog(EqaimeImportForm):
         """Remember what the portal shows (D53), warn of changes in reconciled months."""
         listed = [i.listed for i in fetched.invoices if i.listed is not None]
         try:
-            self.s.ledger.remember_portal(self.s.company_id, [*fetched.rechecked, *listed])
+            self.s.ledger.eqaime.remember_portal(self.s.company_id, [*fetched.rechecked, *listed])
         except LedgerError as exc:
             self.status.setText(str(exc))
         warning = changes_warning(self.s.conn, self.s.company_id)

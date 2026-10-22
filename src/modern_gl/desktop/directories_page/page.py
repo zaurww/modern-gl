@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.application.inventory import Inventory
+from modern_gl.application.ledger import ValueDetails
 from modern_gl.desktop.directories_page.form import DirectoriesForm
 from modern_gl.desktop.directories_page.tags import TagsDialog
 from modern_gl.desktop.directories_page.values import (
@@ -40,7 +41,6 @@ from modern_gl.desktop.directories_page.values import (
 from modern_gl.desktop.inventory_page import open_item
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
 from modern_gl.reporting.inventory import item_details
 
 
@@ -163,17 +163,15 @@ class DirectoriesPage(DirectoriesForm):
             tax = old_tax
 
         def save() -> None:
-            cid = self.s.company_id
-            with transaction(self.s.conn):
-                if name != value.name:
-                    self.s.ledger.update_subconto_value(cid, value.id, name, value.code)
-                if dlg.owner is not None and owner != value.owner_id:
-                    self.s.ledger.set_subconto_value_owner(cid, value.id, owner)
-                if dlg.currency is not None and currency != value.currency_id:
-                    self.s.ledger.set_subconto_value_currency(cid, value.id, currency)
-                if tax != old_tax:
-                    self.s.ledger.set_subconto_value_tax(cid, value.id, *tax)
-                self.s.ledger.set_subconto_value_tags(cid, value.id, dlg.tags.chosen())
+            details = ValueDetails(owner, currency, tax, tuple(dlg.tags.chosen()))
+            self.s.ledger.save_detailed_value(
+                self.s.company_id,
+                value.id,
+                name,
+                details,
+                owner_shown=dlg.owner is not None,
+                currency_shown=dlg.currency is not None,
+            )
 
         self._apply(save, tr("Сохранено: {text}", text=name), value.id)
 

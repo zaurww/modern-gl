@@ -9,9 +9,11 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from itertools import accumulate
 
-from modern_gl.application.bank.places import BankPlace
-from modern_gl.application.bank.statement import StatementLine, statement
+from modern_gl.application.bank.places import BankPlace, bank_places
+from modern_gl.application.bank.statement import statement
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting.overview import Attention, attention_source
 
 OPEN, OK, DIFF = "open", "ok", "diff"  # not checked against the bank; agrees; does not
 EVER = ("1900-01-01", "9999-12-31")
@@ -52,7 +54,10 @@ def bank_statements(conn: Connection, company_id: int, place: BankPlace) -> list
     lines = statement(conn, company_id, place, *EVER).lines
     posted = [line for line in lines if line.status == "posted"]
     days = [line.doc_date for line in posted]
-    net = list(accumulate((line.money_in - line.money_out for line in posted), initial=0))
+    # running sums: a period's figures are two lookups, not a pass over the lines
+    money_in = list(accumulate((line.money_in for line in posted), initial=0))
+    money_out = list(accumulate((line.money_out for line in posted), initial=0))
+    draft_days = sorted(line.doc_date for line in lines if line.status == "draft")
     periods = _entered(conn, company_id, place)
     covered = [(p[1], p[2]) for p in periods]
     for day in sorted({line.doc_date for line in lines}):
@@ -62,17 +67,17 @@ def bank_statements(conn: Connection, company_id: int, place: BankPlace) -> list
     result = []
     for statement_id, start, end, bank_closing in periods:
         first, last = bisect_left(days, start), bisect_right(days, end)
-        inside = posted[first:last]
+        drafts = bisect_right(draft_days, end) - bisect_left(draft_days, start)
         result.append(
             BankStatement(
                 statement_id,
                 start,
                 end,
-                net[first],
-                sum(line.money_in for line in inside),
-                sum(line.money_out for line in inside),
-                len(inside),
-                _drafts_in(lines, start, end),
+                money_in[first] - money_out[first],
+                money_in[last] - money_in[first],
+                money_out[last] - money_out[first],
+                last - first,
+                drafts,
                 bank_closing,
             )
         )
@@ -93,5 +98,17 @@ def _entered(
     ]
 
 
-def _drafts_in(lines: list[StatementLine], start: str, end: str) -> int:
-    return sum(1 for line in lines if line.status == "draft" and start <= line.doc_date <= end)
+@attention_source
+def bank_attention(conn: Connection, company_id: int, day: str) -> list[Attention]:
+    """«Bu gün» (D86): statements whose balance is not the bank's, and bank operations
+    left as drafts — up to the day."""
+    differ = drafts = 0
+    for place in bank_places(conn, company_id):
+        for st in bank_statements(conn, company_id, place):
+            if st.date_from <= day:
+                differ += st.status == DIFF
+                drafts += st.drafts
+    return [
+        Attention(tr("Выписки не сходятся с банком"), differ, ("bank",)),
+        Attention(tr("Черновики в банке"), drafts, ("bank",)),
+    ]

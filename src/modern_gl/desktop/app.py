@@ -49,7 +49,7 @@ def main() -> int:
     app.setApplicationName("Modern GL")
     app.setOrganizationName("ModernGL")
     settings = QSettings()
-    theme.set_theme(str(settings.value("theme", theme.DEFAULT_THEME)))
+    theme.use_theme(str(settings.value("theme", theme.DEFAULT_THEME)))
     theme.apply(app)
     qt_texts.install(app)
     select_whole_on_entry(app)

@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QByteArray, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
 FOLDER = Path(__file__).parent / "resources" / "icons"
@@ -35,10 +35,20 @@ GLYPHS: dict[str, str] = {
     "report": "chart-column",
     "import": "import",
     "today": "sun",
+    "home": "sun",
     "search": "search",
     "next": "chevron-right",
     "more": "ellipsis",
     "check": "check",
+    "account": "hash",
+    "counterparty": "building-2",
+    "command": "zap",
+    "palette": "command",
+    "attention": "circle-alert",
+    "money": "wallet",
+    "down": "chevron-down",
+    "back": "arrow-left",
+    "forward": "arrow-right",
 }
 
 _CACHE: dict[tuple[str, str, int, str], QIcon] = {}
@@ -69,27 +79,21 @@ def icon(name: str, color: str, size: int = 18, selected: str = "") -> QIcon:
 
 
 def status_mark(posted: bool, accent: str, amber: str, size: int = 16) -> QIcon:
-    """A document's status: a posted one — a plain check in the accent; a draft — a small
-    amber dot, «still to do». No circle outline: that reads as a checkbox to click (D73)."""
+    """A document's status: a posted one — Lucide's check in the accent; a draft — a small
+    amber dot, «still to do» (a mark, not an icon). No circle outline: that reads as a
+    checkbox to click (D73)."""
+    if posted:
+        return icon("check", accent, size, selected=accent)
     pm = QPixmap(size * 2, size * 2)  # 2x for HiDPI
     pm.setDevicePixelRatio(2)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
     s = size / 16
-    if posted:
-        pen = QPen(QColor(accent), 2.0 * s)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        p.setPen(pen)
-        p.drawPolyline(
-            [QPointF(3.5 * s, 8.5 * s), QPointF(6.8 * s, 11.6 * s), QPointF(12.5 * s, 4.8 * s)]
-        )
-    else:
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(amber))
-        p.drawEllipse(QPointF(8 * s, 8 * s), 3.5 * s, 3.5 * s)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(amber))
+    p.drawEllipse(QPointF(8 * s, 8 * s), 3.5 * s, 3.5 * s)
     p.end()
-    icon = QIcon(pm)
-    icon.addPixmap(pm, QIcon.Mode.Selected)  # keep the color when the row is selected
-    return icon
+    dot = QIcon(pm)
+    dot.addPixmap(pm, QIcon.Mode.Selected)  # keep the color when the row is selected
+    return dot

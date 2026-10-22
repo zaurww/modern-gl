@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.catalog import AccountInfo
+from modern_gl.application.ledger import AccountForm
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, class_icon, type_choices
@@ -23,7 +24,6 @@ from modern_gl.domain.accounts import TYPE_CLASS
 from modern_gl.domain.currency import CURRENCY_ONLY, CURRENCY_OPTIONAL, NO_CURRENCY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
 
 AUTO = "auto"  # type combobox: let the ledger decide (the parent's type and class)
 CURRENCY_CHOICES = (
@@ -265,44 +265,23 @@ class AccountDialog(QDialog):
         while subconto and subconto[-1] is None:
             subconto.pop()
         account_class, account_type = self._choice()
+        form = AccountForm(
+            code,
+            name,
+            parent_id=self.parent_box.currentData() if self.account is None else None,
+            is_group=group,
+            subconto=subconto,
+            account_class=account_class,
+            account_type=account_type,
+            contra=self.contra.isChecked(),
+            two_sided=two_sided,
+            currency=self.currency.currentData(),
+            optional=frozenset(self._optional_positions(subconto)),
+        )
         try:
-            with transaction(self.s.conn):
-                if self.account is None:
-                    parent_id = self.parent_box.currentData()
-                    if parent_id and not self.s.catalog.accounts[parent_id].is_group:
-                        # Adding the first subaccount turns a plain account into a group.
-                        led.update_account(cid, parent_id, is_group=True)
-                    saved_id = led.add_account(
-                        cid,
-                        code,
-                        name,
-                        two_sided=two_sided,
-                        parent=parent_id,
-                        is_group=group,
-                        subconto=subconto,
-                        account_class=account_class,
-                        account_type=account_type,
-                        contra=self.contra.isChecked(),
-                        currency=self.currency.currentData(),
-                    )
-                else:
-                    a = self.account
-                    saved_id = a.id
-                    led.update_account(
-                        cid,
-                        a.id,
-                        new_code=code,
-                        name=name,
-                        two_sided=two_sided,
-                        is_group=group,
-                        subconto=subconto,
-                        currency=self.currency.currentData(),
-                    )
-                    if account_class != a.account_class or self.contra.isChecked() != a.contra:
-                        led.set_account_class(cid, a.id, account_class, self.contra.isChecked())
-                    if account_type != a.account_type:
-                        led.set_account_type(cid, a.id, account_type)
-                led.set_optional_subconto(cid, saved_id, self._optional_positions(subconto))
+            saved_id = led.save_account_form(
+                cid, None if self.account is None else self.account.id, form
+            )
         except (LedgerError, KeyError) as e:
             self.error.setText(str(e).strip("'\""))
             self.error.show()

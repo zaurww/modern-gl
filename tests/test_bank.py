@@ -169,7 +169,7 @@ def postings(ledger, f, operation_id):
 def test_payment_to_supplier_posts_and_closes_the_e_qaime(ledger, firm):
     f = firm
     acc, v = f["acc"], f["v"]
-    op_id = ledger.save_bank_operation(f["cid"], pay_alfa(f), post=True)
+    op_id = ledger.bank.save_bank_operation(f["cid"], pay_alfa(f), post=True)
     [p] = postings(ledger, f, op_id)
     assert (p.debit_account_id, p.credit_account_id, p.amount) == (acc["60.1"], acc["51"], 118000)
     # the counterparty of the operation fills the line's counterparty position
@@ -187,7 +187,7 @@ def test_payment_to_supplier_posts_and_closes_the_e_qaime(ledger, firm):
 def test_receipt_split_into_two_e_qaime(ledger, firm):
     f = firm
     acc, v = f["acc"], f["v"]
-    op_id = ledger.save_bank_operation(f["cid"], from_beta(f), post=True)
+    op_id = ledger.bank.save_bank_operation(f["cid"], from_beta(f), post=True)
     lines = postings(ledger, f, op_id)
     assert [(p.debit_account_id, p.credit_account_id, p.amount, p.invoice) for p in lines] == [
         (acc["51"], acc["62.1"], 50000, "MT010"),
@@ -199,7 +199,7 @@ def test_receipt_split_into_two_e_qaime(ledger, firm):
 
 def test_operation_in_currency_at_the_rate_of_the_day(ledger, firm):
     f = firm
-    op_id = ledger.save_bank_operation(f["cid"], usd_fee(f), post=True)
+    op_id = ledger.bank.save_bank_operation(f["cid"], usd_fee(f), post=True)
     [p] = postings(ledger, f, op_id)
     assert (p.amount, p.currency_id, p.currency_amount) == (340, f["usd"], 200)
     assert p.credit_subconto == (f["v"]["usd"], None, None)
@@ -208,13 +208,15 @@ def test_operation_in_currency_at_the_rate_of_the_day(ledger, firm):
 def test_no_rate_no_posting(ledger, firm):
     f = firm
     with pytest.raises(ValidationError, match=r"нет курса USD на 27\.02\.2026"):
-        ledger.save_bank_operation(f["cid"], replace(usd_fee(f), doc_date="2026-02-27"), post=True)
+        ledger.bank.save_bank_operation(
+            f["cid"], replace(usd_fee(f), doc_date="2026-02-27"), post=True
+        )
 
 
 def test_trial_balance_after_the_month(ledger, firm):
     f = firm
     for data in (pay_alfa(f), from_beta(f), usd_fee(f)):
-        ledger.save_bank_operation(f["cid"], data, post=True)
+        ledger.bank.save_bank_operation(f["cid"], data, post=True)
     rows = {
         r.code: r for r in trial_balance(ledger.conn, f["cid"], "2026-03-01", "2026-03-31").rows
     }
@@ -228,15 +230,15 @@ def test_trial_balance_after_the_month(ledger, firm):
 def test_draft_has_no_postings_until_posted_and_keeps_its_number(ledger, firm):
     f = firm
     cid = f["cid"]
-    op_id = ledger.save_bank_operation(cid, pay_alfa(f, lines=()), post=False)
+    op_id = ledger.bank.save_bank_operation(cid, pay_alfa(f, lines=()), post=False)
     op = load_bank_operation(ledger.conn, cid, op_id)
     assert (op.status, op.lines) == ("draft", ())
     assert load_document(ledger.conn, cid, op.document_id).postings == []
-    ledger.save_bank_operation(cid, pay_alfa(f), op_id, post=True)
+    ledger.bank.save_bank_operation(cid, pay_alfa(f), op_id, post=True)
     posted = load_bank_operation(ledger.conn, cid, op_id)
     assert (posted.status, posted.number) == ("posted", op.number)
     # changed in place (D32): the same document and number, the new amount
-    ledger.save_bank_operation(
+    ledger.bank.save_bank_operation(
         cid,
         pay_alfa(f, lines=(BankLine(f["acc"]["60.1"], 100000, (None, f["v"]["contract"])),)),
         op_id,
@@ -246,19 +248,19 @@ def test_draft_has_no_postings_until_posted_and_keeps_its_number(ledger, firm):
     assert (again.document_id, again.number) == (op.document_id, op.number)
     assert [p.amount for p in postings(ledger, f, op_id)] == [100000]
     with pytest.raises(ValidationError, match="сначала отмените проведение"):
-        ledger.save_bank_operation(cid, pay_alfa(f), op_id, post=False)
+        ledger.bank.save_bank_operation(cid, pay_alfa(f), op_id, post=False)
 
 
 def test_unpost_and_delete(ledger, firm):
     f = firm
     cid = f["cid"]
-    op_id = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    op_id = ledger.bank.save_bank_operation(cid, pay_alfa(f), post=True)
     doc_id = load_bank_operation(ledger.conn, cid, op_id).document_id
-    ledger.unpost_bank_operation(cid, op_id)
+    ledger.bank.unpost_bank_operation(cid, op_id)
     assert load_document(ledger.conn, cid, doc_id).postings == []
     assert load_bank_operation(ledger.conn, cid, op_id).status == "draft"
-    ledger.save_bank_operation(cid, pay_alfa(f), op_id, post=True)
-    ledger.delete_bank_operation(cid, op_id)
+    ledger.bank.save_bank_operation(cid, pay_alfa(f), op_id, post=True)
+    ledger.bank.delete_bank_operation(cid, op_id)
     assert bank_operation_of_document(ledger.conn, cid, doc_id) is None
     count = ledger.conn.execute("SELECT COUNT(*) FROM documents WHERE id = ?", (doc_id,))
     assert count.fetchone()[0] == 0
@@ -267,7 +269,7 @@ def test_unpost_and_delete(ledger, firm):
 def test_the_journal_does_not_touch_its_postings(ledger, firm):
     f = firm
     cid = f["cid"]
-    op_id = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    op_id = ledger.bank.save_bank_operation(cid, pay_alfa(f), post=True)
     doc_id = load_bank_operation(ledger.conn, cid, op_id).document_id
     assert load_document(ledger.conn, cid, doc_id).bank_operation_id == op_id
     assert not load_document(ledger.conn, cid, doc_id).editable
@@ -282,7 +284,7 @@ def test_the_journal_refuses_by_the_owners_view_alone(ledger, firm, monkeypatch)
     refuses, in general terms."""
     f = firm
     cid = f["cid"]
-    op_id = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    op_id = ledger.bank.save_bank_operation(cid, pay_alfa(f), post=True)
     doc_id = load_bank_operation(ledger.conn, cid, op_id).document_id
     owners = ledger.conn.execute(
         "SELECT module, role FROM document_owners WHERE company_id = ? AND document_id = ?",
@@ -314,7 +316,7 @@ def test_what_cannot_be_posted(ledger, firm):
     ]
     for data, message in cases:
         with pytest.raises(ValidationError, match=message):
-            ledger.save_bank_operation(cid, data, post=True)
+            ledger.bank.save_bank_operation(cid, data, post=True)
 
 
 def test_transfer_between_own_accounts(ledger, firm):
@@ -328,7 +330,7 @@ def test_transfer_between_own_accounts(ledger, firm):
         lines=(BankLine(acc["51"], 300000, (v["pasha"],)),),
         memo="Перевод на PAŞA",
     )
-    op_id = ledger.save_bank_operation(cid, data, post=True)
+    op_id = ledger.bank.save_bank_operation(cid, data, post=True)
     [p] = postings(ledger, f, op_id)
     assert (p.debit_subconto[0], p.credit_subconto[0], p.amount) == (v["pasha"], v["azn"], 300000)
     places = {pl.value_id: pl for pl in bank_places(ledger.conn, cid)}
@@ -343,16 +345,16 @@ def test_vat_deposit_pays_only_vat(ledger, firm):
     deposit = ledger.add_subconto_value(cid, f["kind"]["bank_account"], "ƏDV depozit")
     base = pay_alfa(f, account_id=acc["55"], subconto=(deposit,))
     with pytest.raises(ValidationError, match="депозитного счёта ƏDV"):
-        ledger.save_bank_operation(cid, replace(base, kind=OTHER), post=True)
+        ledger.bank.save_bank_operation(cid, replace(base, kind=OTHER), post=True)
     # a draft may be anything: the rule is checked when it is posted
-    draft = ledger.save_bank_operation(cid, replace(base, kind=OTHER), post=False)
+    draft = ledger.bank.save_bank_operation(cid, replace(base, kind=OTHER), post=False)
     tax = replace(
         base,
         kind=TAX,
         counterparty_id=None,
         lines=(BankLine(acc["68.1"], 18000),),
     )
-    ledger.save_bank_operation(cid, tax, draft, post=True)
+    ledger.bank.save_bank_operation(cid, tax, draft, post=True)
     [p] = postings(ledger, f, draft)
     assert (p.debit_account_id, p.credit_account_id, p.amount) == (acc["68.1"], acc["55"], 18000)
 
@@ -374,9 +376,9 @@ def test_a_payment_and_its_vat_from_the_deposit_are_two_operations(ledger, firm)
         lines=(replace(pay_alfa(f).lines[0], amount=18000),),
     )
     with pytest.raises(ValidationError, match="депозитного счёта ƏDV"):
-        ledger.save_bank_payment(cid, bank, replace(vat, kind=OTHER), post=True)
+        ledger.bank.save_bank_payment(cid, bank, replace(vat, kind=OTHER), post=True)
     assert ledger.conn.execute("SELECT COUNT(*) FROM bank_operations").fetchone()[0] == 0
-    first, second = ledger.save_bank_payment(cid, bank, vat, post=True)
+    first, second = ledger.bank.save_bank_payment(cid, bank, vat, post=True)
     [p] = postings(ledger, f, first)
     assert (p.debit_account_id, p.credit_account_id, p.amount, p.invoice) == (
         acc["60.1"],
@@ -399,7 +401,7 @@ def test_last_lines_suggest_the_account_of_the_counterparty(ledger, firm):
     cid, acc, v = f["cid"], f["acc"], f["v"]
     # nothing paid through the bank yet: nothing to suggest
     assert last_lines(ledger.conn, cid, OUT, v["alfa"]) == []
-    ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    ledger.bank.save_bank_operation(cid, pay_alfa(f), post=True)
     assert last_lines(ledger.conn, cid, OUT, v["alfa"]) == [
         BankLine(acc["60.1"], 0, (v["alfa"], v["contract"], None))
     ]
@@ -417,7 +419,7 @@ def test_last_lines_suggest_the_account_of_the_counterparty(ledger, firm):
 
 def test_reference_finds_the_operation(ledger, firm):
     f = firm
-    op_id = ledger.save_bank_operation(f["cid"], pay_alfa(f, reference=" FT2603 "), post=False)
+    op_id = ledger.bank.save_bank_operation(f["cid"], pay_alfa(f, reference=" FT2603 "), post=False)
     assert find_bank_operation(ledger.conn, f["cid"], "FT2603") == op_id
     assert find_bank_operation(ledger.conn, f["cid"], "") is None
 
@@ -444,8 +446,8 @@ def test_statement_with_balances_and_drafts(ledger, firm):
     f = firm
     cid, v = f["cid"], f["v"]
     for data in (pay_alfa(f), from_beta(f), usd_fee(f)):
-        ledger.save_bank_operation(cid, data, post=True)
-    draft = ledger.save_bank_operation(
+        ledger.bank.save_bank_operation(cid, data, post=True)
+    draft = ledger.bank.save_bank_operation(
         cid,
         pay_alfa(f, doc_date="2026-03-08", lines=(BankLine(f["acc"]["60.1"], 5000),)),
         post=False,
@@ -507,10 +509,10 @@ def test_operations_move_to_another_bank_account(ledger, firm):
     number; Kapital AZN is back to 10 000.00, PAŞA AZN −1 180.00. A draft moves too."""
     f = firm
     cid, acc, v = f["cid"], f["acc"], f["v"]
-    paid = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
-    draft = ledger.save_bank_operation(cid, pay_alfa(f, memo="черновик"), post=False)
+    paid = ledger.bank.save_bank_operation(cid, pay_alfa(f), post=True)
+    draft = ledger.bank.save_bank_operation(cid, pay_alfa(f, memo="черновик"), post=False)
     number = load_bank_operation(ledger.conn, cid, paid).number
-    ledger.move_bank_operations(cid, [paid, draft], acc["51"], (v["pasha"],))
+    ledger.bank.move_bank_operations(cid, [paid, draft], acc["51"], (v["pasha"],))
     moved = load_bank_operation(ledger.conn, cid, paid)
     assert (moved.number, moved.status, moved.subconto[0]) == (number, "posted", v["pasha"])
     assert load_bank_operation(ledger.conn, cid, draft).subconto[0] == v["pasha"]
@@ -523,15 +525,15 @@ def test_operations_move_to_another_bank_account(ledger, firm):
 def test_an_operation_does_not_move_to_another_currency_or_onto_itself(ledger, firm):
     f = firm
     cid, acc, v = f["cid"], f["acc"], f["v"]
-    paid = ledger.save_bank_operation(cid, pay_alfa(f), post=True)
+    paid = ledger.bank.save_bank_operation(cid, pay_alfa(f), post=True)
     with pytest.raises(ValidationError, match="валют"):
-        ledger.move_bank_operations(cid, [paid], acc["52"], (v["usd"],))
+        ledger.bank.move_bank_operations(cid, [paid], acc["52"], (v["usd"],))
     transfer = pay_alfa(
         f, kind=TRANSFER, counterparty_id=None, lines=(BankLine(acc["51"], 100, (v["pasha"],)),)
     )
-    moved = ledger.save_bank_operation(cid, transfer, post=True)
+    moved = ledger.bank.save_bank_operation(cid, transfer, post=True)
     with pytest.raises(ValidationError, match="сам на себя"):
-        ledger.move_bank_operations(cid, [moved], acc["51"], (v["pasha"],))
+        ledger.bank.move_bank_operations(cid, [moved], acc["51"], (v["pasha"],))
 
 
 def test_the_kind_of_an_operation_by_the_account_of_its_line():
@@ -593,7 +595,7 @@ def test_an_advance_is_offset_against_a_later_e_qaime(ledger, firm):
     Dt 60.1 [ALFA, MT002] / Ct 60.2 [ALFA]; MT002 still owes 80.00, 60.2 is zero."""
     f = firm
     cid, acc, v = f["cid"], f["acc"], f["v"]
-    ledger.save_bank_operation(
+    ledger.bank.save_bank_operation(
         cid,
         pay_alfa(
             f,
@@ -620,7 +622,7 @@ def test_an_advance_is_offset_against_a_later_e_qaime(ledger, firm):
     )
     a602 = ledger.account_id(cid, "60.2")
     assert counterparty_balance(ledger.conn, cid, a602, v["alfa"], "2026-03-31") == 32_000
-    ledger.offset_advances(
+    ledger.bank.offset_advances(
         cid,
         "2026-03-07",
         v["alfa"],

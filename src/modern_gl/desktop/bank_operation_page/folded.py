@@ -3,14 +3,14 @@ part typed beside the amount (D69)."""
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 from PySide6.QtCore import QTimer
 
 from modern_gl.application.bank import (
     IN,
     BankOperationInput,
     BankPlace,
+    split_by_deposit,
+    vat_deposit_part,
 )
 from modern_gl.desktop.bank_operation_page.common import (
     SEVERAL,
@@ -84,11 +84,12 @@ class FoldedPart(BankOperationForm):
             return
         empty = not row.amount.text().strip() and not self.vat_amount.text().strip()
         if isinstance(chosen, OpenInvoice) and empty:
-            if self.deposit_shown:  # the ƏDV from the deposit, the rest from the bank
-                row.amount.setText(amount_text(chosen.amount - chosen.vat))
-                self.vat_amount.setText(amount_text(chosen.vat) if chosen.vat else "")
-            elif self._on_deposit():  # the deposit itself pays only the ƏDV
-                row.amount.setText(amount_text(chosen.vat or chosen.amount))
+            on_deposit = not self.deposit_shown and self._on_deposit()
+            bank, vat = split_by_deposit(chosen.amount, chosen.vat, self.deposit_shown, on_deposit)
+            if self.deposit_shown or on_deposit:
+                row.amount.setText(amount_text(bank))
+            if self.deposit_shown:
+                self.vat_amount.setText(amount_text(vat) if vat else "")
         row.invoice.setCurrentIndex(i)
         row.invoice.activated.emit(i)
 
@@ -158,16 +159,9 @@ class FoldedPart(BankOperationForm):
         text = self.vat_amount.text().strip()
         if not self.deposit_shown or not text or not data.lines:
             return None
-        amount = to_minor(text)
         place = self.deposit.currentData()
-        if amount == 0 or not isinstance(place, BankPlace):
+        if not isinstance(place, BankPlace):
             return None
-        return replace(
-            data,
-            doc_date=edited_date(self.deposit_date).isoformat(),
-            account_id=place.account_id,
-            subconto=self._place_subconto(place),
-            currency_id=None,
-            reference="",
-            lines=(replace(data.lines[0], amount=amount),),
-        )
+        day = edited_date(self.deposit_date).isoformat()
+        subconto = self._place_subconto(place)
+        return vat_deposit_part(data, place.account_id, subconto, to_minor(text), day)

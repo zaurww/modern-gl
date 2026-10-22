@@ -6,9 +6,11 @@ UI and importers call these methods; they never write ledger tables directly.
 
 from __future__ import annotations
 
+from functools import cached_property
+
+from modern_gl.application.ledger.account_form import AccountForm, AccountFormCommands
 from modern_gl.application.ledger.bank import BankCommands
 from modern_gl.application.ledger.bank_statements import BankStatementCommands
-from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.companies import CompanyCommands
 from modern_gl.application.ledger.conversion import ConversionCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
@@ -23,35 +25,69 @@ from modern_gl.application.ledger.inputs import (
     PostingInput,
     TemplateLine,
 )
-from modern_gl.application.ledger.opening import OpeningBalanceCommands
+from modern_gl.application.ledger.opening import OpeningBalanceCommands, opening_posting
 from modern_gl.application.ledger.revaluation import RevaluationCommands
-from modern_gl.application.ledger.subconto import SubcontoCommands
+from modern_gl.application.ledger.subconto_details import (
+    NO_TAX,
+    SubcontoDetailCommands,
+    ValueDetails,
+)
 from modern_gl.application.ledger.templates import TemplateCommands
 
 __all__ = [
     "DEFAULT_LAYERS",
+    "NO_TAX",
     "SIDES",
+    "AccountForm",
+    "BankModule",
+    "ConversionModule",
+    "EqaimeModule",
     "ImportOutcome",
     "ImportedDocument",
     "Ledger",
     "PostingInput",
     "TemplateLine",
+    "ValueDetails",
+    "opening_posting",
 ]
+
+
+class BankModule(BankCommands, BankStatementCommands):
+    """The bank (D47, D78): bank accounts, statements, operations, advances."""
+
+
+class ConversionModule(ConversionCommands):
+    """Currency conversion (D44)."""
+
+
+class EqaimeModule(EqaimeCommands):
+    """E-qaimə of the portal: what it showed, and what was reconciled (D52)."""
 
 
 class Ledger(
     CompanyCommands,
     CurrencyCommands,
-    BankCommands,
-    BankStatementCommands,
-    ConversionCommands,
-    EqaimeCommands,
     OpeningBalanceCommands,
-    ChartCommands,
+    AccountFormCommands,
     TemplateCommands,
     DocumentImportCommands,
     RevaluationCommands,
     DocumentCommands,
-    SubcontoCommands,
+    SubcontoDetailCommands,
 ):
-    """All write use cases of one database; each group lives in its own module."""
+    """The core's write use cases of one database (each group in its own module). The
+    modules are objects of their own over the same connection — `ledger.bank`,
+    `ledger.conversion`, `ledger.eqaime` (debt 2, D71): the core knows none of them, and
+    a module can be left out of a company without touching the core."""
+
+    @cached_property
+    def bank(self) -> BankModule:
+        return BankModule(self.conn, self.actor)
+
+    @cached_property
+    def conversion(self) -> ConversionModule:
+        return ConversionModule(self.conn, self.actor)
+
+    @cached_property
+    def eqaime(self) -> EqaimeModule:
+        return EqaimeModule(self.conn, self.actor)

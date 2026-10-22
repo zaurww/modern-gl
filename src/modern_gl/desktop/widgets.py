@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.desktop import icons
 from modern_gl.desktop.icons import status_mark
 from modern_gl.desktop.theme import P, check_icon, dot_icon, fonts
 from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_NAMES
@@ -122,10 +123,30 @@ def hide_when_viewing(read_only: bool, *widgets: QWidget) -> None:
 MenuItem = tuple[str, Callable[[], object]] | None  # None: a separator
 
 
+def icon_button(name: str, tooltip: str) -> QPushButton:
+    """A quiet button that is only a Lucide icon («⋯», ←, →); what it does — in the tip."""
+    b = button("", "more", tooltip)
+    b.setIcon(icons.icon(name, P.secondary))
+    b.setIconSize(QSize(18, 18))
+    return b
+
+
+def trailing_icon(b: QPushButton, name: str = "down") -> QPushButton:
+    """A Lucide icon at the right end of a button: the chevron of one that opens a menu."""
+    lay = QHBoxLayout(b)
+    lay.setContentsMargins(0, 0, 8, 0)
+    lay.addStretch(1)
+    mark = QLabel()
+    mark.setPixmap(icons.icon(name, P.secondary, 14).pixmap(14, 14))
+    mark.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+    lay.addWidget(mark)
+    return b
+
+
 def more_button(items: Callable[[], list[MenuItem]], tooltip: str = "") -> QPushButton:
-    """ "⋯": the less frequent actions of a page in a menu, so one main action stands
+    """«⋯»: the less frequent actions of a page in a menu, so one main action stands
     out (as in Things). `items()` is asked each time, so the menu fits the moment."""
-    return menu_button(button("⋯", "more", tooltip or tr("Ещё")), items)
+    return menu_button(icon_button("more", tooltip or tr("Ещё")), items)
 
 
 def menu_button(b: QPushButton, items: Callable[[], list[MenuItem]]) -> QPushButton:
