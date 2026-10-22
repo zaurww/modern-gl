@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import (
     QGuiApplication,
     QKeySequence,
@@ -24,6 +24,7 @@ from modern_gl.application.queries import (
 from modern_gl.desktop import theme
 from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.bank_page import BankPage
+from modern_gl.desktop.command_palette import CommandPalette
 from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.currencies_page import CurrenciesPage
 from modern_gl.desktop.directories_page import DirectoriesPage
@@ -35,6 +36,7 @@ from modern_gl.desktop.invoices_page import InvoicesPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.landed_cost_page import LandedCostPage
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
+from modern_gl.desktop.main_window.commands import palette_entries
 from modern_gl.desktop.main_window.open_pages import OpenPages
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
@@ -69,11 +71,21 @@ class MainWindow(OpenPages):
             ("Ctrl+-", lambda: self.show_place(("sales",))),
             ("Ctrl+B", lambda: self.show_place(("bank",))),
             ("Ctrl+L", self.quick_entry),
+            ("Ctrl+K", self.command_palette),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
         hints = QGuiApplication.styleHints()
         if hints is not None:
             hints.colorSchemeChanged.connect(lambda _scheme: self.follow_system_theme())
+
+    def command_palette(self) -> CommandPalette | None:
+        """Ctrl+K: find and do anything (D86)."""
+        if self.session is None:
+            return None
+        palette = CommandPalette(self, lambda query: palette_entries(self, query))
+        palette.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        palette.open()
+        return palette
 
     def _company_menu(self) -> None:
         menu = QMenu(self)

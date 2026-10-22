@@ -61,7 +61,7 @@ def main() -> None:
             (
                 w
                 for w in QApplication.topLevelWidgets()
-                if w.objectName() == "completer" and w.isVisible()
+                if w.objectName() in ("completer", "palette") and w.isVisible()
             ),
             None,
         )
@@ -85,6 +85,11 @@ def main() -> None:
     shot("1d_quick_suggest")
     journal.quick.completer.popup().hide()
     journal.quick.edit.clear()
+    palette = win.command_palette()  # Ctrl+K: find and do anything (D86)
+    assert palette is not None
+    palette.search.setText("60")
+    shot("14_command_palette")
+    palette.close()
     win.show_import()
     importer = win.pages[("import",)]
     alfa = i18n.tr("Альфа Трейд").split()[0]

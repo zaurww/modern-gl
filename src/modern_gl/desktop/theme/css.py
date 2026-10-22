@@ -175,6 +175,18 @@ QCheckBox::indicator:checked:disabled {{ background: {P.accent_soft}; }}
 def _panels_css() -> str:
     """Folded lines, notes, the bank's panels and the toast."""
     return f"""
+QDialog#palette {{
+    background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 12px;
+}}
+QLineEdit#paletteSearch {{
+    background: transparent; border: none; padding: 8px 6px; font-size: 16px; color: {P.text};
+}}
+QListWidget#paletteList {{ background: transparent; border: none; }}
+QListWidget#paletteList::item {{
+    color: {P.text}; padding: 0 8px; border-radius: 7px;
+}}
+QListWidget#paletteList::item:disabled {{ color: {P.header_text}; padding-top: 6px; }}
+QListWidget#paletteList::item:selected {{ background: {P.selection}; color: {P.text}; }}
 QFrame#toast {{ background: {P.tooltip}; border-radius: 10px; }}
 QLabel#toastText {{ color: {P.tooltip_text}; background: transparent; }}
 QPushButton#toastAction {{

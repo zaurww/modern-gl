@@ -134,6 +134,45 @@ def list_documents(
     return [DocumentSummary(**dict(r)) for r in rows]
 
 
+@dataclass(frozen=True)
+class FoundDocument:
+    id: int
+    number: int
+    doc_date: str
+    memo: str
+    status: str
+
+
+def find_documents(
+    conn: Connection, company_id: int, text: str, limit: int = 8
+) -> list[FoundDocument]:
+    """Ctrl+K (D86): a document by its number («15», «№15»), or by words of its title
+    (letters folded: «odenis» finds «Ödəniş») — the latest first. The rows are read one
+    by one, newest first, until `limit` are found: no list of all documents is built."""
+    text = text.strip().lstrip("№#").strip()
+    if not text:
+        return []
+    if text.isdigit():
+        row = conn.execute(
+            "SELECT id, number, doc_date, memo, status FROM documents "
+            "WHERE company_id = ? AND number = ?",
+            (company_id, int(text)),
+        ).fetchone()
+        return [FoundDocument(**dict(row))] if row else []
+    words = fold(text).split()
+    cursor = conn.execute(
+        "SELECT id, number, doc_date, memo, status FROM documents "
+        "WHERE company_id = ? ORDER BY doc_date DESC, number DESC",
+        (company_id,),
+    )
+    found: list[FoundDocument] = []
+    while len(found) < limit and (rows := cursor.fetchmany(200)):
+        found += [
+            FoundDocument(**dict(r)) for r in rows if all(w in fold(r["memo"]) for w in words)
+        ]
+    return found[:limit]
+
+
 def document_by_number(conn: Connection, company_id: int, number: int) -> int:
     row = conn.execute(
         "SELECT id FROM documents WHERE company_id = ? AND number = ?", (company_id, number)

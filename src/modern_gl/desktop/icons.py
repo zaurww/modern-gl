@@ -39,6 +39,15 @@ GLYPHS: dict[str, str] = {
     "next": "chevron-right",
     "more": "ellipsis",
     "check": "check",
+    "account": "hash",
+    "counterparty": "building-2",
+    "command": "zap",
+    "palette": "command",
+    "attention": "circle-alert",
+    "money": "wallet",
+    "down": "chevron-down",
+    "back": "arrow-left",
+    "forward": "arrow-right",
 }
 
 _CACHE: dict[tuple[str, str, int, str], QIcon] = {}

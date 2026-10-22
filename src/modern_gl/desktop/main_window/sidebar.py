@@ -190,9 +190,8 @@ class Sidebar(QWidget):
         self.viewing.setText(tr("Только просмотр"))
         self.viewing.setVisible(read_only)
         journal = not (read_only or stock_only)  # Ctrl+N is a new journal document
-        self.hint.setText(
-            tr("Ctrl+N  новый документ\nCtrl+W  закрыть") if journal else tr("Ctrl+W  закрыть")
-        )
+        new = tr("Ctrl+N  новый документ") + "\n" if journal else ""
+        self.hint.setText(tr("Ctrl+K  поиск и команды") + "\n" + new + tr("Ctrl+W  закрыть"))
 
     def add_section(self, title: str) -> None:
         item = QListWidgetItem(upper(title))
