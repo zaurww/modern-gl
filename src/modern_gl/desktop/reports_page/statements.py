@@ -1,5 +1,6 @@
-"""Финансовая отчётность (D99): the balance sheet on the period's last day, or the profit
-and loss of the period — one place, a switch between the two; lines by account type."""
+"""Финансовая отчётность (D99, D100): the balance sheet on the period's last day, the
+profit and loss or the cash flow of the period — one place, a switch between them; lines
+by account type."""
 
 from __future__ import annotations
 
@@ -12,9 +13,10 @@ from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import button, ru_date
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting.cash_flow import cash_flow
 from modern_gl.reporting.statements import Line, Statement, balance_sheet, profit_and_loss
 
-BALANCE, PROFIT = "balance", "profit"
+BALANCE, PROFIT, CASH = "balance", "profit", "cash"
 # the parts of the balance sheet: their subtotal reads «Итого: …»
 SECTIONS = (
     "Оборотные активы",
@@ -37,7 +39,8 @@ class StatementsPage(ReportPage):
         row.setSpacing(6)
         self.balance_button = button(tr("Баланс"), "segment")
         self.profit_button = button(tr("Прибыли и убытки"), "segment")
-        for b in (self.balance_button, self.profit_button):
+        self.cash_button = button(tr("Движение денег"), "segment")
+        for b in (self.balance_button, self.profit_button, self.cash_button):
             b.setCheckable(True)
             b.clicked.connect(lambda _=False: self.refresh())
             self.views.addButton(b)
@@ -51,12 +54,16 @@ class StatementsPage(ReportPage):
 
     @property
     def view(self) -> str:
+        if self.cash_button.isChecked():
+            return CASH
         return PROFIT if self.profit_button.isChecked() else BALANCE
 
     def job(self):
         cid, p, view = self.s.company_id, self.params, self.view
         if view == BALANCE:
             return lambda conn: balance_sheet(conn, cid, p.date_to, p.layers)
+        if view == CASH:
+            return lambda conn: cash_flow(conn, cid, p.date_from, p.date_to, p.layers)
         return lambda conn: profit_and_loss(conn, cid, p.date_from, p.date_to, p.layers)
 
     def fetch(self, conn: Connection) -> Statement:
@@ -103,6 +110,8 @@ class StatementsPage(ReportPage):
                 if not data.unbalanced
                 else tr("Внимание: актив и пассив не сходятся")
             )
+        elif self.view == CASH:
+            notes.append(tr("Остаток денег сходится с потоками  ✓"))
         if untyped:
             notes.append(tr("Есть счета без типа — укажите тип в плане счетов"))
         self.footer.setText("      ".join(notes))

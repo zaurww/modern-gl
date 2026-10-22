@@ -1675,4 +1675,16 @@ AZ: dict[str, str] = {
     "Расходы без типа": "Növü olmayan xərclər",
     "Прибыль до налогообложения": "Vergiyədək mənfəət",
     "Чистая прибыль (убыток)": "Xalis mənfəət (zərər)",
+    # ---- cash flow, direct method (D100) ---------------------------------------------------
+    "Движение денег": "Pul axını",
+    "Остаток денег сходится с потоками  ✓": "Pul qalığı axınlarla üst-üstə düşür  ✓",
+    "Деньги на начало периода": "Dövrün əvvəlinə pul",
+    "Деньги на конец периода": "Dövrün sonuna pul",
+    "Изменение денег за период": "Dövr ərzində pulun dəyişməsi",
+    "Операционная деятельность": "Əməliyyat fəaliyyəti",
+    "Инвестиционная деятельность": "İnvestisiya fəaliyyəti",
+    "Финансовая деятельность": "Maliyyə fəaliyyəti",
+    "Чистый поток от операционной деятельности": "Əməliyyat fəaliyyətindən xalis axın",
+    "Чистый поток от инвестиционной деятельности": "İnvestisiya fəaliyyətindən xalis axın",
+    "Чистый поток от финансовой деятельности": "Maliyyə fəaliyyətindən xalis axın",
 }
