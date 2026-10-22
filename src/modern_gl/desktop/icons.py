@@ -49,6 +49,7 @@ GLYPHS: dict[str, str] = {
     "down": "chevron-down",
     "back": "arrow-left",
     "forward": "arrow-right",
+    "lock": "lock",
 }
 
 _CACHE: dict[tuple[str, str, int, str], QIcon] = {}

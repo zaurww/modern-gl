@@ -57,6 +57,7 @@ def _commands(win: MainWindow) -> list[Entry]:
             items += [
                 (tr("Новая банковская операция"), win.new_bank_operation, "", "bank"),
                 (tr("Импорт проводок из Excel"), win.show_import, "", "import"),
+                (tr("Закрытие периода…"), win.close_period, "", "lock"),
             ]
     return [Entry(group, title, run, hint, icon) for title, run, hint, icon in items]
 

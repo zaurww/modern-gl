@@ -527,6 +527,15 @@ def main() -> None:
     dialog.account_type.view().window().grab().save(str(out / "9c_account_types.png"))
     dialog.account_type.hidePopup()
     dialog.close()
+    from modern_gl.desktop.period_dialog import PeriodDialog
+
+    period = PeriodDialog(session, win)  # «Закрытие периода» (D95)
+    period.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    period.grab().save(str(out / "16_period_dialog.png"))
+    period.close()
 
     # Currencies: a USD bank account, CBAR-like rates, a payment in USD, revaluation.
     from modern_gl.application.ledger import PostingInput

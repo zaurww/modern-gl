@@ -41,6 +41,7 @@ from modern_gl.desktop.main_window.commands import palette_entries
 from modern_gl.desktop.main_window.open_pages import OpenPages
 from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.period_dialog import PeriodDialog
 from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
@@ -106,6 +107,8 @@ class MainWindow(OpenPages):
                 menu.addAction(tr("Перечитать файл")).triggered.connect(self.reread)
             menu.addAction(tr("Показать файл компании")).triggered.connect(self.show_company_file)
             menu.addAction(tr("Передача дел…")).triggered.connect(self.hand_over)
+            if not viewing and not self.session.stock_only:
+                menu.addAction(tr("Закрытие периода…")).triggered.connect(self.close_period)
             if not viewing:
                 self._file_actions(menu)
         menu.addSeparator()
@@ -128,6 +131,14 @@ class MainWindow(OpenPages):
             act.triggered.connect(lambda _=False, n=name: self.set_ui_theme(n))
         btn = self.sidebar.company
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def close_period(self) -> None:
+        """«Закрытие периода» (D95): the pages are built again — what is closed now opens
+        read-only, what is opened again can be changed."""
+        if self._viewing() or not self._confirm_close_all():
+            return
+        if PeriodDialog(self.open_session, self).exec():
+            self._reopen()
 
     def _file_actions(self, menu: QMenu) -> None:
         """What changes the open company's file (not shown while viewing)."""
