@@ -18,9 +18,6 @@ SKIP = {"i18n_az.py"}  # translations: data, not code
 # Code over the limit today and its size: the debt to pay off (STATUS, «Архитектурный
 # аудит», п. 7). Lower a number when the code shrinks; never raise it.
 OVER_LIMIT = {
-    "application/bank.py::bank_places": 92,
-    "application/bank.py::statement": 92,
-    "application/catalog.py::Catalog.reload": 83,
     "application/eqaime_import.py": 641,
     "application/quick_entry.py": 602,
     "demo_data.py::create_demo_company": 124,

@@ -77,6 +77,15 @@ class Catalog:
         self.reload()
 
     def reload(self) -> None:
+        self._load_accounts()
+        self._load_kinds()
+        self._load_values()
+        self.currencies: dict[int, CurrencyInfo] = {
+            c.id: c for c in list_currencies(self.conn, self.company_id)
+        }
+
+    def _load_accounts(self) -> None:
+        """The accounts in the order of the chart, and the system ones (opening balances)."""
         self.system_account_ids = {
             r["account_id"]
             for r in self.conn.execute(
@@ -107,6 +116,9 @@ class Catalog:
         }
         self._tree_order()
         self.by_code = {a.code: a for a in self.accounts.values() if a.code}
+
+    def _load_kinds(self) -> None:
+        """The subconto kinds, which belong to which (contracts to counterparties), the tags."""
         kinds = self.conn.execute(
             "SELECT id, code, name, owner_kind_id FROM subconto_kinds WHERE company_id = ?",
             (self.company_id,),
@@ -123,6 +135,9 @@ class Catalog:
                 "SELECT id, name FROM tags WHERE company_id = ?", (self.company_id,)
             )
         }
+
+    def _load_values(self) -> None:
+        """The elements of every directory, by name, with their tags."""
         value_tags: dict[int, set[int]] = {}
         for r in self.conn.execute(
             "SELECT value_id, tag_id FROM subconto_value_tags WHERE company_id = ?",
@@ -156,9 +171,6 @@ class Catalog:
             )
         for values in self._by_kind.values():
             values.sort(key=lambda v: sort_key(v.name))
-        self.currencies: dict[int, CurrencyInfo] = {
-            c.id: c for c in list_currencies(self.conn, self.company_id)
-        }
 
     def _tree_order(self) -> None:
         """Tree order: each account followed by its subaccounts; among siblings coded
