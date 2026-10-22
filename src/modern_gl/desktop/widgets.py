@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.desktop.icons import status_mark
 from modern_gl.desktop.theme import P, check_icon, dot_icon, fonts
 from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_NAMES
 from modern_gl.domain.dates import ru_date
@@ -383,12 +384,21 @@ def type_choices() -> list[tuple[str | None, str | None, str]]:
     return choices
 
 
-def status_icon(posted: bool) -> QIcon:
-    """A document's status in a list, as Things marks a to-do: a hollow circle for a
-    draft, the accent circle with a check for a posted one."""
-    key = f"check-{posted}-{P.accent}-{P.tertiary}"  # themes change the colors
+def tick_icon(ticked: bool) -> QIcon:
+    """A row the user ticks to choose it, as Things marks a to-do: a hollow circle, the
+    accent circle with a check once ticked."""
+    key = f"check-{ticked}-{P.accent}-{P.tertiary}"  # themes change the colors
     if key not in _CLASS_ICONS:
-        _CLASS_ICONS[key] = check_icon(posted)
+        _CLASS_ICONS[key] = check_icon(ticked)
+    return _CLASS_ICONS[key]
+
+
+def status_icon(posted: bool) -> QIcon:
+    """A document's status in a list: an accent check for a posted one, an amber dot for a
+    draft. Nothing like a checkbox: users clicked the hollow circle to tick it (D73)."""
+    key = f"status-{posted}-{P.accent}-{P.amber}"  # themes change the colors
+    if key not in _CLASS_ICONS:
+        _CLASS_ICONS[key] = status_mark(posted, P.accent, P.amber)
     return _CLASS_ICONS[key]
 
 

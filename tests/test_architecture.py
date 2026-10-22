@@ -43,6 +43,7 @@ MODULE_CODE = (
     "modern_gl.application.eqaime_import",
     "modern_gl.application.eqaime_portal",
     "modern_gl.application.quick_entry",
+    "modern_gl.application.trade_batch",
     "modern_gl.reporting.inventory",
     "modern_gl.reporting.trade",
     "modern_gl.reporting.eqaime_reconciliation",

@@ -121,6 +121,40 @@ class MovementCommands(StockCommands):
             )
             self._audit(company_id, "inventory_document", document_id, "update_draft", {})
 
+    def fill_expense_account(
+        self,
+        company_id: int,
+        document_id: int,
+        line_id: int,
+        account_id: int,
+        subconto: Sequence[int | None] = (),
+    ) -> None:
+        """Give a purchase draft's line without an item and without an account the account
+        its value goes to (D73: drafts posted in bulk, like the supplier's last purchase).
+        A line that has an item or an account already is left as it is."""
+        with transaction(self.conn):
+            doc = self._require_inventory_draft(company_id, document_id)
+            if doc["doc_type"] != "receipt":
+                raise ValidationError(tr("счёт затрат указывается только в покупке"))
+            self._account(company_id, account_id)
+            for value_id in subconto:
+                if value_id is not None:
+                    self._subconto_value(company_id, value_id)
+            sc = pad_subconto(subconto)
+            self.conn.execute(
+                "UPDATE inventory_lines SET cost_account_id = ?, cost_sc1 = ?, cost_sc2 = ?, "
+                "cost_sc3 = ? WHERE company_id = ? AND document_id = ? AND id = ? "
+                "AND item_id IS NULL AND cost_account_id IS NULL",
+                (account_id, *sc, company_id, document_id, line_id),
+            )
+            self._audit(
+                company_id,
+                "inventory_document",
+                document_id,
+                "fill_expense_account",
+                {"line_id": line_id, "account_id": account_id},
+            )
+
     def create_issue_draft(
         self,
         company_id: int,
