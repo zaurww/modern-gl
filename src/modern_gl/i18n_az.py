@@ -1545,4 +1545,15 @@ AZ: dict[str, str] = {
     "Что будете вести?": "Nəyi aparacaqsınız?",
     "Неизвестный режим компании: {mode}": "Şirkətin naməlum rejimi: {mode}",
     "Остатки считаются по проведённым документам.": "Qalıqlar keçirilmiş sənədlər üzrə hesablanır.",
+    # «Mədaxil» without a purchase (D91)
+    "Оприходование": "Mədaxil",
+    "Причина": "Səbəb",
+    "Излишки (инвентаризация)": "Artıq çıxma (inventarizasiya)",
+    "Вклад учредителя": "Təsisçinin payı",
+    "Собственное производство": "Öz istehsalı",
+    "Безвозмездное получение (подарок)": "Əvəzsiz alınma (hədiyyə)",
+    "— прочие доходы —": "— digər gəlirlər —",
+    "неизвестная причина поступления: {r}": "daxilolmanın naməlum səbəbi: {r}",
+    "Оприходование: Дт счёт товара / Кт счёт причины.": "Mədaxil: Dt malın hesabı / Kt səbəbin hesabı.",
+    "Товар пришёл не от поставщика: излишки, вклад учредителя, своё производство, подарок": "Mal təchizatçıdan gəlməyib: artıq çıxma, təsisçinin payı, öz istehsalı, hədiyyə",
 }

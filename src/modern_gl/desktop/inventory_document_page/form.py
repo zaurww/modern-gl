@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.inventory import (
+    INCOMING_REASONS,
     STANDARD_VAT_RATE,
     Inventory,
     InventoryDocumentData,
@@ -78,7 +79,12 @@ class InventoryDocumentForm(QWidget):
         vat_role = OUTPUT_VAT if doc_type == "sale" else INPUT_VAT
         has_vat_account = session.ledger.account_role(session.company_id, vat_role) is not None
         self._show_vat_rate(STANDARD_VAT_RATE if has_vat_account else None)
-        self.model = InventoryLinesModel(session, doc_type, vat_rate=self._chosen_vat_rate())
+        self.model = InventoryLinesModel(
+            session,
+            doc_type,
+            vat_rate=self._chosen_vat_rate(),
+            incoming_account=self._incoming_account(),
+        )
         self.delegate = InventoryLinesDelegate(self)
         self.table = InventoryLinesTable(self.model, self.delegate)
         self.expense_columns = self._expense_columns()  # shown for these
@@ -135,6 +141,7 @@ class InventoryDocumentForm(QWidget):
             self.vat_rate.addItem(tr(label), rate)
         meta.addWidget(self.vat_rate)
         meta.addSpacing(12)
+        self._build_reason(meta)
         self._build_basis(meta)
         self._build_expense_month(meta)
         self._build_currency(meta)
@@ -161,6 +168,18 @@ class InventoryDocumentForm(QWidget):
         self.portal_status = Chip()
         self.portal_status.hide()
         meta.addWidget(self.portal_status)
+        meta.addSpacing(12)
+
+    def _build_reason(self, meta: QHBoxLayout) -> None:
+        # why goods come in without a purchase (D91): it chooses the account credited
+        self.reason_caption = QLabel(tr("Причина"))
+        self.reason_caption.setObjectName("secondary")
+        meta.addWidget(self.reason_caption)
+        self.reason = PickBox()
+        self.reason.setFixedWidth(260)
+        for key, (name, _role) in INCOMING_REASONS.items():
+            self.reason.addItem(tr(name), key)
+        meta.addWidget(self.reason)
         meta.addSpacing(12)
 
     def _build_expense_month(self, meta: QHBoxLayout) -> None:
@@ -292,6 +311,14 @@ class InventoryDocumentForm(QWidget):
 
     def _expense_date(self) -> str | None:
         return self.expense_month.currentData() if self.doc_type == "receipt" else None
+
+    def _chosen_reason(self) -> str | None:
+        return self.reason.currentData() if self.doc_type == "incoming" else None
+
+    def _incoming_account(self) -> int | None:
+        """The account a mədaxil of the chosen reason credits (D91)."""
+        reason = self._chosen_reason()
+        return self.inventory.incoming_account(self.s.company_id, reason) if reason else None
 
     def _expense_columns(self) -> tuple[bool, set[int], bool]:
         return self.model.has_expenses(), self.model.expense_positions(), self.model.has_goods()

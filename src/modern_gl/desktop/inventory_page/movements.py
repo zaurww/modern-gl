@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.inventory import format_quantity
+from modern_gl.application.inventory import INCOMING_REASONS, format_quantity
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.widgets import EmptyState, ru_date
@@ -28,6 +28,9 @@ def source_text(source: MovementSource, counterparty: bool = True) -> str:
     """«Alış · e-qaimə AA123 · Supplier», «İdxal · YGB 12345», «Yerdəyişmə → Mağaza»."""
     if source.movement_type == "opening":
         parts = [tr("Начальные остатки")]
+    elif source.doc_type == "incoming":
+        reason = INCOMING_REASONS.get(source.incoming_reason or "")
+        parts = [tr("Оприходование"), *([tr(reason[0])] if reason else [])]
     elif source.movement_type == "receipt" and source.invoice_kind == "customs":
         parts = [tr("Импорт · ГТД {n}", n=source.invoice)]
     elif source.movement_type == "receipt":

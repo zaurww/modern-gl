@@ -17,6 +17,8 @@ from modern_gl.application.inventory.catalog import CatalogCommands
 from modern_gl.application.inventory.model import (
     ACCRUED_CODE,
     ALLOCATION_METHODS,
+    INCOMING_REASONS,
+    INCOMING_TYPES,
     QUANTITY_FACTOR,
     QUANTITY_SCALE,
     SALE_ROLE_NAMES,
@@ -37,6 +39,8 @@ from modern_gl.application.inventory.posting import PostingCommands
 __all__ = [
     "ACCRUED_CODE",
     "ALLOCATION_METHODS",
+    "INCOMING_REASONS",
+    "INCOMING_TYPES",
     "QUANTITY_FACTOR",
     "QUANTITY_SCALE",
     "SALE_ROLE_NAMES",

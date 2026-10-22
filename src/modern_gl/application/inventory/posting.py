@@ -33,6 +33,7 @@ from modern_gl.infrastructure.db import Row, transaction
 _SEQUENCE_RANK = {
     "opening": 0,
     "receipt": 1,
+    "incoming": 1,
     "landed_cost": 2,
     "transfer": 3,
     "issue": 3,
@@ -73,6 +74,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         memo: str = "",
         *,
         opening: bool = False,
+        incoming_reason: str | None = None,
         vat_rate: int | None = None,
         currency_id: int | None = None,
         currency_rate: str | int | Decimal | None = None,
@@ -80,8 +82,8 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         invoice_kind: str = "",
         expense_date: date | str | None = None,
     ) -> int:
-        """Post a receipt/opening balance and its Dr inventory / Cr offset entries
-        (and Dr input VAT / Cr offset for the lines' VAT). With `expense_date` the
+        """Post a receipt/opening balance (or a mədaxil, D91) and its Dr inventory / Cr
+        offset entries (and Dr input VAT / Cr offset for the lines' VAT). With `expense_date` the
         lines without an item are an expense of that earlier month (D65)."""
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
@@ -94,6 +96,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
                 credit_subconto,
                 memo,
                 opening=opening,
+                incoming_reason=incoming_reason,
                 vat_rate=vat_rate,
                 currency_id=currency_id,
                 currency_rate=currency_rate,

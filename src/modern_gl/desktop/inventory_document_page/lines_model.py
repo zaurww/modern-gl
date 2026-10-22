@@ -102,7 +102,7 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
         if key in SALE_KEYS:
             kind_id = self.sale_kind(key)
             return self.s.catalog.kinds[kind_id] if kind_id else ""
-        if key in SUBCONTO_KEYS and key[-1] != "1":
+        if key in SUBCONTO_KEYS and (key[-1] != "1" or self.accounts_hidden):
             return self._kind_header(key)
         return tr(HEADERS[key])
 

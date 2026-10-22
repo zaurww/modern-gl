@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from modern_gl.application.common import insert, where_used
 from modern_gl.application.inventory.base import InventoryBase
-from modern_gl.application.inventory.model import QUANTITY_SCALE
+from modern_gl.application.inventory.model import INCOMING_REASONS, QUANTITY_SCALE
+from modern_gl.domain.accounts import FX_GAIN
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import IntegrityError, transaction
@@ -196,3 +197,12 @@ class CatalogCommands(InventoryBase):
                 {"code": code, "name": name},
             )
         return type_id
+
+    def incoming_account(self, company_id: int, reason: str) -> int | None:
+        """The account a mədaxil of this reason credits (D91): the one chosen in the
+        settings; a surplus or a gift without one — the other income (FX_GAIN's account)."""
+        role = INCOMING_REASONS[reason][1]
+        account = self.ledger.account_role(company_id, role)
+        if account is None and reason in ("surplus", "gift"):
+            account = self.ledger.account_role(company_id, FX_GAIN)
+        return account

@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.inventory import (
+    INCOMING_TYPES,
     vat_of,
 )
 from modern_gl.desktop.inventory_document_page.clipboard import ClipboardPart
@@ -66,6 +67,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self.date.dateChanged.connect(self._changed)
         self.vat_rate.activated.connect(self._vat_rate_changed)
         self.basis.activated.connect(self._changed)
+        self.reason.activated.connect(self._reason_changed)
         self.invoice.textEdited.connect(self._changed)
         self.expense_month.activated.connect(self._changed)
         self.currency.activated.connect(self._currency_changed)
@@ -137,6 +139,9 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self._apply_mode(False)
         self._show_currency(None, None)
         self._show_basis(EQAIME, "")
+        self._show_reason(None)
+        if self.doc_type == "incoming":  # the first reason's account on the first line
+            self._reason_changed()
         self._fill_expense_months(None)
         self.dirty = False  # showing the defaults is not an edit
         self._show_totals()
@@ -149,6 +154,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self.date.setDate(to_qdate(date.fromisoformat(self.doc.doc_date)))
         self.type_label.setText(tr(DOCUMENT_TYPES.get(self.doc_type, self.doc_type)))
         self._show_vat_rate(self.doc.vat_rate)
+        self._show_reason(self.doc.incoming_reason)
         vat_rate = self._chosen_vat_rate()
         kinds = sale_kinds(self.s) if self.doc_type == "sale" else []
         rows = [
@@ -176,7 +182,12 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         # a posted document is edited in place, as in 1C; not while viewing (D80)
         read_only = not self.doc.editable or self.s.read_only
         self.model = InventoryLinesModel(
-            self.s, self.doc_type, rows, read_only=read_only, vat_rate=vat_rate
+            self.s,
+            self.doc_type,
+            rows,
+            read_only=read_only,
+            vat_rate=vat_rate,
+            incoming_account=self._incoming_account(),
         )
         self.table.setModel(self.model)
         self.table.configure_columns()
@@ -207,6 +218,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self.basis.setEnabled(not read_only)
         self.invoice.setReadOnly(read_only)
         self.expense_month.setEnabled(not read_only)
+        self.reason.setEnabled(not read_only)
         self.model.read_only = read_only
         posted = self.doc is not None and self.doc.status == "posted"
         editable = not read_only and self.doc_type != "landed_cost"
@@ -286,7 +298,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         company_id = self.s.company_id
         document_date = edited_date(self.date)
         memo = self.memo.text().strip()
-        if self.doc_type in {"opening", "receipt"}:
+        if self.doc_type in INCOMING_TYPES:
             first = inputs[0]
             if self.doc is None:
                 return self.inventory.create_receipt_draft(
@@ -297,6 +309,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
                     first.credit_subconto,
                     memo,
                     opening=self.doc_type == "opening",
+                    incoming_reason=self._chosen_reason(),
                     vat_rate=self._chosen_vat_rate(),
                     currency_id=self._chosen_currency(),
                     currency_rate=self._rate_text(),
@@ -311,6 +324,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
                 first.credit_account_id,
                 first.credit_subconto,
                 memo,
+                incoming_reason=self._chosen_reason(),
                 vat_rate=self._chosen_vat_rate(),
                 currency_id=self._chosen_currency(),
                 currency_rate=self._rate_text(),

@@ -13,6 +13,7 @@ from PySide6.QtCore import (
 )
 
 from modern_gl.application.inventory import (
+    INCOMING_TYPES,
     Inventory,
 )
 from modern_gl.desktop.inventory_document_page.columns import (
@@ -76,8 +77,10 @@ class InventoryLinesBase(QAbstractTableModel):
         rows: list[InventoryGridRow] | None = None,
         read_only: bool = False,
         vat_rate: int | None = None,
+        incoming_account: int | None = None,
     ) -> None:
         super().__init__()
+        self.incoming_account = incoming_account  # a mədaxil's: its reason's account (D91)
         self.s = session
         self.doc_type = doc_type
         self.read_only = read_only
@@ -93,11 +96,7 @@ class InventoryLinesBase(QAbstractTableModel):
         self.rows = rows or [self.default_row()]
         # a company kept as a warehouse only (D90): the offset account is put in by itself
         # and not shown — unless the chart has none to put in
-        self.accounts_hidden = (
-            self.stock_only
-            and doc_type not in {"transfer", "landed_cost"}
-            and self.default_row().offset_account_id is not None
-        )
+        self.accounts_hidden = self._accounts_hidden()
         if doc_type == "transfer":
             self.columns = [
                 ITEM,
@@ -184,6 +183,8 @@ class InventoryLinesBase(QAbstractTableModel):
         return row.expense_subconto if key in ESC_KEYS else row.offset_subconto
 
     def default_row(self) -> InventoryGridRow:
+        if self.doc_type == "incoming":
+            return InventoryGridRow(offset_account_id=self.incoming_account)
         codes = [{"opening": "60", "receipt": "60", "sale": "62"}.get(self.doc_type, "46")]
         if self.doc_type == "opening" and self.stock_only:
             codes = ["88", "84", *codes]  # unseen (D90): retained earnings, not a supplier
@@ -192,6 +193,26 @@ class InventoryLinesBase(QAbstractTableModel):
             return InventoryGridRow()
         # Subconto (counterparty, contract) stay empty: a guessed value would post silently.
         return InventoryGridRow(offset_account_id=account.id)
+
+    def _accounts_hidden(self) -> bool:
+        return (
+            self.stock_only
+            and self.doc_type not in {"transfer", "landed_cost"}
+            and self.default_row().offset_account_id is not None
+        )
+
+    def set_incoming_account(self, account_id: int | None) -> None:
+        """Another reason of a mədaxil: the lines still on the previous reason's account
+        (or on none) go to the new one, without the old account's subconto."""
+        old, self.incoming_account = self.incoming_account, account_id
+        for row in self.rows:
+            if row.offset_account_id in (old, None) and row.offset_account_id != account_id:
+                row.offset_account_id = account_id
+                row.offset_subconto = [None, None, None]
+        self.accounts_hidden = self._accounts_hidden()
+        self.beginResetModel()
+        self.endResetModel()
+        self.changed.emit()
 
     def _leaf_by_code(self, code: str):
         """The account of the code, or the first under it when it is a group (60 → 60.1)."""
@@ -283,7 +304,7 @@ class InventoryLinesBase(QAbstractTableModel):
     def editable(self, key: str) -> bool:
         if key in {UNIT}:
             return False
-        if key in {PRICE, AMOUNT} and self.doc_type not in {"opening", "receipt", "sale"}:
+        if key in {PRICE, AMOUNT} and self.doc_type not in {*INCOMING_TYPES, "sale"}:
             return False
         if key == VAT and self.doc_type not in VAT_DOCUMENTS:
             return False

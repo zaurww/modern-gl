@@ -69,6 +69,7 @@ class DocumentsPart(InventoryForm):
         return {
             "opening": tr("Начальные остатки"),
             "receipt": tr("Покупка"),
+            "incoming": tr("Оприходование"),
             "issue": tr("Списание"),
             "sale": tr("Продажа"),
             "transfer": tr("Перемещение"),

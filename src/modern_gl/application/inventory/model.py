@@ -6,7 +6,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 
-from modern_gl.domain.accounts import COST_OF_SALES, OUTPUT_VAT, SALES_REVENUE, SALES_VAT
+from modern_gl.domain.accounts import (
+    COST_OF_SALES,
+    INCOMING_CONTRIBUTION,
+    INCOMING_GIFT,
+    INCOMING_PRODUCTION,
+    INCOMING_SURPLUS,
+    OUTPUT_VAT,
+    SALES_REVENUE,
+    SALES_VAT,
+)
 
 QUANTITY_SCALE = 6
 QUANTITY_FACTOR = 10**QUANTITY_SCALE
@@ -23,6 +32,17 @@ SALE_ROLE_NAMES = {
     OUTPUT_VAT: "НДС к уплате",
     SALES_VAT: "НДС начисляется со счёта",
 }
+
+
+# «Mədaxil» (D91): why goods come in without a purchase, its name and the account role
+INCOMING_REASONS = {
+    "surplus": ("Излишки (инвентаризация)", INCOMING_SURPLUS),
+    "contribution": ("Вклад учредителя", INCOMING_CONTRIBUTION),
+    "production": ("Собственное производство", INCOMING_PRODUCTION),
+    "gift": ("Безвозмездное получение (подарок)", INCOMING_GIFT),
+}
+# documents whose lines bring goods in at their amount: Dt stock / Kt the line's account
+INCOMING_TYPES = {"opening", "receipt", "incoming"}
 
 
 @dataclass(frozen=True)
@@ -182,6 +202,7 @@ class InventoryDocumentData:
     # and the GL document of the accrual posted on it
     expense_date: str | None = None
     accrual_document_id: int | None = None
+    incoming_reason: str | None = None  # a mədaxil's reason: a key of INCOMING_REASONS
 
     @property
     def editable(self) -> bool:

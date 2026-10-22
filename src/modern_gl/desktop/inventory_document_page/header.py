@@ -80,6 +80,16 @@ class HeaderPart(InventoryDocumentForm):
             return None
         return plain_number(self.rate.text()) or None
 
+    def _show_reason(self, reason: str | None) -> None:
+        """A mədaxil's reason (D91); other documents have none."""
+        self.reason.setCurrentIndex(max(self.reason.findData(reason), 0))
+        for widget in (self.reason_caption, self.reason):
+            widget.setVisible(self.doc_type == "incoming")
+
+    def _reason_changed(self, *_args) -> None:
+        self.model.set_incoming_account(self._incoming_account())
+        self.table.configure_columns()
+
     def _show_basis(self, kind: str, number: str) -> None:
         """The e-qaimə / declaration of a receipt, the e-qaimə of a sale; other documents
         have none."""

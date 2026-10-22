@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from modern_gl.application.inventory import (
+    INCOMING_TYPES,
     IssueLine,
     ReceiptLine,
     SaleLine,
@@ -47,7 +48,7 @@ class LineInputs(InventoryLinesBase):
             if self.doc_type == "sale":
                 result.append(self._sale_line(row, quantity))
                 continue
-            if self.doc_type in {"opening", "receipt"}:
+            if self.doc_type in INCOMING_TYPES:
                 result.append(self._receipt_line(row, quantity))
                 continue
             assert item_id is not None  # only a sale's or receipt's line may have none
@@ -118,9 +119,7 @@ class LineInputs(InventoryLinesBase):
             if row.to_warehouse_id is None:
                 raise ValidationError(tr("строка {line}: не указан склад-получатель", line=line_no))
             return
-        if self.doc_type in {"opening", "receipt", "sale"} and (
-            row.amount is None or row.amount <= 0
-        ):
+        if self.doc_type in {*INCOMING_TYPES, "sale"} and (row.amount is None or row.amount <= 0):
             raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
         if self.rate is not None and not row.currency_amount:
             raise ValidationError(tr("строка {line}: не указана сумма в валюте", line=line_no))

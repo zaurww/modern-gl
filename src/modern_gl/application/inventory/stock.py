@@ -109,7 +109,7 @@ class StockCommands(DraftCommands):
             JOIN inventory_documents d ON d.id = l.document_id AND d.company_id = l.company_id
             LEFT JOIN stock_consumptions c ON c.receipt_line_id = l.id
             WHERE l.company_id = ? AND l.item_id = ? AND d.status = 'posted'
-              AND d.doc_type IN ('opening', 'receipt')
+              AND d.doc_type IN ('opening', 'receipt', 'incoming')
             GROUP BY l.id, l.quantity, d.doc_date, d.id, l.line_no
             HAVING available > 0
             ORDER BY d.doc_date, d.id, l.line_no

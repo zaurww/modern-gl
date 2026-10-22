@@ -117,6 +117,7 @@ class DraftCommands(InventoryBase):
             invoice_kind=doc["invoice_kind"] or "",
             expense_date=doc["expense_date"],
             accrual_document_id=doc["accrual_document_id"],
+            incoming_reason=doc["incoming_reason"],
         )
 
     def _insert_document(
@@ -127,6 +128,7 @@ class DraftCommands(InventoryBase):
         memo: str,
         *,
         cost_type_id: int | None = None,
+        incoming_reason: str | None = None,
     ) -> int:
         self._company(company_id)
         value_date = iso_date(doc_date)
@@ -139,8 +141,8 @@ class DraftCommands(InventoryBase):
             self.conn,
             "INSERT INTO inventory_documents "
             "(company_id, number, doc_date, doc_type, memo, status, landed_cost_type_id, "
-            "created_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)",
-            (company_id, number, value_date, doc_type, memo, cost_type_id, now()),
+            "incoming_reason, created_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)",
+            (company_id, number, value_date, doc_type, memo, cost_type_id, incoming_reason, now()),
         )
 
     def _update_draft_header(
@@ -150,6 +152,13 @@ class DraftCommands(InventoryBase):
         self.conn.execute(
             "UPDATE inventory_documents SET doc_date = ?, memo = ? WHERE company_id = ? AND id = ?",
             (value_date, memo.strip(), company_id, document_id),
+        )
+
+    def _set_incoming_reason(self, document_id: int, reason: str | None) -> None:
+        """A mədaxil's reason (D91): only a mədaxil has one, so it is never cleared here."""
+        self.conn.execute(
+            "UPDATE inventory_documents SET incoming_reason = ? WHERE id = ?",
+            (reason, document_id),
         )
 
     def _set_vat_rate(self, document_id: int, rate: int | None) -> None:

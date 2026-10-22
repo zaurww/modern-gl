@@ -19,7 +19,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 19.1;Əsas vəsaitlərin alınması üzrə ƏDV;19;;asset;;;counterparty;
 19.3;Alınmış material-istehsal ehtiyatları üzrə ƏDV;19;;asset;;;counterparty;;input_vat
 19.4;Alınmış iş və xidmətlər üzrə ƏDV;19;;asset;;;counterparty;
-20;Əsas istehsalat;;;asset;;;department,cost_item;
+20;Əsas istehsalat;;;asset;;;department,cost_item;;incoming_production
 21;Öz istehsalımızın yarımfabrikatları;;;asset;;;item,warehouse;
 23;Köməkçi istehsalatlar;;;asset;;;department,cost_item;
 25;Ümumistehsalat xərcləri;;;expense;;;department,cost_item;

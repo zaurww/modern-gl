@@ -16,7 +16,13 @@ from modern_gl.application.inventory.amounts import (
     positive_amount,
     service_quantity,
 )
-from modern_gl.application.inventory.model import IssueLine, ReceiptLine, TransferLine
+from modern_gl.application.inventory.model import (
+    INCOMING_REASONS,
+    INCOMING_TYPES,
+    IssueLine,
+    ReceiptLine,
+    TransferLine,
+)
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.currency import to_base, unit_rate
@@ -36,10 +42,15 @@ def require_complete(doc_type: str, line: Row) -> None:
         if line["to_warehouse_id"] is None:
             raise ValidationError(tr("строка {line}: не указан склад-получатель", line=line_no))
         return
-    if doc_type in {"opening", "receipt"} and line["amount"] <= 0:
+    if doc_type in INCOMING_TYPES and line["amount"] <= 0:
         raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
     if line["offset_account_id"] is None:
         raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
+
+
+def check_reason(reason: str | None) -> None:
+    if reason is not None and reason not in INCOMING_REASONS:
+        raise ValidationError(tr("неизвестная причина поступления: {r}", r=reason))
 
 
 def offset_subconto(line: Row) -> tuple[int | None, int | None, int | None]:
@@ -57,6 +68,7 @@ class MovementCommands(StockCommands):
         memo: str = "",
         *,
         opening: bool = False,
+        incoming_reason: str | None = None,
         vat_rate: int | None = None,
         currency_id: int | None = None,
         currency_rate: str | int | Decimal | None = None,
@@ -64,21 +76,22 @@ class MovementCommands(StockCommands):
         invoice_kind: str = "",
         expense_date: date | str | None = None,
     ) -> int:
-        """Save an editable receipt/opening document without affecting stock or GL.
+        """Save an editable receipt/opening document — or, with `incoming_reason`, a mədaxil
+        without a purchase (D91) — without affecting stock or GL.
 
         A draft may be unfinished: only the item of each line is required. Line amounts
         are without VAT; each line's VAT is given (`vat_rate` only remembers the rate)."""
+        check_reason(incoming_reason)
+        doc_type = "incoming" if incoming_reason else "opening" if opening else "receipt"
+        purchase = doc_type == "receipt"
         with transaction(self.conn):
             document_id = self._insert_document(
-                company_id,
-                doc_date,
-                "opening" if opening else "receipt",
-                memo,
+                company_id, doc_date, doc_type, memo, incoming_reason=incoming_reason
             )
-            self._set_vat_rate(document_id, None if opening else vat_rate)
+            self._set_vat_rate(document_id, vat_rate if purchase else None)
             self._set_currency(company_id, document_id, currency_id, currency_rate)
-            self._set_invoice(document_id, "" if opening else invoice, invoice_kind)
-            self._set_expense_date(document_id, None if opening else expense_date)
+            self._set_invoice(document_id, invoice if purchase else "", invoice_kind)
+            self._set_expense_date(document_id, expense_date if purchase else None)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
             )
@@ -87,7 +100,7 @@ class MovementCommands(StockCommands):
                 "inventory_document",
                 document_id,
                 "create_draft",
-                {"type": "opening" if opening else "receipt"},
+                {"type": doc_type},
             )
         return document_id
 
@@ -101,6 +114,7 @@ class MovementCommands(StockCommands):
         credit_subconto: Sequence[int | None] = (),
         memo: str = "",
         *,
+        incoming_reason: str | None = None,
         vat_rate: int | None = None,
         currency_id: int | None = None,
         currency_rate: str | int | Decimal | None = None,
@@ -108,10 +122,14 @@ class MovementCommands(StockCommands):
         invoice_kind: str = "",
         expense_date: date | str | None = None,
     ) -> None:
+        check_reason(incoming_reason)
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
-            if doc["doc_type"] not in {"opening", "receipt"}:
+            incoming = doc["doc_type"] == "incoming"
+            if doc["doc_type"] not in INCOMING_TYPES or incoming != (incoming_reason is not None):
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
+            if incoming:
+                self._set_incoming_reason(document_id, incoming_reason)
             self._update_draft_header(company_id, document_id, doc_date, memo)
             self._set_vat_rate(document_id, vat_rate if doc["doc_type"] == "receipt" else None)
             self._set_currency(company_id, document_id, currency_id, currency_rate)
@@ -392,7 +410,7 @@ class MovementCommands(StockCommands):
         require_complete(doc["doc_type"], line)
         item = self._item(company_id, line["item_id"])
         warehouse = self._warehouse(company_id, line["warehouse_id"])
-        if doc["doc_type"] in {"opening", "receipt"}:
+        if doc["doc_type"] in INCOMING_TYPES:
             return self._receipt_posting(company_id, doc, line, item, warehouse)
         amount = self._cost(company_id, item, warehouse, line["quantity"], doc["id"])
         self.conn.execute(
@@ -426,7 +444,7 @@ class MovementCommands(StockCommands):
             doc["doc_date"],
             item["id"],
             warehouse["id"],
-            doc["doc_type"],
+            "receipt" if doc["doc_type"] == "incoming" else doc["doc_type"],
             line["quantity"],
             amount,
         )

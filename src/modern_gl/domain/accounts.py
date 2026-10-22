@@ -25,6 +25,12 @@ ACCRUED_EXPENSES = "accrued_expenses"
 # Not taken by type: «none» is a choice (the templates of 1C 7.7 name 60.2 and 62.2).
 ADVANCE_PAID = "advance_paid"
 ADVANCE_RECEIVED = "advance_received"
+# «Mədaxil» without a purchase (D91): the account credited for each reason. A surplus and
+# a gift without one of their own go to the other income (FX_GAIN's account)
+INCOMING_SURPLUS = "incoming_surplus"
+INCOMING_CONTRIBUTION = "incoming_contribution"
+INCOMING_PRODUCTION = "incoming_production"
+INCOMING_GIFT = "incoming_gift"
 ACCOUNT_ROLES = (
     INPUT_VAT,
     OPENING_BALANCE,
@@ -39,6 +45,10 @@ ACCOUNT_ROLES = (
     ACCRUED_EXPENSES,
     ADVANCE_PAID,
     ADVANCE_RECEIVED,
+    INCOMING_SURPLUS,
+    INCOMING_CONTRIBUTION,
+    INCOMING_PRODUCTION,
+    INCOMING_GIFT,
 )
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {
@@ -50,6 +60,9 @@ ROLE_TYPES = {
     SALES_REVENUE: "sales",
     COST_OF_SALES: "cost_of_sales",
     ACCRUED_EXPENSES: "accrued_expenses",
+    INCOMING_SURPLUS: "other_income",
+    INCOMING_CONTRIBUTION: "share_capital",
+    INCOMING_GIFT: "other_income",
 }
 
 # Account types: what an account means, whatever its code (D35). The list is fixed by the

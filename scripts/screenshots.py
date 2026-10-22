@@ -245,6 +245,9 @@ def main() -> None:
     inventory.documents_button.click()
     shot("8c_inventory_documents")
     inventory.movements_button.click()
+    win.new_inventory_document("incoming")  # D91: goods in without a purchase
+    shot("8c1_incoming")
+    win.close_current()
     inventory_document = min(  # the first one, with VAT
         (row for row in inventory.documents_model.rows if row.doc_type == "receipt"),
         key=lambda row: row.number,

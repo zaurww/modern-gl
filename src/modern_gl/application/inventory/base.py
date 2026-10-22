@@ -113,7 +113,7 @@ class InventoryBase:
             SELECT l.* FROM inventory_lines l
             JOIN inventory_documents d ON d.id = l.document_id
             WHERE l.company_id = ? AND l.id = ? AND d.status = 'posted'
-              AND d.doc_type IN ('opening', 'receipt')
+              AND d.doc_type IN ('opening', 'receipt', 'incoming')
             """,
             (company_id, line_id),
         ).fetchone()

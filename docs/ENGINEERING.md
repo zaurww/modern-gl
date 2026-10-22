@@ -116,6 +116,7 @@
 | 5 | Ссылки без индекса: 5 «строка → документ» и ещё 69 в старых таблицах (субконто в `postings`, счета в строках) | `landed_cost_shares`, `landed_cost_expense_allocations`, `stock_consumptions`, `stock_movements` — и др. | Индексы «строка → документ» — первой же миграцией склада; остальные — по замерам (п. 6) |
 | 6 | Отчёты и пересчёт склада — в UI-потоке, замеров нет | `reports_page/`, пересчёт склада (`application/inventory/`) | Генератор базы 10k/100k проводок, замеры (STATUS: «Архитектурный аудит», п. 3–4), потом фон |
 | 7 | Значки текстом («⋯», «←», «→», «▾») и нарисованные кодом (`theme/icons.py`: `dot_icon`, `check_icon`; `icons.status_mark`) — не из одного набора Lucide (D86) | `widgets.more_button`, `bank_page/page.py`, меню «Отчёты ▾» склада | Заменить на `icons.icon(...)` (Lucide `ellipsis`, `chevron-*`) на этапе 3 D86 |
+| 8 | `MovementCommands` ровно 500 строк (предел класса) после D91 | `application/inventory/movements.py` | Перед следующей правкой — разделить: создание и правка черновиков поступления (`create/update_receipt_draft`, `_write_receipt_draft`, `_expense_of`) — в свою группу |
 
 Большие модули, классы и функции — в `OVER_LIMIT` (`tests/test_code_size.py`) и STATUS,
 «Архитектурный аудит», п. 7. Исключения, разрешённые тестами здесь, — ровно пункты 4, 5 (п. 3 — SQL в виджете — погашен в сессии 22: `reporting.inventory.item_name`; п. 1 — ядро читает таблицы модулей — в сессии 25: представление `document_owners`);

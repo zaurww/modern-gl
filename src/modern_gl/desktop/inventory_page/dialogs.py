@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from modern_gl.application.inventory import SALE_ROLE_NAMES, Inventory
+from modern_gl.application.inventory import INCOMING_REASONS, SALE_ROLE_NAMES, Inventory
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
@@ -159,6 +159,7 @@ class InventorySettingsDialog(QDialog):
         }
         for role, combo in self.sale_roles.items():
             form.addRow(tr(SALE_ROLE_NAMES[role]), combo)
+        self._build_incoming(form)
         form.addRow(
             self._hint(
                 "Продажа: Дт счёт покупателя / Кт выручка (с НДС, если НДС начисляется "
@@ -172,6 +173,19 @@ class InventorySettingsDialog(QDialog):
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _build_incoming(self, form: QFormLayout) -> None:
+        """The account each reason of a mədaxil credits (D91)."""
+        incoming = QLabel(tr("Оприходование"))
+        incoming.setFont(fonts().heading)
+        form.addRow(incoming)
+        self.incoming_roles = {}
+        for key, (name, role) in INCOMING_REASONS.items():
+            other_income = key in ("surplus", "gift")  # else FX_GAIN's account
+            empty = tr("— прочие доходы —") if other_income else tr("— не указан —")
+            self.incoming_roles[role] = self._account_list(role, empty)
+            form.addRow(tr(name), self.incoming_roles[role])
+        form.addRow(self._hint("Оприходование: Дт счёт товара / Кт счёт причины."))
 
     def _account_list(self, role: str, empty: str) -> QComboBox:
         combo = QComboBox()
@@ -195,7 +209,8 @@ class InventorySettingsDialog(QDialog):
 
     def _save(self) -> None:
         try:
-            for role, combo in {INPUT_VAT: self.input_vat, **self.sale_roles}.items():
+            roles = {INPUT_VAT: self.input_vat, **self.sale_roles, **self.incoming_roles}
+            for role, combo in roles.items():
                 if combo.currentData() != self.s.ledger.account_role(self.s.company_id, role):
                     self.s.ledger.set_account_role(self.s.company_id, role, combo.currentData())
         except LedgerError as exc:

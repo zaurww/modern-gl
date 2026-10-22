@@ -155,7 +155,7 @@ def receipt_line_choices(conn: Connection, company_id: int) -> list[ReceiptLineC
         JOIN warehouses w ON w.company_id = l.company_id AND w.id = l.warehouse_id
         JOIN subconto_values wv ON wv.company_id = w.company_id AND wv.id = w.subconto_value_id
         WHERE l.company_id = ? AND d.status = 'posted'
-          AND d.doc_type IN ('opening', 'receipt')
+          AND d.doc_type IN ('opening', 'receipt', 'incoming')
         ORDER BY d.doc_date DESC, d.id DESC, l.line_no
         """,
         (company_id,),

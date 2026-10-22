@@ -49,6 +49,7 @@ class MovementSource:
     counterparty: str | None = None
     other_warehouse: str | None = None
     cost_type: str | None = None
+    incoming_reason: str | None = None  # a mədaxil's (D91)
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,7 @@ def item_details(conn: Connection, company_id: int, value_id: int) -> ItemDetail
 # what names a movement's source; with MOVEMENT_JOINS over stock_movements m and
 # inventory_documents d
 MOVEMENT_SOURCE = """
-    d.doc_type, m.movement_type, d.invoice, d.invoice_kind,
+    d.doc_type, m.movement_type, d.invoice, d.invoice_kind, d.incoming_reason,
     (SELECT v.name FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id
      WHERE v.company_id = m.company_id AND k.code = 'counterparty'
        AND v.id IN (l.offset_sc1, l.offset_sc2, l.offset_sc3)
@@ -201,6 +202,7 @@ def movement_source(row: Row) -> MovementSource:
         row["counterparty"],
         row["other_warehouse"],
         row["cost_type"],
+        row["incoming_reason"],
     )
 
 

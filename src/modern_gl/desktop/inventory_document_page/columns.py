@@ -90,6 +90,7 @@ PARTY_HEADERS = {"receipt": "Поставщик", "sale": "Покупатель"
 DOCUMENT_TYPES = {
     "opening": "Начальные остатки",
     "receipt": "Покупка",
+    "incoming": "Оприходование",
     "issue": "Списание",
     "sale": "Продажа",
     "transfer": "Перемещение",
