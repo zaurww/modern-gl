@@ -1,152 +1,40 @@
-"""The lines of a GL document as a table model."""
+"""The lines of a GL document as a table model: what each cell shows and takes; which
+cells a line has and the clipboard are in their own modules."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from decimal import Decimal
-from fractions import Fraction
 
 from PySide6.QtCore import (
-    QAbstractTableModel,
     QModelIndex,
-    QPersistentModelIndex,
     Qt,
-    Signal,
 )
 from PySide6.QtGui import QColor
 
-from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import PostingInput
+from modern_gl.desktop.postings.clipboard import PostingsClipboard
 from modern_gl.desktop.postings.columns import (
     ALIGN_LEFT,
     ALIGN_RIGHT,
     AMOUNT,
-    ARITHMETIC,
-    CT,
-    CURRENCY,
-    CURRENCY_AMOUNT_TEXT,
-    CURRENCY_COLUMNS,
-    DT,
-    HEADERS,
     INVOICE,
-    NUMBER_COLUMNS,
     InCurrency,
-    PasteResult,
     PostingRow,
-    UnknownValue,
     column_role,
-    header_columns,
-    plain_number,
 )
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain import formula
 from modern_gl.domain.accounts import SETTLEMENT_TYPES
 from modern_gl.domain.currency import (
-    CURRENCY_ONLY,
     format_unit_rate,
-    parse_rate,
     to_base,
-    unit_rate,
 )
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.domain.money import SCALE, format_minor, to_minor
+from modern_gl.domain.money import SCALE, format_minor
 from modern_gl.i18n import tr
 
 
-class PostingsModel(QAbstractTableModel):
-    changed = Signal()
-
-    def __init__(
-        self,
-        catalog: Catalog,
-        rows: list[PostingRow] | None = None,
-        read_only: bool = False,
-        formulas: bool = False,
-        inherit_invoices: bool = True,
-    ) -> None:
-        super().__init__()
-        self.catalog = catalog
-        self.rows = rows or [PostingRow()]
-        self.read_only = read_only
-        self.formulas = formulas  # template editing: the amount column holds formulas
-        self.inherit_invoices = inherit_invoices
-        # currency id -> manat per unit on the document date (set by the document page)
-        self.rate_for: Callable[[int], Fraction | None] = lambda _currency_id: None
-
-    # ---- Qt model API ----------------------------------------------------------------
-
-    def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
-        return 0 if parent is not None and parent.isValid() else len(self.rows)
-
-    def columnCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
-        return 0 if parent is not None and parent.isValid() else len(HEADERS)
-
-    def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
-        if role == Qt.ItemDataRole.DisplayRole:
-            if orientation == Qt.Orientation.Horizontal:
-                return tr(HEADERS[section]) if HEADERS[section] else ""
-            return str(section + 1)
-        if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
-            return ALIGN_RIGHT if self.is_number(section) else ALIGN_LEFT
-        return None
-
-    def column_order(self) -> list[int]:
-        """Columns in the order they are shown, typed and pasted."""
-        return list(range(self.columnCount()))
-
-    def is_number(self, col: int) -> bool:
-        return col in NUMBER_COLUMNS
-
-    def _currency_modes(self, row: int) -> list[int]:
-        r = self.rows[row]
-        if self.formulas:
-            return []
-        modes = [self.catalog.accounts[a].currency for a in (r.debit, r.credit) if a is not None]
-        return [m for m in modes if m]
-
-    def is_currency(self, row: int) -> bool:
-        """The line hits a currency account, so it may have a currency and an amount in it."""
-        return bool(self._currency_modes(row))
-
-    def currency_required(self, row: int) -> bool:
-        """The line hits an account kept only in currency (52): manat alone won't do."""
-        return CURRENCY_ONLY in self._currency_modes(row)
-
-    def in_currency(self, row: int) -> bool:
-        """The line is (or has to be) in a currency: its currency cells are in use.
-        A line on 60 / 62 with a local partner stays in manat and shows none of them."""
-        return self.currency_required(row) or (
-            self.is_currency(row) and self.rows[row].currency_id is not None
-        )
-
-    def takes_invoice(self, row: int) -> bool:
-        """The line is on a settlement or ƏDV account: it may name its e-qaimə."""
-        r = self.rows[row]
-        return not self.formulas and (
-            self.catalog.takes_invoice(r.debit) or self.catalog.takes_invoice(r.credit)
-        )
-
-    def kind_at(self, row: int, col: int) -> int | None:
-        """Subconto kind required at this cell, or None if the cell doesn't apply."""
-        side, pos = column_role(col)
-        if pos is None:
-            return None
-        account_id = getattr(self.rows[row], side)
-        if account_id is None:
-            return None
-        return self.catalog.accounts[account_id].sc_kinds[pos - 1]
-
-    def applies(self, row: int, col: int) -> bool:
-        if col == CURRENCY:
-            return self.is_currency(row)
-        if col in CURRENCY_COLUMNS:
-            return self.in_currency(row)
-        if col == INVOICE:
-            return self.takes_invoice(row)
-        _, pos = column_role(col)
-        return pos is None or self.kind_at(row, col) is not None
-
+class PostingsModel(PostingsClipboard):
     def flags(self, index):
         if not self.applies(index.row(), index.column()):
             return Qt.ItemFlag.NoItemFlags
@@ -378,8 +266,6 @@ class PostingsModel(QAbstractTableModel):
                 r.rate = self.rate_for(r.currency_id)
         self._follow_rate(r)
 
-    # ---- currency ----------------------------------------------------------------------
-
     def _row_changed(self, row: int) -> None:
         self.dataChanged.emit(self.index(row, 0), self.index(row, self.columnCount() - 1))
 
@@ -419,176 +305,6 @@ class PostingsModel(QAbstractTableModel):
                 self._follow_rate(r)
                 self._row_changed(row)
         self.changed.emit()
-
-    # ---- typed text -> values ----------------------------------------------------------
-
-    def parse(self, row: int, col: int, text: str):
-        """The value for a cell from what was typed or pasted; None for an empty text.
-        Raises LookupError / ValueError (UnknownValue for a name not in a directory)."""
-        text = text.strip()
-        side, pos = column_role(col)
-        if side == "invoice":
-            return normalize_invoice(text) or ""
-        if not text:  # text fields (memo, a template's formula) stay strings
-            return "" if side == "memo" or (side == "amount" and self.formulas) else None
-        if side in ("debit", "credit") and pos is None:
-            return self.catalog.resolve_account(text).id
-        if side in ("debit", "credit"):
-            return self._parse_subconto(row, col, text)
-        if side == "currency":
-            return self.catalog.resolve_currency(text).id
-        if side == "rate":
-            return unit_rate(parse_rate(plain_number(text)))
-        if side == "amount" and self.formulas:
-            formula.parse(text)  # check now, not when the template is saved
-            return text
-        if side == "amount" and self.is_currency(row) and (found := self._in_currency(text)):
-            return found
-        if side in ("amount", "currency_amount"):
-            if ARITHMETIC.search(text):  # a small calculator: 1180*18/118
-                value = formula.evaluate(text)
-            else:
-                value = to_minor(plain_number(text))
-            if value <= 0:
-                raise ValueError(tr("сумма должна быть больше нуля"))
-            return value
-        return text
-
-    def _parse_subconto(self, row: int, col: int, text: str) -> int:
-        kind = self.kind_at(row, col)
-        if kind is None:
-            raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
-        value = self.catalog.resolve_value(kind, text, self.owner_at(row, col))
-        if value is None:
-            raise UnknownValue(kind, text)
-        return value
-
-    def owner_at(self, row: int, col: int) -> int | None:
-        """The counterparty chosen on the line for a contract cell (None: any contract)."""
-        side, pos = column_role(col)
-        account_id = getattr(self.rows[row], side) if pos is not None else None
-        if account_id is None or pos is None:
-            return None
-        account = self.catalog.accounts[account_id]
-        return self.catalog.owner_in(account, getattr(self.rows[row], f"{side}_sc"), pos - 1)
-
-    def _in_currency(self, text: str) -> InCurrency | None:
-        """ "500 EUR" / "EUR 500" in the amount cell of a line on 60 / 62 / 52."""
-        m = CURRENCY_AMOUNT_TEXT.match(text)
-        if not m:
-            return None
-        code = (m["code"] or m["code2"]).upper()
-        currency = next((c for c in self.catalog.active_currencies if c.code == code), None)
-        if currency is None:
-            raise LookupError(tr("валюта «{text}» не найдена", text=code))
-        amount = to_minor(plain_number(m["number"] or m["number2"]))
-        if amount <= 0:
-            raise ValueError(tr("сумма должна быть больше нуля"))
-        return InCurrency(currency.id, amount)
-
-    def paste(self, text: str, start_row: int, start_col: int, shown) -> PasteResult:
-        """Put lines copied from Excel into the grid (see the module docstring).
-        `shown(col)` tells whether a column is visible. A single line goes into the
-        current row; more lines fill the current row if it is empty, then new rows."""
-        lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-        while lines and not lines[-1].strip():
-            lines.pop()
-        cells = [line.split("\t") for line in lines]
-        result = PasteResult()
-        if not cells:
-            return result
-        mapping = self.header_columns(cells[0])
-        if mapping is not None:
-            cells = cells[1:]
-        target = start_row
-        for n, line in enumerate(cells, start=1):
-            if not any(c.strip() for c in line):
-                continue
-            needs_row = target >= len(self.rows) or not self.rows[target].is_empty()
-            if (len(cells) > 1 or target >= len(self.rows)) and needs_row:
-                self.insert_row(target)
-            if mapping is not None:
-                self._paste_by_header(target, line, mapping, n, result)
-            else:
-                self._paste_in_order(target, line, start_col, shown, n, result)
-            result.rows += 1
-            target += 1
-        self.changed.emit()
-        return result
-
-    def header_columns(self, cells: list[str]) -> list[int | None] | None:
-        return header_columns(cells)
-
-    def _paste_by_header(self, row, line, mapping, n, result) -> None:
-        # accounts first: their subconto columns apply only once the account is known
-        order = sorted(
-            (i for i, col in enumerate(mapping) if col is not None and i < len(line)),
-            key=lambda i: (mapping[i] not in (DT, CT), mapping[i]),
-        )
-        for i in order:
-            if line[i].strip():
-                self._paste_cell(row, mapping[i], line[i], n, result)
-
-    def _paste_in_order(self, row, line, start_col, shown, n, result) -> None:
-        order = self.column_order()
-        at = order.index(start_col)
-        for cell in line:
-            while at < len(order) and not (shown(order[at]) and self.applies(row, order[at])):
-                at += 1
-            if at >= len(order):
-                if cell.strip():
-                    result.errors.append(
-                        tr("строка {n}: лишнее значение «{text}»", n=n, text=cell.strip())
-                    )
-                continue
-            if cell.strip():
-                self._paste_cell(row, order[at], cell, n, result)
-            at += 1
-
-    def _paste_cell(self, row, col, text, n, result) -> None:
-        try:
-            value = self.parse(row, col, text)
-        except UnknownValue as e:
-            result.unknown.append((row, col, e.kind_id, e.text))
-            return
-        except (LookupError, ValueError, TypeError, ValidationError) as e:
-            result.errors.append(tr("строка {n}: {error}", n=n, error=str(e).strip("'\"")))
-            return
-        self.setData(self.index(row, col), value)
-
-    def copy_text(self, shown) -> str:
-        """The document as tab-separated lines with a header, for Excel."""
-        columns = [c for c in self.column_order() if shown(c)]
-
-        def title(col: int) -> str:
-            side, pos = column_role(col)
-            if pos is not None:
-                return f"{tr('Субконто')} {tr('Дт' if side == 'debit' else 'Кт')} {pos}"
-            return str(self.headerData(col, Qt.Orientation.Horizontal))
-
-        lines = ["\t".join(title(c) for c in columns)]
-        for r, row in enumerate(self.rows):
-            if row.is_empty():
-                continue
-            values = []
-            for c in columns:
-                if not self.applies(r, c):
-                    values.append("")
-                    continue
-                value = self.data(self.index(r, c), Qt.ItemDataRole.EditRole)
-                values.append("" if value is None else str(value))
-            lines.append("\t".join(values))
-        return "\n".join(lines) + "\n"
-
-    # ---- row operations --------------------------------------------------------------
-
-    def insert_row(self, at: int | None = None, row: PostingRow | None = None) -> int:
-        at = len(self.rows) if at is None else at
-        self.beginInsertRows(QModelIndex(), at, at)
-        self.rows.insert(at, row or PostingRow())
-        self.endInsertRows()
-        self.changed.emit()
-        return at
 
     def duplicate_row(self, i: int) -> int:
         src = self.rows[i]

@@ -565,12 +565,12 @@ def test_osv_highlights_balance_on_wrong_side(window):
 
 def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch):
     monkeypatch.setattr(
-        "modern_gl.desktop.main_window.QInputDialog.getText",
+        "modern_gl.desktop.main_window.company_files.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("Yeni MMC", True)),
     )
     offered = []
     monkeypatch.setattr(  # the file goes where it is offered: the data folder
-        "modern_gl.desktop.main_window.QFileDialog.getSaveFileName",
+        "modern_gl.desktop.main_window.company_files.QFileDialog.getSaveFileName",
         staticmethod(lambda _w, _t, path, _f: (offered.append(path) or path, "")),
     )
     assert window.create_company()
@@ -590,13 +590,17 @@ def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch)
 
 def test_delete_company_needs_typed_name(window, workspace, monkeypatch):
     path = window.company_path
-    monkeypatch.setattr("modern_gl.desktop.main_window.confirm_delete", lambda *a: False)
+    monkeypatch.setattr(
+        "modern_gl.desktop.main_window.company_files.confirm_delete", lambda *a: False
+    )
     window.delete_company()
     assert path.exists()  # not confirmed: nothing happens
 
-    monkeypatch.setattr("modern_gl.desktop.main_window.confirm_delete", lambda *a: True)
     monkeypatch.setattr(
-        "modern_gl.desktop.main_window.QInputDialog.getText",
+        "modern_gl.desktop.main_window.company_files.confirm_delete", lambda *a: True
+    )
+    monkeypatch.setattr(
+        "modern_gl.desktop.main_window.company_files.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("", False)),  # user declines to create a new one
     )
     window.delete_company()
