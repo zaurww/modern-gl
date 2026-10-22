@@ -18,6 +18,7 @@ code;type
 50;cash
 51;bank
 52;bank
+54;vat_deposit
 57;transit
 60;payable
 61;advance_paid

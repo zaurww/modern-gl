@@ -38,6 +38,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 50;Касса;;;asset;;;;
 51;Расчётные счета;;;asset;;;bank_account;
 52;Валютные счета;;;asset;;;bank_account;1
+54;Депозитный счёт НДС;;;asset;;;bank_account;
 55;Специальные счета в банках;;;asset;;;bank_account;
 57;Переводы в пути;;;asset;;;;;fx_transit
 58;Финансовые вложения;;;asset;;;counterparty;

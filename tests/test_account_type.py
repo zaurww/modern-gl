@@ -153,7 +153,9 @@ def test_migration_types_old_companies_like_the_template(ledger, conn, template)
     # 0019: the transit account of conversions (a role since 0018) becomes "transit"
     sql = (MIGRATIONS_DIR / "0019_transit_type.sql").read_text(encoding="utf-8")
     conn.executescript(sql[sql.index("UPDATE accounts") :])
-    # 76H came with D65 (0031): files typed by 0012 had no such account
-    assert {code: k for code, k in kinds(conn, cid).items() if code != "76H"} == {
-        code: k for code, k in expected.items() if code != "76H"
+    # 76H came with D65 (0031), the ƏDV deposit 54 with the templates later: files typed by
+    # 0012 had no such accounts
+    later = {"76H", "54"}
+    assert {code: k for code, k in kinds(conn, cid).items() if code not in later} == {
+        code: k for code, k in expected.items() if code not in later
     }

@@ -247,12 +247,10 @@ def test_vat_deposit_offers_only_what_it_may_pay(qtbot, session):
 def test_the_bank_account_is_one_field(qtbot, session, monkeypatch):
     """The GL account, the bank and its currency are chosen at once: «Kapital USD · 52 ·
     USD» puts 52, the bank and USD; the currency is not asked. A bank never used on an
-    account is offered there too (a new ƏDV deposit on 55). A bank not in the list is
-    added right in the field, under the chosen account, and taken."""
+    account is offered there too (the ƏDV deposit 54 of the template). A bank not in the
+    list is added right in the field, under the chosen account, and taken."""
     from modern_gl.desktop.directories_page import ValueDialog
 
-    session.ledger.set_account_type(session.company_id, acc(session, "55"), "vat_deposit")
-    session.catalog.reload()
     page = new_page(qtbot, session)
     assert page.bank.currentText() == "Kapital AZN  ·  51  ·  AZN"  # the first bank account
     assert page.currency.isHidden()
@@ -260,7 +258,7 @@ def test_the_bank_account_is_one_field(qtbot, session, monkeypatch):
     assert page.bank_info is not None and page.bank_info.code == "52"
     assert page.bank_subconto()[0] == value(session, "Kapital USD")
     assert page.total.text() == "0.00 USD"
-    assert page.deposit.currentText() == "Kapital AZN  ·  55  ·  AZN"  # never used there
+    assert page.deposit.currentText() == "Kapital AZN  ·  54  ·  AZN"  # never used there
 
     def exec_(dialog):
         dialog.name.setText("Paşa Bank")
@@ -406,8 +404,9 @@ def shown_page(qtbot, session: Session) -> BankOperationPage:
 
 
 def test_an_operation_is_typed_and_posted_without_the_mouse(qtbot, session):
-    """D49: name → Enter → e-qaimə → Enter → amount → Enter → «Провести» → Enter; the
-    bank, day and kind are set before, the line as last time is folded into one."""
+    """D49: name → Enter → e-qaimə → Enter → amount → Enter → ƏDV from the deposit (D69,
+    the template has the deposit 54) → Enter → «Провести» → Enter; the bank, day and kind
+    are set before, the line as last time is folded into one."""
     page = shown_page(qtbot, session)
     choose(page.sc[0], "Kapital AZN")
     assert page.bank.currentText().startswith("Kapital AZN")
@@ -424,6 +423,8 @@ def test_an_operation_is_typed_and_posted_without_the_mouse(qtbot, session):
     key(qtbot, Qt.Key.Key_Return)
     assert page.amount.hasFocus()
     typed("500")
+    key(qtbot, Qt.Key.Key_Return)
+    assert page.vat_amount.hasFocus()  # left empty: the deposit pays later
     key(qtbot, Qt.Key.Key_Return)
     assert page.btn_post.hasFocus()
     key(qtbot, Qt.Key.Key_Return)
