@@ -366,3 +366,57 @@ def test_card_shows_what_is_missing_and_what_is_new_in_place(books):
     entry = parse("52 kapital bank usd / 51 kapital bank 100 USD", cat, (), rate, TODAY)
     [usd] = card(entry, cat)
     assert (usd.amount.text, usd.in_manat) == ("100.00 USD", "× 1.7000 = 170.00")
+
+
+def test_free_order_line_is_the_posting_of_last_time(books):
+    """«альфа 450»: no "/", the words of a posting typed before and the amount."""
+    conn, ledger, cid, cat, v = books
+    rent = PostingInput(
+        cat.by_code["26"].id,
+        cat.by_code["60"].id,
+        from_minor(40_000),
+        (v["Аренда офиса"], None, None),
+        (v["Альфа Трейд"], v["Договор №1"], None),
+        "Аренда за март",
+    )
+    ledger.post_new(cid, TODAY, [rent], "Аренда за март")
+    history = past_postings(conn, cid)
+    [ln] = parse("альфа 450", cat, today=TODAY, history=history).lines
+    assert (ln.debit, ln.credit, ln.amount, ln.memo) == (
+        rent.debit_account_id,
+        rent.credit_account_id,
+        45_000,
+        "Аренда за март",
+    )
+    assert ln.credit_sc[:2] == [v["Альфа Трейд"], v["Договор №1"]]
+    [ln] = parse(
+        "05.04 аренд альф 450,50 Аренда за апрель", cat, today=TODAY, history=history
+    ).lines
+    assert (ln.amount, ln.memo) == (45_050, "Аренда за апрель")
+    with pytest.raises(ValidationError, match="разделяются"):
+        parse("бета 450", cat, today=TODAY, history=history)  # nothing like it before
+    assert marked_with(history, "альфа 450 Аренда", cat) == [
+        ("альфа", "value"),
+        ("450", "amount"),
+    ]
+
+
+def marked_with(history, text: str, cat: Catalog) -> list[tuple[str, str]]:
+    return [(text[m.start : m.end], m.kind) for m in marks(text, cat, (), TODAY, history)]
+
+
+def test_free_order_posts_with_enter_and_a_grey_place_opens_the_form(bar, qtbot):
+    bar.edit.setText("26 аренда / 60 альфа, договор 400 Аренда за март")
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return)
+    bar.edit.setText("альфа 420")
+    posted = []
+    bar.posted.connect(posted.append)
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return)
+    doc = load_document(bar.s.conn, bar.s.company_id, posted[0])
+    assert (doc.postings[0].amount, doc.memo) == (42_000, "Аренда за март")
+    bar.edit.setText("71 / 50 100")  # 71 waits for an employee: grey, a link
+    assert 'href="form"' in bar.card.text.text()
+    forms = []
+    bar.open_form.connect(forms.append)
+    bar.card.text.linkActivated.emit("form")
+    assert forms[0].postings[0].amount == 10_000

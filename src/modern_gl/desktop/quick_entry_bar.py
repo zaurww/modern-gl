@@ -74,6 +74,7 @@ class QuickEntryBar(QWidget):
         self.preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.preview)
         self.card = EntryCard()
+        self.card.finish.connect(self.to_form)
         lay.addWidget(self.card)
         self.help = QLabel(tr(HELP))
         self.help.setObjectName("tertiary")
@@ -179,6 +180,7 @@ class QuickEntryBar(QWidget):
             list_templates(self.s.conn, self.s.company_id),
             self._rate,
             self.s.working_date,
+            self.past(),
         )
 
     def _preview(self, text: str) -> None:
@@ -200,7 +202,8 @@ class QuickEntryBar(QWidget):
         """Colour the parts as they are understood (Todoist's Quick Add): accounts and
         elements blue, the amount green, a new element amber, what names nothing
         underlined red — except the word still being typed at the end."""
-        found = marks(text, self.s.catalog, list_templates(self.s.conn, self.s.company_id))
+        templates = list_templates(self.s.conn, self.s.company_id)
+        found = marks(text, self.s.catalog, templates, self.s.working_date, self.past())
         typing = len(text.rstrip()) if self.edit.cursorPosition() >= len(text.rstrip()) else -1
         cursor = self.edit.cursorPosition()
         attrs = [

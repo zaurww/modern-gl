@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from datetime import date
 
 from modern_gl.application.catalog import AccountInfo, Catalog
-from modern_gl.application.queries import TemplateData
+from modern_gl.application.queries import PastPosting, TemplateData
+from modern_gl.application.quick_entry.history import matching
 from modern_gl.application.quick_entry.parser import NEW, amount_index, token_date, token_number
 from modern_gl.domain.invoice import MARK as INVOICE_MARK
 from modern_gl.i18n import fold
@@ -27,17 +28,28 @@ class Mark:
 
 
 def marks(
-    text: str, catalog: Catalog, templates: Sequence[TemplateData] = (), today: date | None = None
+    text: str,
+    catalog: Catalog,
+    templates: Sequence[TemplateData] = (),
+    today: date | None = None,
+    history: Sequence[PastPosting] = (),
 ) -> list[Mark]:
     """The understood parts of the line, in order; the memo is left unmarked."""
-    return _Marker(catalog, templates, today or date.today()).line(text)
+    return _Marker(catalog, templates, today or date.today(), history).line(text)
 
 
 class _Marker:
-    def __init__(self, catalog: Catalog, templates: Sequence[TemplateData], today: date) -> None:
+    def __init__(
+        self,
+        catalog: Catalog,
+        templates: Sequence[TemplateData],
+        today: date,
+        history: Sequence[PastPosting],
+    ) -> None:
         self.cat = catalog
         self.templates = templates
         self.today = today
+        self.history = history
         self.found: list[Mark] = []
 
     def line(self, text: str) -> list[Mark]:
@@ -65,10 +77,30 @@ class _Marker:
 
     def _posting(self, body: str, offset: int) -> None:
         slash = body.find("/")
+        if slash < 0 and self._as_before(_words(body, offset)):
+            return
         left = body if slash < 0 else body[:slash]
         self._side(left, offset, credit=False)
         if slash >= 0:
             self._side(body[slash + 1 :], offset + slash + 1, credit=True)
+
+    def _as_before(self, words: list[tuple[int, int, str]]) -> bool:
+        """«альфа аренда 450»: the words of a posting typed before, then the amount."""
+        try:
+            self.cat.resolve_account(words[0][2])
+            return False
+        except LookupError:
+            pass
+        at = next((i for i, w in enumerate(words) if token_number(w[2])), None)
+        if (
+            not at
+            or next(matching([w for _, _, w in words[:at]], self.cat, self.history), None) is None
+        ):
+            return False
+        for start, end, _ in words[:at]:
+            self._mark(start, end, "value")
+        self._mark(words[at][0], words[at][1], "amount")
+        return True
 
     def _side(self, text: str, offset: int, credit: bool) -> None:
         words = _words(text, offset)

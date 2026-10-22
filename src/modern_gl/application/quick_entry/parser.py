@@ -29,7 +29,8 @@ from fractions import Fraction
 
 from modern_gl.application.catalog import AccountInfo, Catalog
 from modern_gl.application.currencies import no_rate_text
-from modern_gl.application.queries import TemplateData
+from modern_gl.application.queries import PastPosting, TemplateData
+from modern_gl.application.quick_entry.history import matching
 from modern_gl.domain import formula
 from modern_gl.domain.currency import format_unit_rate, to_base
 from modern_gl.domain.errors import ValidationError
@@ -105,11 +106,13 @@ class _Parser:
         templates: Sequence[TemplateData],
         rate_for: Callable[[int, date], Fraction | None],
         today: date,
+        history: Sequence[PastPosting] = (),
     ) -> None:
         self.cat = catalog
         self.templates = templates
         self.rate_for = rate_for
         self.today = today
+        self.history = history
         self.entry = QuickEntry()
 
     def parse(self, text: str) -> QuickEntry:
@@ -127,7 +130,7 @@ class _Parser:
         for n, part in enumerate(parts, start=1):
             if part.startswith("#"):
                 self._template(n, part[1:])
-            else:
+            elif not self._as_before(n, part):
                 self._posting(n, part)
         if not self.entry.memo:
             self.entry.memo = next((ln.memo for ln in self.entry.lines if ln.memo), "")
@@ -315,6 +318,39 @@ class _Parser:
         line.currency_id, line.currency_amount, line.rate = currency, amount, rate
         line.amount = to_base(amount, rate)
 
+    # ---- a line in free order: as the last time -----------------------------------
+
+    def _as_before(self, n: int, text: str) -> bool:
+        """«альфа аренда 450 [memo]»: no "/", words of a posting typed before, the amount
+        — that posting again (its memo unless another follows the amount)."""
+        words = text.split()
+        if "/" in text or self._is_account(words[0]):
+            return False
+        at = next((i for i, w in enumerate(words) if token_number(w)), None)
+        if not at:
+            return False
+        past = next(matching(words[:at], self.cat, self.history), None)
+        if past is None:
+            return False
+        line = QuickLine(
+            past.debit,
+            list(past.debit_sc),
+            past.credit,
+            list(past.credit_sc),
+            memo=" ".join(words[at + 1 :]) or past.memo,
+        )
+        accounts = (self.cat.accounts[past.debit], self.cat.accounts[past.credit])
+        self._amount(n, line, token_number(words[at]), past.currency_id, accounts)
+        self.entry.lines.append(line)
+        return True
+
+    def _is_account(self, word: str) -> bool:
+        try:
+            self.cat.resolve_account(word)
+        except LookupError:
+            return False
+        return True
+
     # ---- a template line ---------------------------------------------------------
 
     def _template(self, n: int, text: str) -> None:
@@ -413,9 +449,11 @@ def parse(
     templates: Sequence[TemplateData] = (),
     rate_for: Callable[[int, date], Fraction | None] = lambda _c, _d: None,
     today: date | None = None,
+    history: Sequence[PastPosting] = (),
 ) -> QuickEntry:
-    """Raises ValidationError with a message for the user."""
-    return _Parser(catalog, templates, rate_for, today or date.today()).parse(text)
+    """Raises ValidationError with a message for the user. `history`: postings typed
+    before, for a line in free order ("альфа аренда 450")."""
+    return _Parser(catalog, templates, rate_for, today or date.today(), history).parse(text)
 
 
 def amount_index(catalog: Catalog, credit: AccountInfo, words: list[str]) -> int | None:

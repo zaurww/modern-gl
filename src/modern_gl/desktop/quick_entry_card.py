@@ -1,13 +1,14 @@
 """The quick entry line as a card under it (like Fantastical's preview): the date and
 memo, then each posting — Dt → Kt with their elements, the amount on the right. What is
-still empty stands grey in its place; a new element is amber."""
+still empty stands grey in its place (a click finishes it in the form); a new element
+is amber."""
 
 from __future__ import annotations
 
 from datetime import date
 from html import escape
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout
 
 from modern_gl.application.catalog import Catalog
@@ -18,6 +19,8 @@ from modern_gl.i18n import tr
 
 
 class EntryCard(QFrame):
+    finish = Signal()  # a grey place clicked: finish the document in the form
+
     def __init__(self) -> None:
         super().__init__()
         self.setObjectName("summary")
@@ -26,7 +29,11 @@ class EntryCard(QFrame):
         self.text = QLabel()
         self.text.setFont(fonts().body)
         self.text.setTextFormat(Qt.TextFormat.RichText)
-        self.text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.text.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self.text.linkActivated.connect(lambda _link: self.finish.emit())
         lay.addWidget(self.text)
 
     def show_entry(self, entry: QuickEntry, catalog: Catalog, day: date) -> None:
@@ -67,8 +74,9 @@ def _part(part: Part) -> str:
         return f'<span style="color: {P.text}; font-weight: 600">{escape(part.text)}</span>'
     if part.kind == "new":
         return _span(part.text, P.amber)
-    if part.kind == "missing":
-        return _span(part.text + "?", P.tertiary)
+    if part.kind == "missing":  # a click opens the form to fill it in
+        style = f"color: {P.tertiary}; text-decoration: none"
+        return f'<a href="form" style="{style}">{escape(part.text)}?</a>'
     return _span(part.text, P.text)
 
 

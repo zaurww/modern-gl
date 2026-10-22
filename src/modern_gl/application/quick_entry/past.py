@@ -10,10 +10,10 @@ from fractions import Fraction
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.queries import PastPosting
+from modern_gl.application.quick_entry.history import matching
 from modern_gl.application.quick_entry.parser import parse
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import fold
 
 MOST = 5  # postings offered at once
 
@@ -23,14 +23,8 @@ def past_lines(
 ) -> list[tuple[str, str, tuple[int, int]]]:
     """(label, line, span of the amount in the line) of the latest postings whose
     names or memo hold every typed word at the start of a word."""
-    needles = fold(typed).split()
-    if not needles or not any(c.isalpha() for c in typed):
-        return []
     found = []
-    for past in history:
-        words = fold(" ".join(_names(past, catalog))).split()
-        if not all(any(w.startswith(n) for w in words) for n in needles):
-            continue
+    for past in matching(typed.split(), catalog, history):
         written = _line(past, catalog)
         if written is None:
             continue
@@ -42,12 +36,6 @@ def past_lines(
         if len(found) == MOST:
             break
     return found
-
-
-def _names(past: PastPosting, catalog: Catalog) -> list[str]:
-    values = [catalog.value(v).name for v in (*past.debit_sc, *past.credit_sc) if v]
-    accounts = [catalog.accounts[a].name for a in (past.debit, past.credit)]
-    return [*values, *accounts, past.memo]
 
 
 def _shown(past: PastPosting) -> int:
