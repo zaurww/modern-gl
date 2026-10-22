@@ -72,6 +72,62 @@ def test_restore_brings_back_the_backup_and_keeps_the_current_file(tmp_path):
     assert documents(path) == 2
 
 
+def damage_an_index(path) -> None:
+    """A fault quick_check does not see: an index that no longer matches its table."""
+    conn = sqlite3.connect(path, isolation_level=None)
+    version = conn.execute("PRAGMA schema_version").fetchone()[0]
+    conn.execute("PRAGMA writable_schema = ON")
+    conn.execute(
+        "UPDATE sqlite_master SET sql = 'CREATE INDEX documents_by_company_date "
+        "ON documents (company_id, status, doc_date DESC)' "
+        "WHERE name = 'documents_by_company_date'"
+    )
+    conn.execute(f"PRAGMA schema_version = {version + 1}")
+    conn.close()
+
+
+def test_backup_runs_the_full_check_and_keeps_the_good_ones(tmp_path):
+    """Every backup is checked in full (integrity_check), so each working session ends with
+    a full check of the company: a damaged one is not saved over the good backups, and
+    the message says the company file needs restoring."""
+    ws = Workspace(tmp_path / "data")
+    path, conn, ledger, cid, (a, b) = company(ws)
+    ledger.post_new(cid, "2026-03-01", [PostingInput(a, b, "100")])
+    ledger.post_new(cid, "2026-03-05", [PostingInput(a, b, "50")])
+    good = ws.auto_backup(conn, path)
+    conn.close()
+    damage_an_index(path)
+    conn, _ = ws.open(path)  # the quick check on opening lets it through
+    Ledger(conn).post_new(cid, "2026-03-02", [PostingInput(a, b, "200")])
+    with pytest.raises(backup.BackupError, match="повреждения"):
+        ws.auto_backup(conn, path)
+    conn.close()
+    assert [b.path for b in ws.backups(path)] == [good]
+    assert list(ws.backup_folder(path).glob("*.part")) == []
+
+
+@pytest.mark.parametrize("damage", ["index", "garbage"])
+def test_damaged_company_is_restored_and_kept_as_it_was(tmp_path, damage):
+    """Restoring is what a damaged file needs: the damaged file itself is kept beside the
+    backups as it is (no check, no SQLite copy — it may not even open), then replaced."""
+    ws = Workspace(tmp_path / "data")
+    path, conn, ledger, cid, (a, b) = company(ws)
+    ledger.post_new(cid, "2026-03-01", [PostingInput(a, b, "100")])
+    ledger.post_new(cid, "2026-03-05", [PostingInput(a, b, "50")])
+    good = ws.auto_backup(conn, path)
+    conn.close()
+    assert good is not None
+    if damage == "index":
+        damage_an_index(path)
+    else:
+        path.write_bytes(b"SQLite format 3\x00" + b"\x00" * 50 + b"garbage" * 200)
+    damaged = path.read_bytes()
+    kept = ws.restore(good, path)
+    assert kept.read_bytes() == damaged and "до восстановления" in kept.name
+    assert documents(path) == 2
+    backup.check(path, full=True)
+
+
 def test_damaged_file_is_refused(tmp_path):
     ws = Workspace(tmp_path / "data")
     bad = ws.folder / "Broken.gl"
