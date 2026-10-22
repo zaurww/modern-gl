@@ -25,14 +25,21 @@ from modern_gl.application.bank import (
     VAT_DEPOSIT,
     BankAccount,
 )
+from modern_gl.application.default_accounts import (
+    CARD_ACCOUNT,
+    CURRENCY_ACCOUNT,
+    CURRENT_ACCOUNT,
+    VAT_DEPOSIT_ACCOUNT,
+    default_account,
+)
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, date_edit, edited_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
-# the GL account a new account of a kind goes on, the first of these that exists
-USUAL_ACCOUNTS = {CARD: ("55", "51"), CURRENCY: ("52",), VAT_DEPOSIT: ("54",)}
+# the GL account a new account of a kind goes on (by type, debt 11)
+USUAL_ACCOUNTS = {CARD: CARD_ACCOUNT, CURRENCY: CURRENCY_ACCOUNT, VAT_DEPOSIT: VAT_DEPOSIT_ACCOUNT}
 
 
 class BankAccountDialog(QDialog):
@@ -142,9 +149,8 @@ class BankAccountDialog(QDialog):
 
     def _kind_changed(self, *_) -> None:
         if self.account is None:
-            codes = USUAL_ACCOUNTS.get(self.kind.currentData(), ("51",))
-            by_code = self.s.catalog.by_code
-            usual = next((by_code[c].id for c in codes if c in by_code), None)
+            purpose = USUAL_ACCOUNTS.get(self.kind.currentData(), CURRENT_ACCOUNT)
+            usual = default_account(self.s.ledger, self.s.company_id, purpose)
             if usual is not None and self.ledger_account.findData(usual) >= 0:
                 self.ledger_account.setCurrentIndex(self.ledger_account.findData(usual))
         self._show_card_rows()
