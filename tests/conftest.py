@@ -60,6 +60,26 @@ def fields_as_in_the_app(qapp):
 
 
 @pytest.fixture(autouse=True)
+def reason_dialog_answers(monkeypatch):
+    """«Почему?» (D96) is modal: in tests it is answered at once — yes, with the reason in
+    `REASON["text"]` (a test sets it, or None to change its mind)."""
+    from modern_gl.desktop.reason_dialog import ReasonDialog
+
+    REASON["text"] = ""
+
+    def answer(dialog: ReasonDialog) -> int:
+        if REASON["text"] is None:
+            return 0
+        dialog.reason.setText(REASON["text"])
+        return 1
+
+    monkeypatch.setattr(ReasonDialog, "exec", answer)
+
+
+REASON: dict[str, str | None] = {"text": ""}
+
+
+@pytest.fixture(autouse=True)
 def russian_interface():
     """Tests assert Russian messages; test_i18n covers the Azerbaijani catalog."""
     set_language("ru")

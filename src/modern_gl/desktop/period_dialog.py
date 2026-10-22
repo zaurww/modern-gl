@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout
 
 from modern_gl.application.period import closed_through, drafts_through, period_ends
+from modern_gl.desktop.reason_dialog import ask_reason
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, date_edit, edited_date, ru_date, to_qdate
@@ -124,20 +125,36 @@ class PeriodDialog(QDialog):
         self.ok.setEnabled(day != self.closed)
 
     def close_period(self) -> None:
-        self._set(self.day())
+        day = self.day()
+        if self.closed is not None and day < self.closed:  # opens a part: why?
+            reason = ask_reason(
+                self,
+                tr("Закрытие периода"),
+                tr(
+                    "Открыть период после {day}? Проведённые документы в нём снова можно "
+                    "будет менять.",
+                    day=ru_date(day),
+                ),
+                tr("Открыть часть периода"),
+            )
+            if reason is not None:
+                self._set(day, reason)
+            return
+        self._set(day)
 
     def open_all(self) -> None:
-        answer = QMessageBox.question(
+        reason = ask_reason(
             self,
             tr("Закрытие периода"),
             tr("Открыть все периоды? Проведённые документы снова можно будет менять."),
+            tr("Открыть все периоды"),
         )
-        if answer == QMessageBox.StandardButton.Yes:
-            self._set(None)
+        if reason is not None:
+            self._set(None, reason)
 
-    def _set(self, day: str | None) -> None:
+    def _set(self, day: str | None, reason: str = "") -> None:
         try:
-            self.s.ledger.set_closed_through(self.s.company_id, day)
+            self.s.ledger.set_closed_through(self.s.company_id, day, reason)
         except LedgerError as e:
             QMessageBox.warning(self, tr("Закрытие периода"), str(e))
             return
