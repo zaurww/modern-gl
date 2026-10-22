@@ -99,6 +99,23 @@ def test_drafts_post_with_the_account_of_the_last_purchase(shop, conn):
     assert rest.status == "draft" and rest.lines[0].cost_account_id is None  # rolled back
 
 
+def test_a_service_known_from_another_supplier_is_filled_from_it(shop, conn):
+    """«Aİ-92» of a petrol station never booked before: nothing of its own to learn from,
+    so the line takes the account of the same fuel bought from the first supplier
+    (January, Dt 26 [Yanacaq]): Dt 26 / Kt 60 40.00, Dt 19 / Kt 60 7.20."""
+    yanacaq, *_ = socar_month(shop)
+    kind = shop.ledger.subconto_kind_id(shop.company_id, "counterparty")
+    station = shop.ledger.add_subconto_value(shop.company_id, kind, "Azpetrol")
+    other = draft(shop, "2026-02-12", "aİ-92", "40", "7.20", [station])
+
+    result = post_drafts(shop.inventory, shop.company_id, [other])
+
+    assert (result.posted, result.filled, result.failed) == ([other], 1, [])
+    assert [p[:3] for p in shop.postings(other)] == [("26", "60", 4_000), ("19", "60", 720)]
+    line = shop.inventory.load_document(shop.company_id, other).lines[0]
+    assert line.cost_subconto == (yanacaq, None, None)
+
+
 def test_an_account_typed_in_the_draft_is_kept(shop, conn):
     """A line whose account the user chose (26 [Təmir]) keeps it: the history (26
     [Yanacaq]) fills only empty lines. Dt 26 / Kt 60 10.00."""
