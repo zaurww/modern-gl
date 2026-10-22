@@ -272,6 +272,12 @@ class InventoryPage(QWidget):
         )
         root.addWidget(self.header)
 
+        self._build_operations(root)
+        self._build_stock(root)
+        self._build_documents(root)
+        self.refresh()
+
+    def _build_operations(self, root: QVBoxLayout) -> None:
         operations = QHBoxLayout()
         operations.setSpacing(6)
         for title, operation, kind in (
@@ -286,6 +292,7 @@ class InventoryPage(QWidget):
         operations.addStretch(1)
         root.addLayout(operations)
 
+    def _build_stock(self, root: QVBoxLayout) -> None:
         self.model = ReportModel()
         self.table = QTableView()
         self.table.setObjectName("list")
@@ -308,6 +315,7 @@ class InventoryPage(QWidget):
         self.stack.addWidget(self.empty)
         root.addLayout(self.stack, 2)
 
+    def _build_documents(self, root: QVBoxLayout) -> None:
         recent = QHBoxLayout()
         recent_title = QLabel(tr("Последние складские документы"))
         recent_title.setFont(fonts().heading)
@@ -340,7 +348,6 @@ class InventoryPage(QWidget):
         hint.setFont(fonts().small)
         hint.setWordWrap(True)
         root.addWidget(hint)
-        self.refresh()
 
     def title(self) -> str:
         return tr("Склад")
@@ -412,6 +419,10 @@ class InventoryPage(QWidget):
                 amount=money(sum(r.amount for r in balances), False),
             )
         )
+        self._show_documents()
+
+    def _show_documents(self) -> None:
+        """The warehouse documents."""
         documents = list_inventory_documents(self.s.conn, self.s.company_id)
         self.documents_model.set(
             [

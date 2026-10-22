@@ -205,6 +205,25 @@ class TemplatePage(QWidget):
         meta.addWidget(self.memo, 1)
         root.addLayout(meta)
 
+        self._build_table(root, t)
+
+        self.preview = QLabel()
+        self.preview.setObjectName("secondary")
+        root.addWidget(self.preview)
+        self.error = QLabel()
+        self.error.setObjectName("error")
+        self.error.setWordWrap(True)
+        self.error.hide()
+        root.addWidget(self.error)
+
+        self._build_hint(root)
+        self._build_actions(root, template_id)
+        self._connect()
+        self._update_preview()
+        QTimer.singleShot(0, self.name.setFocus)
+
+    def _build_table(self, root: QVBoxLayout, t: TemplateData | None) -> None:
+        """The lines of the template: amounts are formulas."""
         rows = [
             PostingRow(
                 ln.debit_account_id,
@@ -217,20 +236,12 @@ class TemplatePage(QWidget):
             )
             for ln in (t.lines if t else [])
         ]
-        self.model = PostingsModel(session.catalog, rows, formulas=True)
-        self.delegate = PostingsDelegate(session.catalog, self)
+        self.model = PostingsModel(self.s.catalog, rows, formulas=True)
+        self.delegate = PostingsDelegate(self.s.catalog, self)
         self.table = PostingsTable(self.model, self.delegate)
         root.addWidget(self.table, 1)
 
-        self.preview = QLabel()
-        self.preview.setObjectName("secondary")
-        root.addWidget(self.preview)
-        self.error = QLabel()
-        self.error.setObjectName("error")
-        self.error.setWordWrap(True)
-        self.error.hide()
-        root.addWidget(self.error)
-
+    def _build_hint(self, root: QVBoxLayout) -> None:
         hint = QLabel(
             tr(
                 "Сумма: S — сумма операции, L1, L2 — суммы строк. "
@@ -242,6 +253,7 @@ class TemplatePage(QWidget):
         hint.setWordWrap(True)
         root.addWidget(hint)
 
+    def _build_actions(self, root: QVBoxLayout, template_id: int | None) -> None:
         actions = QHBoxLayout()
         self.btn_delete = button(tr("Удалить"), "danger")
         self.btn_delete.setVisible(template_id is not None)
@@ -251,6 +263,7 @@ class TemplatePage(QWidget):
         actions.addWidget(self.btn_save)
         root.addLayout(actions)
 
+    def _connect(self) -> None:
         self.btn_save.clicked.connect(lambda: self.save())
         self.btn_delete.clicked.connect(self.delete)
         self.delegate.error.connect(self.show_error)
@@ -274,8 +287,6 @@ class TemplatePage(QWidget):
         del_row = QShortcut(QKeySequence("Del"), self.table)
         del_row.setContext(Qt.ShortcutContext.WidgetShortcut)
         del_row.activated.connect(self._remove_row)
-        self._update_preview()
-        QTimer.singleShot(0, self.name.setFocus)
 
     @property
     def key(self):
