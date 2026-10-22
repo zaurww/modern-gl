@@ -36,7 +36,8 @@ CORE = [
 ]
 
 MODULE_TABLE = re.compile(
-    r"\b(inventory_\w+|landed_cost_\w+|stock_\w+|warehouses|bank_operation\w*|"
+    r"\b(inventory_\w+|landed_cost_\w+|stock_\w+|warehouses|bank_operation\w*|bank_statements|"
+    r"bank_account_details|"
     r"currency_conversions|conversion_fees|eqaime_\w+)\b"
 )
 MODULE_CODE = (

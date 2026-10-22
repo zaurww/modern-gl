@@ -113,7 +113,8 @@ def _bank_values(conn: Connection, company_id: int) -> list[Row]:
 
 
 def _used_pairs(conn: Connection, company_id: int) -> set[tuple[int, int]]:
-    """(GL account, subconto value) pairs postings or bank operations have used."""
+    """(GL account, subconto value) pairs postings, bank operations, statements or an
+    account's details have used (D78: a card on 55, not under 51)."""
     return {
         (r[0], r[1])
         for r in conn.execute(
@@ -128,6 +129,8 @@ def _used_pairs(conn: Connection, company_id: int) -> set[tuple[int, int]]:
                 UNION SELECT account_id, sc1 FROM bank_operations WHERE company_id = :c
                 UNION SELECT account_id, sc2 FROM bank_operations WHERE company_id = :c
                 UNION SELECT account_id, sc3 FROM bank_operations WHERE company_id = :c
+                UNION SELECT account_id, value_id FROM bank_account_details WHERE company_id = :c
+                UNION SELECT account_id, value_id FROM bank_statements WHERE company_id = :c
             ) WHERE value IS NOT NULL
             """,
             {"c": company_id},

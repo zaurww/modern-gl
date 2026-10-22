@@ -26,6 +26,15 @@ AZ: dict[str, str] = {
     "{label}: у счёта нет субконто {i}": "{label}: hesabın {i}-ci subkontosu yoxdur",
     "{label}: не заполнено «{kind}»": "{label}: «{kind}» doldurulmayıb",
     "можно не заполнять": "boş qala bilər",
+    "Расчётные счета": "Hesablaşma hesabları",
+    "Валютные счета": "Valyuta hesabları",
+    "Бизнес-карты": "Biznes kartlar",
+    "неизвестный вид банковского счёта: {kind}": "naməlum bank hesabı növü: {kind}",
+    "последние цифры карты — это 4 цифры": "kartın son rəqəmləri 4 rəqəmdir",
+    "конец периода выписки раньше его начала": "çıxarış dövrünün sonu əvvəlindən tezdir",
+    "счёт {code}: на эти дни уже есть выписка {start} — {end}": (
+        "{code} hesabı: bu günlər üçün artıq çıxarış var: {start} — {end}"
+    ),
     "счёт {code}: нет субконто {i}": "{code} hesabı: {i}-ci subkonto yoxdur",
     "счёт {code}: есть проводки без «{kind}», оно останется необязательным": (
         "{code} hesabı: «{kind}» olmayan yazılışlar var, o, məcburi olmayacaq"

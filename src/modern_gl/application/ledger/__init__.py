@@ -7,6 +7,7 @@ UI and importers call these methods; they never write ledger tables directly.
 from __future__ import annotations
 
 from modern_gl.application.ledger.bank import BankCommands
+from modern_gl.application.ledger.bank_statements import BankStatementCommands
 from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.companies import CompanyCommands
 from modern_gl.application.ledger.conversion import ConversionCommands
@@ -42,6 +43,7 @@ class Ledger(
     CompanyCommands,
     CurrencyCommands,
     BankCommands,
+    BankStatementCommands,
     ConversionCommands,
     EqaimeCommands,
     OpeningBalanceCommands,
