@@ -15,12 +15,9 @@ SRC = Path(__file__).parent.parent / "src" / "modern_gl"
 LIMITS = {"module": 600, "class": 500, "function": 80}  # lines, docstrings included
 SKIP = {"i18n_az.py"}  # translations: data, not code
 
-# Code over the limit today and its size: the debt to pay off (STATUS, «Архитектурный
-# аудит», п. 7). Lower a number when the code shrinks; never raise it.
-OVER_LIMIT = {
-    "application/eqaime_import.py": 641,
-    "application/quick_entry.py": 602,
-}
+# Code over the limit and its size: the debt to pay off (STATUS, «Архитектурный аудит»,
+# п. 7). Empty since session 26; an entry may only shrink, never grow.
+OVER_LIMIT: dict[str, int] = {}
 
 
 def sizes() -> Iterator[tuple[str, str, int]]:
