@@ -36,7 +36,6 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
 
 
 class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
@@ -237,10 +236,10 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
                 post = True
             else:
                 doc_id = self.doc.id
-                with transaction(self.s.conn):
+                if post:
+                    led.update_and_post(cid, doc_id, doc_date, inputs, memo, layer)
+                else:
                     led.update_draft(cid, doc_id, doc_date, inputs, memo, layer)
-                    if post:
-                        led.post(cid, doc_id)
         except LedgerError as e:
             self.show_error(str(e))
             return False

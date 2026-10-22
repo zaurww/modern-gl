@@ -16,6 +16,7 @@ from modern_gl.application.bank.accounts import (
 )
 from modern_gl.application.bank.advances import (
     SETTLES,
+    AdvanceOffset,
     counterparty_balance,
     payment_lines,
 )
@@ -91,6 +92,7 @@ __all__ = [
     "TYPE_KINDS",
     "VAT_DEPOSIT",
     "VAT_DEPOSIT_KINDS",
+    "AdvanceOffset",
     "BankAccount",
     "BankLine",
     "BankOperation",

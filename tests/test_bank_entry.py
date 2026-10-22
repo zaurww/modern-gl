@@ -236,7 +236,7 @@ def test_an_overpaid_e_qaime_leaves_an_advance_offset_later(qtbot, bank):
     qtbot.addWidget(dialog)
     dialog.counterparty.setCurrentIndex(dialog.counterparty.findData(value(session, "ALFA MMC")))
     dialog.plan()
-    assert [o.parts for o in dialog.offsets] == [[("MT002", 32_000)]]
+    assert [o.parts for o in dialog.offsets] == [(("MT002", 32_000),)]
     dialog.offset()
     cid, alfa = session.company_id, value(session, "ALFA MMC")
     assert counterparty_balance(session.conn, cid, acc(session, "60.2"), alfa, "2026-03-31") == 0

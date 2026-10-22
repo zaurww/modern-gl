@@ -157,3 +157,15 @@ def test_sqlite_knows_the_common_sql():
     import sqlite3
 
     assert sqlite3.sqlite_version_info >= (3, 44), sqlite3.sqlite_version
+
+
+def test_windows_open_no_transaction():
+    """A scenario is one method of Ledger / Inventory with its own transaction (debt 10,
+    paid in session 38): a window never decides where a scenario begins and ends."""
+    bad = []
+    for path in files("desktop"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            db = isinstance(node, ast.ImportFrom) and node.module == "modern_gl.infrastructure.db"
+            if db and any(alias.name == "transaction" for alias in node.names):  # type: ignore[union-attr]
+                bad.append(rel(path))
+    assert not bad, f"окно открывает транзакцию: {bad} — один метод Ledger на сценарий"

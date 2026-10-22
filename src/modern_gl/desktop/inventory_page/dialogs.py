@@ -18,7 +18,6 @@ from modern_gl.desktop.theme import fonts
 from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
 from modern_gl.reporting.inventory import (
     ItemDetails,
     item_details,
@@ -129,11 +128,9 @@ class ItemDialog(QDialog):
 
     def _update(self, group: int | None, unit: int, account: int, code: str | None) -> None:
         assert self.item is not None
-        cid, value_id, ledger = self.s.company_id, self.item.value_id, self.s.ledger
-        with transaction(self.s.conn):
-            ledger.update_subconto_value(cid, value_id, self.name.text(), code)
-            ledger.set_subconto_value_parent(cid, value_id, group)
-            self.inventory.update_item(cid, self.item.id, unit, account)
+        self.inventory.edit_item(
+            self.s.company_id, self.item.id, self.name.text(), code, group, unit, account
+        )
 
 
 class InventorySettingsDialog(QDialog):

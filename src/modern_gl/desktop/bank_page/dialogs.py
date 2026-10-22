@@ -30,7 +30,6 @@ from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, date_edit, edited_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
 
 # the GL account a new account of a kind goes on, the first of these that exists
 USUAL_ACCOUNTS = {CARD: ("55", "51"), CURRENCY: ("52",), VAT_DEPOSIT: ("54",)}
@@ -175,19 +174,17 @@ class BankAccountDialog(QDialog):
                 )
             else:
                 place = self.account.place
-                with transaction(self.s.conn):
-                    if place.value_id is not None and self.name.text().strip() != place.name:
-                        led.update_subconto_value(cid, place.value_id, self.name.text())
-                    led.set_bank_account(
-                        cid,
-                        place.account_id,
-                        place.value_id,
-                        kind=kind,
-                        card_digits=digits,
-                        holder_id=holder,
-                        iban=self.iban.text(),
-                        closed=self.closed.isChecked(),
-                    )
+                led.set_bank_account(
+                    cid,
+                    place.account_id,
+                    place.value_id,
+                    kind=kind,
+                    card_digits=digits,
+                    holder_id=holder,
+                    iban=self.iban.text(),
+                    closed=self.closed.isChecked(),
+                    name=self.name.text(),
+                )
         except LedgerError as e:
             self.error.setText(str(e))
             self.error.show()

@@ -11,6 +11,7 @@ from modern_gl.application.quick_entry.parser import (
     describe,
     parse,
 )
+from modern_gl.application.quick_entry.saving import posting_input, save_quick_entry
 from modern_gl.application.quick_entry.suggest import (
     Suggestion,
     Suggestions,
@@ -27,5 +28,7 @@ __all__ = [
     "Suggestions",
     "describe",
     "parse",
+    "posting_input",
+    "save_quick_entry",
     "suggest",
 ]

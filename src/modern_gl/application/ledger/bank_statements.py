@@ -59,9 +59,11 @@ class BankStatementCommands(SubcontoCommands):
         holder_id: int | None = None,
         iban: str = "",
         closed: bool = False,
+        name: str | None = None,
     ) -> None:
         """The details of a bank account: its kind (the group of the list), the card's
-        last 4 digits and holder, the IBAN, closed."""
+        last 4 digits and holder, the IBAN, closed; `name` — its element renamed, in the
+        same transaction."""
         card_digits, iban = card_digits.strip(), iban.replace(" ", "").upper()
         if kind not in KIND_CODES:
             raise ValidationError(tr("неизвестный вид банковского счёта: {kind}", kind=kind))
@@ -69,6 +71,10 @@ class BankStatementCommands(SubcontoCommands):
             raise ValidationError(tr("последние цифры карты — это 4 цифры"))
         with transaction(self.conn):
             self._account(company_id, account_id)
+            if name is not None and value_id is not None:
+                current = self._subconto_value(company_id, value_id)["name"]
+                if name.strip() != current:
+                    self.update_subconto_value(company_id, value_id, name)
             details = (kind, card_digits, holder_id, iban, int(closed))
             found = self._details_id(company_id, account_id, value_id)
             if found is None:

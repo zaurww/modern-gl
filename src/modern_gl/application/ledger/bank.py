@@ -17,8 +17,11 @@ from modern_gl.application.bank import (
     KIND_NAMES,
     OUT,
     VAT_DEPOSIT_KINDS,
+    AdvanceOffset,
     BankLine,
     BankOperationInput,
+    allocate,
+    counterparty_balance,
     load_bank_operation,
 )
 from modern_gl.application.common import pad_subconto
@@ -26,6 +29,7 @@ from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.module import ModuleDocumentCommands
+from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
@@ -33,6 +37,10 @@ from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
+from modern_gl.reporting.invoices import open_invoices
+
+# (the settlement account's type, the advance's role, the company owes the e-qaimə)
+OFFSET_SIDES = (("payable", ADVANCE_PAID, True), ("receivable", ADVANCE_RECEIVED, False))
 
 explain_owner(
     "bank",
@@ -170,6 +178,56 @@ class BankCommands(ModuleDocumentCommands):
                     **{f.name: getattr(moved, f.name) for f in fields(BankOperationInput)}
                 )
                 self.save_bank_operation(company_id, data, operation_id, post=op.status == "posted")
+
+    def plan_advance_offsets(
+        self, company_id: int, day: str, counterparty_id: int
+    ) -> list[AdvanceOffset]:
+        """«Зачесть авансы» (D78), nothing written: each advance of the counterparty —
+        paid to it (60.2) or by it (62.2) — against its unpaid e-qaimə, oldest first."""
+        offsets = []
+        for settlement_type, role, payable in OFFSET_SIDES:
+            advance = self.account_role(company_id, role)
+            settlement = self._first_account_of_type(company_id, settlement_type)
+            if advance is None or settlement is None:
+                continue
+            balance = counterparty_balance(self.conn, company_id, advance, counterparty_id, day)
+            amount = balance if payable else -balance
+            if amount <= 0:
+                continue
+            invoices = [
+                i
+                for i in open_invoices(
+                    self.conn, company_id, counterparty_id, payable=payable, on_date=day
+                )
+                if not i.source  # only what the books owe
+            ]
+            paid, _ = allocate(amount, [i.amount for i in invoices])
+            parts = tuple((i.invoice, p) for i, p in zip(invoices, paid, strict=True) if p)
+            offsets.append(AdvanceOffset(settlement, advance, amount, parts))
+        return offsets
+
+    def offset_all_advances(self, company_id: int, day: str, counterparty_id: int) -> list[int]:
+        """«Зачесть»: every offset of the plan in one transaction; the documents made."""
+        with transaction(self.conn):
+            made = [
+                self.offset_advances(
+                    company_id, day, counterparty_id, o.settlement, o.advance, list(o.parts)
+                )
+                for o in self.plan_advance_offsets(company_id, day, counterparty_id)
+                if o.parts
+            ]
+        if not made:
+            raise ValidationError(tr("нечего зачитывать"))
+        return made
+
+    def _first_account_of_type(self, company_id: int, account_type: str) -> int | None:
+        """The first active posting account of a type in the chart's order (60.1, 62.1)."""
+        row = self.conn.execute(
+            "SELECT id FROM accounts WHERE company_id = ? AND account_type = ? "
+            "AND is_group = 0 AND active = 1 ORDER BY code IS NULL, code LIMIT 1",
+            (company_id, account_type),
+        ).fetchone()
+        return row["id"] if row else None
 
     def offset_advances(
         self,

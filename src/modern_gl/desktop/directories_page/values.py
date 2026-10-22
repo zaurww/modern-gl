@@ -19,13 +19,13 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.catalog import SubcontoInfo
+from modern_gl.application.ledger import ValueDetails
 from modern_gl.desktop.directories_page.tags import TagPicker
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
 
 
 class ValueDialog(QDialog):
@@ -222,14 +222,8 @@ def new_value(
         return None
     cid = session.company_id
     try:
-        with transaction(session.conn):
-            value_id = session.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner)
-            if currency is not None:
-                session.ledger.set_subconto_value_currency(cid, value_id, currency)
-            if tax != (None, False, None):
-                session.ledger.set_subconto_value_tax(cid, value_id, *tax)
-            if dlg.tags.chosen():
-                session.ledger.set_subconto_value_tags(cid, value_id, dlg.tags.chosen())
+        details = ValueDetails(owner, currency, tax, tuple(dlg.tags.chosen()))
+        value_id = session.ledger.add_detailed_value(cid, kind_id, name, details)
     except LedgerError as e:
         session.notify(str(e))
         return None
@@ -255,10 +249,8 @@ def added_value(
         return new_value(session, parent, kind_id, name, owner_id, currency_id)
     cid = session.company_id
     try:
-        with transaction(session.conn):
-            value_id = session.ledger.add_subconto_value(cid, kind_id, name, owner_id=owner_id)
-            if currency_id is not None:
-                session.ledger.set_subconto_value_currency(cid, value_id, currency_id)
+        details = ValueDetails(owner_id, currency_id)
+        value_id = session.ledger.add_detailed_value(cid, kind_id, name, details)
     except LedgerError as e:
         session.notify(str(e))
         return None

@@ -298,6 +298,21 @@ class DocumentCommands(PostingChecks):
         with transaction(self.conn):
             self._post(company_id, doc_id)
 
+    def update_and_post(
+        self,
+        company_id: int,
+        doc_id: int,
+        doc_date: date | str,
+        postings: Sequence[PostingInput],
+        memo: str = "",
+        layer: str = "common",
+    ) -> None:
+        """A draft saved with its edits and posted at once: all or nothing (a draft
+        that does not post keeps what it had)."""
+        with transaction(self.conn):
+            self.update_draft(company_id, doc_id, doc_date, postings, memo, layer)
+            self._post(company_id, doc_id)
+
     def post_drafts(
         self, company_id: int, day: date | str
     ) -> tuple[list[int], list[tuple[int, str]]]:
