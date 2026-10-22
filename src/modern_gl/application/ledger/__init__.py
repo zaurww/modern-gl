@@ -6,6 +6,8 @@ UI and importers call these methods; they never write ledger tables directly.
 
 from __future__ import annotations
 
+from functools import cached_property
+
 from modern_gl.application.ledger.account_form import AccountForm, AccountFormCommands
 from modern_gl.application.ledger.bank import BankCommands
 from modern_gl.application.ledger.bank_statements import BankStatementCommands
@@ -37,6 +39,9 @@ __all__ = [
     "NO_TAX",
     "SIDES",
     "AccountForm",
+    "BankModule",
+    "ConversionModule",
+    "EqaimeModule",
     "ImportOutcome",
     "ImportedDocument",
     "Ledger",
@@ -47,13 +52,21 @@ __all__ = [
 ]
 
 
+class BankModule(BankCommands, BankStatementCommands):
+    """The bank (D47, D78): bank accounts, statements, operations, advances."""
+
+
+class ConversionModule(ConversionCommands):
+    """Currency conversion (D44)."""
+
+
+class EqaimeModule(EqaimeCommands):
+    """E-qaimə of the portal: what it showed, and what was reconciled (D52)."""
+
+
 class Ledger(
     CompanyCommands,
     CurrencyCommands,
-    BankCommands,
-    BankStatementCommands,
-    ConversionCommands,
-    EqaimeCommands,
     OpeningBalanceCommands,
     AccountFormCommands,
     TemplateCommands,
@@ -62,4 +75,19 @@ class Ledger(
     DocumentCommands,
     SubcontoDetailCommands,
 ):
-    """All write use cases of one database; each group lives in its own module."""
+    """The core's write use cases of one database (each group in its own module). The
+    modules are objects of their own over the same connection — `ledger.bank`,
+    `ledger.conversion`, `ledger.eqaime` (debt 2, D71): the core knows none of them, and
+    a module can be left out of a company without touching the core."""
+
+    @cached_property
+    def bank(self) -> BankModule:
+        return BankModule(self.conn, self.actor)
+
+    @cached_property
+    def conversion(self) -> ConversionModule:
+        return ConversionModule(self.conn, self.actor)
+
+    @cached_property
+    def eqaime(self) -> EqaimeModule:
+        return EqaimeModule(self.conn, self.actor)

@@ -54,7 +54,7 @@ def firm(ledger):
     money("2026-03-02", "300", True)
     money("2026-03-06", "50", False)
     money("2026-03-09", "100", False)
-    ledger.add_bank_statement(cid, a51, azn, "2026-03-07", "2026-03-09")
+    ledger.bank.add_bank_statement(cid, a51, azn, "2026-03-07", "2026-03-09")
     return cid, a51, azn
 
 
@@ -79,9 +79,9 @@ def test_days_and_periods_with_their_balances(ledger, firm):
 
 def test_the_bank_closing_reconciles_a_statement(ledger, firm):
     cid, a51, azn = firm
-    ledger.set_bank_closing(cid, a51, azn, "2026-03-02", "2026-03-02", 910_000)
-    ledger.set_bank_closing(cid, a51, azn, "2026-03-06", "2026-03-06", 904_000)
-    ledger.add_bank_statement(cid, a51, azn, "2026-03-10", "2026-03-10")
+    ledger.bank.set_bank_closing(cid, a51, azn, "2026-03-02", "2026-03-02", 910_000)
+    ledger.bank.set_bank_closing(cid, a51, azn, "2026-03-06", "2026-03-06", 904_000)
+    ledger.bank.add_bank_statement(cid, a51, azn, "2026-03-10", "2026-03-10")
     rows = bank_statements(ledger.conn, cid, place_of(ledger, cid, azn))
     assert [(s.date_from, s.status, s.difference) for s in rows] == [
         ("2026-03-01", OPEN, None),
@@ -91,23 +91,23 @@ def test_the_bank_closing_reconciles_a_statement(ledger, firm):
         ("2026-03-10", OPEN, None),
     ]
     assert (rows[-1].opening, rows[-1].closing, rows[-1].lines) == (895_000, 895_000, 0)
-    ledger.set_bank_closing(cid, a51, azn, "2026-03-06", "2026-03-06", None)
+    ledger.bank.set_bank_closing(cid, a51, azn, "2026-03-06", "2026-03-06", None)
     assert bank_statements(ledger.conn, cid, place_of(ledger, cid, azn))[2].status == OPEN
 
 
 def test_statements_of_one_account_do_not_overlap(ledger, firm):
     cid, a51, azn = firm
     with pytest.raises(ValidationError, match="уже есть выписка"):
-        ledger.add_bank_statement(cid, a51, azn, "2026-03-09", "2026-03-10")
+        ledger.bank.add_bank_statement(cid, a51, azn, "2026-03-09", "2026-03-10")
     with pytest.raises(ValidationError, match="раньше"):
-        ledger.add_bank_statement(cid, a51, azn, "2026-03-12", "2026-03-11")
+        ledger.bank.add_bank_statement(cid, a51, azn, "2026-03-12", "2026-03-11")
 
 
 def test_bank_accounts_by_group_with_what_is_left_to_check(ledger, firm):
     cid, a51, azn = firm
-    ledger.set_bank_closing(cid, a51, azn, "2026-03-02", "2026-03-02", 910_000)
-    ledger.set_bank_closing(cid, a51, azn, "2026-03-06", "2026-03-06", 904_000)
-    card = ledger.add_bank_account(
+    ledger.bank.set_bank_closing(cid, a51, azn, "2026-03-02", "2026-03-02", 910_000)
+    ledger.bank.set_bank_closing(cid, a51, azn, "2026-03-06", "2026-03-06", 904_000)
+    card = ledger.bank.add_bank_account(
         cid, "ABB Visa", ledger.account_id(cid, "55"), CARD, card_digits="4417"
     )
     rows = bank_accounts(ledger.conn, cid, "2026-03-31")
@@ -126,8 +126,8 @@ def test_a_closed_account_and_wrong_card_digits(ledger, firm):
     cid, _, _ = firm
     a55 = ledger.account_id(cid, "55")
     with pytest.raises(ValidationError, match="4 цифры"):
-        ledger.add_bank_account(cid, "Yelo Visa", a55, CARD, card_digits="44a7")
-    card = ledger.add_bank_account(cid, "Yelo Visa", a55, CARD, card_digits="3388")
-    ledger.set_bank_account(cid, a55, card, kind=CARD, card_digits="3388", closed=True)
+        ledger.bank.add_bank_account(cid, "Yelo Visa", a55, CARD, card_digits="44a7")
+    card = ledger.bank.add_bank_account(cid, "Yelo Visa", a55, CARD, card_digits="3388")
+    ledger.bank.set_bank_account(cid, a55, card, kind=CARD, card_digits="3388", closed=True)
     row = next(r for r in bank_accounts(ledger.conn, cid, "2026-03-31") if r.place.value_id == card)
     assert row.closed

@@ -376,7 +376,7 @@ class ConversionPage(ConversionForm):
         self.error.hide()
         try:
             data = self.collect()
-            conversion_id = self.s.ledger.save_conversion(
+            conversion_id = self.s.ledger.conversion.save_conversion(
                 self.s.company_id, data, self.doc.id if self.doc else None, post=post
             )
         except MissingAccountRole as e:
@@ -404,7 +404,7 @@ class ConversionPage(ConversionForm):
         if self.doc is None:
             return
         try:
-            self.s.ledger.unpost_conversion(self.s.company_id, self.doc.id)
+            self.s.ledger.conversion.unpost_conversion(self.s.company_id, self.doc.id)
         except LedgerError as e:
             self.show_error(str(e))
             return
@@ -418,7 +418,7 @@ class ConversionPage(ConversionForm):
         if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.s.ledger.delete_conversion(self.s.company_id, self.doc.id)
+            self.s.ledger.conversion.delete_conversion(self.s.company_id, self.doc.id)
         except LedgerError as e:
             self.show_error(str(e))
             return

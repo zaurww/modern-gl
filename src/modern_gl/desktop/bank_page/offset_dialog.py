@@ -57,7 +57,7 @@ class AdvanceOffsetDialog(QDialog):
         self.offsets = (
             []
             if value is None
-            else self.s.ledger.plan_advance_offsets(self.s.company_id, self.day, value)
+            else self.s.ledger.bank.plan_advance_offsets(self.s.company_id, self.day, value)
         )
         lines = [self._describe(o) for o in self.offsets]
         self.summary.setText("\n\n".join(lines) or tr("Авансов к зачёту нет."))
@@ -77,7 +77,7 @@ class AdvanceOffsetDialog(QDialog):
 
     def offset(self) -> None:
         try:
-            self.s.ledger.offset_all_advances(
+            self.s.ledger.bank.offset_all_advances(
                 self.s.company_id, self.day, self.counterparty.currentData()
             )
         except LedgerError as e:

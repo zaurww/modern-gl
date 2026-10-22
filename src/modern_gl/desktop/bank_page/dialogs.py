@@ -168,7 +168,7 @@ class BankAccountDialog(QDialog):
         holder = self.holder.currentData() if card else None
         try:
             if self.account is None:
-                led.add_bank_account(
+                led.bank.add_bank_account(
                     cid,
                     self.name.text(),
                     self.ledger_account.currentData(),
@@ -180,7 +180,7 @@ class BankAccountDialog(QDialog):
                 )
             else:
                 place = self.account.place
-                led.set_bank_account(
+                led.bank.set_bank_account(
                     cid,
                     place.account_id,
                     place.value_id,

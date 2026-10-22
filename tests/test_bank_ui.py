@@ -156,7 +156,7 @@ def test_lines_as_last_time_for_the_counterparty(qtbot, session):
     """ALFA was paid an advance from 60.2 last time: the next payment suggests 60.2."""
     cid = session.company_id
     alfa, contract = value(session, "ALFA MMC"), value(session, "Договор 1")
-    session.ledger.save_bank_operation(
+    session.ledger.bank.save_bank_operation(
         cid,
         BankOperationInput(
             doc_date="2026-03-02",
@@ -356,7 +356,7 @@ def test_a_new_statement_and_a_new_card(qtbot, session, monkeypatch):
     page.new_statement()
     assert page.level == "statement" and page.current is not None
     assert (page.current.date_from, page.current.opening) == ("2026-03-02", 1_000_000)
-    session.ledger.add_bank_account(
+    session.ledger.bank.add_bank_account(
         session.company_id, "ABB Visa", acc(session, "55"), "card", card_digits="4417"
     )
     page.go("accounts")

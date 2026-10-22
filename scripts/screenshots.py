@@ -621,7 +621,7 @@ def main() -> None:
     win.show_place(("bank",))
     bank = cast(BankPage, win.pages[("bank",)])
     # D78: the accounts by group (a business card too), the statements, one statement
-    ledger.add_bank_account(session.company_id, "ABB Visa", "51", "card", card_digits="4417")
+    ledger.bank.add_bank_account(session.company_id, "ABB Visa", "51", "card", card_digits="4417")
     session.catalog.reload()
     bank.refresh()
     shot("12_bank")
@@ -640,7 +640,7 @@ def main() -> None:
     first = next(r for r in bank.model.rows if hasattr(r, "place"))
     bank.open_account(first.place.key)
     oldest = bank.statements[0]
-    ledger.set_bank_closing(
+    ledger.bank.set_bank_closing(
         session.company_id,
         first.place.account_id,
         first.place.value_id,

@@ -399,7 +399,7 @@ class BankPage(ReportPage):
         if place is None:
             return
         try:
-            self.s.ledger.add_bank_statement(
+            self.s.ledger.bank.add_bank_statement(
                 self.s.company_id, place.account_id, place.value_id, date_from, date_to
             )
         except LedgerError as e:
@@ -412,7 +412,7 @@ class BankPage(ReportPage):
         if place is None or s is None:
             return
         try:
-            self.s.ledger.set_bank_closing(
+            self.s.ledger.bank.set_bank_closing(
                 self.s.company_id, place.account_id, place.value_id, s.date_from, s.date_to, amount
             )
         except LedgerError as e:
@@ -481,7 +481,9 @@ class BankPage(ReportPage):
         if target is None:
             return
         try:
-            self.s.ledger.move_bank_operations(cid, operations, target.account_id, target.subconto)
+            self.s.ledger.bank.move_bank_operations(
+                cid, operations, target.account_id, target.subconto
+            )
         except LedgerError as e:
             self.s.notify(str(e))
             return

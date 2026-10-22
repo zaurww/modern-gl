@@ -350,10 +350,12 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
             data = self.collect()
             if self.doc is None:  # a new one: with its ƏDV part on the deposit, if typed
                 deposit = self._deposit_part(data)
-                saved = self.s.ledger.save_bank_payment(self.s.company_id, data, deposit, post=post)
+                saved = self.s.ledger.bank.save_bank_payment(
+                    self.s.company_id, data, deposit, post=post
+                )
             else:
                 saved = [
-                    self.s.ledger.save_bank_operation(
+                    self.s.ledger.bank.save_bank_operation(
                         self.s.company_id, data, self.doc.id, post=post
                     )
                 ]
@@ -398,7 +400,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         if self.doc is None:
             return
         try:
-            self.s.ledger.unpost_bank_operation(self.s.company_id, self.doc.id)
+            self.s.ledger.bank.unpost_bank_operation(self.s.company_id, self.doc.id)
         except LedgerError as e:
             self.show_error(str(e))
             return
@@ -412,7 +414,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.s.ledger.delete_bank_operation(self.s.company_id, self.doc.id)
+            self.s.ledger.bank.delete_bank_operation(self.s.company_id, self.doc.id)
         except LedgerError as e:
             self.show_error(str(e))
             return

@@ -169,3 +169,21 @@ def test_windows_open_no_transaction():
             if db and any(alias.name == "transaction" for alias in node.names):  # type: ignore[union-attr]
                 bad.append(rel(path))
     assert not bad, f"окно открывает транзакцию: {bad} — один метод Ledger на сценарий"
+
+
+def test_ledger_is_the_core_and_modules_are_objects_of_their_own():
+    """Debt 2 (paid in session 38): the bank, conversion and e-qaimə are not mixed into
+    Ledger; they are its objects over the same connection — the core knows none of them."""
+    from modern_gl.application.ledger import BankModule, ConversionModule, EqaimeModule, Ledger
+    from modern_gl.infrastructure.db import connect
+
+    module_groups = {
+        cls
+        for module in (BankModule, ConversionModule, EqaimeModule)
+        for cls in module.__mro__
+        if cls.__module__.rsplit(".", 1)[-1] in {"bank", "bank_statements", "conversion", "eqaime"}
+    }
+    assert not module_groups & set(Ledger.__mro__)
+    ledger = Ledger(connect(":memory:"), actor="Aynur")
+    assert ledger.bank.conn is ledger.conn and ledger.bank.actor == "Aynur"
+    assert ledger.bank is ledger.bank  # one object per ledger

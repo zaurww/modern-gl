@@ -111,7 +111,7 @@ def balances(conn, cid, day="2026-03-31"):
 
 def test_sale_of_currency_posts_through_transit(ledger, conn, firm):
     cid, acc = firm["cid"], firm["acc"]
-    conversion_id = ledger.save_conversion(cid, sale(firm), post=True)
+    conversion_id = ledger.conversion.save_conversion(cid, sale(firm), post=True)
 
     conversion = load_conversion(conn, cid, conversion_id)
     assert conversion.status == "posted" and conversion.credit_document_id is None
@@ -142,7 +142,7 @@ def test_purchase_and_cross_currency(ledger, conn, firm):
         source=ConversionSide(acc["51"], 170_500, (firm["azn_bank"],)),
         target=ConversionSide(acc["52"], 100_000, (firm["usd_bank"],), firm["usd"]),
     )
-    doc = load_conversion(conn, cid, ledger.save_conversion(cid, purchase, post=True))
+    doc = load_conversion(conn, cid, ledger.conversion.save_conversion(cid, purchase, post=True))
     assert postings(conn, cid, doc.document_id) == [
         (acc["57"], acc["51"], 170_500, None),
         (acc["91.2"], acc["57"], 500, None),
@@ -157,7 +157,7 @@ def test_purchase_and_cross_currency(ledger, conn, firm):
     )
     calc = calculate(conn, cid, cross)
     assert (calc.source_value, calc.target_value, calc.difference) == (92_500, 92_820, -320)
-    doc = load_conversion(conn, cid, ledger.save_conversion(cid, cross, post=True))
+    doc = load_conversion(conn, cid, ledger.conversion.save_conversion(cid, cross, post=True))
     assert postings(conn, cid, doc.document_id) == [
         (acc["57"], acc["52"], 92_500, 50_000),
         (acc["57"], acc["91.1"], 320, None),
@@ -168,7 +168,7 @@ def test_purchase_and_cross_currency(ledger, conn, firm):
 def test_credit_on_a_later_day_waits_on_transit(ledger, conn, firm):
     cid, acc = firm["cid"], firm["acc"]
     data = sale(firm, target_date="2026-03-03", fees=())
-    conversion_id = ledger.save_conversion(cid, data, post=True)
+    conversion_id = ledger.conversion.save_conversion(cid, data, post=True)
     conversion = load_conversion(conn, cid, conversion_id)
     assert conversion.credit_document_id is not None
     assert postings(conn, cid, conversion.document_id) == [
@@ -182,7 +182,9 @@ def test_credit_on_a_later_day_waits_on_transit(ledger, conn, firm):
     assert balances(conn, cid, "2026-03-03")["57"] == (0, 0)
 
     # back to one day: the second document goes, the first keeps its number
-    ledger.save_conversion(cid, replace(data, target_date=None), conversion_id, post=True)
+    ledger.conversion.save_conversion(
+        cid, replace(data, target_date=None), conversion_id, post=True
+    )
     again = load_conversion(conn, cid, conversion_id)
     assert again.credit_document_id is None and again.number == conversion.number
     assert len(postings(conn, cid, again.document_id)) == 3
@@ -191,36 +193,38 @@ def test_credit_on_a_later_day_waits_on_transit(ledger, conn, firm):
 def test_draft_may_lack_a_side_and_has_no_postings(ledger, conn, firm):
     cid = firm["cid"]
     draft = sale(firm, target=None)
-    conversion_id = ledger.save_conversion(cid, draft, post=False)
+    conversion_id = ledger.conversion.save_conversion(cid, draft, post=False)
     conversion = load_conversion(conn, cid, conversion_id)
     assert conversion.status == "draft" and conversion.target is None
     assert conversion.source == replace(draft.source, subconto=(firm["usd_bank"], None, None))
     assert load_document(conn, cid, conversion.document_id).postings == []
     with pytest.raises(ValidationError, match="на какой счёт зачислено"):
-        ledger.save_conversion(cid, draft, conversion_id, post=True)
+        ledger.conversion.save_conversion(cid, draft, conversion_id, post=True)
 
     # the second statement completes it
-    ledger.save_conversion(cid, sale(firm), conversion_id, post=True)
+    ledger.conversion.save_conversion(cid, sale(firm), conversion_id, post=True)
     assert load_conversion(conn, cid, conversion_id).status == "posted"
 
 
 def test_unpost_and_delete(ledger, conn, firm):
     cid = firm["cid"]
-    conversion_id = ledger.save_conversion(cid, sale(firm, target_date="2026-03-03"), post=True)
+    conversion_id = ledger.conversion.save_conversion(
+        cid, sale(firm, target_date="2026-03-03"), post=True
+    )
     conversion = load_conversion(conn, cid, conversion_id)
     with pytest.raises(ValidationError, match="Конвертация валюты"):
         ledger.delete_document(cid, conversion.document_id)
     with pytest.raises(ValidationError, match="Конвертация валюты"):
         ledger.reverse(cid, conversion.credit_document_id, "2026-03-04")
     with pytest.raises(ValidationError, match="отмените проведение"):
-        ledger.save_conversion(cid, sale(firm), conversion_id, post=False)
+        ledger.conversion.save_conversion(cid, sale(firm), conversion_id, post=False)
 
-    ledger.unpost_conversion(cid, conversion_id)
+    ledger.conversion.unpost_conversion(cid, conversion_id)
     draft = load_conversion(conn, cid, conversion_id)
     assert draft.status == "draft" and draft.credit_document_id is None
     assert balances(conn, cid) == {}  # a draft has no postings
 
-    ledger.delete_conversion(cid, conversion_id)
+    ledger.conversion.delete_conversion(cid, conversion_id)
     assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM currency_conversions").fetchone()[0] == 0
 
@@ -229,14 +233,14 @@ def test_errors(ledger, conn, firm):
     cid, acc = firm["cid"], firm["acc"]
     same = sale(firm, target=ConversionSide(acc["52"], 100, (firm["usd_bank"],), firm["usd"]))
     with pytest.raises(ValidationError, match="одинаковая"):
-        ledger.save_conversion(cid, same, post=True)
+        ledger.conversion.save_conversion(cid, same, post=True)
     with pytest.raises(ValidationError, match="нет курса USD"):
-        ledger.save_conversion(cid, sale(firm, doc_date="2026-02-27"), post=True)
+        ledger.conversion.save_conversion(cid, sale(firm, doc_date="2026-02-27"), post=True)
     with pytest.raises(ValidationError, match="раньше даты списания"):
-        ledger.save_conversion(cid, sale(firm, target_date="2026-03-01"), post=True)
+        ledger.conversion.save_conversion(cid, sale(firm, target_date="2026-03-01"), post=True)
     ledger.set_account_role(cid, FX_TRANSIT, None)
     with pytest.raises(ValidationError, match="переводов в пути"):
-        ledger.save_conversion(cid, sale(firm), post=True)
+        ledger.conversion.save_conversion(cid, sale(firm), post=True)
     # nothing half-made is left behind
     assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 0
 
@@ -269,7 +273,7 @@ def test_transit_account_is_found_by_its_type(ledger, conn, firm):
     assert ledger.account_role(cid, FX_TRANSIT) is None
     ledger.set_account_type(cid, acc["57"], "transit")
     assert ledger.account_role(cid, FX_TRANSIT) == acc["57"]
-    ledger.save_conversion(cid, sale(firm), post=True)
+    ledger.conversion.save_conversion(cid, sale(firm), post=True)
 
 
 def test_fees_from_any_account_in_its_currency(ledger, conn, firm):
@@ -284,7 +288,7 @@ def test_fees_from_any_account_in_its_currency(ledger, conn, firm):
         ),
     )
     assert calculate(conn, cid, cross).fee_values == (500, 170)
-    conversion_id = ledger.save_conversion(cid, cross, post=True)
+    conversion_id = ledger.conversion.save_conversion(cid, cross, post=True)
     doc = load_conversion(conn, cid, conversion_id)
     assert doc.fees == tuple(replace(f, subconto=(*f.subconto, None, None)) for f in cross.fees)
     assert postings(conn, cid, doc.document_id) == [
@@ -305,7 +309,7 @@ def test_fee_taken_on_a_later_credit_goes_with_it(ledger, conn, firm):
         target_date="2026-03-03",
         fees=(ConversionFee(acc["52"], 100, (firm["usd_bank"],), firm["usd"]),),
     )
-    doc = load_conversion(conn, cid, ledger.save_conversion(cid, purchase, post=True))
+    doc = load_conversion(conn, cid, ledger.conversion.save_conversion(cid, purchase, post=True))
     assert postings(conn, cid, doc.document_id) == [
         (acc["57"], acc["51"], 170_500, None),
         (acc["91.2"], acc["57"], 500, None),
