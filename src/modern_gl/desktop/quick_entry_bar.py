@@ -27,9 +27,11 @@ from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import (
     DocumentData,
+    PastPosting,
     PostingData,
     list_templates,
     load_document,
+    past_postings,
     recent_subconto,
 )
 from modern_gl.desktop.cell_editing import PickWithKeys, fit_popup
@@ -85,6 +87,7 @@ class QuickEntryBar(QWidget):
 
     def _setup_suggestions(self) -> None:
         self._found = quick_entry.Suggestions(0)
+        self._past: list[PastPosting] | None = None  # read once, again after posting
         self._names = QStringListModel(self)
         self.completer = QCompleter(self._names, self)
         self.completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
@@ -109,6 +112,7 @@ class QuickEntryBar(QWidget):
             self.s.catalog,
             list_templates(self.s.conn, cid),
             lambda account, pos: recent_subconto(self.s.conn, cid, account, pos),
+            self.past(),
         )
         labels = [i.label for i in self._found.items]
         popup = cast(QAbstractItemView, self.completer.popup())
@@ -127,7 +131,8 @@ class QuickEntryBar(QWidget):
                 ),
             )
         )
-        rect.setWidth(380)
+        widest = max(self.edit.fontMetrics().horizontalAdvance(t) for t in labels) + 48
+        rect.setWidth(min(max(380, widest), self.edit.width()))
         self.completer.complete(rect)
         fit_popup(popup, len(labels), self.completer.maxVisibleItems())
         if self._found.typed:  # Enter takes the best match
@@ -136,8 +141,14 @@ class QuickEntryBar(QWidget):
             popup.setCurrentIndex(QModelIndex())
         return labels
 
+    def past(self) -> list[PastPosting]:
+        if self._past is None:
+            self._past = past_postings(self.s.conn, self.s.company_id)
+        return self._past
+
     def take(self, label: str) -> None:
-        """Put the chosen item in place of the word being typed, then offer what is next."""
+        """Put the chosen item in place of the word being typed, then offer what is next;
+        a posting from the past comes with its amount selected, to type over."""
         item = next((i for i in self._found.items if i.label == label), None)
         if item is None:
             return
@@ -145,6 +156,10 @@ class QuickEntryBar(QWidget):
         text, cursor = self.edit.text(), self.edit.cursorPosition()
         start = min(self._found.start, cursor)
         self.edit.setText(text[:start] + item.insert + text[cursor:])
+        if item.select is not None:
+            first, last = item.select
+            self.edit.setSelection(start + first, last - first)
+            return
         self.edit.setCursorPosition(start + len(item.insert))
         self.suggest()
 
@@ -196,6 +211,8 @@ class QuickEntryBar(QWidget):
     # ---- actions -----------------------------------------------------------------------
 
     def eventFilter(self, obj, event) -> bool:
+        if event.type() == event.Type.FocusIn and obj is self.edit:
+            self._past = None  # documents may have been posted elsewhere meanwhile
         if event.type() != event.Type.KeyPress:
             return super().eventFilter(obj, event)
         key, mods = event.key(), event.modifiers()
@@ -244,6 +261,7 @@ class QuickEntryBar(QWidget):
         self.s.notify(tr("Документ №{n} проведён" if post else "Документ №{n} сохранён", n=number))
         self.history.append(text)
         self._back = 0
+        self._past = None
         self.edit.clear()
         cast(QAbstractItemView, self.completer.popup()).hide()
         self.posted.emit(doc_id)

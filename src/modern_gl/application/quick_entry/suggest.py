@@ -9,8 +9,9 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from modern_gl.application.catalog import AccountInfo, Catalog, search
-from modern_gl.application.queries import TemplateData
+from modern_gl.application.queries import PastPosting, TemplateData
 from modern_gl.application.quick_entry.parser import NEW, token_date, token_number
+from modern_gl.application.quick_entry.past import past_lines
 from modern_gl.i18n import fold, tr
 
 
@@ -18,6 +19,7 @@ from modern_gl.i18n import fold, tr
 class Suggestion:
     label: str  # shown in the list
     insert: str  # replaces the word being typed
+    select: tuple[int, int] | None = None  # part of `insert` selected to type over
 
 
 @dataclass
@@ -33,11 +35,13 @@ def suggest(
     catalog: Catalog,
     templates: Sequence[TemplateData] = (),
     recent: Callable[[int, int], list[int]] = lambda _account, _position: [],
+    history: Sequence[PastPosting] = (),
 ) -> Suggestions:
     """What fits where the cursor is: accounts, then the elements of their subconto in
     order (recently used on the account first; the contracts of the counterparty
     chosen), a currency after the amount, templates after "#". Choosing an element adds
-    what comes next: ", " for the next subconto, " / " after the Dt side."""
+    what comes next: ", " for the next subconto, " / " after the Dt side. Words at the
+    start of the line ("альфа", "аренда") bring back whole postings typed before."""
     before = text[:cursor]
     seg_start = max(before.rfind(";"), before.rfind("\n")) + 1
     segment = before[seg_start:]
@@ -62,18 +66,29 @@ def suggest(
         if not stripped and not credit:
             return Suggestions(side_start)
         items = [Suggestion(a.label, f"{a.short} ") for a in catalog.leaf_accounts]
-        return _filter(items, stripped, side_start)
+        found = _filter(items, stripped, side_start)
+        if not credit:
+            found.items[:0] = _past(stripped, catalog, history)
+        return found
     word = stripped.split()[0]
     try:
         account = catalog.resolve_account(word)
     except LookupError:
-        return Suggestions(cursor)
+        if credit or not (past := _past(stripped, catalog, history)):
+            return Suggestions(cursor)
+        return Suggestions(side_start, past, True)
     rest_start = side_start + len(word)
     rest = before[rest_start:cursor]
     found = _suggest_subconto(catalog, account, rest, rest_start, credit, recent)
     if found.items or not credit:
         return found
     return _suggest_currency(catalog, account, rest, rest_start)
+
+
+def _past(typed: str, catalog: Catalog, history: Sequence[PastPosting]) -> list[Suggestion]:
+    return [
+        Suggestion(label, line, span) for label, line, span in past_lines(typed, catalog, history)
+    ]
 
 
 def _filter(items: list[Suggestion], typed: str, start: int) -> Suggestions:

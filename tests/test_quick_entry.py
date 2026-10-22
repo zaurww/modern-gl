@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from fractions import Fraction
 
@@ -10,14 +11,16 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import list_templates, load_document
+from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.queries import list_templates, load_document, past_postings
 from modern_gl.application.quick_entry import describe, parse
+from modern_gl.application.quick_entry.past import past_lines
 from modern_gl.desktop import theme
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.money import from_minor
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 
@@ -198,6 +201,53 @@ def test_enter_on_an_open_list_with_nothing_chosen_is_the_line_s(bar, qtbot, boo
     qtbot.keyClick(popup, Qt.Key.Key_Return)
     assert bar.edit.text() == "26 Аренда офиса / 60 12345"
     assert bar.preview.objectName() == "error"
+
+
+def test_a_word_brings_back_the_last_posting_with_its_amount_to_type_over(bar, qtbot):
+    """hledger add / QuickFill: «альф» → the rent posting of last time, 400 selected;
+    typing 450 replaces it and Enter posts."""
+    bar.edit.setText("26 аренда / 60 альфа, договор 400 Аренда за март")
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return)
+    bar.edit.insert("альф")
+    bar.edit.textEdited.emit(bar.edit.text())
+    first = bar._found.items[0]
+    assert first.label.startswith("26 Аренда офиса / 60 Альфа Трейд, Договор №1")
+    assert bar._found.typed  # Enter takes it
+    bar.take(first.label)
+    assert bar.edit.text() == "26 Аренда офиса / 60 Альфа Трейд, Договор №1 400 Аренда за март"
+    assert bar.edit.selectedText() == "400"
+    bar.edit.insert("450")
+    assert bar.edit.text().endswith("Договор №1 450 Аренда за март")
+    posted = []
+    bar.posted.connect(posted.append)
+    qtbot.keyClick(bar.edit, Qt.Key.Key_Return)
+    doc = load_document(bar.s.conn, bar.s.company_id, posted[0])
+    assert (doc.postings[0].amount, doc.memo) == (45_000, "Аренда за март")
+
+
+def test_past_postings_found_by_every_word_newest_first(books):
+    conn, ledger, cid, cat, v = books
+    rent = PostingInput(
+        cat.by_code["26"].id,
+        cat.by_code["60"].id,
+        from_minor(40_000),
+        (v["Аренда офиса"], None, None),
+        (v["Альфа Трейд"], v["Договор №1"], None),
+        "Аренда",
+    )
+    ledger.post_new(cid, TODAY, [rent], "Аренда")
+    ledger.post_new(cid, TODAY, [replace(rent, amount=from_minor(42_000))], "Аренда")
+    cash = PostingInput(cat.by_code["50"].id, cat.by_code["80"].id, from_minor(100_000))
+    ledger.post_new(cid, TODAY, [cash], "Вклад")
+    history = past_postings(conn, cid)
+    assert [p.amount for p in history] == [100_000, 42_000]  # one per Dt/Kt and subconto
+    assert [line for _, line, _ in past_lines("альфа ар", cat, history)] == [
+        "26 Аренда офиса / 60 Альфа Трейд, Договор №1 420 Аренда"
+    ]
+    assert past_lines("бета", cat, history) == []
+    assert past_lines("26", cat, history) == []  # an account code: the accounts list
+    [(_, line, (a, b))] = past_lines("вкл", cat, history)
+    assert line[a:b] == "1000"
 
 
 def test_shift_enter_saves_a_draft_and_plus_adds_elements(bar, qtbot):
