@@ -1,6 +1,6 @@
 """The stock page's frame: the header, the operations and the layout; its parts fill it.
 
-Everything the warehouse does starts here (D86): a client may keep only the warehouse,
+Everything the warehouse does starts here (D88): a client may keep only the warehouse,
 so purchases and sales are typed from this page too, and the postings make themselves."""
 
 from __future__ import annotations

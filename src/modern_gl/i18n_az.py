@@ -1504,7 +1504,7 @@ AZ: dict[str, str] = {
     "{n} поступлений · стоимость {cost} · расходы {added} ({percent})": "{n} daxilolma · dəyər {cost} · xərclər {added} ({percent})",
     "Открыть поступление №{n}": "Daxilolma №{n} aç",
     "Открыть доп. расходы №{n} от {date}": "Əlavə xərclər №{n} ({date}) aç",
-    # «Anbar»: the chosen item's movements, operations for a beginner (D86)
+    # «Anbar»: the chosen item's movements, operations for a beginner (D88)
     "Движения": "Hərəkətlər",
     "Документы": "Sənədlər",
     "Документы · черновиков: {n}": "Sənədlər · qaralama: {n}",
