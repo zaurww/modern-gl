@@ -49,6 +49,7 @@ FROZEN = {
     "0035_long_term_types.sql": "9af358600e337aea",
     "0036_company_mode.sql": "a9553da764433920",
     "0037_incoming.sql": "76850b60a80bfa56",
+    "0038_owner_indexes.sql": "dd926587843c2ffe",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).
@@ -99,14 +100,8 @@ SINGLE_COLUMN_ALLOWED = {
 }
 # A row that belongs to a parent (a line to its document) is found by the parent: indexed.
 OWNER_COLUMNS = {"document_id", "operation_id", "conversion_id", "template_id", "line_id"}
-# Debt 5: owner references without an index.
-UNINDEXED_OWNER_ALLOWED = {
-    "landed_cost_expense_allocations.document_id",
-    "landed_cost_shares.document_id",
-    "landed_cost_shares.line_id",
-    "stock_consumptions.document_id",
-    "stock_movements.line_id",
-}
+# Debt 5: owner references without an index (paid in 0038; keep empty).
+UNINDEXED_OWNER_ALLOWED: set[str] = set()
 
 
 @pytest.fixture(scope="module")
