@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import (
+    QGuiApplication,
     QKeySequence,
     QShortcut,
 )
@@ -70,6 +71,9 @@ class MainWindow(OpenPages):
             ("Ctrl+L", self.quick_entry),
         ):
             QShortcut(QKeySequence(keys), self).activated.connect(fn)
+        hints = QGuiApplication.styleHints()
+        if hints is not None:
+            hints.colorSchemeChanged.connect(lambda _scheme: self.follow_system_theme())
 
     def _company_menu(self) -> None:
         menu = QMenu(self)
@@ -99,6 +103,12 @@ class MainWindow(OpenPages):
             act = languages.addAction(("✓  " if code == language() else "    ") + title)
             act.triggered.connect(lambda _=False, c=code: self.set_ui_language(c))
         looks = menu.addMenu(tr("Оформление"))
+        system = theme.SYSTEM_THEME
+        mark = "✓  " if theme.current_theme() == system else "    "
+        looks.addAction(mark + tr(theme.SYSTEM_TITLE)).triggered.connect(
+            lambda: self.set_ui_theme(system)
+        )
+        looks.addSeparator()
         for name, (title, _) in theme.THEMES.items():
             act = looks.addAction(("✓  " if name == theme.current_theme() else "    ") + tr(title))
             act.triggered.connect(lambda _=False, n=name: self.set_ui_theme(n))

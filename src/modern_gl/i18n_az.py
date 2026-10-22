@@ -943,6 +943,7 @@ AZ: dict[str, str] = {
     "Rosé Pine Dawn — мягкий бежевый": "Rosé Pine Dawn — yumşaq bej",
     "Nord — холодный серо-голубой": "Nord — soyuq boz-mavi",
     "Catppuccin Mocha — тёмная": "Catppuccin Mocha — tünd",
+    "Как в системе — светлая или тёмная": "Sistemdəki kimi — açıq və ya tünd",
     "расходы распределены на поступление №{n}, которое не проведено": "xərclər keçirilməmiş №{n} mədaxilinə bölüşdürülüb",
     "строка {line}: на неё распределены дополнительные расходы (документ №{n}) — сначала удалите их": "sətir {line}: ona əlavə xərclər bölüşdürülüb (sənəd №{n}) — əvvəlcə onları silin",
     "складской документ не проведён": "anbar sənədi keçirilməyib",

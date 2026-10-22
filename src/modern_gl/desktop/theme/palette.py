@@ -210,21 +210,34 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
         },
     ),
 }
-DEFAULT_THEME = "things"
+# "As the system": the light or the dark theme, as the system is set (D86)
+SYSTEM_THEME = "system"
+SYSTEM_TITLE = "Как в системе — светлая или тёмная"
+SYSTEM_PAIR = ("things", "catppuccin_mocha")  # (light, dark)
+DEFAULT_THEME = SYSTEM_THEME
 P = Palette()
 _current = DEFAULT_THEME
+_shown = SYSTEM_PAIR[0]
 
 
-def set_theme(name: str) -> str:
+def set_theme(name: str, dark: bool = False) -> str:
     """Switch the palette to a theme (an unknown name: the default); returns its name.
+    `dark` — the system is dark: «as the system» takes the dark theme.
     The look changes once apply() runs and the pages are built again."""
-    global _current
-    _current = name if name in THEMES else DEFAULT_THEME
-    base, changes = Palette(), THEMES[_current][1]
+    global _current, _shown
+    _current = name if name in THEMES or name == SYSTEM_THEME else DEFAULT_THEME
+    _shown = SYSTEM_PAIR[dark] if _current == SYSTEM_THEME else _current
+    base, changes = Palette(), THEMES[_shown][1]
     for f in fields(Palette):
         setattr(P, f.name, changes.get(f.name, getattr(base, f.name)))
     return _current
 
 
 def current_theme() -> str:
+    """The theme chosen (it may be «as the system»)."""
     return _current
+
+
+def shown_theme() -> str:
+    """The theme whose colors are on the screen."""
+    return _shown

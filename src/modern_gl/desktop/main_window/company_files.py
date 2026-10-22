@@ -462,13 +462,30 @@ class CompanyFiles(QMainWindow):
         """Another look at once: the pages are built again in its colors."""
         if name == theme.current_theme() or not self._confirm_close_all():
             return
-        theme.set_theme(name)
+        theme.use_theme(name)
         if self.settings:
             self.settings.setValue("theme", name)
+        self._repaint()
+
+    def follow_system_theme(self) -> None:
+        """The system turned light or dark: «as the system» follows it. Pages with
+        unsaved changes are not built again — the new colors reach them on reopening."""
+        if theme.current_theme() != theme.SYSTEM_THEME:
+            return
+        shown = theme.shown_theme()
+        theme.use_theme(theme.SYSTEM_THEME)
+        if theme.shown_theme() != shown:
+            self._repaint(reopen=not self._dirty_pages())
+
+    def _repaint(self, reopen: bool = True) -> None:
         app = QApplication.instance()
         if isinstance(app, QApplication):
             theme.apply(app)
-        self._reopen()
+        if reopen:
+            self._reopen()
+
+    def _dirty_pages(self) -> list[QWidget]:
+        raise NotImplementedError
 
     # ---- the window shows the company; made by the window ----------------------------
 

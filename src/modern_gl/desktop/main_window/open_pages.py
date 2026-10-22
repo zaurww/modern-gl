@@ -265,6 +265,9 @@ class OpenPages(CompanyFiles):
             return page.save(post=False)
         return answer == QMessageBox.StandardButton.Discard
 
+    def _dirty_pages(self) -> list[QWidget]:
+        return [p for p in self.pages.values() if getattr(p, "is_dirty", lambda: False)()]
+
     def _confirm_close_all(self) -> bool:
         return all(self._confirm_close(p) for p in list(self.pages.values()))
 

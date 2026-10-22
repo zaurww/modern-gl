@@ -900,6 +900,32 @@ def test_theme_switches_at_once_and_keeps_the_company(window):
     assert theme.P.canvas == "#FFFFFF"
 
 
+def test_system_theme_follows_the_system_light_or_dark(window, monkeypatch):
+    """«As the system» (the default, D86): Things when the system is light, Catppuccin
+    Mocha when it turns dark — at once, the company stays open."""
+    from modern_gl.desktop import theme
+
+    dark = False
+    monkeypatch.setattr(theme, "system_is_dark", lambda: dark)
+    try:
+        assert theme.DEFAULT_THEME == theme.SYSTEM_THEME
+        window.set_ui_theme("craft")
+        window.set_ui_theme(theme.SYSTEM_THEME)
+        assert theme.shown_theme() == "things"
+        assert theme.P.canvas == "#FFFFFF"
+        dark = True
+        window.follow_system_theme()
+        assert theme.current_theme() == theme.SYSTEM_THEME
+        assert theme.shown_theme() == "catppuccin_mocha"
+        assert theme.P.window == theme.THEMES["catppuccin_mocha"][1]["window"]
+        assert current_page(window).model.rowCount() == 13
+        window.set_ui_theme("craft")
+        window.follow_system_theme()  # a chosen theme does not follow the system
+        assert theme.shown_theme() == "craft"
+    finally:
+        theme.set_theme(theme.DEFAULT_THEME)
+
+
 def test_every_theme_colors_the_whole_stylesheet():
     """A theme names only palette colors, and the stylesheet takes every color from the
     palette: no hardcoded white or grey is left in a dark theme."""
