@@ -9,6 +9,7 @@ from modern_gl.desktop.reports_page.account import REPORTS, CardPage, SubcontoPa
 from modern_gl.desktop.reports_page.books import BooksPage
 from modern_gl.desktop.reports_page.chart import ChartPage
 from modern_gl.desktop.reports_page.osv import OsvPage
+from modern_gl.desktop.reports_page.statements import StatementsPage
 from modern_gl.desktop.reports_page.table import (
     SectionRow,
     figure,
@@ -38,6 +39,7 @@ __all__ = [
     "ReportPage",
     "ReportParams",
     "SectionRow",
+    "StatementsPage",
     "SubcontoPage",
     "figure",
     "month_of",

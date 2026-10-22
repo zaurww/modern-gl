@@ -30,7 +30,7 @@ from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
-from modern_gl.desktop.reports_page import OsvPage, SubcontoPage
+from modern_gl.desktop.reports_page import OsvPage, StatementsPage, SubcontoPage
 from modern_gl.infrastructure.workspace import Workspace
 
 
@@ -148,6 +148,11 @@ def main() -> None:
         option.setChecked(True)
         shot(name)
         option.setChecked(False)
+    win.show_place(("statements",))  # «Баланс и прибыль» (D99)
+    shot("20_balance_sheet")
+    statements = cast(StatementsPage, win.pages[("statements",)])
+    statements.profit_button.click()
+    shot("20b_profit_and_loss")
     win.open_books()  # «Сравнение книг» (D98): the demo's IFRS write-down of stock
     shot("19_books_compare")
     win.close_current()
