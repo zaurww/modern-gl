@@ -7,27 +7,14 @@ from fractions import Fraction
 
 from PySide6.QtCore import (
     Qt,
-    Signal,
 )
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
-    QApplication,
     QDialog,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
     QMessageBox,
-    QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.currencies import rate_on
-from modern_gl.application.inventory import (
-    Inventory,
-    InventoryDocumentData,
-)
 from modern_gl.desktop.landed_cost_page.columns import (
     ACCOUNT,
     AMOUNT,
@@ -35,10 +22,8 @@ from modern_gl.desktop.landed_cost_page.columns import (
     COST_TYPE,
     CURRENCY_AMOUNT,
     DOCUMENT,
-    HINT,
     ITEM,
     MEMO,
-    METHODS,
     QUANTITY,
     RATE,
     SC1,
@@ -51,6 +36,7 @@ from modern_gl.desktop.landed_cost_page.columns import (
     ChargeRow,
     TargetRow,
 )
+from modern_gl.desktop.landed_cost_page.form import LandedCostForm
 from modern_gl.desktop.landed_cost_page.models import ChargesModel, TargetsModel
 from modern_gl.desktop.landed_cost_page.pickers import (
     BatchCostDialog,
@@ -58,14 +44,8 @@ from modern_gl.desktop.landed_cost_page.pickers import (
     receipt_picker,
     source_label,
 )
-from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
-from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
-    Chip,
-    button,
-    date_edit,
     edited_date,
     enter_goes_on,
     money,
@@ -80,135 +60,22 @@ from modern_gl.reporting.inventory import (
 )
 
 
-class LandedCostPage(QWidget):
-    saved = Signal(int)
-    close_requested = Signal()
-    title_changed = Signal()
-    open_gl_document = Signal(int)
-
-    doc_type = "landed_cost"
-
+class LandedCostPage(LandedCostForm):
     def __init__(self, session: Session, document_id: int | None = None) -> None:
-        super().__init__()
-        self.setObjectName("page")
-        self.s = session
-        self.inventory = Inventory(session.conn, actor=session.ledger.actor)
-        self.doc: InventoryDocumentData | None = None
-        self.dirty = False
-
-        root = QVBoxLayout(self)
-        root.setContentsMargins(40, 30, 40, 22)
-        root.setSpacing(12)
-
-        top = QHBoxLayout()
-        self.number = QLabel()
-        self.number.setObjectName("tertiary")
-        self.number.setFont(fonts().heading)
-        top.addWidget(self.number)
-        self.memo = QLineEdit()
-        self.memo.setObjectName("titleEdit")
-        self.memo.setFont(fonts().title)
-        self.memo.setPlaceholderText(tr("Партия: название или номер инвойса"))
-        top.addWidget(self.memo, 1)
-        self.status = Chip()
-        top.addWidget(self.status, 0, Qt.AlignmentFlag.AlignVCenter)
-        root.addLayout(top)
-
-        meta = QHBoxLayout()
-        self.date = date_edit(session.working_date)
-        self.date.setFixedWidth(130)
-        self.method = PickBox()
-        self.method.setFixedWidth(170)
-        for method, title in METHODS:
-            self.method.addItem(tr(title), method)
-        self.method.setCurrentIndex(0)
-        for caption, widget in ((tr("Дата"), self.date), (tr("Распределение"), self.method)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
-            meta.addWidget(label)
-            meta.addWidget(widget)
-            meta.addSpacing(12)
-        meta.addStretch(1)
-        root.addLayout(meta)
-
-        self.delegate = CellDelegate(self)
+        super().__init__(session)
         self.delegate.error.connect(self.show_error)
         self.delegate.add_value = self._add_value
+        self._connect()
 
-        charges_bar = QHBoxLayout()
-        charges_title = QLabel(tr("Расходы"))
-        charges_title.setFont(fonts().heading)
-        charges_bar.addWidget(charges_title, 1)
-        self.btn_add_charge = button(tr("+ Расход"), "flat", "Ins")
-        self.btn_from_gl = button(tr("+ Из проводки…"), "flat")
-        charges_bar.addWidget(self.btn_add_charge)
-        charges_bar.addWidget(self.btn_from_gl)
-        root.addLayout(charges_bar)
-        self.charges = ChargesModel(session, [], read_only=False)
-        self.charges_table = LinesTable(self.charges, self.delegate)
-        root.addWidget(self.charges_table, 1)
+        self._set_models([], [], read_only=False)
+        if document_id is None:
+            self.number.setText(tr("Новый"))
+            self.status.set(tr("Новый"), "blue")
+            self._apply_mode(False)
+        else:
+            self.load(document_id)
 
-        batch_bar = QHBoxLayout()
-        batch_title = QLabel(tr("Партия"))
-        batch_title.setFont(fonts().heading)
-        batch_bar.addWidget(batch_title, 1)
-        self.btn_add_receipts = button(tr("+ Поступления…"), "flat")
-        batch_bar.addWidget(self.btn_add_receipts)
-        root.addLayout(batch_bar)
-        self.targets = TargetsModel([], read_only=False)
-        self.targets_table = LinesTable(self.targets, self.delegate)
-        root.addWidget(self.targets_table, 1)
-
-        self.error = QLabel()
-        self.error.setObjectName("error")
-        self.error.setWordWrap(True)
-        self.error.hide()
-        root.addWidget(self.error)
-
-        summary = QHBoxLayout()
-        self.hint = QLabel(tr(HINT))
-        self.hint.setObjectName("tertiary")
-        self.hint.setFont(fonts().small)
-        summary.addWidget(self.hint, 1)
-        summary.addSpacing(24)
-        self.totals: dict[str, QLabel] = {}
-        for key, caption in (
-            ("vat", "НДС"),
-            ("allocated", "Распределено"),
-            ("total", "Расходы"),
-        ):
-            label = QLabel(tr(caption))
-            label.setObjectName("secondary")
-            value = QLabel()
-            value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            value.setMinimumWidth(90)
-            if key == "total":
-                value.setFont(fonts().total)
-                value.setMinimumWidth(130)
-            summary.addWidget(label)
-            summary.addWidget(value)
-            summary.addSpacing(16)
-            self.totals[key] = value
-            self.totals[f"{key}_caption"] = label
-        root.addLayout(summary)
-
-        actions = QHBoxLayout()
-        self.btn_delete = button(tr("Удалить"), "danger")
-        self.btn_unpost = button(tr("Отменить проведение"), "flat")
-        self.btn_gl = button(tr("Открыть проводки"), "flat")
-        self.btn_report = button(tr("Себестоимость партии"), "flat")
-        actions.addWidget(self.btn_delete)
-        actions.addWidget(self.btn_unpost)
-        actions.addWidget(self.btn_gl)
-        actions.addWidget(self.btn_report)
-        actions.addStretch(1)
-        self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
-        self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
-        self.btn_post.setMinimumWidth(130)
-        actions.addWidget(self.btn_save)
-        actions.addWidget(self.btn_post)
-        root.addLayout(actions)
-
+    def _connect(self) -> None:
         self.btn_save.clicked.connect(lambda: self.save(post=False))
         self.btn_post.clicked.connect(lambda: self.save(post=True))
         self.btn_delete.clicked.connect(self.delete)
@@ -232,14 +99,6 @@ class LandedCostPage(QWidget):
                 shortcut = QShortcut(QKeySequence(keys), table)
                 shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
                 shortcut.activated.connect(callback)
-
-        self._set_models([], [], read_only=False)
-        if document_id is None:
-            self.number.setText(tr("Новый"))
-            self.status.set(tr("Новый"), "blue")
-            self._apply_mode(False)
-        else:
-            self.load(document_id)
 
     # ---- page protocol -----------------------------------------------------------------
 
@@ -334,13 +193,6 @@ class LandedCostPage(QWidget):
             self.dirty = True
             self.title_changed.emit()
 
-    def _finish_editing(self) -> None:
-        editor = QApplication.focusWidget()
-        for table in (self.charges_table, self.targets_table):
-            if table.state() == QAbstractItemView.State.EditingState and editor is not None:
-                table.commitData(editor)
-                table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
-
     def add_charge(self) -> None:
         if self.charges.read_only:
             return
@@ -399,10 +251,6 @@ class LandedCostPage(QWidget):
         """Enter in the title, date or method goes on as Tab does."""
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
-
-    def show_error(self, message: str) -> None:
-        self.error.setText(message)
-        self.error.show()
 
     # ---- storage -----------------------------------------------------------------------
 
