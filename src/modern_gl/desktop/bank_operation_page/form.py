@@ -156,7 +156,7 @@ class BankOperationForm(QWidget):
         self.sc: list[PickBox] = []
         for _ in range(3):
             box = PickBox(NONE)
-            self.sc_captions.append(QLabel())
+            self.sc_captions.append(QLabel(held))  # not a window of its own when shown
             self.sc.append(box)
             kept.addWidget(box)
 

@@ -275,6 +275,20 @@ def test_the_bank_account_is_one_field(qtbot, session, monkeypatch):
     assert page.bank.currentText() == "Paşa Bank  ·  51  ·  AZN"
 
 
+def test_no_stray_windows_of_the_page(qtbot, session):
+    """The captions of the held bank subconto are not shown as windows of their own (the
+    «Bank hesabları» box at the top left of the screen)."""
+    page = new_page(qtbot, session)
+    page.show()
+    choose(page.bank, "Kapital USD  ·  52  ·  USD")
+    stray = [
+        w
+        for w in QApplication.topLevelWidgets()
+        if w.isVisible() and w is not page and not isinstance(w, QDialog)
+    ]
+    assert stray == []
+
+
 def test_errors_stay_on_the_page_and_a_draft_is_saved(qtbot, session):
     page = new_page(qtbot, session)
     choose(page.sc[0], "Kapital AZN")
