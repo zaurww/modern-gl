@@ -210,6 +210,8 @@ def test_tag_is_made_in_the_counterparty_window_and_filters_the_report(session, 
 
     report = SubcontoPage(s, acc["60"].id, ReportParams(date(2026, 3, 1), date(2026, 3, 31)))
     qtbot.addWidget(report)
+    report.levels.setCurrentIndex(0)  # counterparties only, without their contracts
+    report.refresh()
     assert not report.tag.isHidden()
     names = [report.model.index(r, 0).data() for r in range(report.model.rowCount())]
     assert names == ["Альфа", "Бета", "Итого"]

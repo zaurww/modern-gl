@@ -207,15 +207,7 @@ def _name_subconto(
     company_id: int,
     by_value: dict[int, list[tuple[int | None, Turnovers]]],
 ) -> dict[int, list[SubcontoRow]]:
-    ids = {v for parts in by_value.values() for v, _ in parts if v is not None}
-    names = {
-        r["id"]: r["name"]
-        for r in conn.execute(
-            "SELECT id, name FROM subconto_values "
-            "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
-            (company_id, json.dumps(sorted(ids))),
-        )
-    }
+    names = _value_names(conn, company_id, {v for parts in by_value.values() for v, _ in parts})
     result = {}
     for account_id, parts in by_value.items():
         rows = []
@@ -237,86 +229,147 @@ def subconto_balance(
     layers: Sequence[str] = COMMON,
     position: int = 1,
     tag_id: int | None = None,
+    levels: int = 1,
 ) -> list[SubcontoRow]:
     """ОСВ по субконто: balances of one account split by the subconto at `position`.
-    With `tag_id` only the elements with that tag («Связанная сторона», D64)."""
-    if position not in (1, 2, 3):
+    With `levels` > 1 each row is split further by the next subconto (a counterparty,
+    under it its contracts): the rows come in tree order, `depth` tells the level and a
+    row sums the rows under it. With `tag_id` only the elements of the first level with
+    that tag («Связанная сторона», D64)."""
+    positions = tuple(range(position, position + levels))
+    if levels < 1 or not set(positions) <= {1, 2, 3}:
         raise ValidationError(tr("позиция субконто должна быть 1, 2 или 3"))
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     acc = _find_account(accounts, account)
-    if acc[f"sc{position}_kind_id"] is None:
-        raise ValidationError(
-            tr("у счёта {code} нет субконто {i}", code=acc["code"] or acc["name"], i=position)
-        )
+    for i in positions:
+        if acc[f"sc{i}_kind_id"] is None:
+            raise ValidationError(
+                tr("у счёта {code} нет субконто {i}", code=acc["code"] or acc["name"], i=i)
+            )
     params["accounts"] = json.dumps(_subtree(accounts, acc["id"]))
     params["tag"] = tag_id
+    keys = ", ".join(f"m.sc{n}" for n in range(levels))
     raw = conn.execute(
         f"""
         WITH {_DOCS_CTE},
         moves AS (
-            SELECT docs.doc_date, p.dt_sc{position} AS sc, p.amount AS dt, 0 AS ct
+            SELECT docs.doc_date, {_sides("dt", positions)}, p.amount AS dt, 0 AS ct
             FROM postings p JOIN docs ON docs.id = p.document_id
             WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
             UNION ALL
-            SELECT docs.doc_date, p.ct_sc{position}, 0, p.amount
+            SELECT docs.doc_date, {_sides("ct", positions)}, 0, p.amount
             FROM postings p JOIN docs ON docs.id = p.document_id
             WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
         )
-        SELECT m.sc, v.name,
+        SELECT {keys},
                SUM(CASE WHEN m.doc_date <  :date_from THEN m.dt - m.ct ELSE 0 END) AS opening,
                SUM(CASE WHEN m.doc_date >= :date_from THEN m.dt ELSE 0 END)        AS dt,
                SUM(CASE WHEN m.doc_date >= :date_from THEN m.ct ELSE 0 END)        AS ct
-        FROM moves m LEFT JOIN subconto_values v ON v.id = m.sc
-        WHERE :tag IS NULL OR m.sc IN (
+        FROM moves m
+        WHERE :tag IS NULL OR m.sc0 IN (
             SELECT value_id FROM subconto_value_tags
             WHERE company_id = :company_id AND tag_id = :tag
         )
-        GROUP BY m.sc ORDER BY v.name
+        GROUP BY {keys}
         """,
         params,
     ).fetchall()
-    in_currency = _subconto_currency(conn, params, position)
-    result = []
+    sums: dict[tuple[int | None, ...], list[int]] = defaultdict(lambda: [0, 0, 0])
     for r in raw:
-        row = SubcontoRow(value_id=r["sc"], name=r["name"] or tr("<не указано>"))
-        row.add(Turnovers.from_net(r["opening"], r["dt"], r["ct"]))
-        row.currency_closing = in_currency.get(r["sc"], {})
-        if not row.is_zero() or row.currency_closing:
-            result.append(row)
-    return result
+        path = tuple(r[f"sc{n}"] for n in range(levels))
+        for k in range(1, levels + 1):  # the row itself and every row above it
+            total = sums[path[:k]]
+            total[0] += r["opening"]
+            total[1] += r["dt"]
+            total[2] += r["ct"]
+    in_currency = _subconto_currency(conn, params, positions)
+    names = _value_names(conn, company_id, {v for path in sums for v in path})
+    return _subconto_tree(sums, in_currency, names, levels)
+
+
+def _sides(side: str, positions: tuple[int, ...]) -> str:
+    """The subconto columns of one side of a posting: p.dt_sc1 AS sc0, p.dt_sc2 AS sc1…"""
+    return ", ".join(f"p.{side}_sc{i} AS sc{n}" for n, i in enumerate(positions))
+
+
+def _value_names(conn: Connection, company_id: int, ids: set[int | None]) -> dict[int, str]:
+    return {
+        r["id"]: r["name"]
+        for r in conn.execute(
+            "SELECT id, name FROM subconto_values "
+            "WHERE company_id = ? AND id IN (SELECT value FROM json_each(?))",
+            (company_id, json.dumps(sorted(v for v in ids if v is not None))),
+        )
+    }
+
+
+def _subconto_tree(
+    sums: dict[tuple[int | None, ...], list[int]],
+    in_currency: dict[tuple[int | None, ...], dict[str, int]],
+    names: dict[int, str],
+    levels: int,
+) -> list[SubcontoRow]:
+    """The rows in tree order: each value, then the values under it; «не указано» first,
+    the rest by name. A silent row (nothing at all) is left out with what is under it."""
+    unknown = tr("<не указано>")
+    children: dict[tuple[int | None, ...], list[tuple[int | None, ...]]] = defaultdict(list)
+    for path in sums:
+        children[path[:-1]].append(path)
+
+    def under(parent: tuple[int | None, ...]) -> list[SubcontoRow]:
+        paths = children[parent]
+        paths.sort(key=lambda p: (p[-1] is not None, names.get(p[-1] or 0, "").casefold()))
+        result = []
+        for path in paths:
+            value_id = path[-1]
+            name = names.get(value_id, "—") if value_id is not None else unknown
+            row = SubcontoRow(value_id=value_id, name=name, depth=len(parent), path=path)
+            row.add(Turnovers.from_net(*sums[path]))
+            row.currency_closing = in_currency.get(path, {})
+            if not row.is_zero() or row.currency_closing:
+                result.append(row)
+                if len(path) < levels:
+                    result += under(path)
+        return result
+
+    return under(())
 
 
 def _subconto_currency(
-    conn: Connection, params: dict, position: int
-) -> dict[int | None, dict[str, int]]:
-    """Net balance at the end in each currency, per subconto value (currency accounts:
-    a foreign partner with invoices in USD and in EUR has both)."""
-    found: dict[int | None, dict[str, int]] = defaultdict(dict)
+    conn: Connection, params: dict, positions: tuple[int, ...]
+) -> dict[tuple[int | None, ...], dict[str, int]]:
+    """Net balance at the end in each currency, per subconto value and per each row above
+    it (currency accounts: a foreign partner with invoices in USD and in EUR has both)."""
+    keys = ", ".join(f"m.sc{n}" for n in range(len(positions)))
+    found: dict[tuple[int | None, ...], dict[str, int]] = defaultdict(dict)
     for r in conn.execute(
         f"""
         WITH {_DOCS_CTE},
         moves AS (
-            SELECT p.dt_sc{position} AS sc, p.currency_id, p.currency_amount AS net
+            SELECT {_sides("dt", positions)}, p.currency_id, p.currency_amount AS net
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.debit_account_id
             WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
               AND own.currency <> 0 AND p.currency_id IS NOT NULL
             UNION ALL
-            SELECT p.ct_sc{position}, p.currency_id, -p.currency_amount
+            SELECT {_sides("ct", positions)}, p.currency_id, -p.currency_amount
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.credit_account_id
             WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
               AND own.currency <> 0 AND p.currency_id IS NOT NULL
         )
-        SELECT m.sc, c.code, SUM(m.net) AS net
+        SELECT {keys}, c.code, SUM(m.net) AS net
         FROM moves m JOIN currencies c ON c.id = m.currency_id
-        GROUP BY m.sc, c.code HAVING SUM(m.net) <> 0
+        GROUP BY {keys}, c.code HAVING SUM(m.net) <> 0
         """,
         params,
     ):
-        found[r["sc"]][r["code"]] = r["net"]
-    return found
+        path = tuple(r[f"sc{n}"] for n in range(len(positions)))
+        for k in range(1, len(path) + 1):
+            amounts = found[path[:k]]
+            amounts[r["code"]] = amounts.get(r["code"], 0) + r["net"]
+    return {path: {c: n for c, n in amounts.items() if n} for path, amounts in found.items()}
 
 
 def account_card(
@@ -326,15 +379,18 @@ def account_card(
     date_from: date | str,
     date_to: date | str,
     layers: Sequence[str] = COMMON,
+    subconto: Sequence[int | None] = (),
 ) -> AccountCard:
     """Карточка счёта: opening balance, each movement with corr account, running balance.
 
-    For a group account, movements of all its subaccounts are included.
+    For a group account, movements of all its subaccounts are included. `subconto` —
+    the card of one counterparty, or of one of its contracts: the values of the account's
+    own side from the first subconto on (None = «не указано»).
     """
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account)["id"]))
-    raw = _card_rows(conn, params)
+    raw = _card_rows(conn, params, subconto)
     opening = 0
     card = AccountCard(opening=0)
     for r in raw:
@@ -353,9 +409,11 @@ def account_card(
     return card
 
 
-def _card_rows(conn: Connection, params: dict) -> list[Row]:
+def _card_rows(conn: Connection, params: dict, subconto: Sequence[int | None]) -> list[Row]:
     """Each posting line of the accounts, either side, with its corr account and the
     running balance; currency amounts only for currency accounts."""
+    for i, value in enumerate(subconto, 1):
+        params[f"sc{i}"] = value
     return conn.execute(
         f"""
         WITH {_DOCS_CTE},
@@ -368,6 +426,7 @@ def _card_rows(conn: Connection, params: dict) -> list[Row]:
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.debit_account_id
             WHERE p.debit_account_id IN (SELECT value FROM json_each(:accounts))
+              {_same_subconto("dt", subconto)}
             UNION ALL
             SELECT docs.doc_date, docs.number, docs.id, docs.memo,
                    p.line_no, 1, p.debit_account_id, 0, p.amount,
@@ -377,6 +436,7 @@ def _card_rows(conn: Connection, params: dict) -> list[Row]:
             FROM postings p JOIN docs ON docs.id = p.document_id
             JOIN accounts own ON own.id = p.credit_account_id
             WHERE p.credit_account_id IN (SELECT value FROM json_each(:accounts))
+              {_same_subconto("ct", subconto)}
         ),
         running AS (
             SELECT *, SUM(dt - ct) OVER (
@@ -391,6 +451,14 @@ def _card_rows(conn: Connection, params: dict) -> list[Row]:
         """,
         params,
     ).fetchall()
+
+
+def _same_subconto(side: str, subconto: Sequence[int | None]) -> str:
+    """AND p.dt_sc1 = :sc1 AND p.dt_sc2 IS NULL… — the lines of one counterparty."""
+    return "".join(
+        f" AND p.{side}_sc{i} = :sc{i}" if value is not None else f" AND p.{side}_sc{i} IS NULL"
+        for i, value in enumerate(subconto, 1)
+    )
 
 
 def _card_line(r: Row) -> CardLine:
