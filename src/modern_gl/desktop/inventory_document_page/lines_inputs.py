@@ -19,13 +19,13 @@ from modern_gl.desktop.inventory_document_page.columns import (
 )
 from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import SCALE as MONEY_SCALE
+from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 
 
 def manats(minor: int | None) -> Decimal | None:
     """An amount in kopecks as the Decimal the inputs take."""
-    return None if minor is None else Decimal(minor).scaleb(-MONEY_SCALE)
+    return None if minor is None else from_minor(minor)
 
 
 class LineInputs(InventoryLinesBase):

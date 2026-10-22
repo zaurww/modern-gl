@@ -20,7 +20,6 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
-from decimal import Decimal
 from fractions import Fraction
 
 from modern_gl.application.catalog import AccountInfo, Catalog
@@ -28,7 +27,7 @@ from modern_gl.application.ledger import ImportedDocument, Ledger, PostingInput
 from modern_gl.domain.currency import parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.domain.money import SCALE, to_minor
+from modern_gl.domain.money import from_minor, to_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.i18n_az import AZ
 
@@ -253,12 +252,12 @@ class _Reader:
         return PostingInput(
             row.debit.id,
             row.credit.id,
-            Decimal(amount).scaleb(-SCALE),
+            from_minor(amount),
             subconto[DT],
             subconto[CT],
             row.memo,
             currency_id,
-            None if currency_amount is None else Decimal(currency_amount).scaleb(-SCALE),
+            None if currency_amount is None else from_minor(currency_amount),
             row.invoice,
         )
 

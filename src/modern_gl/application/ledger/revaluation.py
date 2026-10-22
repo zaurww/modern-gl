@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger.base import account_label
@@ -12,6 +11,7 @@ from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
 
@@ -63,7 +63,7 @@ class RevaluationCommands(DocumentCommands):
                     PostingInput(
                         dt,
                         ct,
-                        Decimal(abs(diff)).scaleb(-2),
+                        from_minor(abs(diff)),
                         dt_sc,
                         ct_sc,
                         tr("Курсовая разница {code}", code=b["code"]),

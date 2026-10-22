@@ -56,8 +56,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.currency import format_unit_rate, parse_rate, unit_rate
 from modern_gl.domain.dates import ru_date
-from modern_gl.domain.money import SCALE as MONEY_SCALE
-from modern_gl.domain.money import format_minor, to_minor
+from modern_gl.domain.money import format_minor, from_minor, to_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     ReceiptLineChoice,
@@ -371,21 +370,17 @@ class ChargesModel(QAbstractTableModel):
     def to_inputs(self) -> list[LandedCostCharge]:
         return [
             LandedCostCharge(
-                None if charge.amount is None else Decimal(charge.amount).scaleb(-MONEY_SCALE),
+                None if charge.amount is None else from_minor(charge.amount),
                 charge.account_id,
                 tuple(charge.subconto),
-                None
-                if charge.vat_amount is None
-                else Decimal(charge.vat_amount).scaleb(-MONEY_SCALE),
+                None if charge.vat_amount is None else from_minor(charge.vat_amount),
                 charge.cost_type_id,
                 charge.source[0] if charge.source else None,
                 charge.source[1] if charge.source else None,
                 charge.memo.strip(),
                 charge.currency_id,
                 None if charge.rate is None else format_unit_rate(charge.rate),
-                None
-                if charge.currency_amount is None
-                else Decimal(charge.currency_amount).scaleb(-MONEY_SCALE),
+                None if charge.currency_amount is None else from_minor(charge.currency_amount),
             )
             for charge in self.rows
             if not charge.is_empty()
@@ -524,7 +519,7 @@ class TargetsModel(QAbstractTableModel):
         return [
             LandedCostTarget(
                 target.receipt.id,
-                None if target.manual is None else Decimal(target.manual).scaleb(-MONEY_SCALE),
+                None if target.manual is None else from_minor(target.manual),
                 target.line_id,
             )
             for target in self.rows

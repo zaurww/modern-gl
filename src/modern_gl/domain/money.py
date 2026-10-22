@@ -44,6 +44,11 @@ def round_ratio(numerator: int, denominator: int) -> int:
     return round_half_away(Fraction(numerator, denominator))
 
 
+def from_minor(minor: int) -> Decimal:
+    """Stored minor units back to the exact value: 12345 -> Decimal('123.45')."""
+    return Decimal(minor).scaleb(-SCALE)
+
+
 def format_minor(minor: int) -> str:
     """12345678 -> '123 456.78'"""
     sign = "-" if minor < 0 else ""

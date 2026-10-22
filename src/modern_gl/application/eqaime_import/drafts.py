@@ -20,6 +20,7 @@ from modern_gl.application.inventory import (
     SaleLine,
 )
 from modern_gl.application.queries import remembered_sale_subconto
+from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, transaction
 
@@ -126,7 +127,7 @@ def _sale_line(
 def _amount(minor: int, zero: bool = False) -> Decimal | None:
     if minor == 0 and not zero:
         return None  # a draft may lack it; posting asks for it
-    return Decimal(minor).scaleb(-2)
+    return from_minor(minor)
 
 
 def _quantity(conn: Connection, item_id: int | None, quantity: Decimal | None) -> Decimal | None:

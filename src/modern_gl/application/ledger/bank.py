@@ -11,7 +11,6 @@ amount in the currency kept on the posting.
 from __future__ import annotations
 
 from dataclasses import fields, replace
-from decimal import Decimal
 
 from modern_gl.application.bank import (
     IN,
@@ -31,6 +30,7 @@ from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
+from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
 
@@ -198,7 +198,7 @@ class BankCommands(ModuleDocumentCommands):
             PostingInput(
                 advance_account,
                 settlement_account,
-                Decimal(amount).scaleb(-2),
+                from_minor(amount),
                 advance,
                 own,
                 invoice=number,
@@ -207,7 +207,7 @@ class BankCommands(ModuleDocumentCommands):
             else PostingInput(
                 settlement_account,
                 advance_account,
-                Decimal(amount).scaleb(-2),
+                from_minor(amount),
                 own,
                 advance,
                 invoice=number,
@@ -366,12 +366,12 @@ class BankCommands(ModuleDocumentCommands):
                 PostingInput(
                     dt,
                     ct,
-                    Decimal(value).scaleb(-2),
+                    from_minor(value),
                     dt_sc,
                     ct_sc,
                     data.memo,
                     data.currency_id,
-                    None if data.currency_id is None else Decimal(line.amount).scaleb(-2),
+                    None if data.currency_id is None else from_minor(line.amount),
                     line.invoice,
                 )
             )

@@ -8,7 +8,6 @@ not be remembered: Enter or Tab takes the highlighted item and adds what comes n
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
 from fractions import Fraction
 from typing import cast
 
@@ -37,7 +36,7 @@ from modern_gl.desktop.cell_editing import PickWithKeys, fit_popup
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.domain.errors import LedgerError
-from modern_gl.domain.money import SCALE
+from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
@@ -291,11 +290,11 @@ class QuickEntryBar(QWidget):
         return PostingInput(
             ln.debit,
             ln.credit,
-            Decimal(ln.amount).scaleb(-SCALE),
+            from_minor(ln.amount),
             tuple(ln.debit_sc),
             tuple(ln.credit_sc),
             ln.memo,
             ln.currency_id,
-            None if ln.currency_amount is None else Decimal(ln.currency_amount).scaleb(-SCALE),
+            None if ln.currency_amount is None else from_minor(ln.currency_amount),
             ln.invoice,
         )

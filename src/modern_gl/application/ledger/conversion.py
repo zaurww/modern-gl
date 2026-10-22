@@ -11,8 +11,6 @@ with the credit, at the rate of its day.
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.conversions import (
     ConversionCalc,
@@ -30,6 +28,7 @@ from modern_gl.application.ledger.module import ModuleDocumentCommands
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
 
@@ -63,12 +62,12 @@ def posting_line(
     return PostingInput(
         debit,
         credit,
-        Decimal(amount).scaleb(-2),
+        from_minor(amount),
         debit_sc,
         credit_sc,
         text,
         currency_id,
-        None if currency_id is None else Decimal(currency_amount).scaleb(-2),
+        None if currency_id is None else from_minor(currency_amount),
     )
 
 

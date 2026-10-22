@@ -3,8 +3,6 @@ cells a line has and the clipboard are in their own modules."""
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from PySide6.QtCore import (
     QModelIndex,
     Qt,
@@ -30,7 +28,7 @@ from modern_gl.domain.currency import (
     to_base,
 )
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import SCALE, format_minor
+from modern_gl.domain.money import format_minor, from_minor
 from modern_gl.i18n import tr
 
 
@@ -372,12 +370,12 @@ class PostingsModel(PostingsClipboard):
                 PostingInput(
                     r.debit,
                     r.credit,
-                    Decimal(r.amount).scaleb(-SCALE),
+                    from_minor(r.amount),
                     tuple(r.debit_sc),
                     tuple(r.credit_sc),
                     r.memo.strip(),
                     r.currency_id if currency else None,
-                    Decimal(r.currency_amount or 0).scaleb(-SCALE) if currency else None,
+                    from_minor(r.currency_amount or 0) if currency else None,
                     r.invoice if self.takes_invoice(n - 1) else "",
                     r.invoice_kind if self.takes_invoice(n - 1) and r.invoice else "",
                 )

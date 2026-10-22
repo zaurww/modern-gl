@@ -8,8 +8,7 @@ from decimal import Decimal, InvalidOperation
 from modern_gl.application.inventory.model import QUANTITY_FACTOR, QUANTITY_SCALE, VAT_RATE_SCALE
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import SCALE as MONEY_SCALE
-from modern_gl.domain.money import round_ratio, to_minor
+from modern_gl.domain.money import from_minor, round_ratio, to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row
 
@@ -64,7 +63,7 @@ def blank(value: object) -> bool:
 
 def money(minor: int) -> Decimal:
     """Convert stored minor units back to the exact value expected by PostingInput."""
-    return Decimal(minor).scaleb(-MONEY_SCALE)
+    return from_minor(minor)
 
 
 def allocate_minor(total: int, weights: Sequence[tuple[int, int]]) -> dict[int, int]:
