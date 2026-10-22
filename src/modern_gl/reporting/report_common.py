@@ -97,6 +97,10 @@ class Osv:
 class SubcontoRow(Turnovers):
     value_id: int | None = None
     name: str = ""
+    # ОСВ по субконто in levels: 0 = a counterparty, 1 = its contract under it…
+    depth: int = 0
+    # the values from the first level down to this row: (counterparty, contract)
+    path: tuple[int | None, ...] = ()
     # a currency account: net balance (Dt - Ct) at the end in each currency ("USD": …)
     currency_closing: dict[str, int] = field(default_factory=dict)
 

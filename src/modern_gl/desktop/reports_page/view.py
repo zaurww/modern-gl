@@ -72,6 +72,9 @@ class ReportParams:
     date_from: date
     date_to: date
     book: int = 0  # index in BOOKS
+    # a card of one counterparty or contract, opened from ОСВ по субконто: the values
+    # from the first subconto on (None = «не указано»)
+    subconto: tuple[int | None, ...] = ()
 
     @property
     def layers(self) -> tuple[str, ...]:
@@ -235,6 +238,7 @@ class ReportPage(QWidget):
                 edited_date(self.date_from),
                 edited_date(self.date_to),
                 self.book.currentIndex(),
+                self.params.subconto,
             )
             self.header.subtitle.setText(self.params.describe(self.s.parallel_books))
         try:

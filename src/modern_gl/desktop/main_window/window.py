@@ -419,10 +419,10 @@ class MainWindow(OpenPages):
             journal.refresh(select_id=page.doc_id)
 
     def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
-        key = (kind, account_id)
+        page = REPORTS[kind](self.open_session, account_id, params)
+        key = page.key  # a card of one counterparty is a page of its own
         if key in self.pages:
             self.close_page(key, ask=False)
-        page = REPORTS[kind](self.open_session, account_id, params)
         self._wire_report(page)
         self._add_page(key, page, open_item=True)
         self._activate(key)

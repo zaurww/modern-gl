@@ -147,6 +147,9 @@ def main() -> None:
     shot("5e_opening_balances")
     win.open_report("subconto", session.catalog.by_code["60"].id, osv.params)
     shot("6_subconto")
+    subconto = cast(SubcontoPage, win.stack.currentWidget())
+    subconto.drill(subconto.model.rows[2])  # the card of one counterparty, with its lines
+    shot("6b_subconto_card")
     win.open_report("card", session.catalog.by_code["51"].id, osv.params)
     shot("7_card")
     win.show_place(("chart",))

@@ -1277,6 +1277,7 @@ AZ: dict[str, str] = {
     "На портале": "Portalda",
     # tags of directory elements (D64)
     "Метка": "Etiket",
+    "Детализация": "Detallaşdırma",
     "Метки": "Etiketlər",
     "Все": "Hamısı",
     "Только с меткой «{name}»": "Yalnız «{name}» etiketli",

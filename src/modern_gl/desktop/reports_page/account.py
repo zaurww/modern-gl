@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from PySide6.QtWidgets import (
     QComboBox,
@@ -35,9 +35,9 @@ class AccountReportPage(ReportPage):
         self.account_id = account_id
         acc = session.catalog.accounts[account_id]
         super().__init__(session, f"{tr(self.caption)} {acc.short}", params)
-        self.header.title.setText(f"{tr(self.caption)} {acc.short}")
+        self.header.title.setText(self.title())
         self.header.subtitle.setText(acc.name)
-        self.key = (self.kind, account_id)
+        self.key = (self.kind, account_id, *self.params.subconto)
         self.add_filters()
         self.refresh()
 
@@ -49,17 +49,26 @@ class AccountReportPage(ReportPage):
         return self.s.catalog.accounts[self.account_id]
 
     def title(self) -> str:
-        return f"{tr(self.caption)} {self.account.short}"
+        names = self._subconto_names()
+        return f"{tr(self.caption)} {self.account.short}" + (f" · {names[-1]}" if names else "")
+
+    def _subconto_names(self) -> list[str]:
+        """The counterparty (and contract) the report is about, if it is about one."""
+        return [
+            self.s.catalog.value(v).name if v is not None else tr("<не указано>")
+            for v in self.params.subconto
+        ]
 
     def refresh(self) -> None:
         super().refresh()
         acc = self.account
         name = acc.name if acc.code else ""  # without a code the name is the title already
-        self.header.subtitle.setText(
-            "   ·   ".join(
-                part for part in (name, self.params.describe(self.s.parallel_books)) if part
-            )
+        parts = (
+            name,
+            " · ".join(self._subconto_names()),
+            self.params.describe(self.s.parallel_books),
         )
+        self.header.subtitle.setText("   ·   ".join(part for part in parts if part))
 
 
 def invoice_text(line: reports.CardLine) -> str:
@@ -99,6 +108,7 @@ class CardPage(AccountReportPage):
             self.params.date_from,
             self.params.date_to,
             self.params.layers,
+            self.params.subconto,
         )
         # within one year the year is in the period already
         one_year = self.params.date_from.year == self.params.date_to.year
@@ -164,17 +174,41 @@ class SubcontoPage(AccountReportPage):
 
     def add_filters(self) -> None:
         """«Метка»: only the elements with it — the related parties, the landlords (D64).
-        Shown when some element of the directory has a tag."""
+        Shown when some element of the directory has a tag. «Детализация»: counterparties,
+        or counterparties and their contracts under them — when the account has both."""
         self.tag = QComboBox()
         self.tag.setMinimumWidth(190)
         self.tag_label = QLabel(tr("Метка"))
         self.tag_label.setObjectName("secondary")
+        self.levels = QComboBox()
+        self.levels.setMinimumWidth(190)
+        kinds = self._kinds()
+        for n in range(1, len(kinds) + 1):
+            self.levels.addItem(" → ".join(kinds[:n]))
+        self.levels.setCurrentIndex(len(kinds) - 1)  # down to the contracts, as asked for
+        levels_label = QLabel(tr("Детализация"))
+        levels_label.setObjectName("secondary")
         at = self.bar.count() - 2  # before «Сформировать»
-        self.bar.insertWidget(at, self.tag_label)
-        self.bar.insertWidget(at + 1, self.tag)
-        self.bar.insertSpacing(at + 2, 6)
+        for w in (levels_label, self.levels, self.tag_label, self.tag):
+            self.bar.insertWidget(at, w)
+            at += 1
+            if w in (self.levels, self.tag):
+                self.bar.insertSpacing(at, 6)
+                at += 1
+        for w in (levels_label, self.levels):
+            w.setVisible(len(kinds) > 1)
         self._fill_tags()
         self.tag.activated.connect(lambda _: self.refresh())
+        self.levels.activated.connect(lambda _: self.refresh())
+
+    def _kinds(self) -> list[str]:
+        """The names of the account's subconto in a row: Контрагенты, Договоры."""
+        kinds = []
+        for kind_id in self.account.sc_kinds:
+            if kind_id is None:
+                break
+            kinds.append(self.s.catalog.kinds[kind_id])
+        return kinds
 
     def _fill_tags(self) -> None:
         kind_id = self.account.sc_kinds[0]
@@ -193,6 +227,7 @@ class SubcontoPage(AccountReportPage):
     def build(self) -> None:
         self._fill_tags()  # a tag given in «Справочники» since the report was opened
         tag_id = self.tag.currentData()
+        levels = self.levels.currentIndex() + 1
         rows = reports.subconto_balance(
             self.s.conn,
             self.s.company_id,
@@ -201,22 +236,24 @@ class SubcontoPage(AccountReportPage):
             self.params.date_to,
             self.params.layers,
             tag_id=tag_id,
+            levels=levels,
         )
         total = SubcontoRow(name=tr("Итого"))
         for r in rows:
-            total.add(
-                Turnovers(
-                    r.opening_dt,
-                    r.opening_ct,
-                    r.turnover_dt,
-                    r.turnover_ct,
-                    r.closing_dt,
-                    r.closing_ct,
+            if r.depth == 0:  # a contract is in its counterparty already
+                total.add(
+                    Turnovers(
+                        r.opening_dt,
+                        r.opening_ct,
+                        r.turnover_dt,
+                        r.turnover_ct,
+                        r.closing_dt,
+                        r.closing_ct,
+                    )
                 )
-            )
-        kind_id = self.account.sc_kinds[0]
-        kind = self.s.catalog.kinds[kind_id] if kind_id is not None else ""
-        columns = [Column(kind, lambda r: r.name)]
+        columns = [
+            Column(" / ".join(self._kinds()[:levels]), lambda r: "      " * r.depth + r.name)
+        ]
         if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN
             columns.append(Column(tr("VÖEN"), self._tax_id, width=130))
         columns += turnover_columns()
@@ -225,12 +262,18 @@ class SubcontoPage(AccountReportPage):
         self.model.set(
             columns,
             [*rows, total] if rows else [],
-            emphasis=lambda r: r is total,
+            emphasis=lambda r: r is total or (levels > 1 and r.depth == 0),
+            muted=lambda r: r.depth > 0,
             total=lambda r: r is total,
         )
         self.footer.setText(
             tr("Только с меткой «{name}»", name=self.tag.currentText()) if tag_id else ""
         )
+
+    def drill(self, row) -> None:
+        """The card of this counterparty (or contract) — and from it the documents."""
+        if row is not None and row.path:
+            self.open_report.emit("card", self.account_id, replace(self.params, subconto=row.path))
 
     @staticmethod
     def _in_currency(row: SubcontoRow) -> str:
