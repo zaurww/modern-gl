@@ -33,7 +33,7 @@ RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
 # Reports follow Jon Moon (Clarity & Impact): a table as wide as its content, so the
-# amounts stand next to the names; whitespace and soft bands of three rows instead of
+# amounts stand next to the names; whitespace and soft zebra rows instead of
 # rules; a dash under the units for nothing; negatives in brackets that hang right.
 DASH = "–"
 
@@ -41,7 +41,7 @@ NAME_MAX = 380  # px: a longer name is cut with "…" (the whole of it shows und
 
 GROUP_GAP = 24  # px of air in front of each Dt/Kt pair
 
-BAND = 3  # rows in a band
+BAND = 1  # rows in a band: plain zebra
 
 ROW_HEIGHT = 24
 

@@ -877,9 +877,9 @@ def test_osv_amounts_stand_next_to_the_names(window, qtbot):
         "123.45",
         "(123.45)",
     ]
-    # soft bands of three rows; the total is not banded
+    # soft zebra rows; the total is not banded
     rows = len(page.model.rows)
-    assert page.model.banded == [i // 3 % 2 == 1 for i in range(rows - 1)] + [False]
+    assert page.model.banded == [i % 2 == 1 for i in range(rows - 1)] + [False]
 
 
 def test_theme_switches_at_once_and_keeps_the_company(window):
