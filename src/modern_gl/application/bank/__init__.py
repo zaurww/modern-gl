@@ -47,6 +47,8 @@ from modern_gl.application.bank.operations import (
     last_lines,
     latest_direction,
     load_bank_operation,
+    split_by_deposit,
+    vat_deposit_part,
 )
 from modern_gl.application.bank.places import (
     BankPlace,
@@ -116,6 +118,8 @@ __all__ = [
     "load_bank_operation",
     "payment_lines",
     "place_balance",
+    "split_by_deposit",
     "statement",
     "transfer_targets",
+    "vat_deposit_part",
 ]

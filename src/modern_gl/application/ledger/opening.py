@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import date, timedelta
 
 from modern_gl.application.ledger.chart import ChartCommands
@@ -17,6 +18,20 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 OPENING_CODE = "00"
+
+
+def opening_posting(line: PostingInput, on_credit: bool) -> PostingInput:
+    """A balance typed as «Дт account / Кт 00»: a credit balance is the other way round,
+    «Дт 00 / Кт account» (debt 9: the rule was in the window)."""
+    if not on_credit:
+        return line
+    return replace(
+        line,
+        debit_account_id=line.credit_account_id,
+        debit_subconto=line.credit_subconto,
+        credit_account_id=line.debit_account_id,
+        credit_subconto=line.debit_subconto,
+    )
 
 
 class OpeningBalanceCommands(ChartCommands, DocumentCommands):

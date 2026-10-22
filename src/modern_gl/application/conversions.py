@@ -3,7 +3,7 @@ the postings. Amounts are minor units of each side's currency (None = manat)."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from fractions import Fraction
 
@@ -130,6 +130,23 @@ def bank_rate(data: ConversionInput) -> Fraction | None:
     if source.currency_id is None:  # manat -> currency: manat per unit bought
         return Fraction(source.amount, target.amount)
     return Fraction(target.amount, source.amount)
+
+
+def official_rate(data: ConversionInput, rates: Mapping[int, Rate]) -> Fraction | None:
+    """The Central Bank's rate quoted as the bank quotes (see bank_rate): manat per unit
+    bought or sold; for a cross — the target per one unit of the source, from the two
+    official rates. None: a side is not chosen or a rate is missing."""
+    if data.source is None or data.target is None:
+        return None
+    src, tgt = data.source.currency_id, data.target.currency_id
+    per_unit = {c: r.per_unit for c, r in rates.items()}
+    if src is None:
+        return per_unit.get(tgt) if tgt is not None else None
+    if src not in per_unit:
+        return None
+    if tgt is None:
+        return per_unit[src]
+    return per_unit[src] / per_unit[tgt] if tgt in per_unit else None
 
 
 def conversion_of_document(conn: Connection, company_id: int, document_id: int) -> int | None:

@@ -14,8 +14,8 @@ from PySide6.QtGui import QColor
 from modern_gl.application.inventory import (
     format_quantity,
     line_amount,
+    line_vat,
     unit_price,
-    vat_of,
 )
 from modern_gl.application.queries import remembered_expense, remembered_sale_subconto
 from modern_gl.desktop.inventory_document_page.columns import (
@@ -354,11 +354,7 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
         """VAT follows the amount and the rate until it is typed by hand."""
         if self.doc_type not in VAT_DOCUMENTS or row.vat_typed:
             return
-        row.vat_amount = (
-            None
-            if row.amount is None or self.vat_rate is None
-            else vat_of(row.amount, self.vat_rate)
-        )
+        row.vat_amount = line_vat(self.doc_type, row.amount, self.vat_rate)
 
     def set_vat_rate(self, rate: int | None) -> None:
         self.vat_rate = rate

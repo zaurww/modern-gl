@@ -8,7 +8,7 @@ from typing import cast
 
 from PySide6.QtCore import Qt
 
-from modern_gl.application.ledger import PostingInput
+from modern_gl.application.ledger import PostingInput, opening_posting
 from modern_gl.application.queries import PostingData
 from modern_gl.desktop.postings import (
     AMOUNT,
@@ -160,25 +160,19 @@ class OpeningPostingsModel(PostingsModel):
     def to_inputs(self) -> list[PostingInput]:
         """A debit balance is "Дт account / Кт 00", a credit one "Дт 00 / Кт account"."""
         lines: list[PostingRow] = []
+        sides: list[bool] = []
         for n, r in enumerate(cast(list[OpeningRow], self.rows), start=1):
             if r.is_empty():
                 lines.append(PostingRow())  # skipped, but keeps the line numbers
                 continue
             if r.debit is None:
                 raise ValidationError(tr("строка {line}: не указан счёт", line=n))
-            balance = replace(r, debit_sc=list(r.debit_sc), credit_sc=[None, None, None])
-            if r.on_credit:
-                balance = replace(
-                    balance,
-                    debit=self.control_account,
-                    debit_sc=[None, None, None],
-                    credit=r.debit,
-                    credit_sc=list(r.debit_sc),
-                )
-            lines.append(balance)
+            lines.append(replace(r, debit_sc=list(r.debit_sc), credit_sc=[None, None, None]))
+            sides.append(r.on_credit)
         rows = self.rows
         self.rows = lines
         try:
-            return super().to_inputs() if any(not r.is_empty() for r in lines) else []
+            typed = super().to_inputs() if sides else []
         finally:
             self.rows = rows
+        return [opening_posting(p, on_credit) for p, on_credit in zip(typed, sides, strict=True)]

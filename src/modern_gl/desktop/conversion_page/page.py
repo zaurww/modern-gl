@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date
-from fractions import Fraction
 from itertools import pairwise
 
 from PySide6.QtCore import Qt, QTimer
@@ -22,6 +21,7 @@ from modern_gl.application.conversions import (
     bank_rate,
     calculate,
     load_conversion,
+    official_rate,
 )
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.ledger.conversion import MissingAccountRole
@@ -312,7 +312,7 @@ class ConversionPage(ConversionForm):
         src, tgt = self.source.code(), self.target.code()
         # quoted as the bank does: the foreign currency (the source of a cross) per unit
         unit, quote = (tgt, src) if data.source and data.source.currency_id is None else (src, tgt)
-        cbar = self._cbar_rate(data, calc.rates)
+        cbar = official_rate(data, calc.rates)
         self.cbar.set(f"1 {unit} = {format_unit_rate(cbar)} {quote}" if cbar else NONE)
         rate = bank_rate(data)
         self.bank.set(f"1 {unit} = {format_unit_rate(rate)} {quote}" if rate else NONE)
@@ -328,19 +328,6 @@ class ConversionPage(ConversionForm):
         self.fee_value.caption.setText(tr("Комиссии, {code}", code=base))
         self.fee_value.set(format_minor(calc.fee_total) if calc.fee_total else NONE)
         self._update_rate_note(data)
-
-    def _cbar_rate(self, data: ConversionInput, rates) -> Fraction | None:
-        if data.source is None or data.target is None:
-            return None
-        src, tgt = data.source.currency_id, data.target.currency_id
-        per_unit = {c: r.per_unit for c, r in rates.items()}
-        if src is None:
-            return per_unit.get(tgt) if tgt is not None else None
-        if src not in per_unit:
-            return None
-        if tgt is None:
-            return per_unit[src]
-        return per_unit[src] / per_unit[tgt] if tgt in per_unit else None
 
     def _update_rate_note(self, data: ConversionInput) -> None:
         """Currencies without a rate set for the date itself: offer the official ones."""

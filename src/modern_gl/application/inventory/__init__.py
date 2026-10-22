@@ -16,6 +16,7 @@ from modern_gl.application.inventory.amounts import (
     vat_of,
 )
 from modern_gl.application.inventory.catalog import CatalogCommands
+from modern_gl.application.inventory.defaults import default_vat_rate, line_vat
 from modern_gl.application.inventory.model import (
     ACCRUED_CODE,
     ALLOCATION_METHODS,
@@ -25,6 +26,7 @@ from modern_gl.application.inventory.model import (
     QUANTITY_SCALE,
     SALE_ROLE_NAMES,
     STANDARD_VAT_RATE,
+    VAT_DOCUMENTS,
     VAT_RATE_SCALE,
     InventoryDocumentData,
     InventoryLineData,
@@ -47,6 +49,7 @@ __all__ = [
     "QUANTITY_SCALE",
     "SALE_ROLE_NAMES",
     "STANDARD_VAT_RATE",
+    "VAT_DOCUMENTS",
     "VAT_RATE_SCALE",
     "Inventory",
     "InventoryDocumentData",
@@ -59,8 +62,10 @@ __all__ = [
     "SaleLine",
     "TransferLine",
     "allocate_minor",
+    "default_vat_rate",
     "format_quantity",
     "line_amount",
+    "line_vat",
     "split_charges",
     "to_quantity",
     "unit_price",

@@ -23,7 +23,7 @@ from modern_gl.application.ledger.inputs import (
     PostingInput,
     TemplateLine,
 )
-from modern_gl.application.ledger.opening import OpeningBalanceCommands
+from modern_gl.application.ledger.opening import OpeningBalanceCommands, opening_posting
 from modern_gl.application.ledger.revaluation import RevaluationCommands
 from modern_gl.application.ledger.subconto_details import (
     NO_TAX,
@@ -43,6 +43,7 @@ __all__ = [
     "PostingInput",
     "TemplateLine",
     "ValueDetails",
+    "opening_posting",
 ]
 
 
