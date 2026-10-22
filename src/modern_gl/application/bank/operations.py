@@ -150,6 +150,18 @@ def find_bank_operation(conn: Connection, company_id: int, reference: str) -> in
     return row[0] if row else None
 
 
+def latest_direction(conn: Connection, company_id: int, counterparty_id: int) -> str | None:
+    """Which way money went with this counterparty last time (D78: a line typed in the
+    statement says no direction before its amount)."""
+    row = conn.execute(
+        "SELECT o.direction FROM bank_operations o JOIN documents d ON d.id = o.document_id "
+        "WHERE o.company_id = ? AND o.counterparty_id = ? "
+        "ORDER BY d.doc_date DESC, d.number DESC LIMIT 1",
+        (company_id, counterparty_id),
+    ).fetchone()
+    return row["direction"] if row else None
+
+
 def last_lines(
     conn: Connection, company_id: int, direction: str, counterparty_id: int
 ) -> list[BankLine]:

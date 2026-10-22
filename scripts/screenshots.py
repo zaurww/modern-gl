@@ -634,6 +634,13 @@ def main() -> None:
     shot("12a_bank_statements")
     bank.drill(bank.model.rows[0])
     shot("12a2_bank_statement")
+    line = bank.entry  # a line of the bank's statement typed in: who, which account, how much
+    line.counterparty_box.setCurrentIndex(0)
+    line.counterparty_chosen()
+    line.money_out.setText("120.00")
+    line.money_out.setFocus()
+    shot("12a3_bank_entry")
+    line.clear()
     bank.new_operation("out")
     payment = cast(BankOperationPage, win.stack.currentWidget())
     payment.counterparty_edit.setText(i18n.tr("Альфа Трейд"))

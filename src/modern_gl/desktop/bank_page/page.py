@@ -6,9 +6,16 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from PySide6.QtCore import QModelIndex, Qt, Signal
+from PySide6.QtCore import QModelIndex, QSettings, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QMenu,
+    QVBoxLayout,
+)
 
 from modern_gl.application.bank import (
     ACCOUNT_KINDS,
@@ -20,10 +27,13 @@ from modern_gl.application.bank import (
     BankStatement,
     StatementLine,
     bank_accounts,
+    bank_operation_of_document,
+    bank_places,
     bank_statements,
     statement,
 )
 from modern_gl.desktop.bank_page.dialogs import BankAccountDialog, PeriodDialog
+from modern_gl.desktop.bank_page.entry import ONE, TWO, EntryLine
 from modern_gl.desktop.bank_page.levels import (
     GroupRow,
     account_columns,
@@ -64,12 +74,16 @@ class BankPage(ReportPage):
         self.period: tuple[str, str] | None = None
         self.accounts: list[BankAccount] = []
         self.statements: list[BankStatement] = []
+        self._amount_mode: str | None = None
         self._build_actions()
         self._build_crumbs()
+        self.entry = EntryLine(session)
+        self.entry.saved.connect(self.refresh)
         self.reconcile = ReconcileBar()
         self.reconcile.entered.connect(self._bank_closing_entered)
         root = self.layout()
         assert isinstance(root, QVBoxLayout)
+        root.addWidget(self.entry)
         root.addWidget(self.reconcile)
         self.empty_states = {
             ACCOUNTS: EmptyState(
@@ -86,6 +100,14 @@ class BankPage(ReportPage):
         }
         for empty in self.empty_states.values():
             self.stack.addWidget(empty)
+        # Enter opens a row of the table only: in the entry line it goes on through it
+        for shortcut in self.findChildren(QShortcut):
+            if shortcut.key().toString() in ("Return", "Enter"):
+                shortcut.setEnabled(False)
+        for keys in ("Return", "Enter"):
+            shortcut = QShortcut(QKeySequence(keys), self.table)
+            shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
+            shortcut.activated.connect(self._drill_current)
         for keys, fn in (
             ("Backspace", self.up),
             ("Alt+Up", self.up),
@@ -127,6 +149,15 @@ class BankPage(ReportPage):
         items: list = []
         if self.level == JOURNAL:
             items.append((tr("Выписка за период…"), self.new_period))
+        if self.level == STATEMENT:
+            items.append((tr("Перенести отмеченные на другой счёт…"), self.move_selected))
+            one = self.amount_mode() == ONE
+            items.append(
+                (
+                    tr("Сумма в двух колонках") if one else tr("Сумма одной колонкой ±"),
+                    lambda: self.set_amount_mode(TWO if one else ONE),
+                )
+            )
         if self.level != ACCOUNTS:
             items.append((tr("Реквизиты счёта…"), self.edit_account))
         else:
@@ -204,6 +235,8 @@ class BankPage(ReportPage):
     def open_statement(self, date_from: str, date_to: str) -> None:
         self.period = (date_from, date_to)
         self.go(STATEMENT)
+        if self.level == STATEMENT:
+            self.entry.start()
 
     def up(self) -> None:
         if self.level == STATEMENT:
@@ -282,6 +315,7 @@ class BankPage(ReportPage):
         self.header.title.setText(period_text(s))
         self.header.subtitle.setText(f"{account.title}  ·  {where(account)}")
         self.reconcile.show_statement(s)
+        self.entry.show_for(account.place, s.date_from, s.date_to, self.amount_mode())
 
     def _show_level(self) -> None:
         level = self.level
@@ -292,6 +326,12 @@ class BankPage(ReportPage):
         self.previous.setVisible(level == STATEMENT)
         self.following.setVisible(level == STATEMENT)
         self.reconcile.setVisible(level == STATEMENT)
+        self.entry.setVisible(level == STATEMENT)
+        self.table.setSelectionMode(  # lines are marked to move them to another account
+            QAbstractItemView.SelectionMode.ExtendedSelection
+            if level == STATEMENT
+            else QAbstractItemView.SelectionMode.SingleSelection
+        )
         self.footer.hide()
         if level == JOURNAL:
             day = ru_date(self._next_day())[:5]
@@ -393,3 +433,51 @@ class BankPage(ReportPage):
                 currency_id=place.currency_id if place else None,
             )
         )
+
+    # ---- the statement's lines ---------------------------------------------------------
+
+    def amount_mode(self) -> str:
+        if self._amount_mode is None:  # remembered between sessions
+            self._amount_mode = ONE if QSettings().value("bank/amounts", TWO) == ONE else TWO
+        return self._amount_mode
+
+    def set_amount_mode(self, mode: str) -> None:
+        self._amount_mode = mode
+        QSettings().setValue("bank/amounts", mode)
+        self.refresh()
+        self.entry.start()
+
+    def move_selected(self) -> None:
+        """The marked lines entered on the wrong account go to another one of its currency,
+        into the statement of the same day there."""
+        place = self.place
+        rows = {i.row() for i in self.table.selectionModel().selectedRows()}
+        docs = [self.model.rows[r].document_id for r in sorted(rows)]
+        conn, cid = self.s.conn, self.s.company_id
+        operations = [o for d in docs if (o := bank_operation_of_document(conn, cid, d))]
+        if place is None or not operations:
+            self.s.notify(tr("Отметьте строки банковских операций (Ctrl или Shift + щелчок)"))
+            return
+        others = [
+            p
+            for p in bank_places(conn, cid)
+            if p.key != place.key and p.currency_id == place.currency_id
+        ]
+        target = self.choose_place(others)
+        if target is None:
+            return
+        try:
+            self.s.ledger.move_bank_operations(cid, operations, target.account_id, target.subconto)
+        except LedgerError as e:
+            self.s.notify(str(e))
+            return
+        self.s.notify(tr("Перенесено на {name}: {n}", name=target.name, n=len(operations)))
+        self.refresh()
+
+    def choose_place(self, places: list[BankPlace]) -> BankPlace | None:
+        """The account to move the lines to, from a menu by the table."""
+        menu = QMenu(self)
+        for place in places:
+            menu.addAction(f"{place.account_code}  {place.name}").setData(place)
+        chosen = menu.exec(self.table.mapToGlobal(self.table.rect().center()))
+        return chosen.data() if chosen is not None else None

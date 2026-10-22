@@ -29,6 +29,37 @@ AZ: dict[str, str] = {
     "Расчётные счета": "Hesablaşma hesabları",
     "Валютные счета": "Valyuta hesabları",
     "Бизнес-карты": "Biznes kartlar",
+    "Перенесено на {name}: {n}": "{name} hesabına köçürüldü: {n}",
+    "Отметьте строки банковских операций (Ctrl или Shift + щелчок)": (
+        "Bank əməliyyatlarının sətirlərini seçin (Ctrl və ya Shift + klik)"
+    ),
+    "Перенести отмеченные на другой счёт…": "Seçilənləri başqa hesaba köçür…",
+    "Сумма в двух колонках": "Məbləğ iki sütunda",
+    "Сумма одной колонкой ±": "Məbləğ bir sütunda ±",
+    "Счёт: 60, 70, 68…": "Hesab: 60, 70, 68…",
+    "Впишите сумму": "Məbləği yazın",
+    "Счёт комиссии банка не указан: «⋯ → Настройки банка»": (
+        "Bank komissiyası hesabı göstərilməyib: «⋯ → Bank parametrləri»"
+    ),
+    "«{text}» нет в справочнике": "«{text}» soraqçada yoxdur",
+    "Счёта «{text}» нет": "«{text}» hesabı yoxdur",
+    "приход": "mədaxil",
+    "расход": "məxaric",
+    "Сумма — либо в приходе, либо в расходе, не в обоих": (
+        "Məbləğ ya mədaxildə, ya məxaricdə olur, ikisində birdən yox"
+    ),
+    "Не выбран банковский счёт": "Bank hesabı seçilməyib",
+    "Выберите счёт: куда ушли деньги или откуда пришли": (
+        "Hesabı seçin: pul hara getdi və ya haradan gəldi"
+    ),
+    "Для счёта {code} нужен контрагент": "{code} hesabı üçün kontragent lazımdır",
+    "Не заполнено «{kind}»": "«{kind}» doldurulmayıb",
+    "Сумма должна быть больше нуля": "Məbləğ sıfırdan böyük olmalıdır",
+    "Дата — в пределах выписки": "Tarix çıxarışın dövründə olmalıdır",
+    "№{n}: другая валюта счёта — деньги между валютами переводит «Конвертация валюты»": (
+        "№{n}: hesabın valyutası fərqlidir — valyutalar arasında pulu «Valyuta konvertasiyası» köçürür"
+    ),
+    "№{n}: перевод не переносится сам на себя": "№{n}: köçürmə öz-özünə köçürülmür",
     "Счёт закрыт — в конце списка": "Hesab bağlıdır — siyahının sonunda",
     "Счёт учёта": "Uçot hesabı",
     "Выписка за период": "Dövr üçün çıxarış",

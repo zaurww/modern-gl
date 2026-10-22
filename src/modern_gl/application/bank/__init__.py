@@ -39,6 +39,7 @@ from modern_gl.application.bank.operations import (
     find_bank_operation,
     kind_of_account,
     last_lines,
+    latest_direction,
     load_bank_operation,
 )
 from modern_gl.application.bank.places import (
@@ -101,6 +102,7 @@ __all__ = [
     "find_bank_operation",
     "kind_of_account",
     "last_lines",
+    "latest_direction",
     "load_bank_operation",
     "place_balance",
     "statement",
