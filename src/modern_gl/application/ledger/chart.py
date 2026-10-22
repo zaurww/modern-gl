@@ -14,6 +14,25 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import IntegrityError, Row, transaction
 
 
+def _inherited(
+    parent: Row,
+    account_class: str | None,
+    account_type: str | None,
+    two_sided: bool | None,
+    currency: bool | int | None,
+) -> tuple[str | None, str | None, bool, bool | int | None]:
+    """What a subaccount takes from its group unless given: the class, the type (when the
+    class is the group's), two-sidedness and the currency mode."""
+    account_class = account_class or parent["account_class"]
+    if account_type is None and account_class == parent["account_class"]:
+        account_type = parent["account_type"]
+    if two_sided is None:
+        two_sided = bool(parent["two_sided"])
+    if currency is None:
+        currency = parent["currency"]
+    return account_class, account_type, two_sided, currency
+
+
 class ChartCommands(AccountTypeCommands):
     def add_account(
         self,
@@ -56,13 +75,9 @@ class ChartCommands(AccountTypeCommands):
             if parent is not None:
                 parent_row = self._group_parent(company_id, parent, label)
                 parent_id = parent_row["id"]
-                account_class = account_class or parent_row["account_class"]
-                if account_type is None and account_class == parent_row["account_class"]:
-                    account_type = parent_row["account_type"]
-                if two_sided is None:
-                    two_sided = bool(parent_row["two_sided"])
-                if currency is None:
-                    currency = parent_row["currency"]
+                account_class, account_type, two_sided, currency = _inherited(
+                    parent_row, account_class, account_type, two_sided, currency
+                )
             mode = currency_mode(currency or NO_CURRENCY)
             account_id = self._insert_account(
                 label,

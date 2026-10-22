@@ -46,6 +46,7 @@ from modern_gl.reporting.inventory import (
     cost_sources,
     receipt_line_choices,
 )
+from modern_gl.reporting.inventory.costs import BatchCharge
 
 
 def _list(selection: QAbstractItemView.SelectionMode) -> QTableView:
@@ -226,6 +227,46 @@ def _cost_row(line: BatchCostLine) -> _CostRow:
     )
 
 
+def _rate_notes(charges: list[BatchCharge]) -> list[str]:
+    """«Доставка: 100.00 USD по курсу 1.7000» for each expense in a currency."""
+    return [
+        tr(
+            "{title}: {amount} {code} по курсу {rate}",
+            title=c.title,
+            amount=money(c.currency_amount or 0),
+            code=c.currency,
+            rate=format_unit_rate(unit_rate(c.rate or 0)),
+        )
+        for c in charges
+        if c.currency
+    ]
+
+
+def _cost_columns(charges: list[BatchCharge], in_currency: bool) -> list[Column]:
+    """The receipt line, the supplier's price (in a currency: and the rate), each expense,
+    the total and a unit's cost. Width 1: as wide as the contents; the item takes the rest."""
+    return [
+        Column(tr("Поступление"), lambda r: r.document, width=1),
+        Column(tr("Товар"), lambda r: r.item),
+        Column(tr("Количество"), lambda r: r.quantity, width=1, right=True),
+        *(
+            [
+                Column(tr("Цена поставщика"), lambda r: r.price, width=1, right=True),
+                Column(tr("Курс"), lambda r: r.rate, width=1, right=True),
+            ]
+            if in_currency
+            else []
+        ),
+        Column(tr("Стоимость"), lambda r: r.cost, money=True, width=1),
+        *[
+            Column(c.title, lambda r, cid=c.id: r.shares.get(cid, 0), money=True, width=1)
+            for c in charges
+        ],
+        Column(tr("Итого"), lambda r: r.total, money=True, width=1),
+        Column(tr("Цена за единицу"), lambda r: r.unit_cost, money=True, width=1),
+    ]
+
+
 class BatchCostDialog(QDialog):
     """«Себестоимость партии»: what each receipt line cost — the supplier's price (in a
     currency and at what rate), every expense separately, the total and a unit's cost."""
@@ -238,42 +279,12 @@ class BatchCostDialog(QDialog):
         heading = QLabel(title)
         heading.setFont(fonts().heading)
         layout.addWidget(heading)
-        notes = [
-            tr(
-                "{title}: {amount} {code} по курсу {rate}",
-                title=c.title,
-                amount=money(c.currency_amount or 0),
-                code=c.currency,
-                rate=format_unit_rate(unit_rate(c.rate or 0)),
-            )
-            for c in charges
-            if c.currency
-        ]
+        notes = _rate_notes(charges)
         if notes:
             note = QLabel("   ·   ".join(notes))
             note.setObjectName("secondary")
             layout.addWidget(note)
-        in_currency = any(line.currency for line in lines)
-        self.columns = [
-            Column(tr("Поступление"), lambda r: r.document, width=1),
-            Column(tr("Товар"), lambda r: r.item),
-            Column(tr("Количество"), lambda r: r.quantity, width=1, right=True),
-            *(
-                [
-                    Column(tr("Цена поставщика"), lambda r: r.price, width=1, right=True),
-                    Column(tr("Курс"), lambda r: r.rate, width=1, right=True),
-                ]
-                if in_currency
-                else []
-            ),
-            Column(tr("Стоимость"), lambda r: r.cost, money=True, width=1),
-            *[
-                Column(c.title, lambda r, cid=c.id: r.shares.get(cid, 0), money=True, width=1)
-                for c in charges
-            ],
-            Column(tr("Итого"), lambda r: r.total, money=True, width=1),
-            Column(tr("Цена за единицу"), lambda r: r.unit_cost, money=True, width=1),
-        ]  # width 1: as wide as the contents; the item takes the rest
+        self.columns = _cost_columns(charges, any(line.currency for line in lines))
         rows = [_cost_row(line) for line in lines]
         total = _CostRow(
             tr("Итого"),
