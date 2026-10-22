@@ -16,7 +16,7 @@
 
 ## Структура
 - `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt.
-- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart`, `templates`, `documents`, `validation`, `document_import`, `revaluation`, `opening`, `conversion`, `bank`; общее модулей — `module.py`); общие помощники — `application/common.py`.
+- `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart` (+ `account_types` — классы и типы счетов), `templates`, `documents`, `validation`, `document_import`, `revaluation`, `opening`, `conversion`, `bank`; общее модулей — `module.py`); общие помощники — `application/common.py`.
 - `src/modern_gl/application/inventory/` — склад: `Inventory` собран так же из групп (`catalog`, `drafts`, `stock`, `receipts` — черновики поступления, `movements`, `sales`, `landed_cost`, `accruals`, `posting`); `model` — константы и dataclass-строки, `amounts` — чистая арифметика.
 - `src/modern_gl/reporting/reports.py` — ОСВ, ОСВ по субконто, карточка, анализ счёта (агрегация в SQL); `reporting/report_common.py` — общее отчётов; `reporting/plaintext.py` — журнал для hledger (D79); `reporting/handover.py` — пакет «Передача дел» (D81); `reporting/inventory/` — склад (`choices`, `stock`, `documents`, `costs`, `declarations` — отчёт «Əlavə xərclər», D85).
 - `src/modern_gl/assistant` — MCP-сервер для AI (D83): `protocol` (JSON-RPC по stdio), `companies` (снимки файлов), `answers` (отчёты в JSON), `server` (инструменты, `main`); `drafts` + `draft_tools` — черновики от AI (D84, флаг `--allow-drafts`).
