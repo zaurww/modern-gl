@@ -441,13 +441,13 @@ def _statement_rows(conn: Connection, place: BankPlace, params: dict) -> list[Ro
             GROUP BY d.id
         )
         SELECT docs.*,
-               (SELECT GROUP_CONCAT(name, ', ') FROM (
+               (SELECT string_agg(name, ', ') FROM (
                     SELECT DISTINCT v.name FROM moves m
                     JOIN subconto_values v ON v.id IN (m.o1, m.o2, m.o3)
                     JOIN subconto_kinds k ON k.id = v.kind_id
                      AND k.code IN ('counterparty', 'employee', 'bank_account')
                     WHERE m.document_id = docs.id)) AS counterparty,
-               (SELECT GROUP_CONCAT(code, ', ') FROM (
+               (SELECT string_agg(code, ', ') FROM (
                     SELECT DISTINCT COALESCE(a.code, a.name) AS code FROM moves m
                     JOIN accounts a ON a.id = m.corr_id
                     WHERE m.document_id = docs.id)) AS corr,
@@ -467,7 +467,7 @@ def _drafts(conn: Connection, place: BankPlace, params: dict) -> list[StatementL
         """
         SELECT d.id, d.number, d.doc_date, d.memo, o.kind, o.direction,
                COALESCE(SUM(x.amount), 0) AS total, v.name AS counterparty,
-               (SELECT GROUP_CONCAT(code, ', ') FROM (
+               (SELECT string_agg(code, ', ') FROM (
                     SELECT DISTINCT COALESCE(a.code, a.name) AS code
                     FROM bank_operation_lines y JOIN accounts a ON a.id = y.account_id
                     WHERE y.operation_id = o.id)) AS corr

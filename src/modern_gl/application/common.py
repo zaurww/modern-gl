@@ -8,7 +8,9 @@ from datetime import UTC, datetime
 
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure import db
 from modern_gl.infrastructure.db import Connection, Row
+from modern_gl.infrastructure.db import insert as insert  # used by the write services
 
 MAX_SUBCONTO = 3
 
@@ -30,14 +32,6 @@ def pad_subconto(values: Sequence[int | None], line_no: int | None = None) -> Su
         )
     first, second, third = [*values, *([None] * (MAX_SUBCONTO - len(values)))]
     return first, second, third
-
-
-def insert(conn: Connection, sql: str, params: Sequence[object] = ()) -> int:
-    """Run an INSERT and return the id of the new row."""
-    row_id = conn.execute(sql, params).lastrowid
-    if row_id is None:  # only when the statement inserted nothing
-        raise RuntimeError(f"no row inserted: {sql}")
-    return row_id
 
 
 def company_row(conn: Connection, company_id: int) -> Row:
@@ -98,14 +92,15 @@ def where_used(conn: Connection, company_id: int, table: str, row_id: int) -> st
     or None when nothing does. The places are read from the foreign keys, so a new
     table that refers to accounts or directory elements is checked without changes here."""
     for referrer, columns in _references(conn, table):
-        own = {r["name"] for r in conn.execute(f'PRAGMA table_info("{referrer}")')}
+        own = db.column_names(conn, referrer)
         where = " OR ".join(f'"{column}" = ?' for column in columns)
         params: list[object] = [row_id] * len(columns)
         if "company_id" in own:
             where = f"({where}) AND company_id = ?"
             params.append(company_id)
+        order = "ORDER BY id " if "id" in own else ""  # the earliest document first
         found = conn.execute(
-            f'SELECT * FROM "{referrer}" WHERE {where} ORDER BY rowid LIMIT 1', params
+            f'SELECT * FROM "{referrer}" WHERE {where} {order}LIMIT 1', params
         ).fetchone()
         if found is not None:
             return _usage_text(conn, referrer, found)
@@ -117,13 +112,11 @@ def _references(conn: Connection, table: str) -> list[tuple[str, list[str]]]:
     found: dict[str, list[str]] = {}
     for referrer, column in UNCHECKED_REFERENCES.get(table, []):
         found.setdefault(referrer, []).append(column)
-    for (referrer,) in conn.execute(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-    ).fetchall():
-        for key in conn.execute(f'PRAGMA foreign_key_list("{referrer}")'):
+    for referrer in db.table_names(conn):
+        for key in db.foreign_key_columns(conn, referrer):
             # a cascaded row is a part of the referred one (an element's tags), no use
-            if key["table"] == table and key["to"] == "id" and key["on_delete"] != "CASCADE":
-                found.setdefault(referrer, []).append(key["from"])
+            if key.table == table and key.to == "id" and key.on_delete != "CASCADE":
+                found.setdefault(referrer, []).append(key.column)
     # the clearest reason first: a document by its number
     first = {"postings": 0, "inventory_lines": 1}
     return sorted(found.items(), key=lambda ref: first.get(ref[0], 2))

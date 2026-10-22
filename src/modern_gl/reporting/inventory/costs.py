@@ -48,9 +48,9 @@ def cost_sources(
                p.debit_account_id, p.dt_sc1, p.dt_sc2, p.dt_sc3, da.account_class,
                COALESCE(NULLIF(p.memo, ''), d.memo) AS memo,
                COALESCE(da.code, da.name) AS debit, COALESCE(ca.code, ca.name) AS credit,
-               (SELECT GROUP_CONCAT(v.name, ', ') FROM subconto_values v
+               (SELECT string_agg(v.name, ', ') FROM subconto_values v
                 WHERE v.id IN (p.dt_sc1, p.dt_sc2, p.dt_sc3)) AS dt_names,
-               (SELECT GROUP_CONCAT(v.name, ', ') FROM subconto_values v
+               (SELECT string_agg(v.name, ', ') FROM subconto_values v
                 WHERE v.id IN (p.ct_sc1, p.ct_sc2, p.ct_sc3)) AS ct_names,
                (SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c
                 JOIN inventory_documents i ON i.id = c.document_id AND i.status = 'posted'

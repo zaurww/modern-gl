@@ -30,7 +30,7 @@ def list_inventory_documents(
         SELECT d.id, d.number, d.doc_date, d.doc_type, d.memo, d.status,
                d.gl_document_id,
                COALESCE(ct.name, (
-                   SELECT GROUP_CONCAT(t.name, ', ') FROM landed_cost_charges c
+                   SELECT string_agg(t.name, ', ') FROM landed_cost_charges c
                    JOIN landed_cost_types t ON t.id = c.cost_type_id
                    WHERE c.document_id = d.id
                )) AS cost_type_name,

@@ -40,7 +40,7 @@ def trade_documents(
         SELECT d.id, d.doc_type, d.number, d.doc_date, d.status, d.memo,
                COALESCE(d.invoice, '') AS invoice,
                COALESCE((
-                   SELECT GROUP_CONCAT(name, ', ') FROM (
+                   SELECT string_agg(name, ', ') FROM (
                        SELECT DISTINCT v.name FROM inventory_lines x
                        JOIN subconto_values v
                          ON v.company_id = x.company_id
@@ -50,7 +50,7 @@ def trade_documents(
                    )
                ), '') AS counterparties,
                COALESCE((
-                   SELECT GROUP_CONCAT(tax_id, ', ') FROM (
+                   SELECT string_agg(tax_id, ', ') FROM (
                        SELECT DISTINCT v.tax_id FROM inventory_lines x
                        JOIN subconto_values v
                          ON v.company_id = x.company_id

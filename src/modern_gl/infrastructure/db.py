@@ -7,8 +7,9 @@ not the queries' callers."""
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -46,6 +47,42 @@ def transaction(conn: sqlite3.Connection) -> Iterator[None]:
         conn.execute("ROLLBACK")
         raise
     conn.execute("COMMIT")
+
+
+def insert(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) -> int:
+    """Run an INSERT and return the id of the new row."""
+    row_id = conn.execute(sql, params).lastrowid
+    if row_id is None:  # only when the statement inserted nothing
+        raise RuntimeError(f"no row inserted: {sql}")
+    return row_id
+
+
+@dataclass(frozen=True)
+class ForeignKeyColumn:
+    """One column of a foreign key: `column` refers to `table`.`to`."""
+
+    column: str
+    table: str
+    to: str
+    on_delete: str  # "CASCADE", "NO ACTION", ...
+
+
+def table_names(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    )
+    return [name for (name,) in rows.fetchall()]
+
+
+def column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {r["name"] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+
+
+def foreign_key_columns(conn: sqlite3.Connection, table: str) -> list[ForeignKeyColumn]:
+    return [
+        ForeignKeyColumn(k["from"], k["table"], k["to"], k["on_delete"])
+        for k in conn.execute(f'PRAGMA foreign_key_list("{table}")')
+    ]
 
 
 def schema_version(conn: sqlite3.Connection) -> int:

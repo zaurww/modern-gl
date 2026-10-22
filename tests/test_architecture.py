@@ -118,3 +118,36 @@ def test_no_sql_in_widgets():
     )
     paid = SQL_IN_WIDGETS_ALLOWED - with_sql
     assert not paid, f"долг погашен: уберите {sorted(paid)} из SQL_IN_WIDGETS_ALLOWED"
+
+
+# The database engine is known only to infrastructure (D77): elsewhere the SQL is the common
+# part of SQLite and PostgreSQL, so the move to a server changes one package, not the queries.
+SQLITE_ONLY = re.compile(
+    r"\b(GROUP_CONCAT|INSERT\s+OR|REPLACE\s+INTO|PRAGMA|sqlite_master|rowid|lastrowid|"
+    r"executescript|iif|instr|ifnull|julianday|typeof|total_changes)\b|"
+    r"COLLATE\s+NOCASE|\b(date|datetime|strftime)\('",
+    re.IGNORECASE,
+)
+
+
+@pytest.mark.parametrize("layer", ["domain", "application", "reporting", "desktop"])
+def test_database_engine_only_in_infrastructure(layer):
+    bad = {}
+    for path in files(layer):
+        found = {m.group(0) for m in SQLITE_ONLY.finditer(path.read_text(encoding="utf-8"))}
+        if "sqlite3" in imports(path):
+            found.add("import sqlite3")
+        if found:
+            bad[rel(path)] = sorted(found)
+    assert not bad, (
+        f"только в SQLite: {bad} — типы и ошибки берите из infrastructure.db, "
+        "справочные запросы о схеме — оттуда же; SQL — общий для SQLite и PostgreSQL "
+        "(string_agg, ON CONFLICT, COALESCE) — docs/ENGINEERING.md, п. 3.9"
+    )
+
+
+def test_sqlite_knows_the_common_sql():
+    # string_agg is in SQLite since 3.44 (the Python of uv brings a newer one)
+    import sqlite3
+
+    assert sqlite3.sqlite_version_info >= (3, 44), sqlite3.sqlite_version
