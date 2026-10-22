@@ -24,8 +24,17 @@ class Session:
     working_date: date = field(default_factory=date.today)  # 1C "рабочая дата"
     read_only: bool = False  # open for viewing (D80): a snapshot, nothing is written
     notify: Callable[[str], None] = print
+    # the window's toast with «Undo»; without it the message alone is told (tests)
+    notify_undo: Callable[[str, Callable[[], None]], None] | None = None
     # official rates of a day {code: (rate, nominal)}; tests put a stub here (no network)
     fetch_rates: Callable[[date], dict[str, tuple[int, int]]] = cbar.fetch
+
+    def notify_undoable(self, message: str, undo: Callable[[], None]) -> None:
+        """What was just done, and how to take it back (a toast's «Undo», D86)."""
+        if self.notify_undo is None:
+            self.notify(message)
+        else:
+            self.notify_undo(message, undo)
 
     @property
     def layers(self) -> list[tuple[str, str]]:

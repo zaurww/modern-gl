@@ -664,6 +664,8 @@ def main() -> None:
     payment.line_rows[1].amount.setText("1.20")
     payment._changed()
     shot("12b2_bank_payment_lines")
+    win.notify(i18n.tr("Документ №{n} проведён", n=14), lambda: None)
+    shot("15_toast")  # what was done, at the bottom, with «Undo» (D86)
     shoot_vat_deposit(session, win, ledger, shot)
     shoot_sale_groups(session, win, ledger, shot)
     shoot_stock_only(win, ledger, shot)

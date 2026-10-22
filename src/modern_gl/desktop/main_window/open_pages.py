@@ -3,6 +3,7 @@ and reports as open items that close back to where they were opened from."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import cast
 
 from PySide6.QtCore import (
@@ -43,7 +44,9 @@ from modern_gl.desktop.main_window.sidebar import (
     shown_places,
 )
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.toast import Toast
 from modern_gl.desktop.widgets import EmptyState
+from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.workspace import Workspace
 
@@ -66,7 +69,7 @@ class OpenPages(CompanyFiles):
         self.stack.currentChanged.connect(self._size_by_current_page)
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(central)
-        self.statusBar().setSizeGripEnabled(False)
+        self.toast = Toast(self)
 
         self.sidebar.nav.currentItemChanged.connect(self._on_nav)
         self.sidebar.nav.itemClicked.connect(self._on_nav_click)
@@ -301,8 +304,19 @@ class OpenPages(CompanyFiles):
                     return True
         return super().eventFilter(obj, event)
 
-    def notify(self, message: str) -> None:
-        self.statusBar().showMessage(message, 6000)
+    def notify(self, message: str, undo: Callable[[], None] | None = None) -> None:
+        self.toast.show_message(message, None if undo is None else lambda: self._undo(undo))
+
+    def _undo(self, undo: Callable[[], None]) -> None:
+        """«Undo» on the toast: done, then the page shown reads it again."""
+        try:
+            undo()
+        except LedgerError as e:
+            self.toast.show_message(str(e))
+            return
+        key = self._key_of(self.stack.currentWidget())
+        if key is not None:
+            self._activate(key)
 
     def show_place(self, key) -> None:
         if self.session is not None and key not in shown_places(self.session.stock_only):

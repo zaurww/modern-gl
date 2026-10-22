@@ -9,6 +9,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QMessageBox,
 )
+from shiboken6 import isValid
 
 from modern_gl.application.authorship import authors_text, document_authors
 from modern_gl.application.queries import (
@@ -222,6 +223,7 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         )
         layer = self.layer.currentData()
         led, cid = self.s.ledger, self.s.company_id
+        was_posted = self.doc is not None and self.doc.status == "posted"
         try:
             inputs = self.model.to_inputs()
             if self.doc is None:
@@ -245,11 +247,23 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         self.s.working_date = doc_date
         self.load(doc_id)
         assert self.doc is not None  # load() has just read it
-        self.s.notify(
-            tr("Документ №{n} проведён" if post else "Документ №{n} сохранён", n=self.doc.number)
+        # just posted: «Undo» takes it back to a draft (corrected in place: nothing to undo)
+        message = tr(
+            "Документ №{n} проведён" if post else "Документ №{n} сохранён", n=self.doc.number
         )
+        if post and not was_posted:
+            self.s.notify_undoable(message, lambda: self._undo_post(doc_id))
+        else:
+            self.s.notify(message)
         self.saved.emit(doc_id)
         return True
+
+    def _undo_post(self, doc_id: int) -> None:
+        """«Undo» on the toast: the document is a draft again (the page may be closed)."""
+        self.s.ledger.unpost(self.s.company_id, doc_id)
+        if isValid(self) and self.doc is not None and self.doc.id == doc_id:
+            self.load(doc_id)
+            self.saved.emit(doc_id)
 
     def post_and_new(self) -> None:
         if self.save(post=True):

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.queries import load_document
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.directories_page import DirectoriesPage
@@ -217,6 +218,35 @@ def test_post_from_form_updates_journal_and_reports(window):
     assert journal.model.docs[-1].memo == "Пополнение кассы"
     osv = trial_balance(window.conn, window.session.company_id, "2026-03-01", "2026-03-31")
     assert {r.code: r.turnover_dt for r in osv.rows}["50"] == 50000
+
+
+def test_posting_says_so_in_a_toast_and_undo_makes_a_draft_again(window):
+    """D86: no status bar — a toast at the bottom; «Undo» takes the posting back."""
+    window.new_document()
+    page = current_page(window)
+    cat = window.session.catalog
+    page.model.rows = [
+        PostingRow(
+            debit=cat.by_code["50"].id,
+            credit=cat.by_code["51"].id,
+            credit_sc=[cat.values(cat.by_code["51"].sc_kinds[0])[0].id, None, None],
+            amount=50000,
+        )
+    ]
+    assert page.save(post=True)
+    assert window.toast.message() == "Документ №14 проведён"
+    assert window.toast.undo_button.isVisibleTo(window.toast)
+    assert window.statusBar().currentMessage() == ""
+    doc_id = page.doc_id
+    window.toast.undo_button.click()
+    assert load_document(window.conn, window.session.company_id, doc_id).status == "draft"
+    assert page.status.text() == "Черновик"
+    assert not window.toast.message()
+
+    assert page.save(post=True)  # posted again; corrected in place has no «Undo»
+    page.memo.setText("Исправлено")
+    assert page.save(post=True)
+    assert not window.toast.undo_button.isVisibleTo(window.toast)
 
 
 def test_post_errors_are_shown_and_nothing_is_lost(window):

@@ -173,8 +173,15 @@ QCheckBox::indicator:checked:disabled {{ background: {P.accent_soft}; }}
 
 
 def _panels_css() -> str:
-    """Folded lines, notes and the bank's panels."""
+    """Folded lines, notes, the bank's panels and the toast."""
     return f"""
+QFrame#toast {{ background: {P.tooltip}; border-radius: 10px; }}
+QLabel#toastText {{ color: {P.tooltip_text}; background: transparent; }}
+QPushButton#toastAction {{
+    background: transparent; border: none; color: {P.toast_action}; font-weight: 600;
+    padding: 2px 6px;
+}}
+QPushButton#toastAction:hover {{ text-decoration: underline; }}
 QMenu {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 10px; padding: 6px;
 }}

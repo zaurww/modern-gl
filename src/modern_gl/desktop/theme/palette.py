@@ -44,6 +44,7 @@ class Palette:
     on_accent: str = "#FFFFFF"  # text on accent, red buttons and icon squares
     tooltip: str = "#1D2025"
     tooltip_text: str = "#FFFFFF"
+    toast_action: str = "#8AB4F8"  # «Undo» on the dark toast (it has tooltip colors)
 
 
 # name -> (title in the menu, the colors that differ from Palette)
@@ -207,6 +208,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "scrollbar_hover": "#585B70",
             "tooltip": "#313244",
             "tooltip_text": "#CDD6F4",
+            "toast_action": "#89B4FA",
         },
     ),
 }

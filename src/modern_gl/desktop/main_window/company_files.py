@@ -6,6 +6,7 @@ from __future__ import annotations
 import getpass
 import subprocess
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -208,7 +209,13 @@ class CompanyFiles(QMainWindow):
         self.ledger = Ledger(conn, actor=self.user_name())
         name = company_name(conn, company_id)
         self.session = Session(
-            conn, self.ledger, company_id, name, Catalog(conn, company_id), notify=self.notify
+            conn,
+            self.ledger,
+            company_id,
+            name,
+            Catalog(conn, company_id),
+            notify=self.notify,
+            notify_undo=self.notify,
         )
         self.session.read_only = read_only
         if old_date:
@@ -501,5 +508,5 @@ class CompanyFiles(QMainWindow):
     def _confirm_close_all(self) -> bool:
         raise NotImplementedError
 
-    def notify(self, message: str) -> None:
+    def notify(self, message: str, undo: Callable[[], None] | None = None) -> None:
         raise NotImplementedError
