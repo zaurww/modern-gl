@@ -14,6 +14,7 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import list_templates, load_document, past_postings
 from modern_gl.application.quick_entry import describe, parse
+from modern_gl.application.quick_entry.marks import marks
 from modern_gl.application.quick_entry.past import past_lines
 from modern_gl.desktop import theme
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
@@ -311,3 +312,39 @@ def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
     assert journal.model.rowCount() == before + 1
     assert win.stack.currentWidget() is journal  # no document page was opened
     win.shutdown()
+
+
+def marked(text: str, cat: Catalog) -> list[tuple[str, str]]:
+    return [(text[m.start : m.end], m.kind) for m in marks(text, cat, today=TODAY)]
+
+
+def test_parts_of_the_line_are_marked_where_they_are(books):
+    *_, cat, _v = books
+    assert marked("05.03 26 аренда / 60 альфа, +Новый 1234,50 USD Аренда за март", cat) == [
+        ("05.03", "date"),
+        ("26", "account"),
+        ("аренда", "value"),
+        ("60", "account"),
+        ("альфа", "value"),
+        ("+Новый", "new"),
+        ("1234,50", "amount"),
+        ("USD", "currency"),
+    ]  # the memo is not marked
+    assert marked("26 нечто / 999 400", cat) == [
+        ("26", "account"),
+        ("нечто", "unknown"),
+        ("999", "unknown"),
+    ]
+    assert marked("26 аренда / 60 Альфа Трейд, 400", cat)[-1] == ("400", "amount")
+    assert marked("26 ар", cat) == [("26", "account"), ("ар", "value")]  # a unique part
+    assert marked("50 / 51 1; 26 аренда / 50 2", cat)[-1] == ("2", "amount")
+
+
+def test_colouring_the_line_keeps_its_text_cursor_and_selection(bar, qtbot):
+    bar.show()
+    qtbot.waitExposed(bar)
+    bar.edit.setText("26 аренда / 60 альфа, договор 400 Аренда")
+    bar.edit.setSelection(30, 3)
+    bar._paint(bar.edit.text())
+    assert bar.edit.text() == "26 аренда / 60 альфа, договор 400 Аренда"
+    assert bar.edit.selectedText() == "400"

@@ -418,6 +418,11 @@ def parse(
     return _Parser(catalog, templates, rate_for, today or date.today()).parse(text)
 
 
+def amount_index(catalog: Catalog, credit: AccountInfo, words: list[str]) -> int | None:
+    """Where the amount is among the Kt words (the account first), as the line reads it."""
+    return _Parser(catalog, (), lambda _c, _d: None, date.today())._amount_at(credit, words)
+
+
 def describe(entry: QuickEntry, catalog: Catalog) -> str:
     """How the line was understood, one posting per line, for the preview."""
 

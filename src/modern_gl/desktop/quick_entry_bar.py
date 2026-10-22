@@ -11,7 +11,8 @@ from datetime import date
 from fractions import Fraction
 from typing import cast
 
-from PySide6.QtCore import QModelIndex, QStringListModel, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QModelIndex, QStringListModel, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QInputMethodEvent, QTextCharFormat
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCompleter,
@@ -34,9 +35,10 @@ from modern_gl.application.queries import (
     past_postings,
     recent_subconto,
 )
+from modern_gl.application.quick_entry.marks import Mark, marks
 from modern_gl.desktop.cell_editing import PickWithKeys, fit_popup
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
@@ -180,6 +182,7 @@ class QuickEntryBar(QWidget):
 
     def _preview(self, text: str) -> None:
         self.help.setVisible(bool(text.strip()))
+        self._paint(text)
         if not text.strip():
             self.preview.hide()
             return
@@ -200,6 +203,25 @@ class QuickEntryBar(QWidget):
             )
             notes.append(tr("будет добавлено: {names}", names=names))
         self._show("\n".join([head, lines, *notes]), error=False)
+
+    def _paint(self, text: str) -> None:
+        """Colour the parts as they are understood (Todoist's Quick Add): accounts and
+        elements blue, the amount green, a new element amber, what names nothing
+        underlined red — except the word still being typed at the end."""
+        found = marks(text, self.s.catalog, list_templates(self.s.conn, self.s.company_id))
+        typing = len(text.rstrip()) if self.edit.cursorPosition() >= len(text.rstrip()) else -1
+        cursor = self.edit.cursorPosition()
+        attrs = [
+            QInputMethodEvent.Attribute(
+                QInputMethodEvent.AttributeType.TextFormat,
+                m.start - cursor,
+                m.end - m.start,
+                _format(m),
+            )
+            for m in found
+            if not (m.kind == "unknown" and m.end == typing)
+        ]
+        QCoreApplication.sendEvent(self.edit, QInputMethodEvent("", attrs))
 
     def _show(self, text: str, error: bool) -> None:
         self.preview.setObjectName("error" if error else "secondary")
@@ -325,3 +347,21 @@ class QuickEntryBar(QWidget):
             None if ln.currency_amount is None else from_minor(ln.currency_amount),
             ln.invoice,
         )
+
+
+def _format(mark: Mark) -> QTextCharFormat:
+    f = QTextCharFormat()
+    if mark.kind == "unknown":
+        f.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+        f.setUnderlineColor(QColor(P.red))
+        return f
+    text, back = {
+        "amount": (P.green, P.green_soft),
+        "currency": (P.green, P.green_soft),
+        "new": (P.amber, P.amber_soft),
+    }.get(mark.kind, (P.accent, P.accent_soft))
+    f.setForeground(QColor(text))
+    f.setBackground(QColor(back))
+    if mark.kind == "amount":
+        f.setFontWeight(QFont.Weight.DemiBold)
+    return f
