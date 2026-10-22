@@ -19,8 +19,8 @@ from modern_gl.application.bank import (
     OTHER,
     TRANSFER,
     BankLine,
-    bank_places,
     last_lines,
+    transfer_targets,
 )
 from modern_gl.desktop.bank_operation_page.common import (
     TYPE_KINDS,
@@ -72,12 +72,11 @@ class LinesPart(BankOperationForm):
             account_id = self.s.ledger.account_role(self.s.company_id, BANK_FEE)
             return BankLine(account_id, 0, self._fee_subconto(account_id))
         if kind == TRANSFER:
-            own = (self.account.currentData(), self.bank_subconto()[:1])
-            currency = self.currency.currentData()
-            for place in bank_places(self.s.conn, self.s.company_id):
-                if (place.account_id, (place.value_id,)) != own and (place.currency_id == currency):
-                    return BankLine(place.account_id, 0, place.subconto)
-            return None
+            own = (self.account.currentData(), self.bank_subconto()[0])
+            others = transfer_targets(
+                self.s.conn, self.s.company_id, own, self.currency.currentData()
+            )
+            return BankLine(others[0].account_id, 0, others[0].subconto) if others else None
         account_type = KIND_TYPES.get(kind)
         if account_type is None:
             return None

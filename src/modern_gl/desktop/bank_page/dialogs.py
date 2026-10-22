@@ -17,7 +17,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.bank import ACCOUNT_KINDS, CARD, CURRENCY, VAT_DEPOSIT, BankAccount
+from modern_gl.application.bank import (
+    ACCOUNT_KINDS,
+    BANK_TYPES,
+    CARD,
+    CURRENCY,
+    VAT_DEPOSIT,
+    BankAccount,
+)
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, date_edit, edited_date
@@ -110,7 +117,7 @@ class BankAccountDialog(QDialog):
         return [
             a
             for a in cat.leaf_accounts
-            if a.account_type in ("bank", "vat_deposit")
+            if a.account_type in BANK_TYPES
             or any(k is not None and cat.kind_codes.get(k) == "bank_account" for k in a.sc_kinds)
         ]
 

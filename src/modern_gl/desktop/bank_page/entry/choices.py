@@ -7,11 +7,12 @@ from __future__ import annotations
 from PySide6.QtWidgets import QDialog
 
 from modern_gl.application.bank import (
+    BANK_TYPES,
     IN,
     OUT,
-    bank_places,
     last_lines,
     latest_direction,
+    transfer_targets,
 )
 from modern_gl.application.catalog import AccountInfo
 from modern_gl.desktop.bank_operation_page.common import (
@@ -27,7 +28,6 @@ from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.invoices import open_invoices
 
-BANK_TYPES = ("bank", "vat_deposit")
 ADVANCE_OF = {"advance_paid": "payable", "advance_received": "receivable"}
 
 
@@ -45,9 +45,12 @@ class EntryChoices(EntryFields):
             if not self._is_bank(a):
                 self.account.addItem(a.label, (a.id, None))
         place = self.place
-        for other in bank_places(self.s.conn, self.s.company_id):
-            if place is None or other.key == place.key or other.currency_id != place.currency_id:
-                continue
+        others = (
+            []
+            if place is None
+            else transfer_targets(self.s.conn, self.s.company_id, place.key, place.currency_id)
+        )
+        for other in others:
             label = f"{other.account_code}  {other.name}"
             self.account.addItem(label, other.key)
 

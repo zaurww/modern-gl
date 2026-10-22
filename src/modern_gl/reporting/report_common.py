@@ -15,6 +15,7 @@ from modern_gl.infrastructure.db import Connection, Row
 COMMON = ("common",)
 IFRS = ("common", "ifrs_adj")
 TAX = ("common", "tax_adj")
+BOOKS = {"common": COMMON, "ifrs": IFRS, "tax": TAX}  # by the name a file or a client uses
 
 # Posted documents of the requested book up to :date_to.
 _DOCS_CTE = """

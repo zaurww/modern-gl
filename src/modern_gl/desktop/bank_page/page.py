@@ -28,9 +28,9 @@ from modern_gl.application.bank import (
     StatementLine,
     bank_accounts,
     bank_operation_of_document,
-    bank_places,
     bank_statements,
     statement,
+    transfer_targets,
 )
 from modern_gl.desktop.bank_page.dialogs import BankAccountDialog, PeriodDialog
 from modern_gl.desktop.bank_page.entry import ONE, TWO, EntryLine
@@ -476,12 +476,7 @@ class BankPage(ReportPage):
         if place is None or not operations:
             self.s.notify(tr("Отметьте строки банковских операций (Ctrl или Shift + щелчок)"))
             return
-        others = [
-            p
-            for p in bank_places(conn, cid)
-            if p.key != place.key and p.currency_id == place.currency_id
-        ]
-        target = self.choose_place(others)
+        target = self.choose_place(transfer_targets(conn, cid, place.key, place.currency_id))
         if target is None:
             return
         try:

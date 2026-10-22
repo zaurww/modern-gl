@@ -50,6 +50,7 @@ from modern_gl.application.bank.operations import (
 from modern_gl.application.bank.places import (
     BankPlace,
     bank_places,
+    transfer_targets,
 )
 from modern_gl.application.bank.statement import (
     Statement,
@@ -114,4 +115,5 @@ __all__ = [
     "payment_lines",
     "place_balance",
     "statement",
+    "transfer_targets",
 ]

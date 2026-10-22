@@ -79,6 +79,16 @@ def bank_places(conn: Connection, company_id: int) -> list[BankPlace]:
     return places
 
 
+def transfer_targets(
+    conn: Connection, company_id: int, key: tuple[int, int | None], currency_id: int | None
+) -> list[BankPlace]:
+    """Where money of a bank place (its `key`) can be moved: the other places of its
+    currency."""
+    return [
+        p for p in bank_places(conn, company_id) if p.key != key and p.currency_id == currency_id
+    ]
+
+
 def _bank_accounts(conn: Connection, company_id: int) -> list[Row]:
     """The GL accounts money is in the bank on, with the position of the bank account
     directory among their subconto (None: the account has no such directory)."""

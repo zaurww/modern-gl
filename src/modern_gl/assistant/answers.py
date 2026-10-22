@@ -15,9 +15,8 @@ from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import invoices as invoice_reports
 from modern_gl.reporting import reports
-from modern_gl.reporting.report_common import IFRS, TAX, Turnovers
+from modern_gl.reporting.report_common import BOOKS, Turnovers
 
-BOOKS = {"common": reports.COMMON, "ifrs": IFRS, "tax": TAX}
 LIMIT = 500
 
 
