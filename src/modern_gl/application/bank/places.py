@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from modern_gl.application.common import pad_subconto
+from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY
 from modern_gl.i18n import sort_key
 from modern_gl.infrastructure.db import Connection, Row
 
@@ -149,8 +150,8 @@ def _used_pairs(conn: Connection, company_id: int) -> set[tuple[int, int]]:
 
 
 def _fits(account: Row, value: Row) -> bool:
-    if account["currency"] == 0:  # manat only
+    if account["currency"] == NO_CURRENCY:
         return value["currency_id"] is None
-    if account["currency"] == 1:  # currency only
+    if account["currency"] == CURRENCY_ONLY:
         return value["currency_id"] is not None
     return True

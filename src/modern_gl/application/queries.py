@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from itertools import chain
 
+from modern_gl.application.common import company_row
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import fold, sort_key, tr
 from modern_gl.infrastructure.db import Connection
@@ -84,10 +85,7 @@ class DocumentData:
 
 
 def company_name(conn: Connection, company_id: int) -> str:
-    row = conn.execute("SELECT name FROM companies WHERE id = ?", (company_id,)).fetchone()
-    if row is None:
-        raise NotFoundError(tr("компания {id} не найдена", id=company_id))
-    return row[0]
+    return company_row(conn, company_id)["name"]
 
 
 def parallel_books(conn: Connection, company_id: int) -> bool:
