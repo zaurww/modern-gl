@@ -77,3 +77,39 @@ def test_unknown_template(ledger):
     cid = ledger.create_company("X")
     with pytest.raises(ValidationError, match="нет шаблона"):
         apply_chart_template(ledger, cid, "nope")
+
+
+def test_salary_in_one_sum_without_an_employee(ledger, conn, company):
+    """70's employee may stay empty (D78): payroll paid in one sum, 1 500.00 from the bank;
+    one employee paid separately still shows by name. ОСВ on 70: Dt 1 500.00 + 200.00."""
+    acc = {c: ledger.account_id(company, c) for c in ("51", "70")}
+    bank = ledger.add_subconto_value(
+        company, ledger.subconto_kind_id(company, "bank_account"), "ABB"
+    )
+    employee = ledger.add_subconto_value(
+        company, ledger.subconto_kind_id(company, "employee"), "Əli"
+    )
+    ledger.post_new(
+        company,
+        "2026-03-05",
+        [
+            PostingInput(acc["70"], acc["51"], "1500", (), (bank,)),
+            PostingInput(acc["70"], acc["51"], "200", (employee,), (bank,)),
+        ],
+    )
+    rows = trial_balance(conn, company, "2026-03-01", "2026-03-31")
+    assert next(r for r in rows.rows if r.code == "70").turnover_dt == 170_000
+
+
+def test_an_optional_subconto_turns_required_only_while_nothing_left_it_empty(ledger, company):
+    acc = {c: ledger.account_id(company, c) for c in ("51", "70", "71")}
+    bank = ledger.add_subconto_value(
+        company, ledger.subconto_kind_id(company, "bank_account"), "ABB"
+    )
+    ledger.set_optional_subconto(company, "71", {0})  # nothing posted on 71: any change
+    ledger.set_optional_subconto(company, "71", set())
+    ledger.post_new(company, "2026-03-05", [PostingInput(acc["70"], acc["51"], "10", (), (bank,))])
+    with pytest.raises(ValidationError, match="без «"):
+        ledger.set_optional_subconto(company, "70", set())
+    with pytest.raises(ValidationError, match="нет субконто 2"):
+        ledger.set_optional_subconto(company, "70", {1})

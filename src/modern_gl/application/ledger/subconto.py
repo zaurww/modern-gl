@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from modern_gl.application.common import insert, where_used
-from modern_gl.application.ledger.base import LedgerBase
+from modern_gl.application.ledger.base import LedgerBase, account_label
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import IntegrityError, Row, transaction
@@ -294,6 +294,59 @@ class SubcontoCommands(LedgerBase):
             )
 
     # ---- tags (D64) -------------------------------------------------------------------
+
+    def set_optional_subconto(
+        self, company_id: int, account: int | str, positions: Iterable[int]
+    ) -> None:
+        """The account's subconto positions (0-2) that may stay empty: 70 paid in one sum,
+        without an employee (D78). A position turns required again only while no posting
+        has left it empty — it would not post again."""
+        with transaction(self.conn):
+            acc = self._account(company_id, account)
+            label = account_label(acc)
+            bits = 0
+            for position in set(positions):
+                if not 0 <= position <= 2 or acc[f"sc{position + 1}_kind_id"] is None:
+                    raise ValidationError(
+                        tr("счёт {code}: нет субконто {i}", code=label, i=position + 1)
+                    )
+                bits |= 1 << position
+            for position in range(3):
+                required_now = acc["sc_optional"] & (1 << position) and not bits & (1 << position)
+                if required_now and self._left_empty(company_id, acc["id"], position + 1):
+                    kind = self.conn.execute(
+                        "SELECT name FROM subconto_kinds WHERE company_id = ? AND id = ?",
+                        (company_id, acc[f"sc{position + 1}_kind_id"]),
+                    ).fetchone()["name"]
+                    raise ValidationError(
+                        tr(
+                            "счёт {code}: есть проводки без «{kind}», оно останется необязательным",
+                            code=label,
+                            kind=kind,
+                        )
+                    )
+            self.conn.execute(
+                "UPDATE accounts SET sc_optional = ? WHERE company_id = ? AND id = ?",
+                (bits, company_id, acc["id"]),
+            )
+            self._audit(
+                company_id,
+                "account",
+                acc["id"],
+                "update",
+                {"sc_optional": [acc["sc_optional"], bits]},
+            )
+
+    def _left_empty(self, company_id: int, account_id: int, i: int) -> bool:
+        return (
+            self.conn.execute(
+                f"SELECT 1 FROM postings WHERE company_id = ? AND ("
+                f"(debit_account_id = ? AND dt_sc{i} IS NULL) OR "
+                f"(credit_account_id = ? AND ct_sc{i} IS NULL)) LIMIT 1",
+                (company_id, account_id, account_id),
+            ).fetchone()
+            is not None
+        )
 
     def add_tag(self, company_id: int, name: str) -> int:
         """A tag of the company: «Связанная сторона», «Арендодатель»."""

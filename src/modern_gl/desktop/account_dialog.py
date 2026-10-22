@@ -75,8 +75,11 @@ class AccountDialog(QDialog):
         form.addRow(tr("Тип"), class_row)
         form.addRow("", self.two_sided)
         form.addRow(tr("Валюта"), self.currency)
-        for i, box in enumerate(self.subconto, start=1):
-            form.addRow(tr("Субконто {i}", i=i), box)
+        for i, (box, optional) in enumerate(zip(self.subconto, self.optional, strict=True), 1):
+            row = QHBoxLayout()
+            row.addWidget(box, 1)
+            row.addWidget(optional)
+            form.addRow(tr("Субконто {i}", i=i), row)
         self._build_subconto_hint(form)
         root.addLayout(form)
 
@@ -142,12 +145,24 @@ class AccountDialog(QDialog):
 
     def _build_subconto(self) -> None:
         self.subconto = []
+        self.optional = []  # the position may stay empty: 70 paid in one sum (D78)
         for _ in range(3):
             box = QComboBox()
             box.addItem("—", None)
             for kind_id, kind_name in sorted(self.s.catalog.kinds.items(), key=lambda kv: kv[1]):
                 box.addItem(kind_name, kind_id)
+            optional = QCheckBox(tr("можно не заполнять"))
+            optional.setEnabled(False)
+            box.currentIndexChanged.connect(self._fit_optional)
             self.subconto.append(box)
+            self.optional.append(optional)
+
+    def _fit_optional(self, *_) -> None:
+        for box, optional in zip(self.subconto, self.optional, strict=True):
+            kind = box.currentData() is not None and not self.group.isChecked()
+            optional.setEnabled(kind)  # a locked kind (old postings) still may turn optional
+            if not kind:
+                optional.setChecked(False)
 
     def _build_subconto_hint(self, form: QFormLayout) -> None:
         # an account with postings keeps its subconto; a new one goes to a free place (D61)
@@ -193,6 +208,8 @@ class AccountDialog(QDialog):
         self.contra.setChecked(a.contra)
         for box, kind_id in zip(self.subconto, a.sc_kinds, strict=True):
             self._select(box, kind_id)
+        for position, optional in enumerate(self.optional):
+            optional.setChecked(position in a.sc_optional)
         if not a.is_group and self.s.catalog.has_postings(a.id):
             self.subconto_hint.show()
             for box, kind_id in zip(self.subconto, a.sc_kinds, strict=True):
@@ -217,6 +234,7 @@ class AccountDialog(QDialog):
     def _group_toggled(self, on: bool) -> None:
         for box in self.subconto:
             box.setEnabled(not on)
+        self._fit_optional()
 
     def _choice(self) -> tuple[str | None, str | None]:
         """(class, type) picked; (None, None) for "automatically" and "not set"."""
@@ -226,6 +244,17 @@ class AccountDialog(QDialog):
         return (None, None) if key in (AUTO, "") else (key, None)
 
     # ---- save ------------------------------------------------------------------------
+
+    def _optional_positions(self, subconto: list[int | None]) -> set[int]:
+        """Ticked positions, and one just added to an account with postings: the old
+        postings have no value there (D61)."""
+        ticked = {i for i, box in enumerate(self.optional) if box.isChecked()}
+        a = self.account
+        if a is not None and self.s.catalog.has_postings(a.id):
+            ticked |= {
+                i for i, kind in enumerate(subconto) if kind is not None and a.sc_kinds[i] is None
+            }
+        return {i for i in ticked if i < len(subconto) and subconto[i] is not None}
 
     def save(self) -> None:
         led, cid = self.s.ledger, self.s.company_id
@@ -273,6 +302,7 @@ class AccountDialog(QDialog):
                         led.set_account_class(cid, a.id, account_class, self.contra.isChecked())
                     if account_type != a.account_type:
                         led.set_account_type(cid, a.id, account_type)
+                led.set_optional_subconto(cid, saved_id, self._optional_positions(subconto))
         except (LedgerError, KeyError) as e:
             self.error.setText(str(e).strip("'\""))
             self.error.show()

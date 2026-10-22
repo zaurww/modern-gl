@@ -306,6 +306,23 @@ def test_account_dialog_adds_a_subconto_to_an_account_with_postings(shop, conn, 
     assert (account.sc_kinds, account.sc_optional) == ((kind, None, None), frozenset({0}))
 
 
+def test_account_dialog_ticks_a_subconto_that_may_stay_empty(shop, conn, qtbot):
+    """62's counterparty ticked «можно не заполнять» in the dialog is optional (D78);
+    the tick is shown next time; a position without a kind cannot be ticked."""
+    session = sale_page(shop, conn, qtbot).s
+    dialog = AccountDialog(session, session.catalog.accounts[shop.acc["62"]])
+    qtbot.addWidget(dialog)
+    assert [box.isEnabled() for box in dialog.optional] == [True, True, False]  # 62: cp, contract
+    dialog.optional[0].setChecked(True)
+    dialog.save()
+    assert dialog.result() == AccountDialog.DialogCode.Accepted, dialog.error.text()
+    session.catalog.reload()
+    assert session.catalog.accounts[shop.acc["62"]].sc_optional == frozenset({0})
+    again = AccountDialog(session, session.catalog.accounts[shop.acc["62"]])
+    qtbot.addWidget(again)
+    assert [box.isChecked() for box in again.optional] == [True, False, False]
+
+
 def test_imported_sale_takes_the_group_the_item_had_last_time(shop, conn):
     """A printer was sold to Alfa in group «Printerlər»; an e-qaimə of 2 printers for 40.00
     to Alfa becomes a draft whose line has that group already."""

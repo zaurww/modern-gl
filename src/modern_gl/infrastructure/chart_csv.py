@@ -4,7 +4,8 @@ Columns: code;name;parent;group;subconto[;class;type;contra;two_sided;currency]
   code      - optional: an account without a code is known by its name
   parent    - parent account code, empty for top level (parents must come first)
   group     - 1 for a group (no postings allowed), empty or 0 otherwise
-  subconto  - subconto kind codes for positions 1..3, comma-separated; must already exist
+  subconto  - subconto kind codes for positions 1..3, comma-separated; must already exist;
+              "employee?" — the position may stay empty (70 paid in one sum, D78)
   class     - optional: asset / liability / equity / revenue / expense (empty: parent's)
   type      - optional: an account type of domain.accounts.ACCOUNT_TYPES (cash, bank,
               receivable…); it gives the class
@@ -118,7 +119,8 @@ def import_chart_csv(
     with transaction(ledger.conn):
         for line_no, row in enumerate(rows, start=2):
             try:
-                kinds = [c.strip() for c in (row["subconto"] or "").split(",") if c.strip()]
+                codes = [c.strip() for c in (row["subconto"] or "").split(",") if c.strip()]
+                kinds = [c.rstrip("?") for c in codes]
                 legacy = (row.get("kind") or "").strip().upper()
                 account_class = (row.get("class") or "").strip().lower() or LEGACY_CLASS.get(legacy)
                 two_sided = (row.get("two_sided") or "").strip() == "1" or legacy == "AP"
@@ -139,6 +141,9 @@ def import_chart_csv(
                     if row.get("currency") is None
                     else int((row["currency"] or "").strip() or 0),
                 )
+                optional = {i for i, c in enumerate(codes) if c.endswith("?")}
+                if optional:
+                    ledger.set_optional_subconto(company_id, account_id, optional)
                 for role in (row.get("role") or "").split(","):  # "fx_loss,bank_fee"
                     if role.strip():
                         ledger.set_account_role(company_id, role.strip(), account_id)

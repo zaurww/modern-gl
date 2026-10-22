@@ -58,7 +58,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 68.4;Налог на прибыль;68;;liability;;1;;
 68.8;Прочие налоги и сборы;68;;liability;;1;;
 69;Расчёты по социальному страхованию и обеспечению;;;liability;;1;;
-70;Расчёты с персоналом по оплате труда;;;liability;;1;employee;
+70;Расчёты с персоналом по оплате труда;;;liability;;1;employee?;
 71;Расчёты с подотчётными лицами;;;asset;;1;employee;
 73;Расчёты с персоналом по прочим операциям;;;asset;;1;employee;
 75;Расчёты с учредителями;;1;liability;;1;;
