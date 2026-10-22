@@ -582,11 +582,7 @@ AZ: dict[str, str] = {
     "+ Склад": "+ Anbar",
     "+ Вид расходов": "+ Xərc növü",
     "На складе пока пусто": "Anbar hələ boşdur",
-    "Добавьте товар и склад, затем введите покупку в «Покупках и продажах».": (
-        "Mal və anbar əlavə edin, sonra alışı «Alış və satış» bölməsində daxil edin."
-    ),
     "Документов: {n}": "Sənəd: {n}",
-    "Количество и стоимость рассчитаны по проведённым складским документам; проводки создаются автоматически.": "Miqdar və dəyər keçirilmiş anbar sənədlərinə əsasən hesablanır; mühasibat yazılışları avtomatik yaradılır.",
     "Ед.": "Ölçü v.",
     "Средняя цена": "Orta qiymət",
     "Стоимость": "Dəyər",
@@ -604,7 +600,6 @@ AZ: dict[str, str] = {
     "Название (например, доставка или таможня):": "Adı (məsələn, çatdırılma və ya gömrük):",
     "Вид расходов «{name}» добавлен": "«{name}» xərc növü əlavə edildi",
     "Складской документ проведён": "Anbar sənədi keçirildi",
-    "Последние складские документы": "Son anbar sənədləri",
     "Удалить документ": "Sənədi sil",
     "Операция": "Əməliyyat",
     "Выберите складской документ": "Anbar sənədini seçin",
@@ -1446,15 +1441,26 @@ AZ: dict[str, str] = {
     "Банковский счёт…": "Bank hesabı…",
     # purchase and sale drafts posted in bulk (D73)
     "Провести черновики: {n}": "Qaralamaları keçir: {n}",
-    "Выделенные черновики (Ctrl, Shift) или все черновики списка. Строке без "
-    "счёта — счёт, как в прошлой покупке у этого поставщика": "Seçilmiş qaralamalar "
-    "(Ctrl, Shift) və ya siyahının bütün qaralamaları. Hesabı olmayan sətrə — bu "
-    "təchizatçıdan əvvəlki alışdakı hesab",
-    "Провести черновики: {n}?\n{names}": "Qaralamalar keçirilsin: {n}?\n{names}",
+    "Выделенные черновики (Ctrl, Shift) или все черновики списка. Строкам без "
+    "счёта — выбранный счёт или как в прошлой покупке у этого поставщика": "Seçilmiş "
+    "qaralamalar (Ctrl, Shift) və ya siyahının bütün qaralamaları. Hesabı olmayan "
+    "sətirlərə — seçilmiş hesab və ya bu təchizatçıdan əvvəlki alışdakı hesab",
     "Проведено: {n}": "Keçirildi: {n}",
     "счёт как в прошлый раз — строк: {n}": "hesab əvvəlki kimi — sətir: {n}",
     "Остались черновиками: {n}\n\n{reasons}": "Qaralama qaldı: {n}\n\n{reasons}",
     "счёт затрат указывается только в покупке": "xərc hesabı yalnız alışda göstərilir",
+    # where the lines without an account go, chosen once for the batch (D87)
+    "Строк без счёта: {n}. На какой счёт их провести?": "Hesabsız sətir: {n}. Hansı "
+    "hesaba keçirilsin?",
+    "Строк без аналитики продажи: {n}. Куда их отнести?": "Satış analitikası olmayan "
+    "sətir: {n}. Hara aid edilsin?",
+    "Пусто — каждой строке как в прошлый раз. Выбранное запомнится: следующие e-qaimə "
+    "этих контрагентов предложат то же.": "Boş qalsa — hər sətir əvvəlki kimi. Seçilən "
+    "yadda qalır: bu kontragentlərin növbəti e-qaimələri eynisini təklif edəcək.",
+    "Код или название": "Kod və ya ad",
+    "Укажите «{kind}» — его требует счёт": "«{kind}» göstərin — hesab onu tələb edir",
+    "выбранный счёт — строк: {n}": "seçilmiş hesab — sətir: {n}",
+    "аналитика продажи указывается только в продаже": "satış analitikası yalnız satışda göstərilir",
     # plain-text journal for hledger (D79); the lower-case words are tag names
     "Журнал проводок по {date} — книга: {book}": "{date} tarixinədək yazılışlar jurnalı "
     "— kitab: {book}",
@@ -1511,4 +1517,23 @@ AZ: dict[str, str] = {
     "{n} поступлений · стоимость {cost} · расходы {added} ({percent})": "{n} daxilolma · dəyər {cost} · xərclər {added} ({percent})",
     "Открыть поступление №{n}": "Daxilolma №{n} aç",
     "Открыть доп. расходы №{n} от {date}": "Əlavə xərclər №{n} ({date}) aç",
+    # «Anbar»: the chosen item's movements, operations for a beginner (D88)
+    "Движения": "Hərəkətlər",
+    "Документы": "Sənədlər",
+    "Документы · черновиков: {n}": "Sənədlər · qaralama: {n}",
+    "Остатки считаются по проведённым документам; проводки в бухгалтерии создаются сами.": "Qalıqlar keçirilmiş sənədlər üzrə hesablanır; mühasibat yazılışları özü yaranır.",
+    "Выберите товар": "Malı seçin",
+    "Здесь будет видно, откуда он пришёл и куда ушёл.": "Burada onun haradan gəldiyi və hara getdiyi görünəcək.",
+    "Импорт · ГТД {n}": "İdxal · YGB {n}",
+    "Откуда / куда": "Haradan / hara",
+    "Стоимость остатка": "Qalığın dəyəri",
+    "Перемещение → {w}": "Yerdəyişmə → {w}",
+    "Перемещение ← {w}": "Yerdəyişmə ← {w}",
+    "Добавьте товар и склад, затем введите покупку кнопкой «+ Покупка».": "Mal və anbar əlavə edin, sonra alışı «+ Alış» düyməsi ilə daxil edin.",
+    "Товар пришёл от поставщика — по e-qaimə или таможенной декларации; проводки создаются сами": "Mal təchizatçıdan gəlib — e-qaimə və ya gömrük bəyannaməsi (YGB) üzrə; yazılışlar özü yaranır",
+    "Товар продан покупателю: выручка, ƏDV и себестоимость проводятся сами": "Mal alıcıya satılıb: gəlir, ƏDV və maya dəyəri özü yazılır",
+    "Товар израсходован или испорчен: его стоимость уходит в расходы": "Mal istifadə olunub və ya xarab olub: dəyəri xərclərə silinir",
+    "Товар переехал на другой склад; стоимость не меняется": "Mal başqa anbara keçib; dəyəri dəyişmir",
+    "Доставка, таможня, сертификация — увеличивают стоимость полученного товара": "Çatdırılma, gömrük, sertifikatlaşdırma — alınmış malın dəyərini artırır",
+    "Что было на складе в день начала учёта в программе": "Proqramda uçota başladığınız gün anbarda olanlar",
 }
