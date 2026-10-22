@@ -303,7 +303,8 @@ class ReportPage(QWidget):
 
     def _fit_columns(self) -> None:
         """In a narrow window the names give up width first (cut with "…"), down to
-        NAME_MIN; then the table scrolls sideways."""
+        NAME_MIN; then the table scrolls sideways. In a wide one a `fill` column takes
+        the free room."""
         widths = self._widths
         if not widths:
             return
@@ -311,9 +312,15 @@ class ReportPage(QWidget):
         names = [i for i, c in enumerate(columns) if not (c.width or c.money or c.right)]
         others = sum(w for i, w in widths.items() if i not in names)
         room = (self.table.viewport().width() - others) // max(1, len(names))
-        for i, width in widths.items():
-            if i in names:
-                width = max(min(width, NAME_MIN), min(width, room))
+        fitted = {
+            i: max(min(width, NAME_MIN), min(width, room)) if i in names else width
+            for i, width in widths.items()
+        }
+        fill = [i for i, c in enumerate(columns) if c.fill]
+        spare = self.table.viewport().width() - sum(fitted.values())
+        for i in fill:
+            fitted[i] += max(0, spare) // len(fill)
+        for i, width in fitted.items():
             self.table.setColumnWidth(i, width)
 
     def eventFilter(self, watched, event) -> bool:

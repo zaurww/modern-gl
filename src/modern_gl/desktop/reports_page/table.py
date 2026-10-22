@@ -63,6 +63,7 @@ class Column:
     right: bool = False  # a number that is not money ("7 000.00 Dt"): aligned like one
     tone: Callable[[Any], str | None] | None = None  # a palette color of the text (status)
     group: str = ""  # a caption over the columns next to each other that share it
+    fill: bool = False  # takes the free room: the table reaches the right edge (bank)
 
 
 def figure(minor: int | None) -> str:

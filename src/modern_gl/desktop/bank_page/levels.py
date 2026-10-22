@@ -85,7 +85,7 @@ def account_columns() -> list[Column]:
 
     return [
         Column(tr("Счёт"), lambda r: r.title),
-        Column("", on_account(where), width=110),
+        Column("", on_account(where), width=110, fill=True),  # "AZN · 51" by the name
         Column(
             tr("Последняя выписка"),
             on_account(lambda a: ru_date(a.last_statement) if a.last_statement else ""),
@@ -123,7 +123,7 @@ def status_tone(s: BankStatement) -> str:
 
 def statement_columns() -> list[Column]:
     return [
-        Column(tr("Выписка"), period_text, width=200),
+        Column(tr("Выписка"), period_text, width=200, fill=True),
         Column(tr("На начало"), lambda s: s.opening, money=True, width=120),
         Column(tr("Приход"), lambda s: s.money_in, money=True, width=120),
         Column(tr("Расход"), lambda s: s.money_out, money=True, width=120),
@@ -154,7 +154,7 @@ def line_columns(period: bool) -> list[Column]:
         Column(tr("№"), lambda r: r.number, width=60),
         Column(tr("Операция"), line_kind, width=190),
         Column(tr("Контрагент"), lambda r: r.counterparty or r.corr, width=200),
-        Column(tr("Назначение"), lambda r: r.memo),
+        Column(tr("Назначение"), lambda r: r.memo, fill=True),
         Column(tr("Приход"), lambda r: r.money_in, money=True, width=120),
         Column(tr("Расход"), lambda r: r.money_out, money=True, width=120),
         Column(tr("Остаток"), lambda r: r.balance, money=True, width=130),
