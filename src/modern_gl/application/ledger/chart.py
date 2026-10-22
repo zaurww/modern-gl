@@ -54,15 +54,7 @@ class ChartCommands(LedgerBase):
         with transaction(self.conn):
             parent_id = None
             if parent is not None:
-                parent_row = self._account(company_id, parent)
-                if not parent_row["is_group"]:
-                    raise ValidationError(
-                        tr(
-                            "счёт {code}: родитель {parent} не группа",
-                            code=label,
-                            parent=account_label(parent_row),
-                        )
-                    )
+                parent_row = self._group_parent(company_id, parent, label)
                 parent_id = parent_row["id"]
                 account_class = account_class or parent_row["account_class"]
                 if account_type is None and account_class == parent_row["account_class"]:
@@ -72,32 +64,22 @@ class ChartCommands(LedgerBase):
                 if currency is None:
                     currency = parent_row["currency"]
             mode = currency_mode(currency or NO_CURRENCY)
-            try:
-                account_id = insert(
-                    self.conn,
-                    "INSERT INTO accounts (company_id, code, name, parent_id, is_group, "
-                    "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, account_type, contra, "
-                    "two_sided, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        company_id,
-                        code,
-                        name,
-                        parent_id,
-                        int(is_group),
-                        *sc,
-                        account_class,
-                        account_type,
-                        int(contra),
-                        int(bool(two_sided)),
-                        mode,
-                    ),
-                )
-            except sqlite3.IntegrityError as e:
-                if "UNIQUE" in str(e):
-                    raise ValidationError(tr("счёт {code} уже есть", code=label)) from e
-                raise ValidationError(
-                    tr("не удалось добавить счёт {code}: {error}", code=label, error=e)
-                ) from e
+            account_id = self._insert_account(
+                label,
+                (
+                    company_id,
+                    code,
+                    name,
+                    parent_id,
+                    int(is_group),
+                    *sc,
+                    account_class,
+                    account_type,
+                    int(contra),
+                    int(bool(two_sided)),
+                    mode,
+                ),
+            )
             self._audit(
                 company_id,
                 "account",
@@ -113,6 +95,36 @@ class ChartCommands(LedgerBase):
                 },
             )
         return account_id
+
+    def _group_parent(self, company_id: int, parent: int | str, label: str) -> sqlite3.Row:
+        """The parent of a new account: an existing group."""
+        parent_row = self._account(company_id, parent)
+        if not parent_row["is_group"]:
+            raise ValidationError(
+                tr(
+                    "счёт {code}: родитель {parent} не группа",
+                    code=label,
+                    parent=account_label(parent_row),
+                )
+            )
+        return parent_row
+
+    def _insert_account(self, label: str, values: tuple) -> int:
+        """The new row of accounts; a code already taken is told as such."""
+        try:
+            return insert(
+                self.conn,
+                "INSERT INTO accounts (company_id, code, name, parent_id, is_group, "
+                "sc1_kind_id, sc2_kind_id, sc3_kind_id, account_class, account_type, contra, "
+                "two_sided, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                values,
+            )
+        except sqlite3.IntegrityError as e:
+            if "UNIQUE" in str(e):
+                raise ValidationError(tr("счёт {code} уже есть", code=label)) from e
+            raise ValidationError(
+                tr("не удалось добавить счёт {code}: {error}", code=label, error=e)
+            ) from e
 
     def account_id(self, company_id: int, code: str) -> int:
         return self._account(company_id, code)["id"]
@@ -244,36 +256,10 @@ class ChartCommands(LedgerBase):
                 raise ValidationError(tr("название счёта не может быть пустым"))
             used = self._has_postings(acc["id"])
             if group != bool(acc["is_group"]):
-                if group and used:
-                    raise ValidationError(
-                        tr(
-                            "счёт {code}: по счёту есть проводки, он не может стать группой",
-                            code=label,
-                        )
-                    )
-                if (
-                    not group
-                    and self.conn.execute(
-                        "SELECT 1 FROM accounts WHERE parent_id = ?", (acc["id"],)
-                    ).fetchone()
-                ):
-                    raise ValidationError(tr("счёт {code}: у группы есть субсчета", code=label))
+                self._check_group_change(company_id, acc, label, group, used)
             if group:
                 sc = (None, None, None)
-            optional = acc["sc_optional"] if used else 0
-            if sc != current_sc and used:
-                pairs = list(zip(current_sc, sc, strict=True))
-                if any(old is not None and new != old for old, new in pairs):
-                    raise ValidationError(
-                        tr(
-                            "счёт {code}: по счёту есть проводки, субконто можно только "
-                            "добавить на свободное место",
-                            code=label,
-                        )
-                    )
-                for position, (old, new) in enumerate(pairs):
-                    if old is None and new is not None:  # old postings have no value there
-                        optional |= 1 << position
+            optional = self._optional_positions(acc, label, current_sc, sc, used)
             if mode != acc["currency"] and used:
                 self._check_currency_fits(acc, label, mode)
             try:
@@ -309,6 +295,53 @@ class ChartCommands(LedgerBase):
                     },
                 },
             )
+
+    def _check_group_change(
+        self, company_id: int, acc: sqlite3.Row, label: str, group: bool, used: bool
+    ) -> None:
+        """An account with postings does not become a group; a group with subaccounts
+        stays one."""
+        if group and used:
+            raise ValidationError(
+                tr(
+                    "счёт {code}: по счёту есть проводки, он не может стать группой",
+                    code=label,
+                )
+            )
+        if (
+            not group
+            and self.conn.execute(
+                "SELECT 1 FROM accounts WHERE company_id = ? AND parent_id = ?",
+                (company_id, acc["id"]),
+            ).fetchone()
+        ):
+            raise ValidationError(tr("счёт {code}: у группы есть субсчета", code=label))
+
+    @staticmethod
+    def _optional_positions(
+        acc: sqlite3.Row,
+        label: str,
+        current_sc: tuple[int | None, ...],
+        sc: tuple[int | None, ...],
+        used: bool,
+    ) -> int:
+        """The subconto positions old postings have no value at (bits 0-2): a kind added
+        to an account with postings goes to a free place only and is optional there (D61)."""
+        optional = acc["sc_optional"] if used else 0
+        if sc != current_sc and used:
+            pairs = list(zip(current_sc, sc, strict=True))
+            if any(old is not None and new != old for old, new in pairs):
+                raise ValidationError(
+                    tr(
+                        "счёт {code}: по счёту есть проводки, субконто можно только "
+                        "добавить на свободное место",
+                        code=label,
+                    )
+                )
+            for position, (old, new) in enumerate(pairs):
+                if old is None and new is not None:  # old postings have no value there
+                    optional |= 1 << position
+        return optional
 
     def set_account_active(self, company_id: int, account: int | str, active: bool) -> None:
         """Hide an account from entry (history and reports stay intact), or show it again."""

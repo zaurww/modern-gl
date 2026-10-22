@@ -16,6 +16,8 @@ from decimal import Decimal
 
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.conversions import (
+    ConversionCalc,
+    ConversionFee,
     ConversionInput,
     ConversionSide,
     calculate,
@@ -33,6 +35,41 @@ from modern_gl.infrastructure.db import transaction
 
 EXCHANGE_DIFFERENCE = "Курсовая разница при конвертации"
 BANK_FEE_ITEM = "Комиссия банка"
+
+
+def require_sides(data: ConversionInput) -> tuple[ConversionSide, ConversionSide]:
+    """What left one account and what came to the other, in different currencies."""
+    source, target = data.source, data.target
+    if source is None or not source.amount:
+        raise ValidationError(tr("не указано, с какого счёта списано"))
+    if target is None or not target.amount:
+        raise ValidationError(tr("не указано, на какой счёт зачислено"))
+    if source.currency_id == target.currency_id:
+        raise ValidationError(tr("валюта списания и зачисления одинаковая — это не конвертация"))
+    return source, target
+
+
+def posting_line(
+    debit: int,
+    credit: int,
+    amount: int,
+    debit_sc=(),
+    credit_sc=(),
+    text: str = "",
+    currency_id: int | None = None,
+    currency_amount: int = 0,
+) -> PostingInput:
+    """A posting of the conversion; amounts in kopecks."""
+    return PostingInput(
+        debit,
+        credit,
+        Decimal(amount).scaleb(-2),
+        debit_sc,
+        credit_sc,
+        text,
+        currency_id,
+        None if currency_id is None else Decimal(currency_amount).scaleb(-2),
+    )
 
 
 class MissingAccountRole(ValidationError):
@@ -225,15 +262,48 @@ class ConversionCommands(ModuleDocumentCommands):
     ) -> tuple[list[PostingInput], list[PostingInput]]:
         """Postings of the debit date and of the credit date (the same day: both lists go
         into one document)."""
-        source, target = data.source, data.target
-        if source is None or not source.amount:
-            raise ValidationError(tr("не указано, с какого счёта списано"))
-        if target is None or not target.amount:
-            raise ValidationError(tr("не указано, на какой счёт зачислено"))
-        if source.currency_id == target.currency_id:
-            raise ValidationError(
-                tr("валюта списания и зачисления одинаковая — это не конвертация")
+        source, target = require_sides(data)
+        transit = self._transit_account(company_id)
+        calc = self._calculated(company_id, data)
+        assert calc.source_value is not None and calc.target_value is not None
+        memo = tr(
+            "Конвертация {source} → {target}",
+            source=self._code(company_id, source.currency_id),
+            target=self._code(company_id, target.currency_id),
+        )
+        debit_lines = [
+            posting_line(
+                transit["id"],
+                source.account_id,
+                calc.source_value,
+                (),
+                source.subconto,
+                memo,
+                currency_id=source.currency_id,
+                currency_amount=source.amount,
             )
+        ]
+        difference = self._difference_line(company_id, transit["id"], calc.difference or 0)
+        if difference is not None:
+            debit_lines.append(difference)
+        credit_lines = [
+            posting_line(
+                target.account_id,
+                transit["id"],
+                calc.target_value,
+                target.subconto,
+                (),
+                memo,
+                currency_id=target.currency_id,
+                currency_amount=target.amount,
+            )
+        ]
+        for fee, value in zip(data.fees, calc.fee_values, strict=True):
+            posting = self._fee_line(company_id, fee, value or 0)
+            (credit_lines if fee_on_credit(data, fee) else debit_lines).append(posting)
+        return debit_lines, credit_lines
+
+    def _transit_account(self, company_id: int) -> sqlite3.Row:
         transit = self._role_account(
             company_id, FX_TRANSIT, tr("Не указан счёт переводов в пути (57)")
         )
@@ -244,97 +314,54 @@ class ConversionCommands(ModuleDocumentCommands):
                     code=account_label(transit),
                 )
             )
+        return transit
+
+    def _calculated(self, company_id: int, data: ConversionInput) -> ConversionCalc:
+        """The manat values of the conversion; a currency without a rate stops it."""
         calc = calculate(self.conn, company_id, data)
         if calc.missing:
             codes = ", ".join(self._currency(company_id, c)["code"] for c in calc.missing)
             raise ValidationError(
                 tr("нет курса {code} на {date}", code=codes, date=iso_date(data.doc_date))
             )
-        assert calc.source_value is not None and calc.target_value is not None
-        memo = tr(
-            "Конвертация {source} → {target}",
-            source=self._code(company_id, source.currency_id),
-            target=self._code(company_id, target.currency_id),
+        return calc
+
+    def _difference_line(
+        self, company_id: int, transit_id: int, difference: int
+    ) -> PostingInput | None:
+        """The exchange difference: a loss (Dt loss / Kt transit) or a gain (the other way)."""
+        if not difference:
+            return None
+        text = tr(EXCHANGE_DIFFERENCE)
+        if difference > 0:
+            loss = self._role_account(
+                company_id, FX_LOSS, tr("Не указан счёт убытка от курсовой разницы")
+            )
+            sc = self.named_subconto(company_id, loss["id"], text)
+            return posting_line(loss["id"], transit_id, difference, sc, (), text)
+        gain = self._role_account(
+            company_id, FX_GAIN, tr("Не указан счёт дохода от курсовой разницы")
         )
+        sc = self.named_subconto(company_id, gain["id"], text)
+        return posting_line(transit_id, gain["id"], -difference, (), sc, text)
 
-        def line(
-            debit: int,
-            credit: int,
-            amount: int,
-            debit_sc=(),
-            credit_sc=(),
-            text: str = memo,
-            currency_id: int | None = None,
-            currency_amount: int = 0,
-        ) -> PostingInput:
-            return PostingInput(
-                debit,
-                credit,
-                Decimal(amount).scaleb(-2),
-                debit_sc,
-                credit_sc,
-                text,
-                currency_id,
-                None if currency_id is None else Decimal(currency_amount).scaleb(-2),
-            )
-
-        debit_lines = [
-            line(
-                transit["id"],
-                source.account_id,
-                calc.source_value,
-                (),
-                source.subconto,
-                currency_id=source.currency_id,
-                currency_amount=source.amount,
-            )
-        ]
-        difference = calc.difference or 0
-        if difference:
-            text = tr(EXCHANGE_DIFFERENCE)
-            if difference > 0:
-                loss = self._role_account(
-                    company_id, FX_LOSS, tr("Не указан счёт убытка от курсовой разницы")
-                )
-                sc = self.named_subconto(company_id, loss["id"], text)
-                debit_lines.append(line(loss["id"], transit["id"], difference, sc, (), text))
-            else:
-                gain = self._role_account(
-                    company_id, FX_GAIN, tr("Не указан счёт дохода от курсовой разницы")
-                )
-                sc = self.named_subconto(company_id, gain["id"], text)
-                debit_lines.append(line(transit["id"], gain["id"], -difference, (), sc, text))
-        credit_lines = [
-            line(
-                target.account_id,
-                transit["id"],
-                calc.target_value,
-                target.subconto,
-                (),
-                currency_id=target.currency_id,
-                currency_amount=target.amount,
-            )
-        ]
+    def _fee_line(self, company_id: int, fee: ConversionFee, value: int) -> PostingInput:
+        """A bank fee: Dt its expense account (or the bank fee role) / Kt the money account."""
         text = tr(BANK_FEE_ITEM)
-        for fee, value in zip(data.fees, calc.fee_values, strict=True):
-            if fee.expense_account_id is not None:
-                expense = self._account(company_id, fee.expense_account_id)
-            else:
-                expense = self._role_account(
-                    company_id, BANK_FEE, tr("Не указан счёт комиссии банка")
-                )
-            posting = line(
-                expense["id"],
-                fee.account_id,
-                value or 0,
-                self.named_subconto(company_id, expense["id"], text),
-                fee.subconto,
-                text,
-                currency_id=fee.currency_id,
-                currency_amount=fee.amount,
-            )
-            (credit_lines if fee_on_credit(data, fee) else debit_lines).append(posting)
-        return debit_lines, credit_lines
+        if fee.expense_account_id is not None:
+            expense = self._account(company_id, fee.expense_account_id)
+        else:
+            expense = self._role_account(company_id, BANK_FEE, tr("Не указан счёт комиссии банка"))
+        return posting_line(
+            expense["id"],
+            fee.account_id,
+            value,
+            self.named_subconto(company_id, expense["id"], text),
+            fee.subconto,
+            text,
+            currency_id=fee.currency_id,
+            currency_amount=fee.amount,
+        )
 
     def _role_account(self, company_id: int, role: str, missing: str) -> sqlite3.Row:
         account_id = self.account_role(company_id, role)
