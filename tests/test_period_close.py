@@ -1,4 +1,4 @@
-"""«Закрытие периода» (D94): the window over `Ledger.set_closed_through` — the usual ends
+"""«Закрытие периода» (D95): the window over `Ledger.set_closed_through` — the usual ends
 of a period, drafts that could not be posted afterwards, opening a part or all again."""
 
 from __future__ import annotations

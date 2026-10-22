@@ -68,6 +68,8 @@ def test_counterparty_is_found_by_its_vöen(books):
     # the quick entry line finds it by the VÖEN and puts the name
     found = suggest("60 98765", 8, cat)
     assert [i.insert for i in found.items][:1] == ["Бета, "]
+    found = suggest("26 / 60 98765", 13, cat)  # on the Kt side too, but Enter posts
+    assert [i.insert for i in found.items][:1] == ["Бета, "] and not found.typed
 
 
 @pytest.fixture

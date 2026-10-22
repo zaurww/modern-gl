@@ -529,7 +529,7 @@ def main() -> None:
     dialog.close()
     from modern_gl.desktop.period_dialog import PeriodDialog
 
-    period = PeriodDialog(session, win)  # «Закрытие периода» (D94)
+    period = PeriodDialog(session, win)  # «Закрытие периода» (D95)
     period.show()
     loop = QEventLoop()
     QTimer.singleShot(300, loop.quit)
