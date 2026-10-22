@@ -16,6 +16,7 @@ from datetime import datetime
 from pathlib import Path
 
 from modern_gl.application.ledger import Ledger
+from modern_gl.domain.company import FULL
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
@@ -82,11 +83,16 @@ class Workspace:
         return sorted(result, key=lambda c: sort_key(c.name))
 
     def create(
-        self, name: str, chart: str | None = DEFAULT_TEMPLATE, path: Path | None = None
+        self,
+        name: str,
+        chart: str | None = DEFAULT_TEMPLATE,
+        path: Path | None = None,
+        mode: str = FULL,
     ) -> Path:
         """New company file with the chart template (in the interface language); in the
         folder unless `path` is given (then it is remembered). The file is built aside and
-        put in place only when complete, so a failure leaves nothing half-made."""
+        put in place only when complete, so a failure leaves nothing half-made. `mode`:
+        how it is kept (D90) — a warehouse only still gets the chart, unseen."""
         path = self._free_path(name) if path is None else Path(path)
         partial = path.with_name(path.name + ".part")
         for leftover in (partial, *_sidecars(partial)):
@@ -98,6 +104,8 @@ class Workspace:
                 company_id = ledger.create_company(name)
                 if chart:
                     apply_chart_template(ledger, company_id, chart)
+                if mode != FULL:
+                    ledger.set_company_mode(company_id, mode)
                 conn.execute("PRAGMA journal_mode = DELETE")  # a single self-contained file
             finally:
                 conn.close()

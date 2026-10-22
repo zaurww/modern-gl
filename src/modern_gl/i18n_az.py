@@ -1539,4 +1539,10 @@ AZ: dict[str, str] = {
     "Товар переехал на другой склад; стоимость не меняется": "Mal başqa anbara keçib; dəyəri dəyişmir",
     "Доставка, таможня, сертификация — увеличивают стоимость полученного товара": "Çatdırılma, gömrük, sertifikatlaşdırma — alınmış malın dəyərini artırır",
     "Что было на складе в день начала учёта в программе": "Proqramda uçota başladığınız gün anbarda olanlar",
+    # «Только склад» (D90)
+    "Полный учёт": "Tam uçot",
+    "Только склад (без бухгалтерии)": "Yalnız anbar (mühasibatsız)",
+    "Что будете вести?": "Nəyi aparacaqsınız?",
+    "Неизвестный режим компании: {mode}": "Şirkətin naməlum rejimi: {mode}",
+    "Остатки считаются по проведённым документам.": "Qalıqlar keçirilmiş sənədlər üzrə hesablanır.",
 }

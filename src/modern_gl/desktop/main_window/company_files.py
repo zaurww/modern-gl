@@ -34,6 +34,7 @@ from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_name
 from modern_gl.desktop import theme
 from modern_gl.desktop.session import Session
+from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import language, set_language, tr
 from modern_gl.infrastructure import backup
@@ -113,6 +114,13 @@ class CompanyFiles(QMainWindow):
         name, ok = QInputDialog.getText(self, tr("Новая компания"), prompt)
         if not ok or not name.strip():
             return False
+        kinds = [tr("Полный учёт"), tr("Только склад (без бухгалтерии)")]
+        kind, ok = QInputDialog.getItem(
+            self, tr("Новая компания"), tr("Что будете вести?"), kinds, 0, False
+        )
+        if not ok:
+            return False
+        mode = STOCK_ONLY if kind == kinds[1] else FULL
         target = self._ask_file(tr("Где сохранить файл компании"), name.strip())
         if target is None:
             return False
@@ -124,7 +132,7 @@ class CompanyFiles(QMainWindow):
         if not self._confirm_close_all():
             return False
         try:
-            path = self.workspace.create(name.strip(), path=target)
+            path = self.workspace.create(name.strip(), path=target, mode=mode)
         except (LedgerError, OSError, Error) as e:
             QMessageBox.warning(self, tr("Новая компания"), str(e))
             return False
@@ -434,6 +442,19 @@ class CompanyFiles(QMainWindow):
             self.session.ledger.set_parallel_books(self.session.company_id, on)
         except LedgerError as e:
             QMessageBox.warning(self, tr("Параллельные книги (МСФО, налог)"), str(e))
+            return
+        self.open_company(self.company_path)
+
+    def set_stock_only(self, on: bool) -> None:
+        """Only the warehouse, or the whole program (D90): the sidebar is built again."""
+        if self.session is None or self.company_path is None or not self._confirm_close_all():
+            return
+        try:
+            self.session.ledger.set_company_mode(
+                self.session.company_id, STOCK_ONLY if on else FULL
+            )
+        except LedgerError as e:
+            QMessageBox.warning(self, tr("Только склад (без бухгалтерии)"), str(e))
             return
         self.open_company(self.company_path)
 

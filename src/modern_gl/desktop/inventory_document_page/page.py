@@ -215,9 +215,12 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         viewing = self.s.read_only
         self.btn_delete.setVisible(self.doc is not None and not viewing)
         self.btn_unpost.setVisible(posted and self.doc_type != "landed_cost" and not viewing)
-        self.btn_gl.setVisible(self.doc is not None and self.doc.gl_document_id is not None)
+        books = not self.s.stock_only  # the postings are not shown in a warehouse only (D90)
+        self.btn_gl.setVisible(
+            books and self.doc is not None and self.doc.gl_document_id is not None
+        )
         self.btn_accrual.setVisible(
-            self.doc is not None and self.doc.accrual_document_id is not None
+            books and self.doc is not None and self.doc.accrual_document_id is not None
         )
         self.hint.setVisible(not read_only and self.doc_type != "landed_cost")
 

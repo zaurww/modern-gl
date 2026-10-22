@@ -87,7 +87,9 @@ class InventoryForm(QWidget):
         self._build_stock(root)
         self._build_below(root)
         hint = QLabel(
-            tr(
+            tr("Остатки считаются по проведённым документам.")
+            if session.stock_only  # the books are not shown (D90)
+            else tr(
                 "Остатки считаются по проведённым документам; "
                 "проводки в бухгалтерии создаются сами."
             )

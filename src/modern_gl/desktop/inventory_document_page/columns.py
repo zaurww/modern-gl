@@ -84,6 +84,8 @@ HEADERS = {
 SALE_HEADERS = {ITEM: "Товар / услуга", MEMO: "Содержание"}
 # a receipt line without an item: a service, a fixed asset or any expense bought
 RECEIPT_HEADERS = {ITEM: "Товар / услуга / ОС", MEMO: "Содержание"}
+# the first subconto of the offset account, when the account itself is not shown (D90)
+PARTY_HEADERS = {"receipt": "Поставщик", "sale": "Покупатель"}
 
 DOCUMENT_TYPES = {
     "opening": "Начальные остатки",

@@ -26,11 +26,13 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ITEM,
     MEMO,
     NUMBER_KEYS,
+    PARTY_HEADERS,
     PRICE,
     QUANTITY,
     RECEIPT_HEADERS,
     SALE_HEADERS,
     SALE_KEYS,
+    SC1,
     SC_KEYS,
     STORED_FIELDS,
     SUBCONTO_KEYS,
@@ -67,21 +69,7 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
     def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
-                key = self.columns[section]
-                if key == CURRENCY_AMOUNT and self.currency_code:
-                    return tr("Сумма, {code}", code=self.currency_code)
-                if key == AMOUNT and self.rate is not None:
-                    return tr("Сумма, ₼")
-                if self.doc_type == "sale" and key in SALE_HEADERS:
-                    return tr(SALE_HEADERS[key])
-                if self.doc_type == "receipt" and key in RECEIPT_HEADERS:
-                    return tr(RECEIPT_HEADERS[key])
-                if key in SALE_KEYS:
-                    kind_id = self.sale_kind(key)
-                    return self.s.catalog.kinds[kind_id] if kind_id else ""
-                if key in SUBCONTO_KEYS and key[-1] != "1":
-                    return self._kind_header(key)
-                return tr(HEADERS[key])
+                return self._column_title(self.columns[section])
             return str(section + 1)
         if (
             role == Qt.ItemDataRole.ToolTipRole
@@ -97,6 +85,26 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
                 Qt.AlignmentFlag.AlignRight if numbers else Qt.AlignmentFlag.AlignLeft
             ) | Qt.AlignmentFlag.AlignVCenter
         return None
+
+    def _column_title(self, key: str) -> str:
+        if key == CURRENCY_AMOUNT and self.currency_code:
+            return tr("Сумма, {code}", code=self.currency_code)
+        if key == AMOUNT and self.rate is not None:
+            return tr("Сумма, ₼")
+        if self.stock_only and key == ITEM:  # goods only (D90)
+            return tr(HEADERS[key])
+        if self.accounts_hidden and key == SC1 and self.doc_type in PARTY_HEADERS:
+            return tr(PARTY_HEADERS[self.doc_type])  # the account is unseen (D90)
+        if self.doc_type == "sale" and key in SALE_HEADERS:
+            return tr(SALE_HEADERS[key])
+        if self.doc_type == "receipt" and key in RECEIPT_HEADERS:
+            return tr(RECEIPT_HEADERS[key])
+        if key in SALE_KEYS:
+            kind_id = self.sale_kind(key)
+            return self.s.catalog.kinds[kind_id] if kind_id else ""
+        if key in SUBCONTO_KEYS and key[-1] != "1":
+            return self._kind_header(key)
+        return tr(HEADERS[key])
 
     def _kind_header(self, key: str) -> str:
         """A second or third subconto column is named by its directory («Anbar»,

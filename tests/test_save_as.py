@@ -146,6 +146,10 @@ def test_window_asks_where_to_put_a_new_company(qtbot, tmp_path, monkeypatch):
         "modern_gl.desktop.main_window.company_files.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("Beta", True)),
     )
+    monkeypatch.setattr(  # the whole program, not a warehouse only (D90)
+        "modern_gl.desktop.main_window.company_files.QInputDialog.getItem",
+        staticmethod(lambda _w, _t, _l, kinds, *a, **k: (kinds[0], True)),
+    )
     chosen = tmp_path / "Clients" / "Beta MMC"  # the extension is added
     chosen.parent.mkdir()
     answer = [""]  # cancelled first: nothing is created

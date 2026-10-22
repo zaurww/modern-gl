@@ -38,7 +38,8 @@ class LineInputs(InventoryLinesBase):
         result = []
         for line_no, row in enumerate(rows, 1):
             item_id = row.item_id
-            if item_id is None and self.doc_type not in {"sale", "receipt"}:  # a service
+            services = self.doc_type in {"sale", "receipt"} and not self.stock_only  # D90
+            if item_id is None and not services:
                 raise ValidationError(tr("строка {line}: не указан товар", line=line_no))
             if complete:
                 self._validate_complete(row, line_no)

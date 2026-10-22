@@ -89,7 +89,15 @@ class InventoryLinesBase(QAbstractTableModel):
         self.has_currency = False
         # the kinds a sale line is asked for (D61), one column each
         self.sale_kinds = sale_kinds(session) if doc_type == "sale" else []
+        self.stock_only = session.stock_only  # a warehouse only (D90)
         self.rows = rows or [self.default_row()]
+        # a company kept as a warehouse only (D90): the offset account is put in by itself
+        # and not shown — unless the chart has none to put in
+        self.accounts_hidden = (
+            self.stock_only
+            and doc_type not in {"transfer", "landed_cost"}
+            and self.default_row().offset_account_id is not None
+        )
         if doc_type == "transfer":
             self.columns = [
                 ITEM,
@@ -176,7 +184,17 @@ class InventoryLinesBase(QAbstractTableModel):
         return row.expense_subconto if key in ESC_KEYS else row.offset_subconto
 
     def default_row(self) -> InventoryGridRow:
-        code = {"opening": "60", "receipt": "60", "sale": "62"}.get(self.doc_type, "46")
+        codes = [{"opening": "60", "receipt": "60", "sale": "62"}.get(self.doc_type, "46")]
+        if self.doc_type == "opening" and self.stock_only:
+            codes = ["88", "84", *codes]  # unseen (D90): retained earnings, not a supplier
+        account = next(filter(None, map(self._leaf_by_code, codes)), None)
+        if account is None or self.doc_type in {"transfer", "landed_cost"}:
+            return InventoryGridRow()
+        # Subconto (counterparty, contract) stay empty: a guessed value would post silently.
+        return InventoryGridRow(offset_account_id=account.id)
+
+    def _leaf_by_code(self, code: str):
+        """The account of the code, or the first under it when it is a group (60 → 60.1)."""
         account = self.s.catalog.by_code.get(code)
         if account is not None and account.is_group:
             account = next(
@@ -187,10 +205,7 @@ class InventoryLinesBase(QAbstractTableModel):
                 ),
                 None,
             )
-        if account is None or self.doc_type in {"transfer", "landed_cost"}:
-            return InventoryGridRow()
-        # Subconto (counterparty, contract) stay empty: a guessed value would post silently.
-        return InventoryGridRow(offset_account_id=account.id)
+        return account
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         return 0 if parent is not None and parent.isValid() else len(self.rows)

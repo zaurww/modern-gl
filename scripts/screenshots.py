@@ -663,7 +663,23 @@ def main() -> None:
     shot("12b2_bank_payment_lines")
     shoot_vat_deposit(session, win, ledger, shot)
     shoot_sale_groups(session, win, ledger, shot)
+    shoot_stock_only(win, ledger, shot)
     shoot_viewing(win, shot)
+
+
+def shoot_stock_only(win, ledger, shot) -> None:
+    """D90: the same company kept as a warehouse only — the books are not shown."""
+    from modern_gl.domain.company import FULL, STOCK_ONLY
+
+    win._confirm_close_all = lambda: True  # the bank payment above is left unsaved
+    ledger.set_company_mode(win.open_session.company_id, STOCK_ONLY)
+    win.open_company(win.company_path)
+    win.open_session.working_date = date(2026, 2, 28)
+    shot("14_stock_only")
+    win.new_inventory_document("receipt")
+    shot("14b_stock_only_purchase")
+    win.open_session.ledger.set_company_mode(win.open_session.company_id, FULL)
+    win.open_company(win.company_path)
 
 
 def shoot_viewing(win, shot) -> None:

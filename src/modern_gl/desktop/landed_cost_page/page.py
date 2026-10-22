@@ -150,6 +150,8 @@ class LandedCostPage(LandedCostForm):
         for key in (SC2, SC3):
             column = self.charges.columns.index(key)
             self.charges_table.setColumnHidden(column, int(key[-1]) not in used)
+        column = self.charges.columns.index(ACCOUNT)  # put in by itself (D90)
+        self.charges_table.setColumnHidden(column, self.charges.accounts_hidden)
         self.targets_table.set_widths(
             {DOCUMENT: 140, WAREHOUSE: 130, QUANTITY: 110, COST: 110, SHARE: 110, UNIT_COST: 130},
             ITEM,
@@ -323,11 +325,15 @@ class LandedCostPage(LandedCostForm):
             widget.setEnabled(not read_only)
         for control in (self.btn_add_charge, self.btn_from_gl, self.btn_add_receipts):
             control.setVisible(not read_only)
+        books = not self.s.stock_only  # a warehouse only (D90): no postings to pick or open
+        self.btn_from_gl.setVisible(books and not read_only)
         self.btn_save.setVisible(not read_only and not posted)
         self.btn_post.setVisible(not read_only)
         self.btn_delete.setVisible(self.doc is not None and not self.s.read_only)
         self.btn_unpost.setVisible(posted and not read_only)
-        self.btn_gl.setVisible(self.doc is not None and self.doc.gl_document_id is not None)
+        self.btn_gl.setVisible(
+            books and self.doc is not None and self.doc.gl_document_id is not None
+        )
         self.btn_report.setVisible(posted)  # the shares exist once it is posted
         self.hint.setVisible(not read_only)
 

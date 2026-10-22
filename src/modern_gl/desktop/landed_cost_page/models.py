@@ -83,6 +83,8 @@ class ChargesModel(QAbstractTableModel):
             c.id: c.label for c in landed_cost_type_choices(session.conn, session.company_id)
         }
         self.rows = rows or [self.default_row()]
+        # a warehouse only (D90): the supplier's account is put in by itself, unseen
+        self.accounts_hidden = session.stock_only and self.default_row().account_id is not None
         self.columns = [
             COST_TYPE,
             ACCOUNT,
@@ -118,6 +120,8 @@ class ChargesModel(QAbstractTableModel):
             return str(section + 1) if role == Qt.ItemDataRole.DisplayRole else None
         key = self.columns[section]
         if role == Qt.ItemDataRole.DisplayRole:
+            if key == SC1 and self.accounts_hidden:
+                return tr("Поставщик")
             return tr(CHARGE_HEADERS[key]) if CHARGE_HEADERS[key] else ""
         if role == Qt.ItemDataRole.TextAlignmentRole:
             side = Qt.AlignmentFlag.AlignRight if key in NUMBER_KEYS else Qt.AlignmentFlag.AlignLeft

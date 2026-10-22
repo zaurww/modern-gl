@@ -6,7 +6,8 @@ from datetime import date
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import list_layers, parallel_books
+from modern_gl.application.queries import company_mode, list_layers, parallel_books
+from modern_gl.domain.company import STOCK_ONLY
 from modern_gl.infrastructure import cbar
 from modern_gl.infrastructure.db import Connection
 
@@ -33,3 +34,9 @@ class Session:
     @property
     def parallel_books(self) -> bool:
         return parallel_books(self.conn, self.company_id)
+
+    @property
+    def stock_only(self) -> bool:
+        """Only the warehouse is kept here (D90): the books, their pages and accounts are
+        not shown; the postings are made all the same."""
+        return company_mode(self.conn, self.company_id) == STOCK_ONLY

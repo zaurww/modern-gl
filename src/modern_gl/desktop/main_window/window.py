@@ -113,10 +113,15 @@ class MainWindow(OpenPages):
         menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
         menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
         menu.addSeparator()
-        books = menu.addAction(tr("Параллельные книги (МСФО, налог)"))
-        books.setCheckable(True)
-        books.setChecked(s.parallel_books)
-        books.toggled.connect(self.set_parallel_books)
+        stock_only = menu.addAction(tr("Только склад (без бухгалтерии)"))
+        stock_only.setCheckable(True)
+        stock_only.setChecked(s.stock_only)
+        stock_only.toggled.connect(self.set_stock_only)
+        if not s.stock_only:
+            books = menu.addAction(tr("Параллельные книги (МСФО, налог)"))
+            books.setCheckable(True)
+            books.setChecked(s.parallel_books)
+            books.toggled.connect(self.set_parallel_books)
 
     def _viewing(self) -> bool:
         """Viewing only (D80): nothing new is started; the status bar says why."""
@@ -200,7 +205,7 @@ class MainWindow(OpenPages):
 
     def quick_entry(self) -> None:
         """Ctrl+L anywhere: the journal with the cursor in the quick entry line."""
-        if self.session is None or self._viewing():
+        if self.session is None or self._viewing() or self.session.stock_only:
             return
         self.show_place(("journal",))
         journal = self._page(("journal",), JournalPage)
@@ -270,8 +275,8 @@ class MainWindow(OpenPages):
         self._activate(key)
 
     def new_document(self, template=None, entry=None) -> None:
-        if self._viewing():
-            return
+        if self._viewing() or (self.session is not None and self.session.stock_only):
+            return  # a journal document: not in a company kept as a warehouse only (D90)
         page = DocumentPage(self.open_session, template=template, entry=entry)
         self._wire_document(page)
         self._add_page(page.key, page, open_item=True)

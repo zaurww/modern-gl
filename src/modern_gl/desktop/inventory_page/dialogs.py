@@ -86,7 +86,8 @@ class ItemDialog(QDialog):
         if self.group.count() > 1:  # the directory has groups
             form.addRow(tr("Группа"), self.group)
         form.addRow(tr("Единица измерения"), self.units)
-        form.addRow(tr("Счёт запасов"), self.accounts)
+        if not session.stock_only:  # a warehouse only (D90): the first stock account, unseen
+            form.addRow(tr("Счёт запасов"), self.accounts)
         if item is not None and item.used:
             note = QLabel(tr("По товару есть документы: единица и счёт не меняются"))
             note.setObjectName("tertiary")

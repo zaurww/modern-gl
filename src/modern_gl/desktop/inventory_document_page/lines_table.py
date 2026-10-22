@@ -279,6 +279,8 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, not goods)
             if key == EXPENSE:
                 self.setColumnHidden(column, not expenses)
+            if key == ACCOUNT:
+                self.setColumnHidden(column, model.accounts_hidden)
             if key in ESC_KEYS:
                 self.setColumnHidden(column, not expenses or int(key[-1]) not in expense_positions)
             if key in SALE_KEYS:

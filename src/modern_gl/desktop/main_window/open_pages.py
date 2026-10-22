@@ -32,7 +32,6 @@ from modern_gl.desktop.main_window.company_files import CompanyFiles
 from modern_gl.desktop.main_window.sidebar import (
     ALL_OPEN,
     KEY_ROLE,
-    SECTIONS,
     FocusablePage,
     NavDelegate,
     PageT,
@@ -40,6 +39,8 @@ from modern_gl.desktop.main_window.sidebar import (
     TitledPage,
     open_icon,
     place_icon,
+    sections,
+    shown_places,
 )
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.widgets import EmptyState
@@ -79,14 +80,15 @@ class OpenPages(CompanyFiles):
         self.sidebar.company.setText(f"{name}   ▾")
         viewing = f" — {tr('только просмотр')}" if read_only else ""
         self.setWindowTitle(f"{name}{viewing} — Modern GL")
-        self.sidebar.retranslate(read_only)
-        for heading, places in SECTIONS:
+        stock_only = self.open_session.stock_only
+        self.sidebar.retranslate(read_only, stock_only)
+        for heading, places in sections(stock_only):
             if heading is not None:
                 self.sidebar.add_section(tr(heading))
             for key, text in places:
                 self.sidebar.add_item(key, tr(text), place_icon(key))
         self.sidebar.add_section(tr("Открытые"))
-        self.show_place(("journal",))
+        self.show_place(("inventory",) if stock_only else ("journal",))
 
     def _drop_pages(self) -> None:
         # quietly: clearing moves the current item, and that would open a page again
@@ -300,6 +302,8 @@ class OpenPages(CompanyFiles):
         self.statusBar().showMessage(message, 6000)
 
     def show_place(self, key) -> None:
+        if self.session is not None and key not in shown_places(self.session.stock_only):
+            return  # a page of the books, in a company kept as a warehouse only (D90)
         if key not in self.pages:
             self._add_page(key, self._make_place(key))
         self._activate(key)

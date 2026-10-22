@@ -66,6 +66,22 @@ SECTIONS = [
     ("Модули", MODULES),
 ]
 PLACE_KEYS = [key for _, places in SECTIONS for key, _ in places]
+# «Только склад» (D90): the warehouse first, then the lists it needs; the books are not shown
+STOCK_SECTIONS = [
+    (None, [(("inventory",), "Склад"), (("purchases",), "Покупки"), (("sales",), "Продажи")]),
+    ("Списки", [(("directories",), "Справочники"), (("currencies",), "Валюты")]),
+]
+
+
+def sections(stock_only: bool) -> list:
+    return STOCK_SECTIONS if stock_only else SECTIONS
+
+
+def shown_places(stock_only: bool) -> set:
+    """The places a company of this mode shows; the others stay closed."""
+    return {key for _, places in sections(stock_only) for key, _ in places}
+
+
 # «Open»: only the last few pages, the rest — under «All (N)…», a menu (D86)
 ALL_OPEN = ("open_all",)
 OPEN_SHOWN = 4  # with every place, still no scrolling at 840 px of height
@@ -170,11 +186,12 @@ class Sidebar(QWidget):
         lay.addWidget(self.hint)
         self.retranslate()
 
-    def retranslate(self, read_only: bool = False) -> None:
+    def retranslate(self, read_only: bool = False, stock_only: bool = False) -> None:
         self.viewing.setText(tr("Только просмотр"))
         self.viewing.setVisible(read_only)
+        journal = not (read_only or stock_only)  # Ctrl+N is a new journal document
         self.hint.setText(
-            tr("Ctrl+W  закрыть") if read_only else tr("Ctrl+N  новый документ\nCtrl+W  закрыть")
+            tr("Ctrl+N  новый документ\nCtrl+W  закрыть") if journal else tr("Ctrl+W  закрыть")
         )
 
     def add_section(self, title: str) -> None:

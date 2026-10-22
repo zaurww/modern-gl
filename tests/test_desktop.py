@@ -568,6 +568,10 @@ def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch)
         "modern_gl.desktop.main_window.company_files.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("Yeni MMC", True)),
     )
+    monkeypatch.setattr(  # the whole program, not a warehouse only (D90)
+        "modern_gl.desktop.main_window.company_files.QInputDialog.getItem",
+        staticmethod(lambda _w, _t, _l, kinds, *a, **k: (kinds[0], True)),
+    )
     offered = []
     monkeypatch.setattr(  # the file goes where it is offered: the data folder
         "modern_gl.desktop.main_window.company_files.QFileDialog.getSaveFileName",

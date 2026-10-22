@@ -100,6 +100,12 @@ def parallel_books(conn: Connection, company_id: int) -> bool:
     return bool(row.fetchone()[0])
 
 
+def company_mode(conn: Connection, company_id: int) -> str:
+    """How the company is kept (D90): FULL, or STOCK_ONLY — only the warehouse is shown."""
+    row = conn.execute("SELECT mode FROM companies WHERE id = ?", (company_id,))
+    return row.fetchone()[0]
+
+
 def list_layers(conn: Connection, company_id: int) -> list[tuple[str, str]]:
     return [
         (r["code"], r["name"])

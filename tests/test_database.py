@@ -47,6 +47,7 @@ FROZEN = {
     "0033_bank_statements.sql": "677ed451924b0b90",
     "0034_advance_roles.sql": "64ae2788859eb910",
     "0035_long_term_types.sql": "9af358600e337aea",
+    "0036_company_mode.sql": "a9553da764433920",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

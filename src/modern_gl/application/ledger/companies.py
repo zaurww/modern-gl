@@ -7,6 +7,7 @@ from datetime import date
 from modern_gl.application.common import insert, now
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.application.ledger.inputs import DEFAULT_LAYERS
+from modern_gl.domain.company import COMPANY_MODES
 from modern_gl.domain.currency import DEFAULT_CURRENCIES, currency_name
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
@@ -79,6 +80,18 @@ class CompanyCommands(LedgerBase):
             self._audit(
                 company_id, "company", company_id, "set_parallel_books", {"from": old, "to": on}
             )
+
+    def set_company_mode(self, company_id: int, mode: str) -> None:
+        """How the company is kept (D90): 'full', or 'stock' — only the warehouse, purchases
+        and sales are shown; the postings are made all the same. Audited."""
+        if mode not in COMPANY_MODES:
+            raise ValidationError(tr("Неизвестный режим компании: {mode}", mode=mode))
+        with transaction(self.conn):
+            old = self._company(company_id)["mode"]
+            if old == mode:
+                return
+            self.conn.execute("UPDATE companies SET mode = ? WHERE id = ?", (mode, company_id))
+            self._audit(company_id, "company", company_id, "set_mode", {"from": old, "to": mode})
 
     def set_closed_through(self, company_id: int, through: date | str | None) -> None:
         """Close the period up to `through` inclusive; None reopens everything. Audited."""
