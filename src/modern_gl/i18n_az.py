@@ -1290,4 +1290,15 @@ AZ: dict[str, str] = {
     "Кому": "Kimə",
     "От кого": "Kimdən",
     "Банковский счёт…": "Bank hesabı…",
+    # purchase and sale drafts posted in bulk (D73)
+    "Провести черновики: {n}": "Qaralamaları keçir: {n}",
+    "Выделенные черновики (Ctrl, Shift) или все черновики списка. Строке без "
+    "счёта — счёт, как в прошлой покупке у этого поставщика": "Seçilmiş qaralamalar "
+    "(Ctrl, Shift) və ya siyahının bütün qaralamaları. Hesabı olmayan sətrə — bu "
+    "təchizatçıdan əvvəlki alışdakı hesab",
+    "Провести черновики: {n}?\n{names}": "Qaralamalar keçirilsin: {n}?\n{names}",
+    "Проведено: {n}": "Keçirildi: {n}",
+    "счёт как в прошлый раз — строк: {n}": "hesab əvvəlki kimi — sətir: {n}",
+    "Остались черновиками: {n}\n\n{reasons}": "Qaralama qaldı: {n}\n\n{reasons}",
+    "счёт затрат указывается только в покупке": "xərc hesabı yalnız alışda göstərilir",
 }

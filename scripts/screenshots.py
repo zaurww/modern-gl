@@ -365,6 +365,15 @@ def main() -> None:
     session.catalog.reload()  # the new cost item and fixed asset
     win.open_inventory_document(purchase)
     shot("8c9_purchase_services")
+    for day in ("2026-02-27", "2026-02-28"):  # drafts from the portal: posted at once (D73)
+        stock.create_receipt_draft(
+            cid,
+            day,
+            [ReceiptLine(None, None, None, "40", i18n.tr("Ремонт принтера"), vat_amount="7.20")],
+            supplier.offset_account_id,
+            supplier.offset_subconto,
+            vat_rate=STANDARD_VAT_RATE,
+        )
     win.show_place(("purchases",))
     shot("8c0_purchases")
     win.show_place(("sales",))
