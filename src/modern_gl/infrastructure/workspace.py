@@ -59,9 +59,13 @@ def _first_company(conn: sqlite3.Connection, path: Path) -> int:
 
 
 class Workspace:
-    def __init__(self, folder: Path, files: Iterable[Path | str] = ()) -> None:
+    def __init__(
+        self, folder: Path, files: Iterable[Path | str] = (), mirror: Path | str | None = None
+    ) -> None:
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
+        # a second folder every backup is copied to (D97); the caller stores it
+        self.mirror: Path | None = Path(mirror) if mirror else None
         # company files kept outside the folder; the caller stores this list
         self.files: list[Path] = []
         for file in files:
@@ -175,10 +179,17 @@ class Workspace:
 
     def auto_backup(self, conn: sqlite3.Connection, company_file: Path) -> Path | None:
         """The backup made when a company is closed — only if it changed since the last one."""
-        folder = self.backup_folder(company_file)
-        if not backup.changed_since_last(conn, folder):
+        if not backup.changed_since_last(conn, self.backup_folder(company_file)):
             return None
-        return backup.make_backup(conn, folder, Path(company_file).stem)
+        return self.backup_now(conn, company_file)
+
+    def backup_now(self, conn: sqlite3.Connection, company_file: Path) -> Path:
+        """A backup in the company's folder, and in the second folder when there is one
+        (BackupError if that one failed: the first copy is made all the same)."""
+        made = backup.make_backup(conn, self.backup_folder(company_file), Path(company_file).stem)
+        if self.mirror is not None:
+            backup.mirror(made, self.mirror)
+        return made
 
     def backups(self, company_file: Path) -> list[backup.Backup]:
         return backup.list_backups(self.backup_folder(company_file))

@@ -224,9 +224,14 @@ class CompanyFiles(QMainWindow):
         self.session.read_only = read_only
         self.session.path = path
         self.session.large = posting_count(conn, company_id) >= LARGE
+        self.session.last_backup = lambda: self._last_backup(path)
         if old_date:
             self.session.working_date = old_date
         self._show_company(name)
+
+    def _last_backup(self, path: Path) -> datetime | None:
+        made = self.workspace.backups(path)
+        return made[0].made_at if made else None
 
     def _close_company(self) -> None:
         """Drop all pages of the current company and close its file."""

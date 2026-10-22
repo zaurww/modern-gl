@@ -536,6 +536,16 @@ def main() -> None:
     loop.exec()
     period.grab().save(str(out / "16_period_dialog.png"))
     period.close()
+    from modern_gl.desktop.backups_dialog import BackupsDialog
+
+    assert win.conn is not None and win.company_path is not None
+    copies = BackupsDialog(win.workspace, win.conn, win.company_path, None, win)  # D97
+    copies.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    copies.grab().save(str(out / "18_backups_dialog.png"))
+    copies.close()
 
     # Currencies: a USD bank account, CBAR-like rates, a payment in USD, revaluation.
     from modern_gl.application.ledger import PostingInput

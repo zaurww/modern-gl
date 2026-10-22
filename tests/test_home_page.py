@@ -116,7 +116,7 @@ def test_refresh_leaves_no_old_lists_on_the_page(window, qtbot):
     old = list(page.sections)
     page.refresh()
     assert all(s.isHidden() for s in old)  # at once, not when Qt deletes them
-    assert len(page.sections) == 3 and not set(page.sections) & set(old)
+    assert len(page.sections) == 4 and not set(page.sections) & set(old)
     qtbot.waitUntil(lambda: all(s.isVisible() for s in page.sections))
 
 
@@ -149,4 +149,5 @@ def test_viewing_and_stock_only(window):
     window.session.read_only = False
     window.set_stock_only(True)
     page = home(window)
-    assert len(page.sections) == 2  # what waits and the rates: no books, no money list
+    # what waits, the rates and the backup (D97): no books, no money list
+    assert len(page.sections) == 3

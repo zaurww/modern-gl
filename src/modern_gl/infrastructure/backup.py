@@ -130,6 +130,24 @@ def _drop_oldest(folder: Path, keep: int) -> None:
         old.path.unlink(missing_ok=True)
 
 
+def mirror(made: Path, root: Path) -> Path:
+    """The same backup in a second folder (a flash drive, a synced cloud folder — D97):
+    `<root>/<Company>/<backup name>`, the newest KEEP there too. Raises BackupError when the
+    folder cannot be written (the drive is not plugged in…): the first copy stays."""
+    target = Path(root) / Path(made).parent.name / Path(made).name
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.with_name(target.name + ".part")
+        shutil.copy2(made, partial)
+        partial.replace(target)
+        _drop_oldest(target.parent, KEEP)
+    except OSError as e:
+        raise BackupError(
+            tr("копия не записана во вторую папку {folder}: {error}", folder=root, error=e)
+        ) from e
+    return target
+
+
 def make_backup_of_file(path: Path, folder: Path, note: str = "") -> Path:
     """Back up a company file that is not open (e.g. before a schema update)."""
     src = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)

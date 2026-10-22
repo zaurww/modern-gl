@@ -1,5 +1,6 @@
-"""«Bu gün» (D86): one narrow column, three lists over thin lines — «Требует внимания»,
-«Деньги», «Курсы». Quiet: no cards, no colored icons; color only for a negative sum."""
+"""«Bu gün» (D86): one narrow column, lists over thin lines — «Требует внимания»,
+«Деньги», «Курсы», «Резервная копия» (D97). Quiet: no cards, no colored icons; color
+only for a negative sum."""
 
 from __future__ import annotations
 
@@ -43,6 +44,7 @@ COLUMN = 640  # one narrow column: read top to bottom, not across a wide screen
 
 class HomePage(QWidget):
     open_place = Signal(object)  # a sidebar place: («journal»,), («bank»,)…
+    open_backups = Signal()  # «Резервные копии» of the company menu (D97)
 
     def __init__(self, session: Session, places: set) -> None:
         """`places` — the sidebar's places of this company: a row opens only one of them."""
@@ -107,6 +109,8 @@ class HomePage(QWidget):
         if read.money is not None:
             self.sections.append(self._money(read.money))
         self.sections.append(self._rates(read.rates))
+        if not self.s.read_only:  # viewing a snapshot: its file's copies are not ours
+            self.sections.append(self._backup())
         for section in self.sections:
             self.body.addWidget(section)
 
@@ -149,6 +153,17 @@ class HomePage(QWidget):
             section.add(self._rate_line(r))
         if not shown:
             section.empty(tr("Валют нет"))
+        return section
+
+    def _backup(self) -> Section:
+        """When the company was last copied — so a forgotten copy is seen (D97)."""
+        section = Section(tr("Резервная копия"))
+        made = self.s.last_backup()
+        if made is None:
+            line = Line(tr("Копий ещё нет"), tr("копия делается при закрытии компании"))
+        else:
+            line = Line(tr("Последняя копия"), "", made.strftime("%d.%m.%Y %H:%M"))
+        section.add(line).opens(self.open_backups.emit)
         return section
 
     def _rate_line(self, r: DayRate) -> Line:
