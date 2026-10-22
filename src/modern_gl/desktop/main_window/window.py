@@ -49,6 +49,7 @@ from modern_gl.desktop.reports_page import (
     ChartPage,
     OsvPage,
     ReportParams,
+    StatementsPage,
 )
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
@@ -243,16 +244,16 @@ class MainWindow(OpenPages):
         return self._report_place(key)
 
     def _report_place(self, key) -> QWidget:
-        """ОСВ or the chart of accounts: places that open reports."""
+        """ОСВ, the statements or the chart of accounts: places that open reports."""
         s = self.open_session
         if key == ("osv",):
             osv = OsvPage(s)
             osv.compare_books.connect(self.open_books)
             self._wire_report(osv)
             return osv
-        chart = ChartPage(s)
-        self._wire_report(chart)
-        return chart
+        other = StatementsPage(s) if key == ("statements",) else ChartPage(s)
+        self._wire_report(other)
+        return other
 
     def open_books(self) -> None:
         """«Сравнение книг» (D98): an open page of its own, like an account's card."""

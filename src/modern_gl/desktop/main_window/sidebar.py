@@ -44,6 +44,7 @@ PLACES = [
 ]
 REPORTS_PLACES = [
     (("osv",), "ОСВ"),
+    (("statements",), "Баланс и прибыль"),  # D99
     (("invoices",), "E-qaimələr"),
 ]
 LISTS = [
