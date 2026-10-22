@@ -25,11 +25,22 @@ from modern_gl.application.inventory.model import (
 )
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.application.ledger import PostingInput
+from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.domain.currency import to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor, round_ratio
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
+
+explain_owner(
+    "landed_cost",
+    lambda _role, n, m: tr(
+        "документ №{n} взят как расход партии в складском документе №{m}: "
+        "сначала уберите его оттуда",
+        n=n,
+        m=m,
+    ),
+)
 
 
 @dataclass(frozen=True)

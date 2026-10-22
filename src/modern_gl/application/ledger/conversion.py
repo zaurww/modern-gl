@@ -23,6 +23,7 @@ from modern_gl.application.conversions import (
     same_day,
 )
 from modern_gl.application.ledger.base import account_label
+from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.module import ModuleDocumentCommands
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
@@ -33,6 +34,12 @@ from modern_gl.infrastructure.db import transaction
 
 EXCHANGE_DIFFERENCE = "Курсовая разница при конвертации"
 BANK_FEE_ITEM = "Комиссия банка"
+
+
+explain_owner(
+    "conversion",
+    lambda _role, _n, _m: tr("проводки созданы документом «Конвертация валюты»; исправьте его там"),
+)
 
 
 class MissingAccountRole(ValidationError):
