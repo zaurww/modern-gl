@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.bank import ACCOUNT_KINDS, CARD, CURRENCY, VAT_DEPOSIT, BankAccount
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, date_edit, edited_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -37,9 +38,15 @@ class BankAccountDialog(QDialog):
         self.s, self.account = session, account
         self.saved_value: int | None = None
         self.setWindowTitle(tr("Банковский счёт") if account else tr("Новый банковский счёт"))
-        self.setMinimumWidth(460)
+        self.setMinimumWidth(520)
         root = QVBoxLayout(self)
+        root.setContentsMargins(28, 24, 28, 20)
+        root.setSpacing(16)
+        title = QLabel(self.windowTitle())
+        title.setFont(fonts().heading)
+        root.addWidget(title)
         form = QFormLayout()
+        form.setHorizontalSpacing(18)
         form.setVerticalSpacing(10)
         self.name = QLineEdit(account.place.name if account else "")
         self.name.setPlaceholderText(tr("ABB, Kapital Bank USD, ABB Visa…"))

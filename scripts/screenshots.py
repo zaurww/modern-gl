@@ -607,6 +607,18 @@ def main() -> None:
     session.catalog.reload()
     bank.refresh()
     shot("12_bank")
+    from modern_gl.desktop.bank_page.dialogs import BankAccountDialog
+
+    card_dialog = BankAccountDialog(session, None, win)
+    card_dialog.name.setText("Kapital Mastercard")
+    card_dialog.kind.setCurrentIndex(card_dialog.kind.findData("card"))
+    card_dialog.digits.setText("0921")
+    card_dialog.show()
+    loop = QEventLoop()
+    QTimer.singleShot(300, loop.quit)
+    loop.exec()
+    card_dialog.grab().save(str(out / "12_bank_card_dialog.png"))
+    card_dialog.close()
     first = next(r for r in bank.model.rows if hasattr(r, "place"))
     bank.open_account(first.place.key)
     oldest = bank.statements[0]
