@@ -127,3 +127,36 @@ def test_both_templates_leave_70s_employee_optional(ledger, conn, name, lang):
         "SELECT sc_optional FROM accounts WHERE company_id = ? AND code = '70'", (cid,)
     ).fetchone()
     assert row["sc_optional"] == 1
+
+
+@pytest.mark.parametrize(
+    ("name", "paid", "received"), [("classic", "61", "64"), ("1c77", "60.2", "62.2")]
+)
+def test_the_templates_name_their_advance_accounts(ledger, name, paid, received):
+    """An overpayment goes to an account of its own (D78): 61 / 64 of the classic chart."""
+    from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
+
+    cid = ledger.create_company(name)
+    apply_chart_template(ledger, cid, name)
+    assert ledger.account_role(cid, ADVANCE_PAID) == ledger.account_id(cid, paid)
+    assert ledger.account_role(cid, ADVANCE_RECEIVED) == ledger.account_id(cid, received)
+
+
+def test_an_old_company_gets_its_only_advance_account(ledger, conn):
+    """Migration 0034: the one active account of a type becomes the role; two such
+    accounts — none, the user chooses in the bank's settings."""
+    from modern_gl.infrastructure.db import MIGRATIONS_DIR
+
+    cid = ledger.create_company("Old")
+    apply_chart_template(ledger, cid, "classic")
+    ledger.add_account(cid, "61.9", "Ещё авансы", account_type="advance_received")
+    conn.execute("DELETE FROM account_roles WHERE role LIKE 'advance%'")  # as before 0034
+    conn.executescript((MIGRATIONS_DIR / "0034_advance_roles.sql").read_text(encoding="utf-8"))
+    roles = dict(
+        conn.execute(
+            "SELECT role, account_id FROM account_roles "
+            "WHERE company_id = ? AND role LIKE 'advance%'",
+            (cid,),
+        ).fetchall()
+    )
+    assert roles == {"advance_paid": ledger.account_id(cid, "61")}  # 64 and 61.9: two

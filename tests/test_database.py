@@ -45,6 +45,7 @@ FROZEN = {
     "0031_receipt_expense_period.sql": "9fe806ded219f5fb",
     "0032_document_owners.sql": "547973ab1e6eed4d",
     "0033_bank_statements.sql": "677ed451924b0b90",
+    "0034_advance_roles.sql": "64ae2788859eb910",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).
