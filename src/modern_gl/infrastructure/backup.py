@@ -6,12 +6,15 @@ files, the newest KEEP of them:
 
     Modern GL/Ehtiyat nüsxələri/<Company>/<Company> 2026-10-19 18-05-12.gl
 
-Every backup is checked (PRAGMA quick_check) right after it is written. Restoring first
-backs up the current file, so a restore can itself be undone.
+Every backup is checked in full (PRAGMA integrity_check) right after it is written: a
+copy is page by page, so this is a full check of the company itself after each working
+session; a damaged copy is not kept over the good ones. Opening a file runs only the quick
+check. Restoring first backs up the current file, so a restore can itself be undone.
 """
 
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -52,21 +55,23 @@ def list_backups(folder: Path) -> list[Backup]:
     return sorted(result, key=lambda b: (b.made_at, b.path.stat().st_mtime_ns), reverse=True)
 
 
-def check(path: Path) -> None:
-    """Raise BackupError unless the file is an intact SQLite database."""
+def check(path: Path, full: bool = False) -> None:
+    """Raise BackupError unless the file is an intact SQLite database: the quick check
+    (pages and records), or in full (integrity_check: indexes match their tables too)."""
+    pragma = "integrity_check" if full else "quick_check"
     try:
         conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
         try:
-            result = conn.execute("PRAGMA quick_check").fetchone()[0]
+            found = [r[0] for r in conn.execute(f"PRAGMA {pragma}(5)")]
         finally:
             conn.close()
     except sqlite3.DatabaseError as e:
         raise BackupError(
             tr("файл повреждён: {file} ({error})", file=Path(path).name, error=e)
         ) from e
-    if result != "ok":
+    if found != ["ok"]:
         raise BackupError(
-            tr("файл повреждён: {file} ({error})", file=Path(path).name, error=result)
+            tr("файл повреждён: {file} ({error})", file=Path(path).name, error="; ".join(found))
         )
 
 
@@ -83,7 +88,15 @@ def copy_to(conn: sqlite3.Connection, target: Path) -> Path:
             dst.execute("PRAGMA journal_mode = DELETE")  # a single self-contained file
         finally:
             dst.close()
-        check(partial)
+        try:
+            check(partial, full=True)
+        except BackupError as e:  # the copy is page by page: the source has it too
+            raise BackupError(
+                tr(
+                    "в файле компании найдены повреждения — восстановите его из копии ({error})",
+                    error=str(e),
+                )
+            ) from e
     except BaseException:  # a failed or damaged copy must not be left behind
         partial.unlink(missing_ok=True)
         raise
@@ -95,6 +108,13 @@ def make_backup(
     conn: sqlite3.Connection, folder: Path, name: str, note: str = "", keep: int = KEEP
 ) -> Path:
     """A timestamped backup in `folder`; the oldest beyond `keep` are removed."""
+    target = _new_name(folder, name, note)
+    copy_to(conn, target)
+    _drop_oldest(folder, keep)
+    return target
+
+
+def _new_name(folder: Path, name: str, note: str) -> Path:
     stamp = datetime.now()
     suffix = f" ({note})" if note else ""
     target = Path(folder) / f"{name} {stamp:{STAMP}}{suffix}{SUFFIX}"
@@ -102,10 +122,12 @@ def make_backup(
     while target.exists():
         target = Path(folder) / f"{name} {stamp:{STAMP}}{suffix} {n}{SUFFIX}"
         n += 1
-    copy_to(conn, target)
+    return target
+
+
+def _drop_oldest(folder: Path, keep: int) -> None:
     for old in list_backups(folder)[keep:]:
         old.path.unlink(missing_ok=True)
-    return target
 
 
 def make_backup_of_file(path: Path, folder: Path, note: str = "") -> Path:
@@ -135,10 +157,14 @@ def changed_since_last(conn: sqlite3.Connection, folder: Path) -> bool:
 
 
 def restore(backup: Path, company_file: Path, folder: Path) -> Path:
-    """Replace a (closed) company file with a backup. The current file is backed up
-    first; returns that safety copy."""
-    check(backup)
-    safety = make_backup_of_file(company_file, folder, tr("до восстановления"))
+    """Replace a (closed) company file with a backup. The current file is kept first, byte
+    for byte and unchecked — it is likely damaged, may not even open, and is what a later
+    look at the damage needs; returns that copy."""
+    check(backup, full=True)
+    Path(folder).mkdir(parents=True, exist_ok=True)
+    kept = _new_name(folder, Path(company_file).stem, tr("до восстановления"))
+    shutil.copy2(company_file, kept)
+    _drop_oldest(folder, KEEP)
     src = sqlite3.connect(f"file:{Path(backup).as_posix()}?mode=ro", uri=True)
     try:
         partial = Path(company_file).with_name(Path(company_file).name + ".part")
@@ -148,7 +174,7 @@ def restore(backup: Path, company_file: Path, folder: Path) -> Path:
     for extra in ("-wal", "-shm"):
         Path(str(company_file) + extra).unlink(missing_ok=True)
     partial.replace(company_file)
-    return safety
+    return kept
 
 
 def _last_audit(conn: sqlite3.Connection) -> int:

@@ -660,6 +660,9 @@ AZ: dict[str, str] = {
     "Название компании не может быть пустым": "Şirkətin adı boş ola bilməz",
     "до восстановления": "bərpadan əvvəl",
     "файл повреждён: {file} ({error})": "fayl zədələnib: {file} ({error})",
+    "в файле компании найдены повреждения — восстановите его из копии ({error})": (
+        "şirkət faylında zədələnmə tapıldı — onu ehtiyat nüsxədən bərpa edin ({error})"
+    ),
     "до обновления": "yenilənmədən əvvəl",
     # ---- paste from Excel ------------------------------------------------------------------
     "Вставлено строк: {n}": "Yapışdırılan sətir: {n}",
