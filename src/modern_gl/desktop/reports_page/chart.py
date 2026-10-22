@@ -21,7 +21,6 @@ from modern_gl.desktop.reports_page.view import (
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
-    button,
     class_icon,
     hide_when_viewing,
     type_name,
@@ -45,9 +44,7 @@ class ChartPage(ReportPage):
         self.table.setObjectName("list")  # a list, not a report: no rules under rows
         self.table.verticalHeader().setDefaultSectionSize(32)
         self.model.bands = False
-        add = button(tr("+ Новый счёт"), "flat", "Ins")
-        add.clicked.connect(lambda: self.edit_account(None))
-        self.header.add_action(add)
+        add = self.header.primary(tr("+ Новый счёт"), lambda: self.edit_account(None), "Ins")
         hide_when_viewing(session.read_only, add)
         for keys, fn in (
             ("Ins", lambda: self.edit_account(None)),

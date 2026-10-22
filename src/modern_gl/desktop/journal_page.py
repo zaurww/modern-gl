@@ -26,11 +26,10 @@ from modern_gl.application.authorship import journal_authors
 from modern_gl.application.queries import DocumentSummary, list_documents
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
-    button,
     hide_when_viewing,
     money,
     ru_date,
@@ -106,8 +105,9 @@ class JournalModel(QAbstractTableModel):
                 return QColor(P.red)
             if col in (DATE, NUMBER, BOOK, AUTHOR):
                 return QColor(P.secondary)
-        if role == Qt.ItemDataRole.FontRole and d.status == "draft" and col == MEMO:
-            return fonts().cell_italic
+            # done is quieter, a draft — still to do — in the full text color (D86)
+            if col in (MEMO, TOTAL) and d.status != "draft":
+                return QColor(P.muted)
         return None
 
 
@@ -133,10 +133,11 @@ class JournalPage(QWidget):
         self.search.setObjectName("search")
         self.search.setPlaceholderText(tr("Поиск по содержанию или номеру   Ctrl+F"))
         self.search.setClearButtonEnabled(True)
-        import_button = button(tr("Импорт из Excel…"), "flat", tr("Много документов из таблицы"))
-        import_button.clicked.connect(self.import_requested.emit)
-        self.header.add_action(import_button)
         self.header.add_action(self.search)
+        self.new_button = self.header.primary(
+            tr("+ Новый документ"), self.new_document.emit, "Ins, Ctrl+N"
+        )
+        self.more = self.header.more(lambda: [(tr("Импорт из Excel…"), self.import_requested.emit)])
         root.addWidget(self.header)
         self.quick = QuickEntryBar(session)
         self.quick.posted.connect(lambda doc_id: self.refresh(select_id=doc_id))
@@ -176,19 +177,16 @@ class JournalPage(QWidget):
         self.table.doubleClicked.connect(self._open_current)
 
         self.empty = EmptyState(
-            "◎", tr("Документов пока нет"), tr("Нажмите + или Ins, чтобы ввести первую операцию.")
+            "◎",
+            tr("Документов пока нет"),
+            tr("Нажмите «+ Новый документ» или Ins, чтобы ввести первую операцию."),
         )
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
         root.addLayout(self.stack, 1)
 
-        # Floating "+" in the corner, like Things' Magic Plus.
-        self.fab = button("+", "fab", tr("Новый документ (Ins)"))
-        self.fab.setParent(self)
-        self.fab.setFixedSize(52, 52)
-        self.fab.clicked.connect(self.new_document.emit)
-        hide_when_viewing(session.read_only, import_button, self.quick, self.fab)
+        hide_when_viewing(session.read_only, self.new_button, self.more, self.quick)
         self._bind_keys()
         self.refresh()
 
@@ -216,11 +214,6 @@ class JournalPage(QWidget):
 
     def is_dirty(self) -> bool:
         return False
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.fab.move(self.width() - self.fab.width() - 34, self.height() - self.fab.height() - 30)
-        self.fab.raise_()
 
     def refresh(self, select_id: int | None = None) -> None:
         current = select_id or self._current_id()

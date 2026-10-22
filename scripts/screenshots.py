@@ -240,6 +240,11 @@ def main() -> None:
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()
     shot("8c_inventory")
+    inventory.table.selectRow(1)  # an item: where its goods came from and went to
+    shot("8c_inventory_movements")
+    inventory.documents_button.click()
+    shot("8c_inventory_documents")
+    inventory.movements_button.click()
     inventory_document = min(  # the first one, with VAT
         (row for row in inventory.documents_model.rows if row.doc_type == "receipt"),
         key=lambda row: row.number,

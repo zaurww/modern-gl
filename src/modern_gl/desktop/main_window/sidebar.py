@@ -35,28 +35,28 @@ from modern_gl.i18n import tr, upper
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 # The sidebar's places by what they are for (D56): entry on top without a heading, then
-# reports, then the lists the books are kept with; key, title (translated on display), icon
-# color (a palette name: themes change it)
+# reports, then the lists the books are kept with; key and title (translated on display).
+# Icons are grey, the selected place's — the accent (D86)
 PLACES = [
-    (("journal",), "Журнал", "accent"),
-    (("opening",), "Начальные остатки", "accent"),
+    (("journal",), "Журнал"),
+    (("opening",), "Начальные остатки"),
 ]
 REPORTS_PLACES = [
-    (("osv",), "ОСВ", "green"),
-    (("invoices",), "E-qaimələr", "accent"),
+    (("osv",), "ОСВ"),
+    (("invoices",), "E-qaimələr"),
 ]
 LISTS = [
-    (("chart",), "План счетов", "violet"),
-    (("directories",), "Справочники", "teal"),
-    (("templates",), "Шаблоны", "amber"),
-    (("currencies",), "Валюты", "green"),
+    (("chart",), "План счетов"),
+    (("directories",), "Справочники"),
+    (("templates",), "Шаблоны"),
+    (("currencies",), "Валюты"),
 ]
 # Modules: optional ways of working beside the journal (D30, D44, D46, D47), in a block of their own
 MODULES = [
-    (("purchases",), "Покупки", "green"),
-    (("sales",), "Продажи", "accent"),
-    (("bank",), "Банк", "teal"),
-    (("inventory",), "Склад", "amber"),
+    (("purchases",), "Покупки"),
+    (("sales",), "Продажи"),
+    (("bank",), "Банк"),
+    (("inventory",), "Склад"),
 ]
 # section heading (None: no heading) and its places, top to bottom
 SECTIONS = [
@@ -65,7 +65,10 @@ SECTIONS = [
     ("Списки", LISTS),
     ("Модули", MODULES),
 ]
-PLACE_KEYS = [key for _, places in SECTIONS for key, _, _ in places]
+PLACE_KEYS = [key for _, places in SECTIONS for key, _ in places]
+# «Open»: only the last few pages, the rest — under «All (N)…», a menu (D86)
+ALL_OPEN = ("open_all",)
+OPEN_SHOWN = 4  # with every place, still no scrolling at 840 px of height
 # open pages: a quiet grey icon of what they are (a new document is the blue plus)
 OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
 OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
@@ -75,7 +78,11 @@ OPEN_ICONS |= {"bank_op": "bank", "new_bank_op": "bank"}
 
 def open_icon(key) -> QIcon:
     name = OPEN_ICONS.get(key[0], "report")
-    return icons.icon(name, P.accent if name == "new" else P.secondary)
+    return icons.icon(name, P.accent if name == "new" else P.secondary, selected=P.accent)
+
+
+def place_icon(key) -> QIcon:
+    return icons.icon(key[0], P.secondary, selected=P.accent)
 
 
 PageT = TypeVar("PageT", bound=QWidget)
@@ -101,7 +108,7 @@ class NavDelegate(QStyledItemDelegate):
 
     @staticmethod
     def closable(key) -> bool:
-        return key is not None and key not in PLACE_KEYS
+        return key is not None and key not in PLACE_KEYS and key != ALL_OPEN
 
     @staticmethod
     def close_rect(rect: QRect) -> QRect:
@@ -149,6 +156,7 @@ class Sidebar(QWidget):
         self.viewing.hide()
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
+        self.nav.setFont(fonts().body)  # words, not sums: no figures of one width
         self.nav.setIconSize(QSize(18, 18))
         self.nav.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.nav.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
@@ -173,17 +181,36 @@ class Sidebar(QWidget):
         item = QListWidgetItem(upper(title))
         item.setFlags(Qt.ItemFlag.NoItemFlags)
         item.setFont(fonts().caption)
-        item.setForeground(QColor(P.tertiary))
-        item.setSizeHint(QSize(0, 34))
+        item.setForeground(QColor(P.text))
+        item.setSizeHint(QSize(0, 32))
         item.setData(KEY_ROLE, None)
         self.nav.addItem(item)
 
     def add_item(self, key, text: str, icon: QIcon) -> QListWidgetItem:
         item = QListWidgetItem(icon, text)
         item.setData(KEY_ROLE, key)
-        item.setSizeHint(QSize(0, 34))
+        item.setSizeHint(QSize(0, 32))
         self.nav.addItem(item)
         return item
+
+    def arrange_open(self, recent: list) -> None:
+        """Show the open pages of `recent` (newest first) up to OPEN_SHOWN; with more —
+        the item «All (N)…» at the end."""
+        rows = [self.nav.item(i) for i in range(self.nav.count())]
+        open_items = [item for item in rows if NavDelegate.closable(item.data(KEY_ROLE))]
+        shown = recent[:OPEN_SHOWN]
+        for item in open_items:
+            item.setHidden(item.data(KEY_ROLE) not in shown)
+        if (old := self.item_for(ALL_OPEN)) is not None:
+            self.nav.takeItem(self.nav.row(old))
+        if len(open_items) > OPEN_SHOWN:
+            item = self.add_item(
+                ALL_OPEN,
+                tr("Все ({n})…", n=len(open_items)),
+                icons.icon("more", P.secondary),
+            )
+            item.setForeground(QColor(P.secondary))
+            item.setFlags(Qt.ItemFlag.ItemIsEnabled)  # not selectable: it only opens a menu
 
     def item_for(self, key) -> QListWidgetItem | None:
         for i in range(self.nav.count()):

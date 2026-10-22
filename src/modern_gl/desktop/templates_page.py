@@ -57,9 +57,9 @@ class TemplatesPage(QWidget):
         root.setSpacing(18)
 
         self.header = PageHeader(tr("Шаблоны операций"), "")
-        add = button(tr("+ Новый шаблон"), "flat", "Ins")
-        add.clicked.connect(lambda: self.edit_template.emit(None))
-        self.header.add_action(add)
+        add = self.header.primary(
+            tr("+ Новый шаблон"), lambda: self.edit_template.emit(None), "Ins"
+        )
         hide_when_viewing(session.read_only, add)
         root.addWidget(self.header)
 

@@ -1012,3 +1012,59 @@ def test_directories_show_counterparties_added_elsewhere_on_return(window):
     assert new_id in {v.id for v in s.catalog.all_values(kind)}
     current = page._current_value()
     assert current is not None and current.id == chosen.id
+
+
+def test_journal_done_rows_quieter_no_italics(window):
+    """D86: a posted row's text is a bit quieter than a draft's; nothing in italics."""
+    from modern_gl.desktop.journal_page import MEMO as JOURNAL_MEMO
+    from modern_gl.desktop.journal_page import TOTAL
+    from modern_gl.desktop.theme import P
+
+    model = current_page(window).model
+    draft = next(i for i, d in enumerate(model.docs) if d.status == "draft")
+    posted = next(i for i, d in enumerate(model.docs) if d.status == "posted")
+    fg = Qt.ItemDataRole.ForegroundRole
+    for col in (JOURNAL_MEMO, TOTAL):
+        assert model.data(model.index(posted, col), fg).name().upper() == P.muted.upper()
+        assert model.data(model.index(draft, col), fg) is None
+        assert model.data(model.index(draft, col), Qt.ItemDataRole.FontRole) is None
+
+
+def test_sidebar_shows_the_last_open_pages_and_all_under_a_menu(window):
+    """D86: «Open» keeps a few last pages; more — one item «All (N)…»."""
+    from modern_gl.desktop.main_window.sidebar import ALL_OPEN, KEY_ROLE, OPEN_SHOWN
+
+    docs = window.pages[("journal",)].model.docs
+    for d in docs[:7]:
+        window.open_document(d.id)
+    nav = window.sidebar.nav
+    items = [nav.item(i) for i in range(nav.count())]
+    open_items = [i for i in items if NavDelegate.closable(i.data(KEY_ROLE))]
+    assert len(open_items) == 7
+    shown = [i.data(KEY_ROLE) for i in open_items if not i.isHidden()]
+    assert len(shown) == OPEN_SHOWN
+    assert set(shown) == set(window.recent[:OPEN_SHOWN])
+    newest, oldest = window.recent[0], window.recent[-1]
+    assert newest in shown and oldest not in shown
+    all_item = window.sidebar.item_for(ALL_OPEN)
+    assert all_item is not None and "7" in all_item.text()
+    assert items[-1] is all_item
+    # an old page shown again comes back among the visible ones
+    window._activate(oldest)
+    assert not window.sidebar.item_for(oldest).isHidden()
+    # closing down to the limit removes «All»
+    for key in window.recent[OPEN_SHOWN:]:
+        window.close_page(key, ask=False)
+    assert window.sidebar.item_for(ALL_OPEN) is None
+
+
+def test_closing_a_page_does_not_open_the_all_menu(window, monkeypatch):
+    """Closing moves the current item; landing on «All (N)…» must not pop its menu."""
+    from PySide6.QtWidgets import QMenu
+
+    shown = []
+    monkeypatch.setattr(QMenu, "exec", lambda *a, **k: shown.append(1))
+    for d in window.pages[("journal",)].model.docs[:7]:
+        window.open_document(d.id)
+    window.close_current()
+    assert shown == []

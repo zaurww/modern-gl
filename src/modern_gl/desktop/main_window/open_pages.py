@@ -24,13 +24,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.desktop import icons
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window.company_files import CompanyFiles
 from modern_gl.desktop.main_window.sidebar import (
+    ALL_OPEN,
     KEY_ROLE,
     SECTIONS,
     FocusablePage,
@@ -39,9 +39,9 @@ from modern_gl.desktop.main_window.sidebar import (
     Sidebar,
     TitledPage,
     open_icon,
+    place_icon,
 )
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
-from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.workspace import Workspace
@@ -52,6 +52,7 @@ class OpenPages(CompanyFiles):
         super().__init__(workspace, settings)
         self.pages: dict[object, QWidget] = {}
         self.came_from: dict[QWidget, object] = {}  # an open page → the page it was opened from
+        self.recent: list = []  # open pages, the last shown first (the sidebar shows a few)
         self.resize(1360, 820)
 
         central = QWidget()
@@ -67,6 +68,7 @@ class OpenPages(CompanyFiles):
         self.statusBar().setSizeGripEnabled(False)
 
         self.sidebar.nav.currentItemChanged.connect(self._on_nav)
+        self.sidebar.nav.itemClicked.connect(self._on_nav_click)
         self.sidebar.nav.customContextMenuRequested.connect(self._nav_menu)
         self.sidebar.nav.viewport().installEventFilter(self)
 
@@ -81,8 +83,8 @@ class OpenPages(CompanyFiles):
         for heading, places in SECTIONS:
             if heading is not None:
                 self.sidebar.add_section(tr(heading))
-            for key, text, color in places:
-                self.sidebar.add_item(key, tr(text), icons.icon(key[0], getattr(P, color)))
+            for key, text in places:
+                self.sidebar.add_item(key, tr(text), place_icon(key))
         self.sidebar.add_section(tr("Открытые"))
         self.show_place(("journal",))
 
@@ -97,6 +99,7 @@ class OpenPages(CompanyFiles):
             page.deleteLater()
         self.pages.clear()
         self.came_from.clear()
+        self.recent.clear()
 
     def _add_page(self, key, page: QWidget, open_item: bool = False) -> None:
         self.pages[key] = page
@@ -107,6 +110,7 @@ class OpenPages(CompanyFiles):
             self.came_from[page] = self._key_of(self.stack.currentWidget())
             title = page.title() if isinstance(page, TitledPage) else ""
             self.sidebar.add_item(key, title, open_icon(key))
+            self._touch(key)
 
     def _size_by_current_page(self, _index: int = 0) -> None:
         """Only the page shown sets how narrow the window may get: a stack takes the
@@ -120,8 +124,34 @@ class OpenPages(CompanyFiles):
         cast(QLayout, self.stack.layout()).invalidate()  # a hidden page does not report it
         self.stack.updateGeometry()
 
+    def _touch(self, key) -> None:
+        """An open page was shown: first among the recent ones, so the sidebar shows it."""
+        if NavDelegate.closable(key):
+            self.recent = [key] + [k for k in self.recent if k != key]
+            self.sidebar.arrange_open(self.recent)
+
+    def _all_open_menu(self) -> None:
+        """«All (N)…»: every open page in a menu, the last shown first."""
+        item = self.sidebar.item_for(ALL_OPEN)
+        current = self.sidebar.item_for(self._key_of(self.stack.currentWidget()))
+        if item is None or current is None:
+            return
+        self.sidebar.nav.blockSignals(True)  # the item is a button, not a place to stay on
+        self.sidebar.nav.setCurrentItem(current)
+        self.sidebar.nav.blockSignals(False)
+        menu = QMenu(self)
+        for key in self.recent:
+            page = self.pages[key]
+            title = page.title() if isinstance(page, TitledPage) else ""
+            menu.addAction(open_icon(key), title).triggered.connect(
+                lambda _=False, key=key: self._activate(key)
+            )
+        rect = self.sidebar.nav.visualItemRect(item)
+        menu.exec(self.sidebar.nav.viewport().mapToGlobal(rect.bottomLeft()))
+
     def _activate(self, key) -> None:
         page = self.pages[key]
+        self._touch(key)
         if self.stack.currentWidget() is not page:
             self.stack.setCurrentWidget(page)
             self._fade_in(page)
@@ -161,10 +191,16 @@ class OpenPages(CompanyFiles):
         key = current.data(KEY_ROLE)
         if key is None:
             return
+        if key == ALL_OPEN:  # a button, not a place: it answers a click (_on_nav_click)
+            return
         if key in self.pages:
             self._activate(key)
         else:
             self.show_place(key)
+
+    def _on_nav_click(self, item: QListWidgetItem) -> None:
+        if item.data(KEY_ROLE) == ALL_OPEN:
+            self._all_open_menu()
 
     def _nav_menu(self, pos) -> None:
         item = self.sidebar.nav.itemAt(pos)
@@ -204,6 +240,8 @@ class OpenPages(CompanyFiles):
         if item is not None:
             self.sidebar.nav.takeItem(self.sidebar.nav.row(item))
         del self.pages[key]
+        self.recent = [k for k in self.recent if k != key]
+        self.sidebar.arrange_open(self.recent)
         self.stack.removeWidget(page)
         page.deleteLater()
         back = self.came_from.pop(page, None)
@@ -280,6 +318,7 @@ class OpenPages(CompanyFiles):
         old_key = self._key_of(page)
         if old_key is not None and old_key != page.key and page.doc is not None:
             self.pages[page.key] = self.pages.pop(old_key)
+            self.recent = [page.key if k == old_key else k for k in self.recent]
             item = self.sidebar.item_for(old_key)
             if item is not None:
                 item.setData(KEY_ROLE, page.key)

@@ -73,9 +73,7 @@ class DirectoriesPage(QWidget):
         root.setSpacing(18)
 
         self.header = PageHeader(tr("Справочники"), "")
-        add_kind = button(tr("+ Новый справочник"), "flat")
-        add_kind.clicked.connect(self.add_kind)
-        self.header.add_action(add_kind)
+        add_kind = self.header.primary(tr("+ Новый справочник"), self.add_kind)
         root.addWidget(self.header)
 
         body = QHBoxLayout()

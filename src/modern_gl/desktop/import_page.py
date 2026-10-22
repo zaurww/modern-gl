@@ -57,12 +57,10 @@ class ImportPage(QWidget):
             tr("Импорт из Excel"),
             tr("Скопируйте строки вместе с заголовком и нажмите Ctrl+V, или откройте файл"),
         )
-        open_file = button(tr("Открыть файл…"), "flat", tr("Excel (.xlsx) или CSV"))
-        open_file.clicked.connect(self.open_file)
         paste = button(tr("Вставить"), "flat", "Ctrl+V")
         paste.clicked.connect(lambda: self.paste())
-        self.header.add_action(open_file)
         self.header.add_action(paste)
+        self.header.primary(tr("Открыть файл…"), self.open_file, tr("Excel (.xlsx) или CSV"))
         root.addWidget(self.header)
 
         options = QHBoxLayout()
