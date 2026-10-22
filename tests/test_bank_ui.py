@@ -347,6 +347,36 @@ def test_bank_page_goes_from_the_accounts_to_a_statement(qtbot, session):
     assert page.place.name == "Kapital AZN"  # back where it came from
 
 
+def test_a_large_company_reads_the_statements_in_the_background(qtbot, tmp_path):
+    """Debt 6: the same levels, read by a worker; the entry line gets the cursor only once
+    the statement it belongs to is shown."""
+    theme.apply(QApplication.instance())
+    path = tmp_path / "bank.gl"
+    conn = connect(path)
+    ledger = Ledger(conn, actor="test")
+    cid = setup_company(ledger)
+    s = Session(conn, ledger, cid, "ООО Банк", Catalog(conn, cid), path=path, large=True)
+    s.working_date = date(2026, 3, 5)
+    page = BankPage(s)
+    qtbot.addWidget(page)
+    page.show()
+    try:
+        qtbot.waitUntil(lambda: page.model.rowCount() == 4)  # 2 groups, 2 accounts
+        assert page.place is not None and page.place.name == "Kapital AZN"
+        page.drill(page.model.rows[1])
+        qtbot.waitUntil(lambda: page.level == "journal" and page.model.rowCount() == 1)
+        started: list[bool] = []
+        page.entry.start = lambda: started.append(True)  # type: ignore[method-assign]
+        page.drill(page.model.rows[0])
+        assert not started  # not before the lines are read
+        qtbot.waitUntil(lambda: started == [True])
+        assert page.level == "statement" and page.model.rowCount() == 1
+        assert page.reconcile.figures["closing"].text() == "10 000.00"
+    finally:
+        s.background.wait()
+        conn.close()
+
+
 def test_a_new_statement_and_a_new_card(qtbot, session, monkeypatch):
     """«+ Выписка» opens the next working day after the last statement (01.03 is a Sunday:
     02.03); a card on 55 goes to its own group."""

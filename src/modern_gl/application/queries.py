@@ -136,6 +136,26 @@ def list_documents(
     return [DocumentSummary(**dict(r)) for r in rows]
 
 
+def document_years(conn: Connection, company_id: int) -> list[int]:
+    """The years from the first document's to the last's, the latest first: the journal
+    shows one of them (debt 6: not all of a large company's documents at once)."""
+    first, last = conn.execute(
+        "SELECT MIN(doc_date), MAX(doc_date) FROM documents WHERE company_id = ?",
+        (company_id,),
+    ).fetchone()
+    if first is None:
+        return []
+    return list(range(int(str(last)[:4]), int(str(first)[:4]) - 1, -1))
+
+
+def document_year(conn: Connection, company_id: int, doc_id: int) -> int | None:
+    """The year of a document's date (None: there is no such document)."""
+    row = conn.execute(
+        "SELECT doc_date FROM documents WHERE company_id = ? AND id = ?", (company_id, doc_id)
+    ).fetchone()
+    return int(str(row[0])[:4]) if row else None
+
+
 @dataclass(frozen=True)
 class FoundDocument:
     id: int

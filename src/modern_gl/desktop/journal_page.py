@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from PySide6.QtCore import (
     QAbstractTableModel,
     QModelIndex,
@@ -23,16 +25,25 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.authorship import journal_authors
-from modern_gl.application.queries import DocumentSummary, list_documents
+from modern_gl.application.queries import (
+    DocumentSummary,
+    document_year,
+    document_years,
+    list_documents,
+)
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     EmptyState,
+    MenuItem,
     PageHeader,
+    button,
     hide_when_viewing,
+    menu_button,
     money,
     ru_date,
+    trailing_icon,
 )
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -42,6 +53,26 @@ COLUMNS = ["Дата", "№", "Содержание", "Книга", "Автор"
 DATE, NUMBER, MEMO, BOOK, AUTHOR, TOTAL, STATUS = range(7)
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
+
+def shown_year(years: list[int], wanted: int | None, working_year: int) -> int | None:
+    """The year the journal shows (debt 6: one year, not every document of a large
+    company): the one asked for, else the working date's, else the nearest one that has
+    documents. `years` — the latest first; none — None (nothing to show)."""
+    if not years:
+        return None
+    for year in (wanted, working_year):
+        if year in years:
+            return year
+    return min(years, key=lambda y: abs(y - working_year))  # the latest of two as near
+
+
+@dataclass(frozen=True)
+class JournalData:
+    years: list[int]  # that have documents, the latest first
+    year: int | None  # shown; None — every year
+    docs: list[DocumentSummary]
+    authors: dict[int, str]
 
 
 class JournalModel(QAbstractTableModel):
@@ -135,6 +166,14 @@ class JournalPage(QWidget):
         self.search.setPlaceholderText(tr("Поиск по содержанию или номеру   Ctrl+F"))
         self.search.setClearButtonEnabled(True)
         self.header.add_action(self.search)
+        self.year: int | None = None  # the year shown; None — every year
+        self.all_years = False
+        self.years: list[int] = []
+        self.year_button = menu_button(
+            trailing_icon(button("", "flatMenu", tr("Документы какого года показать"))),
+            self._year_items,
+        )
+        self.header.add_action(self.year_button)
         self.new_button = self.header.primary(
             tr("+ Новый документ"), self.new_document.emit, "Ins, Ctrl+N"
         )
@@ -217,24 +256,42 @@ class JournalPage(QWidget):
         return False
 
     def refresh(self, select_id: int | None = None) -> None:
-        """The documents read (in the background for a large company) and shown."""
+        """The documents of the year read (in the background for a large company) and
+        shown; a document asked for (just saved) brings its own year."""
         current = select_id or self._current_id()
-        cid = self.s.company_id
+        cid, wanted, every = self.s.company_id, self.year, self.all_years
+        working_year = self.s.working_date.year
 
-        def read(conn: Connection) -> tuple[list[DocumentSummary], dict[int, str]]:
-            return list_documents(conn, cid), journal_authors(conn, cid)
+        def read(conn: Connection) -> JournalData:
+            years = document_years(conn, cid)
+            asked = document_year(conn, cid, select_id) if select_id else None
+            year = None if every else shown_year(years, asked or wanted, working_year)
+            bounds = (f"{year}-01-01", f"{year}-12-31") if year else (None, None)
+            docs = list_documents(conn, cid, *bounds)
+            return JournalData(years, year, docs, journal_authors(conn, cid))
 
         self.s.read(
             self,
             read,
-            lambda found: self._show(found[0], found[1], current),
+            lambda found: self._show(found, current),
             lambda e: self.s.notify(str(e)),
         )
 
-    def _show(
-        self, docs: list[DocumentSummary], authors: dict[int, str], current: int | None
-    ) -> None:
-        self.model.set_docs(docs, authors)
+    def show_year(self, year: int | None) -> None:
+        """A year from the menu (None — every year)."""
+        self.all_years = year is None
+        self.year = year
+        self.refresh()
+
+    def _year_items(self) -> list[MenuItem]:
+        items: list[MenuItem] = [(str(y), lambda y=y: self.show_year(y)) for y in self.years]
+        return [*items, None, (tr("Все годы"), lambda: self.show_year(None))]
+
+    def _show(self, data: JournalData, current: int | None) -> None:
+        self.years, self.year = data.years, data.year
+        self.year_button.setText(str(data.year) if data.year else tr("Все годы"))
+        self.year_button.setVisible(len(data.years) > 1 or self.all_years)
+        self.model.set_docs(data.docs, data.authors)
         self.table.setColumnHidden(AUTHOR, not self.model.several_authors())
         self.stack.setCurrentWidget(self.table if self.model.docs else self.empty)
         row = next((i for i, d in enumerate(self.model.docs) if d.id == current), None)
