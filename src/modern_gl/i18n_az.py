@@ -165,6 +165,7 @@ AZ: dict[str, str] = {
     "больше {n} знаков после запятой: {value}": "vergüldən sonra {n} rəqəmdən çox: {value}",
     # ---- lookup ----------------------------------------------------------------------------
     "счёт не указан": "hesab göstərilməyib",
+    "счёт": "hesab",
     "счёт «{text}» не найден": "«{text}» hesabı tapılmadı",
     "«{text}» подходит к нескольким счетам: {codes}": "«{text}» bir neçə hesaba uyğundur: {codes}",
     "счёт {code} — группа, выберите субсчёт: {subs}": "{code} hesabı qrupdur, subhesab seçin: {subs}",

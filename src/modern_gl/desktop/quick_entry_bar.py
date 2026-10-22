@@ -37,6 +37,7 @@ from modern_gl.application.queries import (
 )
 from modern_gl.application.quick_entry.marks import Mark, marks
 from modern_gl.desktop.cell_editing import PickWithKeys, fit_popup
+from modern_gl.desktop.quick_entry_card import EntryCard
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain.errors import LedgerError
@@ -75,11 +76,14 @@ class QuickEntryBar(QWidget):
         self.preview.setWordWrap(True)
         self.preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.preview)
+        self.card = EntryCard()
+        lay.addWidget(self.card)
         self.help = QLabel(tr(HELP))
         self.help.setObjectName("tertiary")
         self.help.setFont(fonts().small)
         lay.addWidget(self.help)
         self.preview.hide()
+        self.card.hide()
         self.help.hide()
         self.edit.textChanged.connect(self._preview)
         self.edit.installEventFilter(self)
@@ -185,24 +189,15 @@ class QuickEntryBar(QWidget):
         self._paint(text)
         if not text.strip():
             self.preview.hide()
+            self.card.hide()
             return
         try:
             entry = self.parse()
         except LedgerError as e:  # still being typed: a quiet hint, red only on Enter
             self._show(str(e), error=False)
             return
-        lines = quick_entry.describe(entry, self.s.catalog)
-        day = entry.doc_date or self.s.working_date
-        head = f"{day:%d.%m.%Y}" + (f"   ·   {entry.memo}" if entry.memo else "")
-        notes = []
-        if entry.missing:
-            notes.append(tr("не заполнено: {what}", what="; ".join(entry.missing)))
-        if entry.new_values:
-            names = ", ".join(
-                f"{self.s.catalog.kinds[v.kind_id]}: {v.name}" for v in entry.new_values
-            )
-            notes.append(tr("будет добавлено: {names}", names=names))
-        self._show("\n".join([head, lines, *notes]), error=False)
+        self.preview.hide()
+        self.card.show_entry(entry, self.s.catalog, entry.doc_date or self.s.working_date)
 
     def _paint(self, text: str) -> None:
         """Colour the parts as they are understood (Todoist's Quick Add): accounts and
@@ -224,6 +219,7 @@ class QuickEntryBar(QWidget):
         QCoreApplication.sendEvent(self.edit, QInputMethodEvent("", attrs))
 
     def _show(self, text: str, error: bool) -> None:
+        self.card.hide()
         self.preview.setObjectName("error" if error else "secondary")
         self.preview.style().unpolish(self.preview)
         self.preview.style().polish(self.preview)

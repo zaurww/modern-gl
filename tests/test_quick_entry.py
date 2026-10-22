@@ -14,6 +14,7 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import list_templates, load_document, past_postings
 from modern_gl.application.quick_entry import describe, parse
+from modern_gl.application.quick_entry.card import card
 from modern_gl.application.quick_entry.marks import marks
 from modern_gl.application.quick_entry.past import past_lines
 from modern_gl.desktop import theme
@@ -149,7 +150,7 @@ def bar(qtbot, books):
 
 def test_enter_posts_and_clears(bar, qtbot):
     bar.edit.setText("26 аренда / 60 альфа, договор 400 Аренда за март")
-    assert "Аренда офиса" in bar.preview.text()
+    assert "Аренда офиса" in bar.card.text.text() and bar.card.isVisibleTo(bar)
     posted = []
     bar.posted.connect(posted.append)
     qtbot.keyClick(bar.edit, Qt.Key.Key_Return)
@@ -348,3 +349,19 @@ def test_colouring_the_line_keeps_its_text_cursor_and_selection(bar, qtbot):
     bar._paint(bar.edit.text())
     assert bar.edit.text() == "26 аренда / 60 альфа, договор 400 Аренда"
     assert bar.edit.selectedText() == "400"
+
+
+def test_card_shows_what_is_missing_and_what_is_new_in_place(books):
+    *_, cat, _v = books
+    entry = parse("26 аренда / 60 +Дельта 400; 71 / 50 15 Такси", cat, today=TODAY)
+    rent, taxi = card(entry, cat)
+    assert [(p.text, p.kind) for p in rent.credit] == [
+        ("60", "account"),
+        ("+Дельта", "new"),
+        ("Договоры", "missing"),
+    ]
+    assert (rent.amount.text, taxi.memo) == ("400.00", "")  # «Такси» is the document's memo
+    assert [p.kind for p in taxi.debit] == ["account", "missing"]
+    entry = parse("52 kapital bank usd / 51 kapital bank 100 USD", cat, (), rate, TODAY)
+    [usd] = card(entry, cat)
+    assert (usd.amount.text, usd.in_manat) == ("100.00 USD", "× 1.7000 = 170.00")

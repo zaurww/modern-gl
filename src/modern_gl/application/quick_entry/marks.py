@@ -130,7 +130,7 @@ class _Marker:
         if at == 0:
             return
         name = fold(" ".join(w for _, _, w in words[:at])[1:])
-        known = bool(name) and any(fold(t.name).startswith(name) for t in self.templates)
+        known = bool(name) and any(name in fold(t.name) for t in self.templates)  # as parse
         self._mark(words[0][0], words[at - 1][1], "template" if known else "unknown")
         if at < len(words):
             self._mark(words[at][0], words[at][1], "amount")
