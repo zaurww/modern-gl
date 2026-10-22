@@ -49,7 +49,7 @@ def import_drafts(
             invoice = plan.invoice
             assert plan.counterparty_id is not None  # added above
             account = _settlement_account(conn, company_id, invoice.outgoing)
-            subconto = _place(conn, account, kind, plan.counterparty_id)
+            subconto = _place(conn, company_id, account, kind, plan.counterparty_id)
             vat_rate = STANDARD_VAT_RATE if invoice.vat else None
             if invoice.outgoing:
                 created.append(
@@ -173,12 +173,14 @@ def _settlement_account(conn: Connection, company_id: int, outgoing: bool) -> in
 
 
 def _place(
-    conn: Connection, account_id: int | None, kind_id: int, value_id: int
+    conn: Connection, company_id: int, account_id: int | None, kind_id: int, value_id: int
 ) -> tuple[int | None, int | None, int | None]:
     """The counterparty at its kind's position of the account (the contract stays empty)."""
     if account_id is None:
         return (None, None, None)
     account = conn.execute(
-        "SELECT sc1_kind_id, sc2_kind_id, sc3_kind_id FROM accounts WHERE id = ?", (account_id,)
+        "SELECT sc1_kind_id, sc2_kind_id, sc3_kind_id FROM accounts "
+        "WHERE company_id = ? AND id = ?",
+        (company_id, account_id),
     ).fetchone()
     return pad_subconto([value_id if k == kind_id else None for k in tuple(account)])
