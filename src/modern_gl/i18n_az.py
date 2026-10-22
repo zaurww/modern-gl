@@ -659,6 +659,12 @@ AZ: dict[str, str] = {
     "Выберите другой файл: этот уже открыт": "Başqa fayl seçin: bu fayl artıq açıqdır",
     "Название компании не может быть пустым": "Şirkətin adı boş ola bilməz",
     "до восстановления": "bərpadan əvvəl",
+    "документ №{n} используется в другом разделе: сначала уберите его оттуда": (
+        "№{n} sənəd başqa bölmədə istifadə olunur: əvvəlcə onu oradan çıxarın"
+    ),
+    "проводки документа №{n} созданы в другом разделе программы; исправьте их там": (
+        "№{n} sənədin yazılışları proqramın başqa bölməsində yaradılıb; onları orada düzəldin"
+    ),
     "файл повреждён: {file} ({error})": "fayl zədələnib: {file} ({error})",
     "в файле компании найдены повреждения — восстановите его из копии ({error})": (
         "şirkət faylında zədələnmə tapıldı — onu ehtiyat nüsxədən bərpa edin ({error})"

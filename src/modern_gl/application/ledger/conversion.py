@@ -25,6 +25,7 @@ from modern_gl.application.conversions import (
     same_day,
 )
 from modern_gl.application.ledger.base import account_label
+from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.module import ModuleDocumentCommands
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
@@ -70,6 +71,12 @@ def posting_line(
         currency_id,
         None if currency_id is None else Decimal(currency_amount).scaleb(-2),
     )
+
+
+explain_owner(
+    "conversion",
+    lambda _role, _n, _m: tr("проводки созданы документом «Конвертация валюты»; исправьте его там"),
+)
 
 
 class MissingAccountRole(ValidationError):

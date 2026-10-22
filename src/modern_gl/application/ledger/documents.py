@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 
 from modern_gl.application.common import insert, now, pad_subconto
@@ -15,6 +15,30 @@ from modern_gl.domain.invoice import KINDS, normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
+
+# What a module tells the user when the journal refuses one of its GL documents:
+# (role, the GL document's number, the module document's number or None) -> text. A module
+# adds its own words on import (explain_owner); the refusal itself comes from the
+# document_owners view and never depends on them.
+OwnerText = Callable[[str, int, int | None], str]
+OWNER_TEXTS: dict[str, OwnerText] = {}
+
+
+def explain_owner(module: str, text: OwnerText) -> None:
+    OWNER_TEXTS[module] = text
+
+
+def _owner_text(module: str, role: str, number: int, owner: sqlite3.Row) -> str:
+    text = OWNER_TEXTS.get(module)
+    if text is not None:
+        return text(role, number, owner["owner_number"])
+    if role == "uses":
+        return tr(
+            "документ №{n} используется в другом разделе: сначала уберите его оттуда", n=number
+        )
+    return tr(
+        "проводки документа №{n} созданы в другом разделе программы; исправьте их там", n=number
+    )
 
 
 class DocumentCommands(PostingChecks):
@@ -64,7 +88,7 @@ class DocumentCommands(PostingChecks):
         """
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
-            self._require_not_module_document(doc_id)
+            self._require_not_module_document(company_id, doc)
             if doc["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
             if doc["reversal_of"] is not None:
@@ -91,7 +115,7 @@ class DocumentCommands(PostingChecks):
         and keeps the number; the audit trail keeps the old content."""
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
-            self._require_not_module_document(doc_id)
+            self._require_not_module_document(company_id, doc)
             if doc["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
             if doc["reversal_of"] is not None:
@@ -196,7 +220,7 @@ class DocumentCommands(PostingChecks):
         """
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
-            self._require_not_module_document(doc_id)
+            self._require_not_module_document(company_id, doc)
             if doc["status"] == "posted":
                 self._require_changeable(company_id, doc)
             snapshot = self._snapshot(doc)
@@ -221,21 +245,9 @@ class DocumentCommands(PostingChecks):
                 + ". "
                 + tr("Исправьте его сторно в открытом периоде.")
             )
-        landed = self.conn.execute(
-            "SELECT d.number FROM landed_cost_charges c "
-            "JOIN inventory_documents d ON d.id = c.document_id "
-            "WHERE c.source_document_id = ? ORDER BY d.number LIMIT 1",
-            (doc["id"],),
-        ).fetchone()
-        if landed is not None:
-            raise ValidationError(
-                tr(
-                    "документ №{n} взят как расход партии в складском документе №{m}: "
-                    "сначала уберите его оттуда",
-                    n=doc["number"],
-                    m=landed["number"],
-                )
-            )
+        user = self._owner(company_id, doc["id"], "uses")
+        if user is not None:
+            raise ValidationError(_owner_text(user["module"], "uses", doc["number"], user))
         storno = self.conn.execute(
             "SELECT number FROM documents WHERE reversal_of = ?", (doc["id"],)
         ).fetchone()
@@ -248,34 +260,20 @@ class DocumentCommands(PostingChecks):
                 )
             )
 
-    def _require_not_module_document(self, doc_id: int) -> None:
+    def _require_not_module_document(self, company_id: int, doc: sqlite3.Row) -> None:
         """Postings a module made (warehouse, currency conversion, bank) are corrected there."""
-        linked = self.conn.execute(
-            "SELECT number FROM inventory_documents "
-            "WHERE gl_document_id = ? OR accrual_document_id = ?",
-            (doc_id, doc_id),
+        owner = self._owner(company_id, doc["id"], "made")
+        if owner is not None:
+            raise ValidationError(_owner_text(owner["module"], "made", doc["number"], owner))
+
+    def _owner(self, company_id: int, doc_id: int, role: str) -> sqlite3.Row | None:
+        """The module that made (or takes in) a GL document, from the document_owners view."""
+        return self.conn.execute(
+            "SELECT module, owner_number FROM document_owners "
+            "WHERE company_id = ? AND document_id = ? AND role = ? "
+            "ORDER BY owner_number LIMIT 1",
+            (company_id, doc_id, role),
         ).fetchone()
-        if linked is not None:
-            raise ValidationError(
-                tr(
-                    "бухгалтерский документ создан складским документом №{n}; "
-                    "исправьте его через склад",
-                    n=linked["number"],
-                )
-            )
-        if self.conn.execute(
-            "SELECT 1 FROM currency_conversions WHERE document_id = ? OR credit_document_id = ?",
-            (doc_id, doc_id),
-        ).fetchone():
-            raise ValidationError(
-                tr("проводки созданы документом «Конвертация валюты»; исправьте его там")
-            )
-        if self.conn.execute(
-            "SELECT 1 FROM bank_operations WHERE document_id = ?", (doc_id,)
-        ).fetchone():
-            raise ValidationError(
-                tr("проводки созданы банковской операцией; исправьте её в разделе «Банк»")
-            )
 
     def _snapshot(self, doc: sqlite3.Row) -> dict:
         """Everything needed to see later what a removed / unposted document contained."""
@@ -316,7 +314,7 @@ class DocumentCommands(PostingChecks):
         """Red storno: a new posted document with the same postings and negated amounts."""
         with transaction(self.conn):
             orig = self._document(company_id, doc_id)
-            self._require_not_module_document(doc_id)
+            self._require_not_module_document(company_id, orig)
             if orig["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=orig["number"]))
             if orig["reversal_of"] is not None:
