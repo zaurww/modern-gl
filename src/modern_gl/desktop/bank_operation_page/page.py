@@ -177,7 +177,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self._lines_edited = True
         self.number.setText(f"№{d.number}")
         closed = load_document(self.s.conn, self.s.company_id, d.document_id).closed
-        self.read_only = d.status == "posted" and closed
+        self.read_only = (d.status == "posted" and closed) or self.s.read_only  # viewing (D80)
         if d.status == "draft":
             self.status.set(tr("Черновик"), "amber")
         else:
@@ -230,7 +230,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.btn_post.setVisible(not ro)
 
     def menu_items(self) -> list[MenuItem]:
-        if self.doc is None:
+        if self.doc is None or self.s.read_only:
             return []
         return [(tr("Копировать"), self._copy)]
 

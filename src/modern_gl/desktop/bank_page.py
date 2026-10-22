@@ -43,6 +43,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    hide_when_viewing,
     more_button,
     ru_date,
 )
@@ -174,15 +175,16 @@ class BankPage(ReportPage):
             control.setMinimumWidth(120)
             control.clicked.connect(lambda _=False, d=direction: self.new_operation(d))
             self.header.add_action(control)
-        self.header.add_action(
-            more_button(
-                lambda: [
-                    (tr("Конвертация валюты…"), self.new_conversion.emit),
-                    None,
-                    (tr("Настройки банка…"), self.settings),
-                ]
-            )
+            hide_when_viewing(session.read_only, control)
+        more = more_button(
+            lambda: [
+                (tr("Конвертация валюты…"), self.new_conversion.emit),
+                None,
+                (tr("Настройки банка…"), self.settings),
+            ]
         )
+        self.header.add_action(more)
+        hide_when_viewing(session.read_only, more)
 
         # the period, under the title (a month, as in the reports)
         period = month_of(session.working_date)

@@ -43,6 +43,7 @@ from modern_gl.desktop.widgets import (
     button,
     date_edit,
     edited_date,
+    hide_when_viewing,
     more_button,
     ru_date,
 )
@@ -100,14 +101,13 @@ class CurrenciesPage(QWidget):
         )
         rates.clicked.connect(self.load_cbar)
         self.header.add_action(rates)
-        self.header.add_action(
-            more_button(
-                lambda: [
-                    (tr("Добавить валюту"), self.add_currency),
-                    (tr("Переоценка…"), self.revalue),
-                ]
-            )
+        more = more_button(
+            lambda: [
+                (tr("Добавить валюту"), self.add_currency),
+                (tr("Переоценка…"), self.revalue),
+            ]
         )
+        self.header.add_action(more)
         root.addWidget(self.header)
 
         body = QHBoxLayout()
@@ -129,6 +129,7 @@ class CurrenciesPage(QWidget):
         add = button(tr("+ Курс"), "primary", "Ins")
         add.clicked.connect(self.add_rate)
         top.addWidget(add)
+        hide_when_viewing(session.read_only, rates, more, add)
         right.addLayout(top)
         self.latest = QLabel()
         self.latest.setObjectName("secondary")

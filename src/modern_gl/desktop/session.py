@@ -21,6 +21,7 @@ class Session:
     company_name: str
     catalog: Catalog
     working_date: date = field(default_factory=date.today)  # 1C "рабочая дата"
+    read_only: bool = False  # open for viewing (D80): a snapshot, nothing is written
     notify: Callable[[str], None] = print
     # official rates of a day {code: (rate, nominal)}; tests put a stub here (no network)
     fetch_rates: Callable[[date], dict[str, tuple[int, int]]] = cbar.fetch

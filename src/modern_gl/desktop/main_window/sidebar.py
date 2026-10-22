@@ -17,6 +17,7 @@ from PySide6.QtGui import (
     QPen,
 )
 from PySide6.QtWidgets import (
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop import icons
 from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.widgets import Chip
 from modern_gl.i18n import tr, upper
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
@@ -136,6 +138,15 @@ class Sidebar(QWidget):
         self.company.setFont(fonts().heading)
         self.company.setCursor(Qt.CursorShape.PointingHandCursor)
         lay.addWidget(self.company)
+        # a company open for viewing only (D80): said once, under its name
+        self.viewing = Chip(tr("Только просмотр"), "blue")
+        self.viewing.setToolTip(tr("Снимок файла: изменения не сохраняются"))
+        viewing = QHBoxLayout()
+        viewing.setContentsMargins(20, 0, 0, 8)
+        viewing.addWidget(self.viewing)
+        viewing.addStretch(1)
+        lay.addLayout(viewing)
+        self.viewing.hide()
         self.nav = QListWidget()
         self.nav.setObjectName("nav")
         self.nav.setIconSize(QSize(18, 18))
@@ -151,8 +162,12 @@ class Sidebar(QWidget):
         lay.addWidget(self.hint)
         self.retranslate()
 
-    def retranslate(self) -> None:
-        self.hint.setText(tr("Ctrl+N  новый документ\nCtrl+W  закрыть"))
+    def retranslate(self, read_only: bool = False) -> None:
+        self.viewing.setText(tr("Только просмотр"))
+        self.viewing.setVisible(read_only)
+        self.hint.setText(
+            tr("Ctrl+W  закрыть") if read_only else tr("Ctrl+N  новый документ\nCtrl+W  закрыть")
+        )
 
     def add_section(self, title: str) -> None:
         item = QListWidgetItem(upper(title))

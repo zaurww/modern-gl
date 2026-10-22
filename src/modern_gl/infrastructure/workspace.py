@@ -19,7 +19,7 @@ from modern_gl.application.ledger import Ledger
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
-from modern_gl.infrastructure.db import connect, latest_version
+from modern_gl.infrastructure.db import connect, latest_version, open_snapshot
 
 SUFFIX = ".gl"
 TRASH = "Silinmiş"
@@ -46,11 +46,15 @@ def company_name(path: Path) -> str:
 def open_company(path: Path) -> tuple[sqlite3.Connection, int]:
     """Open (and migrate) a company file; returns the connection and the company id."""
     conn = connect(path)
+    return conn, _first_company(conn, path)
+
+
+def _first_company(conn: sqlite3.Connection, path: Path) -> int:
     row = conn.execute("SELECT id FROM companies ORDER BY id LIMIT 1").fetchone()
     if row is None:
         conn.close()
         raise sqlite3.DatabaseError(f"{path.name}: no company in file")
-    return conn, row["id"]
+    return row["id"]
 
 
 class Workspace:
@@ -148,6 +152,18 @@ class Workspace:
         if _file_version(path) < latest_version():
             backup.make_backup_of_file(path, self.backup_folder(path), tr("до обновления"))
         return open_company(path)
+
+    def view(self, path: Path) -> tuple[sqlite3.Connection, int]:
+        """A company file for viewing only (D80): a snapshot in memory; the file is not
+        changed, updated or backed up. A damaged file is refused (backup.BackupError)."""
+        path = Path(path)
+        try:
+            conn = open_snapshot(path)
+        except sqlite3.DatabaseError as e:
+            raise backup.BackupError(
+                tr("файл повреждён: {file} ({error})", file=path.name, error=e)
+            ) from e
+        return conn, _first_company(conn, path)
 
     def auto_backup(self, conn: sqlite3.Connection, company_file: Path) -> Path | None:
         """The backup made when a company is closed — only if it changed since the last one."""

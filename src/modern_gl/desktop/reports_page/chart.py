@@ -23,6 +23,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     button,
     class_icon,
+    hide_when_viewing,
     type_name,
 )
 from modern_gl.domain.accounts import normal_side
@@ -47,6 +48,7 @@ class ChartPage(ReportPage):
         add = button(tr("+ Новый счёт"), "flat", "Ins")
         add.clicked.connect(lambda: self.edit_account(None))
         self.header.add_action(add)
+        hide_when_viewing(session.read_only, add)
         for keys, fn in (
             ("Ins", lambda: self.edit_account(None)),
             ("F2", lambda: self.edit_account(self._current())),

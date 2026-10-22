@@ -12,3 +12,7 @@ class PeriodClosedError(LedgerError):
 
 class NotFoundError(LedgerError):
     pass
+
+
+class ReadOnlyError(LedgerError):
+    """The company is open for viewing only: nothing is written."""

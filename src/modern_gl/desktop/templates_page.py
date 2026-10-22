@@ -28,7 +28,14 @@ from modern_gl.desktop.postings import PostingRow, PostingsDelegate, PostingsMod
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, enter_goes_on, money
+from modern_gl.desktop.widgets import (
+    EmptyState,
+    PageHeader,
+    button,
+    enter_goes_on,
+    hide_when_viewing,
+    money,
+)
 from modern_gl.domain import formula
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -53,6 +60,7 @@ class TemplatesPage(QWidget):
         add = button(tr("+ Новый шаблон"), "flat", "Ins")
         add.clicked.connect(lambda: self.edit_template.emit(None))
         self.header.add_action(add)
+        hide_when_viewing(session.read_only, add)
         root.addWidget(self.header)
 
         self.model = ReportModel()
@@ -261,6 +269,7 @@ class TemplatePage(QWidget):
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить шаблон"), "primary", "Ctrl+S")
         actions.addWidget(self.btn_save)
+        hide_when_viewing(self.s.read_only, self.btn_delete, self.btn_save)
         root.addLayout(actions)
 
     def _connect(self) -> None:

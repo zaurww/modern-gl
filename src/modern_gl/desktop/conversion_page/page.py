@@ -134,7 +134,7 @@ class ConversionPage(ConversionForm):
         self._loading = False
         self.number.setText(f"№{d.number}")
         closed = load_document(self.s.conn, self.s.company_id, d.document_id).closed
-        self.read_only = d.status == "posted" and closed
+        self.read_only = (d.status == "posted" and closed) or self.s.read_only  # viewing (D80)
         if d.status == "draft":
             self.status.set(tr("Черновик"), "amber")
         else:
@@ -171,6 +171,8 @@ class ConversionPage(ConversionForm):
         self.btn_post.setVisible(not ro)
 
     def menu_items(self) -> list[MenuItem]:
+        if self.s.read_only:  # viewing (D80)
+            return []
         items: list[MenuItem] = [(tr("Счета конвертации…"), self.edit_accounts)]
         if self.doc is not None:
             items.append((tr("Копировать"), self._copy))
