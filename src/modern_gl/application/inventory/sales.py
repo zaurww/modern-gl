@@ -146,6 +146,32 @@ class SaleCommands(StockCommands):
                 cost_subconto=sale_sc,
             )
 
+    def fill_sale_subconto(
+        self, company_id: int, document_id: int, line_id: int, subconto: Sequence[int | None]
+    ) -> None:
+        """Give a sale draft's line without its own subconto the sale subconto (a sales
+        group, D61) — drafts posted in bulk (D87). A line that has one is left as it is."""
+        with transaction(self.conn):
+            doc = self._require_inventory_draft(company_id, document_id)
+            if doc["doc_type"] != "sale":
+                raise ValidationError(tr("аналитика продажи указывается только в продаже"))
+            for value_id in subconto:
+                if value_id is not None:
+                    self._subconto_value(company_id, value_id)
+            self.conn.execute(
+                "UPDATE inventory_lines SET cost_sc1 = ?, cost_sc2 = ?, cost_sc3 = ? "
+                "WHERE company_id = ? AND document_id = ? AND id = ? "
+                "AND cost_sc1 IS NULL AND cost_sc2 IS NULL AND cost_sc3 IS NULL",
+                (*pad_subconto(subconto), company_id, document_id, line_id),
+            )
+            self._audit(
+                company_id,
+                "inventory_document",
+                document_id,
+                "fill_sale_subconto",
+                {"line_id": line_id, "subconto": list(subconto)},
+            )
+
     def sale_kinds(self, company_id: int) -> list[int]:
         """The subconto kinds a sale line is asked for (D61): those of the sale accounts
         (revenue, cost of sales, the VAT charge) but the item and the warehouse, which the

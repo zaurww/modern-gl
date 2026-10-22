@@ -1444,15 +1444,26 @@ AZ: dict[str, str] = {
     "Банковский счёт…": "Bank hesabı…",
     # purchase and sale drafts posted in bulk (D73)
     "Провести черновики: {n}": "Qaralamaları keçir: {n}",
-    "Выделенные черновики (Ctrl, Shift) или все черновики списка. Строке без "
-    "счёта — счёт, как в прошлой покупке у этого поставщика": "Seçilmiş qaralamalar "
-    "(Ctrl, Shift) və ya siyahının bütün qaralamaları. Hesabı olmayan sətrə — bu "
-    "təchizatçıdan əvvəlki alışdakı hesab",
-    "Провести черновики: {n}?\n{names}": "Qaralamalar keçirilsin: {n}?\n{names}",
+    "Выделенные черновики (Ctrl, Shift) или все черновики списка. Строкам без "
+    "счёта — выбранный счёт или как в прошлой покупке у этого поставщика": "Seçilmiş "
+    "qaralamalar (Ctrl, Shift) və ya siyahının bütün qaralamaları. Hesabı olmayan "
+    "sətirlərə — seçilmiş hesab və ya bu təchizatçıdan əvvəlki alışdakı hesab",
     "Проведено: {n}": "Keçirildi: {n}",
     "счёт как в прошлый раз — строк: {n}": "hesab əvvəlki kimi — sətir: {n}",
     "Остались черновиками: {n}\n\n{reasons}": "Qaralama qaldı: {n}\n\n{reasons}",
     "счёт затрат указывается только в покупке": "xərc hesabı yalnız alışda göstərilir",
+    # where the lines without an account go, chosen once for the batch (D87)
+    "Строк без счёта: {n}. На какой счёт их провести?": "Hesabsız sətir: {n}. Hansı "
+    "hesaba keçirilsin?",
+    "Строк без аналитики продажи: {n}. Куда их отнести?": "Satış analitikası olmayan "
+    "sətir: {n}. Hara aid edilsin?",
+    "Пусто — каждой строке как в прошлый раз. Выбранное запомнится: следующие e-qaimə "
+    "этих контрагентов предложат то же.": "Boş qalsa — hər sətir əvvəlki kimi. Seçilən "
+    "yadda qalır: bu kontragentlərin növbəti e-qaimələri eynisini təklif edəcək.",
+    "Код или название": "Kod və ya ad",
+    "Укажите «{kind}» — его требует счёт": "«{kind}» göstərin — hesab onu tələb edir",
+    "выбранный счёт — строк: {n}": "seçilmiş hesab — sətir: {n}",
+    "аналитика продажи указывается только в продаже": "satış analitikası yalnız satışda göstərilir",
     # plain-text journal for hledger (D79); the lower-case words are tag names
     "Журнал проводок по {date} — книга: {book}": "{date} tarixinədək yazılışlar jurnalı "
     "— kitab: {book}",

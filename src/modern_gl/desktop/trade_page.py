@@ -10,7 +10,8 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMessageBox
 
 from modern_gl.application.inventory import Inventory
-from modern_gl.application.trade_batch import BulkPosting, post_drafts
+from modern_gl.application.trade_batch import BulkPosting, open_lines, post_drafts
+from modern_gl.desktop.batch_post_dialog import BatchPostDialog
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
@@ -86,8 +87,8 @@ class TradePage(ReportPage):
         self.post_button = button("", "flat")
         self.post_button.setToolTip(
             tr(
-                "Выделенные черновики (Ctrl, Shift) или все черновики списка. Строке без "
-                "счёта — счёт, как в прошлой покупке у этого поставщика"
+                "Выделенные черновики (Ctrl, Shift) или все черновики списка. Строкам без "
+                "счёта — выбранный счёт или как в прошлой покупке у этого поставщика"
             )
         )
         self.post_button.clicked.connect(self.post_drafts)
@@ -157,18 +158,24 @@ class TradePage(ReportPage):
         if not drafts:
             return
         names = ", ".join(sorted({r.counterparties for r in drafts if r.counterparties}))
-        question = tr("Провести черновики: {n}?\n{names}", n=len(drafts), names=names)
-        if QMessageBox.question(self, tr("Провести"), question) != QMessageBox.StandardButton.Yes:
-            return
         inventory = Inventory(self.s.conn, actor=self.s.ledger.actor)
-        result = post_drafts(inventory, self.s.company_id, [r.id for r in drafts])
+        ids = [r.id for r in drafts]
+        # where the lines without an account go: chosen once for all of them (D87)
+        lines = open_lines(inventory, self.s.company_id, ids)
+        kinds = inventory.sale_kinds(self.s.company_id)
+        dialog = BatchPostDialog(self.s, len(drafts), names, lines, kinds, self)
+        if not dialog.exec():
+            return
+        result = post_drafts(inventory, self.s.company_id, ids, dialog.booking)
         self.refresh()
         self.imported.emit()
-        self._report(result)
+        self._report(result, chosen=dialog.booking is not None)
 
-    def _report(self, result: BulkPosting) -> None:
+    def _report(self, result: BulkPosting, chosen: bool = False) -> None:
         text = tr("Проведено: {n}", n=len(result.posted))
-        if result.filled:
+        if result.filled and chosen:
+            text += " · " + tr("выбранный счёт — строк: {n}", n=result.filled)
+        elif result.filled:
             text += " · " + tr("счёт как в прошлый раз — строк: {n}", n=result.filled)
         self.s.notify(text)
         if result.failed:

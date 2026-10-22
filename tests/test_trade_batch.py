@@ -4,14 +4,22 @@ month and are booked the same way. The numbers are worked out by hand in each do
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import STANDARD_VAT_RATE, ReceiptLine, SaleLine
-from modern_gl.application.trade_batch import post_drafts
+from modern_gl.application.trade_batch import (
+    Booking,
+    OpenLines,
+    open_lines,
+    post_drafts,
+)
+from modern_gl.desktop.batch_post_dialog import BatchPostDialog
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.reporting.trade import PURCHASE
+from tests.test_sale_subconto import postings_46, sales_groups
 from tests.test_sales import Shop, make_shop
 
 
@@ -26,6 +34,7 @@ def no_modal_dialogs(monkeypatch):
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
     )
     monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(BatchPostDialog, "exec", lambda self: 1)  # «Провести», empty
 
 
 def fuel(shop: Shop) -> int:
@@ -186,3 +195,131 @@ def test_sale_drafts_post_too(shop, conn):
     assert (result.posted, result.failed) == (drafts, [])
     assert [p[:3] for p in shop.postings(drafts[0])] == [("62", "46", 2_500)]
     assert [p[:3] for p in shop.postings(drafts[1])] == [("62", "46", 4_000)]
+
+
+def rabite(shop: Shop) -> int:
+    kind = shop.ledger.subconto_kind_id(shop.company_id, "cost_item")
+    return shop.ledger.add_subconto_value(shop.company_id, kind, "Rabitə")
+
+
+def test_open_lines_offer_where_they_went_last_time(shop, conn):
+    """«Aİ-92» and «Dizel» of the supplier both went to 26 [Yanacaq] (January): that is
+    offered. With the phone bill, which never went anywhere, nothing is offered."""
+    yanacaq, petrol, diesel, bill = socar_month(shop)
+    lines = open_lines(shop.inventory, shop.company_id, [petrol, diesel])
+    assert lines == OpenLines("receipt", 2, Booking(shop.acc["26"], (yanacaq, None, None)))
+    lines = open_lines(shop.inventory, shop.company_id, [petrol, bill])
+    assert (lines.count, lines.suggested) == (2, None)
+
+
+def test_the_chosen_account_goes_to_every_open_line(shop, conn):
+    """26 [Rabitə] chosen for the batch goes to the phone bill, never booked, and to
+    «Aİ-92» too, though it went to 26 [Yanacaq] in January:
+      bill    Dt 26 / Kt 60  20.00   Dt 19 / Kt 60  3.60
+      petrol  Dt 26 / Kt 60  50.00   Dt 19 / Kt 60  9.00
+    Posted, it is remembered: the next phone bill offers 26 [Rabitə]."""
+    _, petrol, _, bill = socar_month(shop)
+    phone_item = rabite(shop)
+    chosen = Booking(shop.acc["26"], (phone_item, None, None))
+
+    result = post_drafts(shop.inventory, shop.company_id, [bill, petrol], chosen)
+
+    assert (result.posted, result.filled, result.failed) == ([petrol, bill], 2, [])
+    assert [p[:3] for p in shop.postings(bill)] == [("26", "60", 2_000), ("19", "60", 360)]
+    assert [p[:3] for p in shop.postings(petrol)] == [("26", "60", 5_000), ("19", "60", 900)]
+    for doc in (bill, petrol):
+        line = shop.inventory.load_document(shop.company_id, doc).lines[0]
+        assert line.cost_subconto == (phone_item, None, None)
+    phone = shop.inventory.load_document(shop.company_id, bill).lines[0].offset_subconto
+    march = draft(shop, "2026-03-15", "Rabitə xidməti", "20", "3.60", [phone[0]])
+    assert open_lines(shop.inventory, shop.company_id, [march]).suggested == chosen
+
+
+def test_sale_drafts_take_the_chosen_sales_group(shop, conn):
+    """46 carries «Satış qrupları». Two deliveries to Alfa, 25.00 and 40.00 without VAT,
+    never sold before: nothing offered; «Xidmət» chosen for both:
+      Dt 62 / Kt 46 [Xidmət]  25.00     Dt 62 / Kt 46 [Xidmət]  40.00
+    The next delivery offers «Xidmət»."""
+    _, (service, _) = sales_groups(shop, "Xidmət", "Topdan")
+
+    def delivery(day: str, amount: str) -> int:
+        return shop.inventory.create_sale_draft(
+            shop.company_id,
+            day,
+            [SaleLine(None, None, None, amount, memo="Çatdırılma")],
+            shop.acc["62"],
+            [shop.customer, shop.contract],
+        )
+
+    drafts = [delivery("2026-02-03", "25"), delivery("2026-02-17", "40")]
+    assert open_lines(shop.inventory, shop.company_id, drafts) == OpenLines("sale", 2, None)
+
+    result = post_drafts(shop.inventory, shop.company_id, drafts, Booking(None, (service,)))
+
+    assert (result.posted, result.filled, result.failed) == (drafts, 2, [])
+    assert postings_46(shop, conn, drafts[0]) == [("62", "46", 2_500, service)]
+    assert postings_46(shop, conn, drafts[1]) == [("62", "46", 4_000, service)]
+    later = delivery("2026-03-03", "10")
+    assert open_lines(shop.inventory, shop.company_id, [later]).suggested == Booking(
+        None, (service,)
+    )
+
+
+def session_of(shop: Shop, conn) -> Session:
+    return Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+
+
+def test_dialog_offers_last_time_and_posts_on_enter(shop, conn, qtbot):
+    """Opened on the supplier's two drafts, the window has 26 and «Yanacaq» filled in:
+    Enter on «Провести» books them there."""
+    yanacaq, petrol, diesel, _ = socar_month(shop)
+    session = session_of(shop, conn)
+    lines = open_lines(shop.inventory, shop.company_id, [petrol, diesel])
+    dialog = BatchPostDialog(session, 2, "Təchizatçı", lines, [])
+    qtbot.addWidget(dialog)
+    assert dialog.account is not None
+    assert dialog.account.currentData() == shop.acc["26"]
+    assert [f.currentData() for _, f in dialog.fields] == [yanacaq]
+    dialog.show()
+    qtbot.waitUntil(dialog.ok.hasFocus)  # all filled: the cursor waits on «Провести»
+    qtbot.keyClick(dialog.ok, Qt.Key.Key_Return)
+    assert dialog.result() == 1
+    assert dialog.booking == Booking(shop.acc["26"], (yanacaq, None, None))
+
+
+def test_dialog_asks_for_the_subconto_the_account_needs(shop, conn, qtbot):
+    """Nothing offered (the phone bill): 26 typed, Enter goes to «Статья затрат», not past
+    it; «Провести» with it empty says what is missing; chosen — the batch goes there."""
+    _, _, _, bill = socar_month(shop)
+    phone_item = rabite(shop)
+    session = session_of(shop, conn)
+    lines = open_lines(shop.inventory, shop.company_id, [bill])
+    dialog = BatchPostDialog(session, 1, "Rabitə MMC", lines, [])
+    qtbot.addWidget(dialog)
+    dialog.show()
+    account = dialog.account
+    assert account is not None and account.currentData() is None
+    account.setFocus()
+    account.setText("26")
+    qtbot.keyClick(account, Qt.Key.Key_Return)
+    assert account.currentData() == shop.acc["26"]
+    ((_, item),) = dialog.fields
+    qtbot.waitUntil(item.hasFocus)
+    qtbot.keyClick(item, Qt.Key.Key_Return)  # empty: Enter does not post
+    assert dialog.isVisible()
+    dialog.ok.click()
+    assert dialog.isVisible() and not dialog.error.isHidden()
+    item.setCurrentIndex(item.findData(phone_item))
+    dialog.ok.click()
+    assert dialog.result() == 1
+    assert dialog.booking == Booking(shop.acc["26"], (phone_item, None, None))
+
+
+def test_dialog_left_empty_posts_like_last_time(shop, conn, qtbot):
+    """No account chosen: no booking, each line goes where it went the last time."""
+    _, petrol, _, bill = socar_month(shop)
+    lines = open_lines(shop.inventory, shop.company_id, [petrol, bill])
+    dialog = BatchPostDialog(session_of(shop, conn), 2, "", lines, [])
+    qtbot.addWidget(dialog)
+    dialog.ok.click()
+    assert (dialog.result(), dialog.booking) == (1, None)
