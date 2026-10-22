@@ -152,3 +152,31 @@ def test_template_name_and_memo_go_on_into_the_lines(qtbot, bank_session):
     assert focused() is page.memo
     qtbot.keyClick(page.memo, Qt.Key.Key_Return)
     assert page.table.state() == page.table.State.EditingState
+
+
+@pytest.mark.parametrize("how", ["click", "tab", "code"])
+def test_a_chosen_value_is_selected_whole_on_entering_its_field(qtbot, how):
+    """Typing into a field that shows a choice replaces it (D78): "70" typed over
+    "60 Malsatan…" is not "7060 Malsatan…", however the cursor came in."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    window = QWidget()
+    lay = QVBoxLayout(window)
+    before = QLineEdit()
+    box = PickBox()
+    for code, name in (("60", "Malsatanlar"), ("70", "Əmək haqqı")):
+        box.addItem(f"{code}  {name}", code)
+    box.setCurrentIndex(0)
+    lay.addWidget(before)
+    lay.addWidget(box)
+    shown(qtbot, window)
+    before.setFocus()
+    if how == "click":
+        QTest.mouseClick(box, Qt.MouseButton.LeftButton, pos=QPoint(4, box.height() // 2))
+    elif how == "tab":
+        QTest.keyClick(before, Qt.Key.Key_Tab)
+    else:
+        box.setFocus()
+    qtbot.waitUntil(lambda: box.selectedText() == "60  Malsatanlar")

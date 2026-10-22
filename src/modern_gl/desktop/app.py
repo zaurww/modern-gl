@@ -19,6 +19,7 @@ from modern_gl import demo_year, i18n
 from modern_gl.application.ledger import Ledger
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import qt_texts, theme
+from modern_gl.desktop.cell_editing import select_whole_on_entry
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
 from modern_gl.infrastructure.workspace import Workspace
@@ -51,6 +52,7 @@ def main() -> int:
     theme.set_theme(str(settings.value("theme", theme.DEFAULT_THEME)))
     theme.apply(app)
     qt_texts.install(app)
+    select_whole_on_entry(app)
     lang = str(settings.value("language", i18n.DEFAULT))
     i18n.set_language(lang if lang in i18n.LANGUAGES else i18n.DEFAULT)
 

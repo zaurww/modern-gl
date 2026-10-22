@@ -19,6 +19,8 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
+    QAbstractSpinBox,
+    QApplication,
     QCompleter,
     QLineEdit,
     QTableView,
@@ -29,6 +31,55 @@ from modern_gl.i18n import fold, tr
 
 TEMPLATE_MARK = "#"  # a list shows templates only after it
 TABS = (Qt.Key.Key_Tab, Qt.Key.Key_Backtab)
+
+
+ENTERED = (
+    Qt.FocusReason.MouseFocusReason,
+    Qt.FocusReason.OtherFocusReason,  # the program moved the cursor here
+    Qt.FocusReason.ShortcutFocusReason,
+)
+
+
+class WholeOnEntry(QObject):
+    """Coming into a field selects what it holds, so typing replaces it, as in 1C (D78):
+    "70" typed over "60 Malsatan…" is "70", not "7060 Malsatan…". Qt does it only for Tab;
+    this adds a click and the program's own moves. A second click places the cursor. Cell
+    editors are left to the table: it selects them itself, and the key that opened one
+    is already typed in it."""
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
+        if (
+            event.type() == QEvent.Type.FocusIn
+            and isinstance(watched, QLineEdit)
+            and event.reason() in ENTERED  # pyright: ignore[reportAttributeAccessIssue]
+            and not watched.isReadOnly()
+            and watched.text()
+            and not isinstance(watched.parent(), QAbstractSpinBox)
+            and not _in_table(watched)
+        ):
+            QTimer.singleShot(0, lambda: _select_whole(watched))
+        return False
+
+
+def _in_table(edit: QLineEdit) -> bool:
+    parent = edit.parent()
+    return parent is not None and isinstance(parent.parent(), QAbstractItemView)
+
+
+def _select_whole(edit: QLineEdit) -> None:
+    try:
+        if edit.hasFocus():
+            edit.selectAll()
+    except RuntimeError:  # the field closed meanwhile
+        pass
+
+
+def select_whole_on_entry(app: QApplication) -> None:
+    """Once for the application: every field selects its text on entering it."""
+    if app.property("gl_whole_on_entry"):
+        return
+    app.setProperty("gl_whole_on_entry", True)
+    app.installEventFilter(WholeOnEntry(app))
 
 
 def adding_label(text: str) -> str:

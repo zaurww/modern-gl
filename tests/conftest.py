@@ -51,6 +51,14 @@ class Demo:
         return PostingInput(self.acc[dt], self.acc[ct], amount, dt_sc, ct_sc)
 
 
+@pytest.fixture(autouse=True, scope="session")
+def fields_as_in_the_app(qapp):
+    """The application-wide behaviour of fields that `app.main` installs."""
+    from modern_gl.desktop.cell_editing import select_whole_on_entry
+
+    select_whole_on_entry(qapp)
+
+
 @pytest.fixture(autouse=True)
 def russian_interface():
     """Tests assert Russian messages; test_i18n covers the Azerbaijani catalog."""
