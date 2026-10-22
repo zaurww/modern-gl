@@ -1639,4 +1639,14 @@ AZ: dict[str, str] = {
     "копия не записана во вторую папку {folder}: {error}": "nüsxə ikinci qovluğa ({folder}) yazılmadı: {error}",
     "копия делается при закрытии компании": "nüsxə şirkət bağlananda çıxarılır",
     "Последняя копия": "Son nüsxə",
+    # ---- comparing the books (D98) --------------------------------------------------------
+    "Сравнение книг": "Kitabların müqayisəsi",
+    "Сравнить книги": "Kitabları müqayisə et",
+    "Только расхождения": "Yalnız fərqlər",
+    "Скрыть счета, где все три книги совпадают": "Hər üç kitabın üst-üstə düşdüyü hesabları gizlət",
+    "Книги совпадают": "Kitablar üst-üstə düşür",
+    "На эту дату корректировок МСФО и налога нет.": "Bu tarixə MHBS və vergi düzəlişləri yoxdur.",
+    "Сальдо на {day}: общая книга, МСФО и налог": "{day} tarixinə qalıq: ümumi kitab, MHBS və vergi",
+    "Книги совпадают  ✓": "Kitablar üst-üstə düşür  ✓",
+    "Расхождения по счетам: {n}": "Fərqli hesablar: {n}",
 }

@@ -43,7 +43,13 @@ from modern_gl.desktop.main_window.open_pages import OpenPages
 from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.period_dialog import PeriodDialog
-from modern_gl.desktop.reports_page import REPORTS, ChartPage, OsvPage, ReportParams
+from modern_gl.desktop.reports_page import (
+    REPORTS,
+    BooksPage,
+    ChartPage,
+    OsvPage,
+    ReportParams,
+)
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.widgets import EmptyState
@@ -234,9 +240,28 @@ class MainWindow(OpenPages):
             page = InvoicesPage(s)
             page.open_document.connect(self.open_document)
             return page
-        page = OsvPage(s) if key == ("osv",) else ChartPage(s)
-        self._wire_report(page)
-        return page
+        return self._report_place(key)
+
+    def _report_place(self, key) -> QWidget:
+        """ОСВ or the chart of accounts: places that open reports."""
+        s = self.open_session
+        if key == ("osv",):
+            osv = OsvPage(s)
+            osv.compare_books.connect(self.open_books)
+            self._wire_report(osv)
+            return osv
+        chart = ChartPage(s)
+        self._wire_report(chart)
+        return chart
+
+    def open_books(self) -> None:
+        """«Сравнение книг» (D98): an open page of its own, like an account's card."""
+        key = BooksPage.key
+        if key not in self.pages:
+            page = BooksPage(self.open_session)
+            self._wire_report(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
 
     def show_import(self) -> None:
         if self._viewing():

@@ -98,6 +98,7 @@ OPEN_SHOWN = 4  # with every place, still no scrolling at 840 px of height
 OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
 OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
 OPEN_ICONS |= {"conversion": "currencies", "new_conversion": "currencies"}
+OPEN_ICONS |= {"books": "books"}  # «Сравнение книг» (D98)
 OPEN_ICONS |= {"bank_op": "bank", "new_bank_op": "bank"}
 
 

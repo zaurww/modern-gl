@@ -76,6 +76,8 @@ def _places(win: MainWindow) -> list[Entry]:
             icon="report",
         )
     )
+    if win.open_session.parallel_books:  # D98
+        entries.append(Entry(tr("Отчёты"), tr("Сравнение книг"), win.open_books, icon="books"))
     # the places first, then the reports: one heading for each
     return sorted(entries, key=lambda e: e.group == tr("Отчёты"))
 
