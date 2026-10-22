@@ -22,7 +22,7 @@ from modern_gl.application.bank import (
     load_bank_operation,
 )
 from modern_gl.application.common import pad_subconto
-from modern_gl.application.currencies import rate_on
+from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.module import ModuleDocumentCommands
@@ -333,10 +333,8 @@ class BankCommands(ModuleDocumentCommands):
             found = rate_on(self.conn, company_id, data.currency_id, data.doc_date)
             if found is None:
                 raise ValidationError(
-                    tr(
-                        "нет курса {code} на {date}",
-                        code=self._currency(company_id, data.currency_id)["code"],
-                        date=iso_date(data.doc_date),
+                    no_rate_text(
+                        self._currency(company_id, data.currency_id)["code"], data.doc_date
                     )
                 )
             rate = found.per_unit

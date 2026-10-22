@@ -207,7 +207,7 @@ def test_operation_in_currency_at_the_rate_of_the_day(ledger, firm):
 
 def test_no_rate_no_posting(ledger, firm):
     f = firm
-    with pytest.raises(ValidationError, match="нет курса USD на 2026-02-27"):
+    with pytest.raises(ValidationError, match=r"нет курса USD на 27\.02\.2026"):
         ledger.save_bank_operation(f["cid"], replace(usd_fee(f), doc_date="2026-02-27"), post=True)
 
 

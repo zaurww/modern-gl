@@ -7,7 +7,8 @@ from datetime import date
 from fractions import Fraction
 
 from modern_gl.domain.currency import unit_rate
-from modern_gl.domain.dates import iso_date
+from modern_gl.domain.dates import iso_date, ru_date
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 
 
@@ -65,6 +66,11 @@ def rate_on(conn: Connection, company_id: int, currency_id: int, day: date | str
         (company_id, currency_id, iso_date(day)),
     ).fetchone()
     return _rate(row) if row else None
+
+
+def no_rate_text(code: str, day: date | str) -> str:
+    """The same words wherever a rate is missing: «нет курса USD на 05.03.2026»."""
+    return tr("нет курса {code} на {date}", code=code, date=ru_date(iso_date(day)))
 
 
 def latest_rates(conn: Connection, company_id: int) -> dict[int, Rate]:

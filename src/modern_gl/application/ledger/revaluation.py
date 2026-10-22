@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from modern_gl.application.currencies import rate_on
+from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
@@ -48,9 +48,7 @@ class RevaluationCommands(DocumentCommands):
             for b in self._currency_balances(company_id, day):
                 rate = rate_on(self.conn, company_id, b["currency_id"], day)
                 if rate is None:
-                    raise ValidationError(
-                        tr("нет курса {code} на {date}", code=b["code"], date=day)
-                    )
+                    raise ValidationError(no_rate_text(b["code"], day))
                 diff = to_base(b["currency_balance"], rate.per_unit) - b["balance"]
                 if diff == 0:
                     continue

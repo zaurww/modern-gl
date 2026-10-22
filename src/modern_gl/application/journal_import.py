@@ -23,6 +23,7 @@ from datetime import date, timedelta
 from fractions import Fraction
 
 from modern_gl.application.catalog import AccountInfo, Catalog
+from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.ledger import ImportedDocument, Ledger, PostingInput
 from modern_gl.domain.currency import parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
@@ -371,9 +372,7 @@ class _Reader:
             day = row.doc_date or date.today()
             rate = self.rate_for(currency_id, day)
             if rate is None:
-                row.errors.append(
-                    tr("нет курса {code} на {date}", code=row.currency, date=f"{day:%d.%m.%Y}")
-                )
+                row.errors.append(no_rate_text(row.currency, day))
                 return None
         return to_base(currency_amount, rate)
 

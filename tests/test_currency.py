@@ -240,7 +240,7 @@ def test_revaluation_needs_a_rate_and_a_manat_account(ledger, books):
         "2026-03-05",
         [PostingInput(acc["52"], acc["51"], "100.00", (bank,), (), "", eur, "50.00")],
     )
-    with pytest.raises(ValidationError, match="нет курса EUR на 2026-03-31"):
+    with pytest.raises(ValidationError, match=r"нет курса EUR на 31\.03\.2026"):
         ledger.revalue(cid, "2026-03-31", "80")
     with pytest.raises(ValidationError, match="без валютного учёта"):
         ledger.revalue(cid, "2026-03-31", "52")

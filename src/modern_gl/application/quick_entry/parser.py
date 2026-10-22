@@ -28,6 +28,7 @@ from datetime import date
 from fractions import Fraction
 
 from modern_gl.application.catalog import AccountInfo, Catalog
+from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.queries import TemplateData
 from modern_gl.domain import formula
 from modern_gl.domain.currency import format_unit_rate, to_base
@@ -310,9 +311,7 @@ class _Parser:
         rate = self.rate_for(currency, day)
         if rate is None:
             code = self.cat.currencies[currency].code
-            raise ValidationError(
-                tr("нет курса {code} на {date}", code=code, date=f"{day:%d.%m.%Y}")
-            )
+            raise ValidationError(no_rate_text(code, day))
         line.currency_id, line.currency_amount, line.rate = currency, amount, rate
         line.amount = to_base(amount, rate)
 

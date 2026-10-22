@@ -21,6 +21,7 @@ from modern_gl.application.conversions import (
     fee_on_credit,
     same_day,
 )
+from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
@@ -326,9 +327,7 @@ class ConversionCommands(ModuleDocumentCommands):
         calc = calculate(self.conn, company_id, data)
         if calc.missing:
             codes = ", ".join(self._currency(company_id, c)["code"] for c in calc.missing)
-            raise ValidationError(
-                tr("нет курса {code} на {date}", code=codes, date=iso_date(data.doc_date))
-            )
+            raise ValidationError(no_rate_text(codes, data.doc_date))
         return calc
 
     def _difference_line(
