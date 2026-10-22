@@ -36,7 +36,6 @@ class BankAccountDialog(QDialog):
     def __init__(self, session: Session, account: BankAccount | None, parent=None) -> None:
         super().__init__(parent)
         self.s, self.account = session, account
-        self.saved_value: int | None = None
         self.setWindowTitle(tr("Банковский счёт") if account else tr("Новый банковский счёт"))
         self.setMinimumWidth(520)
         root = QVBoxLayout(self)
@@ -157,7 +156,7 @@ class BankAccountDialog(QDialog):
         holder = self.holder.currentData() if card else None
         try:
             if self.account is None:
-                self.saved_value = led.add_bank_account(
+                led.add_bank_account(
                     cid,
                     self.name.text(),
                     self.ledger_account.currentData(),
@@ -182,7 +181,6 @@ class BankAccountDialog(QDialog):
                         iban=self.iban.text(),
                         closed=self.closed.isChecked(),
                     )
-                self.saved_value = place.value_id
         except LedgerError as e:
             self.error.setText(str(e))
             self.error.show()

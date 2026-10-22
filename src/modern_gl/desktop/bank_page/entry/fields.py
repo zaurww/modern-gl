@@ -86,9 +86,6 @@ class EntryFields(QWidget):
         ):
             row.addWidget(widget, stretch)
 
-    def amount_fields(self) -> list[QLineEdit]:
-        return [self.amount] if self.mode == ONE else [self.money_in, self.money_out]
-
     def show_mode(self) -> None:
         one = self.mode == ONE
         self.amount.setVisible(one)

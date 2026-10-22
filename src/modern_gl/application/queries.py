@@ -81,12 +81,6 @@ class DocumentData:
         )
 
 
-def list_companies(conn: Connection) -> list[tuple[int, str]]:
-    return [
-        (r["id"], r["name"]) for r in conn.execute("SELECT id, name FROM companies ORDER BY id")
-    ]
-
-
 def company_name(conn: Connection, company_id: int) -> str:
     row = conn.execute("SELECT name FROM companies WHERE id = ?", (company_id,)).fetchone()
     if row is None:
