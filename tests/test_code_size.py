@@ -32,8 +32,6 @@ OVER_LIMIT = {
     "demo_data.py::create_demo_company": 124,
     "desktop/account_dialog.py::AccountDialog.__init__": 123,
     "desktop/currencies_page.py::CurrenciesPage.__init__": 87,
-    "desktop/directories_page.py": 905,
-    "desktop/directories_page.py::DirectoriesPage.__init__": 81,
     "desktop/eqaime_import_page.py": 659,
     "desktop/eqaime_import_page.py::EqaimeImportDialog": 523,
     "desktop/eqaime_import_page.py::EqaimeImportDialog.__init__": 181,

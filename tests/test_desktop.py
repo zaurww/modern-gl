@@ -750,7 +750,7 @@ def test_new_user_directory(window, monkeypatch):
     window.show_place(("directories",))
     page = current_page(window)
     monkeypatch.setattr(
-        "modern_gl.desktop.directories_page.QInputDialog.getText",
+        "modern_gl.desktop.directories_page.page.QInputDialog.getText",
         staticmethod(lambda *a, **k: ("Проекты", True)),
     )
     before = len(window.session.catalog.kinds)
