@@ -1370,4 +1370,11 @@ AZ: dict[str, str] = {
     "укажите компанию: {names}": "şirkəti göstərin: {names}",
     "компания «{name}» не найдена; есть: {names}": "«{name}» şirkəti tapılmadı; var: {names}",
     "«{name}» — несколько компаний: {names}": "«{name}» — bir neçə şirkət: {names}",
+    # assistant drafts (D84)
+    "документ №{n} ввёл не помощник — его меняет человек": "sənəd №{n} köməkçi tərəfindən daxil edilməyib — onu insan dəyişir",
+    "нет проводок": "yazılış yoxdur",
+    "строка {line}: лишние поля {keys}": "sətir {line}: artıq sahələr {keys}",
+    'строка {line}: сумма — строкой, например "261.13"': 'sətir {line}: məbləğ mətnlə, məsələn "261.13"',
+    "у счёта {code} субконто: {kinds}": "{code} hesabının subkontoları: {kinds}",
+    "«{name}» нет в справочнике «{kind}» — его добавляет человек в программе": "«{name}» «{kind}» soraqçasında yoxdur — onu insan proqramda əlavə edir",
 }

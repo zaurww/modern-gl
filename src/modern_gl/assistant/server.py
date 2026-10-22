@@ -1,4 +1,5 @@
 """The assistant server: uv run modern-gl-mcp [--data FOLDER] [--file X.gl …] [--lang az|ru]
+    [--allow-drafts]
 
 An MCP server over stdio (D83) for Claude Desktop or any MCP client; it reads the company
 files the program knows (its folder and remembered files), each as a read-only snapshot.
@@ -17,13 +18,16 @@ from pathlib import Path
 from modern_gl import i18n
 from modern_gl.assistant import answers
 from modern_gl.assistant.companies import Companies
-from modern_gl.assistant.protocol import Server, Tool
+from modern_gl.assistant.draft_tools import ABOUT as DRAFTS_ABOUT
+from modern_gl.assistant.draft_tools import draft_tools
+from modern_gl.assistant.drafts import Drafts
+from modern_gl.assistant.protocol import Server, Session, Tool
 from modern_gl.infrastructure.app_settings import default_folder, read_settings
 from modern_gl.infrastructure.workspace import Workspace
 
 ABOUT = """Modern GL — the user's accounting books (general ledger, 1C 7.7 style: postings
 debit/credit with subconto — counterparties, contracts, bank accounts, items).
-Read-only: nothing here can change the books. Amounts are manat strings ("1234.50"); account
+Reading never changes the books. Amounts are manat strings ("1234.50"); account
 codes as in the chart (60 suppliers, 62 customers, 51 bank…). An ODV/VAT invoice is an
 "e-qaimə". Check figures with the reports, quote document numbers, and when something looks
 wrong, show the postings that prove it. Answer in the user's language."""
@@ -46,7 +50,7 @@ BOOK = {
 PERIOD = {"company": COMPANY, "date_from": DATE_FROM, "date_to": DATE_TO}
 
 
-def build_tools(companies: Companies) -> list[Tool]:
+def build_tools(companies: Companies, drafts: Drafts | None = None) -> list[Tool]:
     def opened(answer: Callable[..., dict]) -> Callable[..., dict]:
         def run(company: str = "", **arguments) -> dict:
             conn, company_id = companies.open(company)
@@ -61,6 +65,7 @@ def build_tools(companies: Companies) -> list[Tool]:
         Tool("companies", "The companies (one file each) whose books can be read.", company_list),
         *_report_tools(opened),
         *_book_tools(opened),
+        *(draft_tools(drafts) if drafts else []),
     ]
 
 
@@ -170,11 +175,17 @@ def main() -> None:
     parser.add_argument("--data", type=Path, help="folder of company files")
     parser.add_argument("--file", type=Path, action="append", default=[], help="a company file")
     parser.add_argument("--lang", choices=sorted(i18n.LANGUAGES))
+    parser.add_argument(
+        "--allow-drafts", action="store_true", help="let the AI prepare drafts (D84)"
+    )
     args = parser.parse_args()
     language = args.lang or read_settings().language
     i18n.set_language(language if language in i18n.LANGUAGES else i18n.DEFAULT)
     companies = Companies(workspace_from(args))
-    server = Server("modern-gl", "0.1.0", build_tools(companies), ABOUT)
+    session = Session()
+    drafts = Drafts(companies, lambda: session.client) if args.allow_drafts else None
+    about = ABOUT + (DRAFTS_ABOUT if drafts else "")
+    server = Server("modern-gl", "0.1.0", build_tools(companies, drafts), about, session)
     try:
         server.serve(sys.stdin.buffer, sys.stdout.buffer)
     finally:

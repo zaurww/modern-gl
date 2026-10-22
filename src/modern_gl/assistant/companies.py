@@ -22,6 +22,9 @@ class Companies:
     def files(self) -> list[CompanyFile]:
         return self.workspace.companies()
 
+    def path(self, name: str = "") -> Path:
+        return self._find(name).path
+
     def open(self, name: str = "") -> tuple[Connection, int]:
         """The company by its name (case and İ/ı, ə… do not matter; a unique beginning will
         do); with no name — the only company there is."""

@@ -25,6 +25,7 @@ class Tool:
     run: Callable[..., dict]
     properties: dict[str, dict] = field(default_factory=dict)  # JSON Schema of each argument
     required: tuple[str, ...] = ()
+    writes: bool = False  # changes the books (drafts only, D84)
 
     def listed(self) -> dict:
         return {
@@ -36,8 +37,15 @@ class Tool:
                 "required": list(self.required),
                 "additionalProperties": False,
             },
-            "annotations": {"readOnlyHint": True},
+            "annotations": {"readOnlyHint": not self.writes, "destructiveHint": False},
         }
+
+
+@dataclass
+class Session:
+    """Who is on the other side: the client's name, from initialize."""
+
+    client: str = ""
 
 
 class RequestError(Exception):
@@ -47,8 +55,16 @@ class RequestError(Exception):
 
 
 class Server:
-    def __init__(self, name: str, version: str, tools: Sequence[Tool], about: str = "") -> None:
+    def __init__(
+        self,
+        name: str,
+        version: str,
+        tools: Sequence[Tool],
+        about: str = "",
+        session: Session | None = None,
+    ) -> None:
         self.info = {"name": name, "version": version}
+        self.session = session or Session()
         self.about = about  # instructions for the model: what the server is for
         self.tools = {t.name: t for t in tools}
 
@@ -85,6 +101,7 @@ class Server:
 
     def _dispatch(self, method: str, params: dict) -> dict:
         if method == "initialize":
+            self.session.client = str((params.get("clientInfo") or {}).get("name") or "")
             asked = params.get("protocolVersion")
             return {
                 "protocolVersion": asked if asked in VERSIONS else VERSIONS[0],
@@ -113,7 +130,7 @@ class Server:
             )
         try:
             result = tool.run(**arguments)
-        except (LedgerError, ValueError) as e:
+        except (LedgerError, LookupError, ValueError) as e:
             return {"content": [{"type": "text", "text": str(e)}], "isError": True}
         text = json.dumps(result, ensure_ascii=False)
         return {"content": [{"type": "text", "text": text}], "structuredContent": result}

@@ -9,7 +9,12 @@ from modern_gl.application.common import insert, now, pad_subconto
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.validation import PostingChecks
 from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
+from modern_gl.domain.errors import (
+    LedgerError,
+    NotFoundError,
+    PeriodClosedError,
+    ValidationError,
+)
 from modern_gl.domain.invoice import KINDS, normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
@@ -291,6 +296,17 @@ class DocumentCommands(PostingChecks):
     def post(self, company_id: int, doc_id: int) -> None:
         with transaction(self.conn):
             self._post(company_id, doc_id)
+
+    def posting_problem(self, company_id: int, doc_id: int) -> str | None:
+        """Why the draft would not post — the checks of posting, nothing written; None: it
+        would. For whoever prepares drafts for a person to post (the assistant, D84)."""
+        doc = self._document(company_id, doc_id)
+        try:
+            self._require_draft(doc)
+            self._validate_for_posting(company_id, doc)
+        except LedgerError as e:
+            return str(e)
+        return None
 
     def post_new(
         self,

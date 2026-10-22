@@ -12,14 +12,14 @@
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка>` — после любых изменений UI смотреть их
 - Демо в консоли: `uv run python scripts/demo.py`
 - Размеры кода (самые большие места): `uv run python tests/test_code_size.py`
-- AI-помощник (MCP, только чтение): `uv run modern-gl-mcp` — подключение в `docs/ASSISTANT.md`
+- AI-помощник (MCP): `uv run modern-gl-mcp` (только чтение; `--allow-drafts` — AI готовит черновики) — подключение в `docs/ASSISTANT.md`
 
 ## Структура
 - `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt.
 - `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart`, `templates`, `documents`, `validation`, `document_import`, `revaluation`, `opening`, `conversion`, `bank`; общее модулей — `module.py`); общие помощники — `application/common.py`.
 - `src/modern_gl/application/inventory/` — склад: `Inventory` собран так же из групп (`catalog`, `drafts`, `stock`, `movements`, `sales`, `landed_cost`, `accruals`, `posting`); `model` — константы и dataclass-строки, `amounts` — чистая арифметика.
 - `src/modern_gl/reporting/reports.py` — ОСВ, ОСВ по субконто, карточка, анализ счёта (агрегация в SQL); `reporting/report_common.py` — общее отчётов; `reporting/plaintext.py` — журнал для hledger (D79); `reporting/handover.py` — пакет «Передача дел» (D81); `reporting/inventory/` — склад (`choices`, `stock`, `documents`, `costs`).
-- `src/modern_gl/assistant` — MCP-сервер для AI (D83): `protocol` (JSON-RPC по stdio), `companies` (снимки файлов), `answers` (отчёты в JSON), `server` (инструменты, `main`).
+- `src/modern_gl/assistant` — MCP-сервер для AI (D83): `protocol` (JSON-RPC по stdio), `companies` (снимки файлов), `answers` (отчёты в JSON), `server` (инструменты, `main`); `drafts` + `draft_tools` — черновики от AI (D84, флаг `--allow-drafts`).
 - `src/modern_gl/infrastructure` — SQLite, миграции (`migrations/NNNN_*.sql`), импорт CSV, `workspace.py` (файл на компанию).
 - `src/modern_gl/desktop` — интерфейс: `main_window/` (`CompanyFiles` — файл компании ← `OpenPages` — стек страниц ← `MainWindow` — какие страницы есть; `sidebar`), `document_page/` (документ: `form`, `rates`, `templates`, `clipboard`), `postings/` (таблица ввода), `cell_editing` (редактирование ячеек как в 1С: списки с поиском, Enter/Tab, поиск в списке `resolve_choice` — для всех таблиц), `journal_page`, `trade_page` (покупки и продажи), `bank_page` + `bank_operation_page/` (модуль «Банк»: выписка, приход/расход; `form` — поля, группы `bank`, `counterparty`, `lines`, `folded`), `eqaime_import_page` (+ `eqaime_import_form`, `eqaime_portal_loader`) + `portal_login` (e-qaimə с портала, клиент — `infrastructure/etaxes.py`), `inventory_document_page/` (форма покупки, продажи и складских документов), `landed_cost_page/` (доп. расходы), `reports_page/` (ОСВ, карточка, план счетов; `table` — таблица отчёта), `directories_page/` (`tags`, `values` — окно элемента), `conversion_page/`, `opening_balances_page` + `opening_postings`, `account_dialog`, `theme` (все цвета и шрифты), `i18n_az.py` (переводы).
 
