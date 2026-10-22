@@ -8,7 +8,7 @@
 - Тесты: `uv run pytest -q`
 - Линтер: `uv run ruff check . && uv run ruff format --check .`
 - Типы: `uv run pyright` (тот же движок, что Pylance; должно быть 0 ошибок)
-- Программа: `uv run modern-gl` — компании это файлы `*.gl` в «Документы\Modern GL» (`--data <папка>` — другая папка, запоминается); `--demo` добавляет демо-компанию в пустую папку
+- Программа: `uv run modern-gl` — компании это файлы `*.gl` в «Документы\Modern GL» (`--data <папка>` — другая папка, запоминается); `--demo` добавляет демо-компанию в пустую папку; `--demo-year` — компанию с целым 2026 годом во всех модулях (`demo_year/`)
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка>` — после любых изменений UI смотреть их
 - Демо в консоли: `uv run python scripts/demo.py`
 - Размеры кода (самые большие места): `uv run python tests/test_code_size.py`
