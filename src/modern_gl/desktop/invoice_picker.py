@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.bank import allocate
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button, ru_date, status_icon
+from modern_gl.desktop.widgets import button, ru_date, tick_icon
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.invoices import OpenInvoice
@@ -111,7 +111,7 @@ class InvoicePicker(QDialog):
 
     @staticmethod
     def _show(item: QTreeWidgetItem) -> None:
-        item.setIcon(0, status_icon(bool(item.data(0, Qt.ItemDataRole.UserRole))))
+        item.setIcon(0, tick_icon(bool(item.data(0, Qt.ItemDataRole.UserRole))))
 
     def ticked(self) -> list[OpenInvoice]:
         return [
