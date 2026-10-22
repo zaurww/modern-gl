@@ -37,6 +37,7 @@ class EntryFields(QWidget):
         self.analytics_position: int | None = None
         self.contract_position: int | None = None
         self.invoices: list[OpenInvoice] = []
+        self.chosen_invoices: list[OpenInvoice] = []  # the e-qaimə the line pays
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(6)

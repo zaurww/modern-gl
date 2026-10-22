@@ -13,37 +13,49 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.domain.accounts import BANK_FEE
+from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED, BANK_FEE
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
 
 class BankSettingsDialog(QDialog):
     """The account «+ Комиссия банка» puts on a new line (role bank_fee, shared with
-    conversions); a line may still take another account."""
+    conversions; D62), and where an advance goes (D78): the advance accounts, or none —
+    an advance stays on the settlement account without an e-qaimə."""
+
+    ROLES = (
+        (BANK_FEE, "Счёт комиссии банка", "— не указан —"),
+        (ADVANCE_PAID, "Авансы выданные", "— на счёте поставщика —"),
+        (ADVANCE_RECEIVED, "Авансы полученные", "— на счёте покупателя —"),
+    )
 
     def __init__(self, session: Session, parent=None) -> None:
         super().__init__(parent)
         self.s = session
         self.setWindowTitle(tr("Настройки банка"))
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(540)
         form = QFormLayout(self)
-        self.fee = QComboBox()
-        # long account names do not squeeze the label
-        self.fee.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        self.fee.setMinimumContentsLength(28)
-        self.fee.addItem(tr("— не указан —"), None)
-        for account in session.catalog.leaf_accounts:
-            self.fee.addItem(account.label, account.id)
-        current = session.ledger.account_role(session.company_id, BANK_FEE)
-        self.fee.setCurrentIndex(max(self.fee.findData(current), 0))
-        form.addRow(tr("Счёт комиссии банка"), self.fee)
+        self.boxes: dict[str, QComboBox] = {}
+        for role, caption, nothing in self.ROLES:
+            box = QComboBox()
+            # long account names do not squeeze the label
+            box.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+            )
+            box.setMinimumContentsLength(28)
+            box.addItem(tr(nothing), None)
+            for account in session.catalog.leaf_accounts:
+                box.addItem(account.label, account.id)
+            current = session.ledger.account_role(session.company_id, role)
+            box.setCurrentIndex(max(box.findData(current), 0))
+            form.addRow(tr(caption), box)
+            self.boxes[role] = box
+        self.fee = self.boxes[BANK_FEE]
         hint = QLabel(
             tr(
-                "Счёт по умолчанию для «+ Комиссия банка» и для конвертации. "
-                "В операции счёт строки можно сменить."
+                "Комиссия — для «+ Комиссия банка» (F6) и конвертации. Оплата больше долга "
+                "контрагента — аванс: на счёт авансов, а без него — на счёт расчётов без "
+                "e-qaimə. В строке счёт можно сменить."
             )
         )
         hint.setObjectName("tertiary")
@@ -58,10 +70,11 @@ class BankSettingsDialog(QDialog):
         form.addRow(buttons)
 
     def _save(self) -> None:
-        account_id = self.fee.currentData()
+        led, cid = self.s.ledger, self.s.company_id
         try:
-            if account_id != self.s.ledger.account_role(self.s.company_id, BANK_FEE):
-                self.s.ledger.set_account_role(self.s.company_id, BANK_FEE, account_id)
+            for role, box in self.boxes.items():
+                if box.currentData() != led.account_role(cid, role):
+                    led.set_account_role(cid, role, box.currentData())
         except LedgerError as exc:
             QMessageBox.warning(self, tr("Настройки банка"), str(exc))
             return

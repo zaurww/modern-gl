@@ -1,7 +1,7 @@
 """Lines typed right in the bank statement (D78), from the keyboard.
 
 Kapital AZN has 10 000.00 from 01.03; the statement of Monday 02.03:
-  ALFA, 60.1, 500.00 out              → 9 500.00   (a supplier: Dt 60.1 [ALFA, Договор 1])
+  ALFA, 60.1, 500.00 out              → 9 500.00   (owed nothing: Dt 60.2 [ALFA, Договор 1])
   ALFA again: 60.1 as last time, 200.00 → 9 300.00
   payroll in one sum, 70, 1 000.00 out  → 8 300.00
 """
@@ -82,7 +82,8 @@ def test_a_supplier_paid_line_by_line_and_again_as_last_time(qtbot, bank):
     assert line.error.isHidden(), line.error.text()
     [op] = operations(session)
     assert (op.kind, op.direction, op.status, op.total) == (SUPPLIER, "out", "posted", 50_000)
-    assert op.lines[0].account_id == acc(session, "60.1")
+    # ALFA is owed nothing: paid ahead, an advance on 60.2 (the template's advance account)
+    assert op.lines[0].account_id == acc(session, "60.2")
     assert op.lines[0].subconto[:2] == (value(session, "ALFA MMC"), value(session, "Договор 1"))
     assert op.memo == "Оплата поставщику ALFA MMC"
     assert page.current is not None and page.current.closing == 950_000
@@ -178,3 +179,87 @@ def test_lines_move_to_another_account(qtbot, bank, monkeypatch):
     [op] = operations(session)
     assert op.subconto[0] == other
     assert page.current is not None and page.current.closing == 1_000_000
+
+
+def owe_alfa(session, number: str, amount: str, day: str) -> None:
+    """ALFA's e-qaimə for rent: Dt 26 [rent] / Ct 60.1 [ALFA, Договор 1]."""
+    from modern_gl.application.ledger import PostingInput
+
+    led, cid = session.ledger, session.company_id
+    rent = led.add_subconto_value(cid, led.subconto_kind_id(cid, "cost_item"), f"Аренда {number}")
+    led.post_new(
+        cid,
+        day,
+        [
+            PostingInput(
+                acc(session, "26"),
+                acc(session, "60.1"),
+                amount,
+                [rent],
+                [value(session, "ALFA MMC"), value(session, "Договор 1")],
+                invoice=number,
+            )
+        ],
+    )
+    session.catalog.reload()
+
+
+def test_an_overpaid_e_qaime_leaves_an_advance_offset_later(qtbot, bank):
+    """MT001 owes 1 180.00; 1 500.00 paid for it: 1 180.00 MT001 on 60.1, 320.00 on 60.2.
+    MT002 for 400.00 comes on 03.03: the advance is offset, MT002 still owes 80.00."""
+    session = bank
+    owe_alfa(session, "MT001", "1180", "2026-03-01")
+    page = statement_page(qtbot, session)
+    line = page.entry
+    pick(qtbot, line.counterparty_box, "ALFA")
+    pick(qtbot, line.account, "60.1")
+    enter_until(qtbot, line.invoice)
+    type_text(line.invoice, "MT001")
+    enter(qtbot)
+    assert focused() is line.money_out and line.money_out.text() == "1 180.00"
+    type_text(line.money_out, "1500")
+    enter(qtbot)
+    assert line.error.isHidden(), line.error.text()
+    [op] = operations(session)
+    accounts = session.catalog.accounts
+    assert [(accounts[x.account_id].code, x.amount, x.invoice) for x in op.lines] == [
+        ("60.1", 118_000, "MT001"),
+        ("60.2", 32_000, ""),
+    ]
+
+    from modern_gl.application.bank import counterparty_balance
+    from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
+    from modern_gl.reporting.invoices import open_invoices
+
+    owe_alfa(session, "MT002", "400", "2026-03-03")
+    dialog = AdvanceOffsetDialog(session, "2026-03-03")
+    qtbot.addWidget(dialog)
+    dialog.counterparty.setCurrentIndex(dialog.counterparty.findData(value(session, "ALFA MMC")))
+    dialog.plan()
+    assert [o.parts for o in dialog.offsets] == [[("MT002", 32_000)]]
+    dialog.offset()
+    cid, alfa = session.company_id, value(session, "ALFA MMC")
+    assert counterparty_balance(session.conn, cid, acc(session, "60.2"), alfa, "2026-03-31") == 0
+    left = {i.invoice: i.amount for i in open_invoices(session.conn, cid, alfa, True, "2026-03-31")}
+    assert left == {"MT002": 8_000}
+
+
+def test_f2_takes_the_line_to_the_full_form(qtbot, bank):
+    session = bank
+    page = statement_page(qtbot, session)
+    line = page.entry
+    sent: list = []
+    page.new_bank_operation.connect(sent.append)
+    pick(qtbot, line.counterparty_box, "ALFA")
+    pick(qtbot, line.account, "60.1")
+    line.money_out.setFocus()
+    type_text(line.money_out, "100")
+    qtbot.keyClick(focused(), Qt.Key.Key_F2)
+    [data] = sent
+    assert (data.counterparty_id, data.direction, data.doc_date) == (
+        value(session, "ALFA MMC"),
+        "out",
+        "2026-03-02",
+    )
+    assert data.lines[0].account_id == acc(session, "60.2") and data.total == 10_000  # ahead
+    assert line.money_out.text() == "" and line.counterparty is None

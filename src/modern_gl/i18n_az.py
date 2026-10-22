@@ -29,6 +29,22 @@ AZ: dict[str, str] = {
     "Расчётные счета": "Hesablaşma hesabları",
     "Валютные счета": "Valyuta hesabları",
     "Бизнес-карты": "Biznes kartlar",
+    "{account}: аванс {amount}": "{account}: avans {amount}",
+    "Зачесть авансы": "Avansları əvəzləşdir",
+    "Зачесть авансы на {day}": "{day} tarixinə avansların əvəzləşdirilməsi",
+    "Зачесть": "Əvəzləşdir",
+    "Авансов к зачёту нет.": "Əvəzləşdiriləcək avans yoxdur.",
+    "неоплаченных e-qaimə нет": "ödənilməmiş e-qaimə yoxdur",
+    "Зачесть авансы…": "Avansları əvəzləşdir…",
+    "Авансы зачтены": "Avanslar əvəzləşdirildi",
+    "Комиссия — для «+ Комиссия банка» (F6) и конвертации. Оплата больше долга контрагента — аванс: на счёт авансов, а без него — на счёт расчётов без e-qaimə. В строке счёт можно сменить.": (
+        "Komissiya — «+ Bank komissiyası» (F6) və konvertasiya üçün. Kontragentin borcundan artıq ödəniş avansdır: avans hesabına, o yoxdursa — hesablaşma hesabına e-qaiməsiz. Sətirdə hesabı dəyişmək olar."
+    ),
+    "Зачёт аванса: {name}": "Avansın əvəzləşdirilməsi: {name}",
+    "нечего зачитывать": "əvəzləşdiriləcək heç nə yoxdur",
+    "— на счёте поставщика —": "— malsatanın hesabında —",
+    "— на счёте покупателя —": "— alıcının hesabında —",
+    "{n} e-qaimə": "{n} e-qaimə",
     "Перенесено на {name}: {n}": "{name} hesabına köçürüldü: {n}",
     "Отметьте строки банковских операций (Ctrl или Shift + щелчок)": (
         "Bank əməliyyatlarının sətirlərini seçin (Ctrl və ya Shift + klik)"

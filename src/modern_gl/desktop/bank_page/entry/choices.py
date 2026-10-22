@@ -4,6 +4,8 @@ asks for, the unpaid e-qaimə of the counterparty."""
 
 from __future__ import annotations
 
+from PySide6.QtWidgets import QDialog
+
 from modern_gl.application.bank import (
     IN,
     OUT,
@@ -13,16 +15,20 @@ from modern_gl.application.bank import (
 )
 from modern_gl.application.catalog import AccountInfo
 from modern_gl.desktop.bank_operation_page.common import (
+    SEVERAL,
     counterparty_kind,
     offer_invoices,
     select_data,
 )
 from modern_gl.desktop.bank_page.entry.fields import ONE, EntryFields
+from modern_gl.desktop.invoice_picker import InvoicePicker
 from modern_gl.desktop.widgets import edited_date
-from modern_gl.domain.money import format_minor
+from modern_gl.domain.money import format_minor, to_minor
+from modern_gl.i18n import tr
 from modern_gl.reporting.invoices import open_invoices
 
 BANK_TYPES = ("bank", "vat_deposit")
+ADVANCE_OF = {"advance_paid": "payable", "advance_received": "receivable"}
 
 
 class EntryChoices(EntryFields):
@@ -77,15 +83,30 @@ class EntryChoices(EntryFields):
         """The account (and analytics) the money of this counterparty went to last time."""
         conn, cid = self.s.conn, self.s.company_id
         direction = latest_direction(conn, cid, value) or OUT
-        lines = last_lines(conn, cid, direction, value)
-        if not lines or lines[0].account_id is None:
+        lines = [x for x in last_lines(conn, cid, direction, value) if x.account_id is not None]
+        if not lines:
             return
-        line = lines[0]
-        if self.account.findData((line.account_id, None)) < 0:
+        # the payment itself, not the advance it left (60.2 → its 60.1)
+        settled = [x for x in lines if self._settlement_of(x.account_id) == x.account_id]
+        line = (settled or lines)[0]
+        account_id = self._settlement_of(line.account_id)
+        if self.account.findData((account_id, None)) < 0:
             return
-        select_data(self.account, (line.account_id, None))
+        select_data(self.account, (account_id, None))
         self.auto_account = True
         self.account_chosen(remembered=list(line.subconto))
+
+    def _settlement_of(self, account_id: int | None) -> int | None:
+        """An advance account's settlement account (60.2 → 60.1, of the same group if
+        there is one); any other account is itself."""
+        accounts = self.s.catalog.accounts
+        info = accounts.get(account_id) if account_id is not None else None
+        settles = ADVANCE_OF.get(info.account_type or "") if info is not None else None
+        if info is None or settles is None:
+            return account_id
+        same = [a for a in self.s.catalog.leaf_accounts if a.account_type == settles]
+        sibling = next((a for a in same if a.parent_id == info.parent_id), None)
+        return (sibling or (same[0] if same else info)).id
 
     def account_chosen(self, *_, remembered: list[int | None] | None = None) -> None:
         """The analytics the account asks for, its contract, the e-qaimə it can close."""
@@ -148,17 +169,50 @@ class EntryChoices(EntryFields):
         else:
             self.invoices = []
         offer_invoices(self.invoice, self.invoices)
+        self.chosen_invoices = []
         self.invoice.setEnabled(self.invoices_apply())
 
     def invoice_chosen(self, *_) -> None:
-        """The amount left to pay goes into the amount, unless one is typed."""
+        """One e-qaimə: what it still owes goes into the amount, unless one is typed;
+        «several»: ticked in a list, the amount spread over them oldest first."""
+        target = self.amount_target()
+        if self.invoice.currentData() == SEVERAL:
+            self._pick_several(target)
+            return
         chosen = next((i for i in self.invoices if i.invoice == self.invoice.text()), None)
-        if self.mode == ONE:
-            target = self.amount
-        else:
-            target = self.money_in if self.guessed_direction() == IN else self.money_out
+        self.chosen_invoices = [chosen] if chosen is not None else []
         if chosen is not None and not target.text().strip():
             target.setText(format_minor(chosen.amount))
+
+    def _pick_several(self, target) -> None:
+        typed = target.text().strip()
+        try:
+            total = to_minor(typed.lstrip("+-−")) if typed else None
+        except ValueError:
+            total = None
+        picker = InvoicePicker(self.invoices, total, self)
+        if picker.exec() != QDialog.DialogCode.Accepted:
+            self.invoice.setText("")
+            return
+        numbers = {number for number, _ in picker.chosen}
+        self.chosen_invoices = [i for i in self.invoices if i.invoice in numbers]
+        self.invoice.setText(tr("{n} e-qaimə", n=len(self.chosen_invoices)))
+        if total is None:
+            target.setText(format_minor(sum(amount for _, amount in picker.chosen)))
+
+    def amount_target(self):
+        if self.mode == ONE:
+            return self.amount
+        return self.money_in if self.guessed_direction() == IN else self.money_out
+
+    def invoices_of_line(self) -> list[tuple[str, int | None]]:
+        """(number, what it still owes) of the e-qaimə the line pays; a number typed that
+        the list does not know: None, it takes the whole amount."""
+        if self.chosen_invoices:
+            return [(i.invoice, i.amount) for i in self.chosen_invoices]
+        typed = self.invoice.text().strip()
+        known = next((i for i in self.invoices if i.invoice == typed), None)
+        return [(typed, known.amount if known else None)] if typed else []
 
     def account_hook(self) -> None:  # the line: the sign of the amount, the purpose
         pass

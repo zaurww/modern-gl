@@ -1,6 +1,7 @@
 """The entry line under a statement (D78): a bank statement's line typed as it is read —
 Enter goes on through what is left to type and posts at the amount, as in the journal
-(D55); the account "as last time" is passed by; F6 — a bank fee; Esc — empty again."""
+(D55); the account "as last time" is passed by; F6 — a bank fee; F2 — the full form
+(the ƏDV deposit, several accounts); Esc — empty again."""
 
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ ENTER = (Qt.Key.Key_Return, Qt.Key.Key_Enter)
 
 class EntryLine(EntrySaving):
     saved = Signal()  # an operation was posted: the statement reads its lines again
+    expand = Signal(object)  # F2: what is typed, to the full form (BankOperationInput)
 
     def __init__(self, session: Session) -> None:
         super().__init__(session)
@@ -121,6 +123,10 @@ class EntryLine(EntrySaving):
             self.start()
         elif key == Qt.Key.Key_F6:
             self.fee()
+        elif key == Qt.Key.Key_F2:
+            data = self.draft()
+            self.clear(keep_date=True)
+            self.expand.emit(data)
         else:
             super().keyPressEvent(event)
 

@@ -43,6 +43,7 @@ from modern_gl.desktop.bank_page.levels import (
     statement_columns,
     where,
 )
+from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
 from modern_gl.desktop.bank_page.reconcile import ReconcileBar
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
 from modern_gl.desktop.reports_page import ReportPage
@@ -79,6 +80,7 @@ class BankPage(ReportPage):
         self._build_crumbs()
         self.entry = EntryLine(session)
         self.entry.saved.connect(self.refresh)
+        self.entry.expand.connect(self.new_bank_operation.emit)
         self.reconcile = ReconcileBar()
         self.reconcile.entered.connect(self._bank_closing_entered)
         root = self.layout()
@@ -164,6 +166,7 @@ class BankPage(ReportPage):
             items.append((tr("Новый счёт или карта…"), self.new_account))
         return [
             *items,
+            (tr("Зачесть авансы…"), self.offset_advances),
             None,
             (tr("Конвертация валюты…"), self.new_conversion.emit),
             (tr("Настройки банка…"), self.settings),
@@ -413,6 +416,12 @@ class BankPage(ReportPage):
 
     def edit_account(self) -> None:
         if self.account and BankAccountDialog(self.s, self.account, self).exec():
+            self.refresh()
+
+    def offset_advances(self) -> None:
+        day = self.current.date_to if self.current else self.s.working_date.isoformat()
+        if AdvanceOffsetDialog(self.s, day, self).exec() == QDialog.DialogCode.Accepted:
+            self.s.notify(tr("Авансы зачтены"))
             self.refresh()
 
     def settings(self) -> None:
