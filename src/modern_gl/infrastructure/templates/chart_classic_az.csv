@@ -30,7 +30,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 68.3;Mənfəət vergisi;68;;liability;;1;;
 68.9;Digər vergi və rüsumlar;68;;liability;;1;;
 69;Sosial sığorta üzrə hesablaşmalar;;;liability;;1;;
-70;Əməyin ödənişi üzrə işçilərlə hesablaşmalar;;;liability;;1;employee;
+70;Əməyin ödənişi üzrə işçilərlə hesablaşmalar;;;liability;;1;employee?;
 71;Təhtəlhesab şəxslərlə hesablaşmalar;;;asset;;1;employee;
 75;Təsisçilərlə hesablaşmalar;;;liability;;1;counterparty;
 76;Müxtəlif debitor və kreditorlarla hesablaşmalar;;;liability;;1;counterparty,contract;

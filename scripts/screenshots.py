@@ -190,6 +190,17 @@ def main() -> None:
     loop.exec()
     bank_dialog.grab().save(str(out / "8b4_bank_dialog.png"))
     bank_dialog.close()
+    from modern_gl.desktop.account_dialog import AccountDialog
+
+    salary = session.catalog.by_code.get("70")
+    if salary is not None:  # its employee may stay empty: paid in one sum (D78)
+        account_dialog = AccountDialog(session, salary, parent=win)
+        account_dialog.show()
+        loop = QEventLoop()
+        QTimer.singleShot(300, loop.quit)
+        loop.exec()
+        account_dialog.grab().save(str(out / "8b9_account_dialog.png"))
+        account_dialog.close()
     partners = session.catalog.owner_kinds[contracts]
     for i, v in enumerate(session.catalog.values(partners)):  # VÖEN of the demo partners
         ledger.set_subconto_value_tax(session.company_id, v.id, f"{1400057421 + i * 1111}")

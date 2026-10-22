@@ -152,7 +152,10 @@ class AccountDialog(QDialog):
             for kind_id, kind_name in sorted(self.s.catalog.kinds.items(), key=lambda kv: kv[1]):
                 box.addItem(kind_name, kind_id)
             optional = QCheckBox(tr("можно не заполнять"))
-            optional.setEnabled(False)
+            policy = optional.sizePolicy()
+            policy.setRetainSizeWhenHidden(True)  # the boxes keep their width
+            optional.setSizePolicy(policy)
+            optional.setVisible(False)
             box.currentIndexChanged.connect(self._fit_optional)
             self.subconto.append(box)
             self.optional.append(optional)
@@ -160,7 +163,7 @@ class AccountDialog(QDialog):
     def _fit_optional(self, *_) -> None:
         for box, optional in zip(self.subconto, self.optional, strict=True):
             kind = box.currentData() is not None and not self.group.isChecked()
-            optional.setEnabled(kind)  # a locked kind (old postings) still may turn optional
+            optional.setVisible(kind)  # a locked kind (old postings) still may turn optional
             if not kind:
                 optional.setChecked(False)
 

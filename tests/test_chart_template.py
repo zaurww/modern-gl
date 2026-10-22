@@ -113,3 +113,17 @@ def test_an_optional_subconto_turns_required_only_while_nothing_left_it_empty(le
         ledger.set_optional_subconto(company, "70", set())
     with pytest.raises(ValidationError, match="нет субконто 2"):
         ledger.set_optional_subconto(company, "70", {1})
+
+
+@pytest.mark.parametrize("name", ["1c77", "classic"])
+@pytest.mark.parametrize("lang", ["ru", "az"])
+def test_both_templates_leave_70s_employee_optional(ledger, conn, name, lang):
+    from modern_gl.i18n import set_language
+
+    set_language(lang)
+    cid = ledger.create_company(f"{name} {lang}")
+    apply_chart_template(ledger, cid, name)
+    row = conn.execute(
+        "SELECT sc_optional FROM accounts WHERE company_id = ? AND code = '70'", (cid,)
+    ).fetchone()
+    assert row["sc_optional"] == 1

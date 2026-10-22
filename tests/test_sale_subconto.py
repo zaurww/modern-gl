@@ -312,7 +312,11 @@ def test_account_dialog_ticks_a_subconto_that_may_stay_empty(shop, conn, qtbot):
     session = sale_page(shop, conn, qtbot).s
     dialog = AccountDialog(session, session.catalog.accounts[shop.acc["62"]])
     qtbot.addWidget(dialog)
-    assert [box.isEnabled() for box in dialog.optional] == [True, True, False]  # 62: cp, contract
+    assert [not box.isHidden() for box in dialog.optional] == [
+        True,
+        True,
+        False,
+    ]  # 62: cp, contract
     dialog.optional[0].setChecked(True)
     dialog.save()
     assert dialog.result() == AccountDialog.DialogCode.Accepted, dialog.error.text()

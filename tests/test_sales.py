@@ -378,11 +378,12 @@ def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path, monkeypa
         sql = migration.read_text(encoding="utf-8")
         old.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};\nCOMMIT;")
     old.execute("PRAGMA foreign_keys = ON")
-    # today's chart template without 76H, whose account type came later (D65, 0031)
+    # today's chart template without 76H, whose account type came later (D65, 0031), and
+    # without optional subconto ("employee?", D78), whose column came later too (0028)
     templates = tmp_path / "templates"
     shutil.copytree(chart_csv.TEMPLATES_DIR, templates)
     for csv in templates.glob("chart_classic_*.csv"):
-        lines = csv.read_text(encoding="utf-8").splitlines(keepends=True)
+        lines = csv.read_text(encoding="utf-8").replace("?;", ";").splitlines(keepends=True)
         csv.write_text("".join(x for x in lines if not x.startswith("76H;")), encoding="utf-8")
     monkeypatch.setattr(chart_csv, "TEMPLATES_DIR", templates)
     shop = make_shop(old, "classic")
