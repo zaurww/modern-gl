@@ -165,6 +165,7 @@ AZ: dict[str, str] = {
     "больше {n} знаков после запятой: {value}": "vergüldən sonra {n} rəqəmdən çox: {value}",
     # ---- lookup ----------------------------------------------------------------------------
     "счёт не указан": "hesab göstərilməyib",
+    "счёт": "hesab",
     "счёт «{text}» не найден": "«{text}» hesabı tapılmadı",
     "«{text}» подходит к нескольким счетам: {codes}": "«{text}» bir neçə hesaba uyğundur: {codes}",
     "счёт {code} — группа, выберите субсчёт: {subs}": "{code} hesabı qrupdur, subhesab seçin: {subs}",
@@ -1591,7 +1592,7 @@ AZ: dict[str, str] = {
     "неизвестная причина поступления: {r}": "daxilolmanın naməlum səbəbi: {r}",
     "Оприходование: Дт счёт товара / Кт счёт причины.": "Mədaxil: Dt malın hesabı / Kt səbəbin hesabı.",
     "Товар пришёл не от поставщика: излишки, вклад учредителя, своё производство, подарок": "Mal təchizatçıdan gəlməyib: artıq çıxma, təsisçinin payı, öz istehsalı, hədiyyə",
-    # ---- closing the period (D94) -------------------------------------------------------
+    # ---- closing the period (D95) -------------------------------------------------------
     "Закрытие периода": "Dövrün bağlanması",
     "Закрытие периода…": "Dövrün bağlanması…",
     "Все периоды открыты": "Bütün dövrlər açıqdır",

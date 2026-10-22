@@ -1,4 +1,4 @@
-"""«Закрытие периода» (D94): up to which day the books are closed — there a posted
+"""«Закрытие периода» (D95): up to which day the books are closed — there a posted
 document is not changed in place, only reversed (D5). The usual ends of a period are one
 click away; drafts that could not be posted afterwards are told before closing."""
 

@@ -11,7 +11,8 @@ from datetime import date
 from fractions import Fraction
 from typing import cast
 
-from PySide6.QtCore import QStringListModel, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QModelIndex, QStringListModel, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QInputMethodEvent, QTextCharFormat
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCompleter,
@@ -26,14 +27,18 @@ from modern_gl.application.common import pad_subconto
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import (
     DocumentData,
+    PastPosting,
     PostingData,
     list_templates,
     load_document,
+    past_postings,
     recent_subconto,
 )
+from modern_gl.application.quick_entry.marks import Mark, marks
 from modern_gl.desktop.cell_editing import PickWithKeys, fit_popup
+from modern_gl.desktop.quick_entry_card import EntryCard
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
+from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -68,11 +73,15 @@ class QuickEntryBar(QWidget):
         self.preview.setWordWrap(True)
         self.preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.preview)
+        self.card = EntryCard()
+        self.card.finish.connect(self.to_form)
+        lay.addWidget(self.card)
         self.help = QLabel(tr(HELP))
         self.help.setObjectName("tertiary")
         self.help.setFont(fonts().small)
         lay.addWidget(self.help)
         self.preview.hide()
+        self.card.hide()
         self.help.hide()
         self.edit.textChanged.connect(self._preview)
         self.edit.installEventFilter(self)
@@ -82,6 +91,7 @@ class QuickEntryBar(QWidget):
 
     def _setup_suggestions(self) -> None:
         self._found = quick_entry.Suggestions(0)
+        self._past: list[PastPosting] | None = None  # read once, again after posting
         self._names = QStringListModel(self)
         self.completer = QCompleter(self._names, self)
         self.completer.setCompletionMode(QCompleter.CompletionMode.UnfilteredPopupCompletion)
@@ -94,6 +104,7 @@ class QuickEntryBar(QWidget):
             self.take
         )
         PickWithKeys(popup, self.take)
+        popup.installEventFilter(self)  # after PickWithKeys: runs first
         self.edit.textEdited.connect(lambda _text: self.suggest())
 
     def suggest(self) -> list[str]:
@@ -105,6 +116,7 @@ class QuickEntryBar(QWidget):
             self.s.catalog,
             list_templates(self.s.conn, cid),
             lambda account, pos: recent_subconto(self.s.conn, cid, account, pos),
+            self.past(),
         )
         labels = [i.label for i in self._found.items]
         popup = cast(QAbstractItemView, self.completer.popup())
@@ -123,15 +135,24 @@ class QuickEntryBar(QWidget):
                 ),
             )
         )
-        rect.setWidth(380)
+        widest = max(self.edit.fontMetrics().horizontalAdvance(t) for t in labels) + 48
+        rect.setWidth(min(max(380, widest), self.edit.width()))
         self.completer.complete(rect)
         fit_popup(popup, len(labels), self.completer.maxVisibleItems())
         if self._found.typed:  # Enter takes the best match
             popup.setCurrentIndex(self._names.index(0))
+        else:  # nothing chosen: Enter posts (an arrow key picks from the list)
+            popup.setCurrentIndex(QModelIndex())
         return labels
 
+    def past(self) -> list[PastPosting]:
+        if self._past is None:
+            self._past = past_postings(self.s.conn, self.s.company_id)
+        return self._past
+
     def take(self, label: str) -> None:
-        """Put the chosen item in place of the word being typed, then offer what is next."""
+        """Put the chosen item in place of the word being typed, then offer what is next;
+        a posting from the past comes with its amount selected, to type over."""
         item = next((i for i in self._found.items if i.label == label), None)
         if item is None:
             return
@@ -139,6 +160,10 @@ class QuickEntryBar(QWidget):
         text, cursor = self.edit.text(), self.edit.cursorPosition()
         start = min(self._found.start, cursor)
         self.edit.setText(text[:start] + item.insert + text[cursor:])
+        if item.select is not None:
+            first, last = item.select
+            self.edit.setSelection(start + first, last - first)
+            return
         self.edit.setCursorPosition(start + len(item.insert))
         self.suggest()
 
@@ -155,32 +180,46 @@ class QuickEntryBar(QWidget):
             list_templates(self.s.conn, self.s.company_id),
             self._rate,
             self.s.working_date,
+            self.past(),
         )
 
     def _preview(self, text: str) -> None:
         self.help.setVisible(bool(text.strip()))
+        self._paint(text)
         if not text.strip():
             self.preview.hide()
+            self.card.hide()
             return
         try:
             entry = self.parse()
         except LedgerError as e:  # still being typed: a quiet hint, red only on Enter
             self._show(str(e), error=False)
             return
-        lines = quick_entry.describe(entry, self.s.catalog)
-        day = entry.doc_date or self.s.working_date
-        head = f"{day:%d.%m.%Y}" + (f"   ·   {entry.memo}" if entry.memo else "")
-        notes = []
-        if entry.missing:
-            notes.append(tr("не заполнено: {what}", what="; ".join(entry.missing)))
-        if entry.new_values:
-            names = ", ".join(
-                f"{self.s.catalog.kinds[v.kind_id]}: {v.name}" for v in entry.new_values
+        self.preview.hide()
+        self.card.show_entry(entry, self.s.catalog, entry.doc_date or self.s.working_date)
+
+    def _paint(self, text: str) -> None:
+        """Colour the parts as they are understood (Todoist's Quick Add): accounts and
+        elements blue, the amount green, a new element amber, what names nothing
+        underlined red — except the word still being typed at the end."""
+        templates = list_templates(self.s.conn, self.s.company_id)
+        found = marks(text, self.s.catalog, templates, self.s.working_date, self.past())
+        typing = len(text.rstrip()) if self.edit.cursorPosition() >= len(text.rstrip()) else -1
+        cursor = self.edit.cursorPosition()
+        attrs = [
+            QInputMethodEvent.Attribute(
+                QInputMethodEvent.AttributeType.TextFormat,
+                m.start - cursor,
+                m.end - m.start,
+                _format(m),
             )
-            notes.append(tr("будет добавлено: {names}", names=names))
-        self._show("\n".join([head, lines, *notes]), error=False)
+            for m in found
+            if not (m.kind == "unknown" and m.end == typing)
+        ]
+        QCoreApplication.sendEvent(self.edit, QInputMethodEvent("", attrs))
 
     def _show(self, text: str, error: bool) -> None:
+        self.card.hide()
         self.preview.setObjectName("error" if error else "secondary")
         self.preview.style().unpolish(self.preview)
         self.preview.style().polish(self.preview)
@@ -190,9 +229,17 @@ class QuickEntryBar(QWidget):
     # ---- actions -----------------------------------------------------------------------
 
     def eventFilter(self, obj, event) -> bool:
-        if obj is self.edit and event.type() == event.Type.KeyPress:
-            key, mods = event.key(), event.modifiers()
-            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        if event.type() == event.Type.FocusIn and obj is self.edit:
+            self._past = None  # documents may have been posted elsewhere meanwhile
+        if event.type() != event.Type.KeyPress:
+            return super().eventFilter(obj, event)
+        key, mods = event.key(), event.modifiers()
+        enter = key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        if enter and obj is self.completer.popup() and not obj.currentIndex().isValid():
+            obj.hide()  # the list is open, nothing chosen in it: Enter is the line's
+            obj = self.edit
+        if obj is self.edit:
+            if enter:
                 if mods & Qt.KeyboardModifier.ControlModifier:
                     self.to_form()
                 else:
@@ -231,6 +278,7 @@ class QuickEntryBar(QWidget):
             self.s.notify(tr("Документ №{n} сохранён", n=number))
         self.history.append(text)
         self._back = 0
+        self._past = None
         self.edit.clear()
         cast(QAbstractItemView, self.completer.popup()).hide()
         self.posted.emit(doc_id)
@@ -263,3 +311,21 @@ class QuickEntryBar(QWidget):
         self.history.append(self.edit.text())
         self.edit.clear()
         self.open_form.emit(doc)
+
+
+def _format(mark: Mark) -> QTextCharFormat:
+    f = QTextCharFormat()
+    if mark.kind == "unknown":
+        f.setUnderlineStyle(QTextCharFormat.UnderlineStyle.WaveUnderline)
+        f.setUnderlineColor(QColor(P.red))
+        return f
+    text, back = {
+        "amount": (P.green, P.green_soft),
+        "currency": (P.green, P.green_soft),
+        "new": (P.amber, P.amber_soft),
+    }.get(mark.kind, (P.accent, P.accent_soft))
+    f.setForeground(QColor(text))
+    f.setBackground(QColor(back))
+    if mark.kind == "amount":
+        f.setFontWeight(QFont.Weight.DemiBold)
+    return f

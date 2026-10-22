@@ -366,6 +366,53 @@ def last_memo(conn: Connection, company_id: int, debit: int, credit: int) -> str
 
 
 @dataclass(frozen=True)
+class PastPosting:
+    """A posting typed before, for the quick entry line to repeat ("as the last time")."""
+
+    debit: int
+    debit_sc: tuple[int | None, int | None, int | None]
+    credit: int
+    credit_sc: tuple[int | None, int | None, int | None]
+    amount: int
+    memo: str
+    currency_id: int | None = None
+    currency_amount: int | None = None
+
+
+def past_postings(conn: Connection, company_id: int, limit: int = 300) -> list[PastPosting]:
+    """The latest posting of each Dt/Kt with its subconto, newest first: only the
+    journal's own (not a module's, not a reversal, not opening balances), common book."""
+    rows = conn.execute(
+        """
+        SELECT p.debit_account_id, p.dt_sc1, p.dt_sc2, p.dt_sc3,
+               p.credit_account_id, p.ct_sc1, p.ct_sc2, p.ct_sc3, p.amount,
+               CASE WHEN p.memo <> '' THEN p.memo ELSE d.memo END,
+               p.currency_id, p.currency_amount
+        FROM postings p
+        JOIN documents d ON d.company_id = p.company_id AND d.id = p.document_id
+        JOIN layers l ON l.company_id = d.company_id AND l.id = d.layer_id
+        WHERE p.company_id = :c AND l.code = 'common' AND d.reversal_of IS NULL
+          AND p.amount > 0
+          AND NOT EXISTS (SELECT 1 FROM document_owners o
+                          WHERE o.company_id = d.company_id AND o.document_id = d.id)
+          AND NOT EXISTS (SELECT 1 FROM opening_balance_documents b
+                          WHERE b.company_id = d.company_id AND b.document_id = d.id)
+        ORDER BY p.id DESC LIMIT :n
+        """,
+        {"c": company_id, "n": limit * 10},
+    )
+    found: dict[tuple, PastPosting] = {}
+    for r in rows:
+        past = PastPosting(r[0], (r[1], r[2], r[3]), r[4], (r[5], r[6], r[7]), *r[8:])
+        key = (past.debit, past.debit_sc, past.credit, past.credit_sc)
+        if key not in found:
+            found[key] = past
+            if len(found) == limit:
+                break
+    return list(found.values())
+
+
+@dataclass(frozen=True)
 class OpeningBalanceDocument:
     document_id: int
     effective_date: str  # the morning the balances take effect; the document is a day earlier

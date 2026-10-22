@@ -1,4 +1,4 @@
-"""Closing the period (D5, D94): up to which day nothing is changed in place any more —
+"""Closing the period (D5, D95): up to which day nothing is changed in place any more —
 what the window shows before the period is closed or opened again. Only reading; the
 change itself is `Ledger.set_closed_through` (audited)."""
 

@@ -207,6 +207,24 @@ def test_new_element_is_offered_right_in_the_line(firm):
     assert entry.new_values[0].name == "Kapital"
 
 
+def test_a_number_on_the_kt_side_is_the_amount_not_a_new_element(firm):
+    """The counterparty taken from the list adds ", " for the contract; the amount typed
+    there was offered as a new contract «400», and Enter took it instead of posting."""
+    _, _, _, cat = firm
+    for text in (
+        "26 Аренда / 60 Бета, 400",
+        "26 Аренда / 60 Бета, 400 Услуги",
+        "26 Аренда / 60 400",
+        "26 Аренда / 60 4",
+        "50 / 51 400",
+    ):
+        found = suggest(text, len(text), cat)
+        assert not any(i.insert.startswith("+") for i in found.items), text
+        assert not (found.items and found.typed), text  # nothing for Enter to take: it posts
+    assert suggestions(cat, "26 +Тест / 50 12") == []
+    assert suggestions(cat, "05.03 26 ар") == ["Аренда / ", "+ар / "]  # the Dt side as before
+
+
 def test_migration_gives_contracts_their_counterparty(tmp_path):
     """A version 8 file: contracts without owners, 60 / 62 manat only."""
     path = tmp_path / "v8.gl"

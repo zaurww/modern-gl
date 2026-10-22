@@ -133,7 +133,7 @@ class MainWindow(OpenPages):
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 
     def close_period(self) -> None:
-        """«Закрытие периода» (D94): the pages are built again — what is closed now opens
+        """«Закрытие периода» (D95): the pages are built again — what is closed now opens
         read-only, what is opened again can be changed."""
         if self._viewing() or not self._confirm_close_all():
             return
