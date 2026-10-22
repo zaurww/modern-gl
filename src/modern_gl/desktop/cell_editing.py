@@ -40,6 +40,28 @@ def names_it(label: str, text: str) -> bool:
     return fold(label.split("  ·  ")[0]) == fold(text)
 
 
+def resolve_choice(choices: list[tuple[int, str]], text: str) -> int | None:
+    """The item a typed text names in a list of (id, label), labels as «code  name»: the
+    exact label, name or code, else the one fragment (or the one it starts); None if
+    nothing matches, LookupError if several do."""
+    needle = fold(text)
+    exact = [
+        choice_id
+        for choice_id, label in choices
+        if needle in {fold(label), fold(label.split("  ", 1)[-1]), fold(label.split("  ", 1)[0])}
+    ]
+    if exact:
+        return exact[0]
+    partial = [(choice_id, label) for choice_id, label in choices if needle in fold(label)]
+    if len(partial) > 1:
+        starts = [choice for choice in partial if fold(choice[1]).startswith(needle)]
+        partial = starts if len(starts) == 1 else partial
+    if len(partial) > 1:
+        names = ", ".join(label for _, label in partial[:5])
+        raise LookupError(tr("«{text}» подходит к нескольким: {names}", text=text, names=names))
+    return partial[0][0] if partial else None
+
+
 def edit_current(view: QTableView) -> None:
     """The current cell (the first one, if none) opened for typing: a cell reached from
     the keyboard shows its cursor, so it is clear that typing goes there."""

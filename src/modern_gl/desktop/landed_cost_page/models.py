@@ -21,6 +21,7 @@ from modern_gl.application.inventory import (
     format_quantity,
     vat_of,
 )
+from modern_gl.desktop.cell_editing import resolve_choice
 from modern_gl.desktop.landed_cost_page.columns import (
     ACCOUNT,
     AMOUNT,
@@ -44,7 +45,6 @@ from modern_gl.desktop.landed_cost_page.columns import (
     WAREHOUSE,
     ChargeRow,
     TargetRow,
-    resolve,
 )
 from modern_gl.desktop.postings import (
     plain_number,
@@ -245,7 +245,7 @@ class ChargesModel(QAbstractTableModel):
         if key == ACCOUNT:
             return self.s.catalog.resolve_account(text).id
         if key == COST_TYPE:
-            value = resolve(self.choices(row, key) or [], text)
+            value = resolve_choice(self.choices(row, key) or [], text)
         else:
             kind = self.kind_at(row, key)
             if kind is None:

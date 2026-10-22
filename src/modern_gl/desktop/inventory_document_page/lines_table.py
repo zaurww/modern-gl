@@ -35,6 +35,7 @@ from modern_gl.desktop.cell_editing import (
     attach_list,
     edit_current,
     holds_on_group,
+    resolve_choice,
     tabbed_in,
 )
 from modern_gl.desktop.inventory_document_page.columns import (
@@ -62,7 +63,6 @@ from modern_gl.desktop.inventory_document_page.columns import (
 )
 from modern_gl.desktop.inventory_document_page.lines_model import (
     InventoryLinesModel,
-    resolve_choice,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
