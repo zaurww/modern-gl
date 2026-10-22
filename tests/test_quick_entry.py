@@ -156,6 +156,50 @@ def test_enter_posts_and_clears(bar, qtbot):
     assert bar.edit.text().startswith("26 аренда")
 
 
+def test_amount_after_a_counterparty_from_the_list_posts_with_enter(bar, qtbot):
+    """Taking «Альфа Трейд» adds ", " for the contract; the amount typed there is the
+    amount: Enter posts, it does not add a contract «400»."""
+    bar.show()
+    qtbot.waitExposed(bar)
+    bar.edit.setFocus()
+    bar.edit.setText("26 Аренда офиса / 60 ")
+    bar.edit.textEdited.emit(bar.edit.text())
+    bar.take(next(i.label for i in bar._found.items if "Альфа" in i.label))
+    assert bar.edit.text() == "26 Аренда офиса / 60 Альфа Трейд, "
+    bar.edit.insert("400")
+    bar.edit.textEdited.emit(bar.edit.text())
+    posted = []
+    bar.posted.connect(posted.append)
+    popup = bar.completer.popup()  # an open list gets the keys first, as on the screen
+    qtbot.keyClick(popup if popup.isVisible() else bar.edit, Qt.Key.Key_Return)
+    [doc_id] = posted
+    doc = load_document(bar.s.conn, bar.s.company_id, doc_id)
+    assert doc.postings[0].amount == 40_000
+    assert [v.name for v in bar.s.catalog.values(bar.s.catalog.by_code["60"].sc_kinds[1])] == [
+        "Договор №1"
+    ]  # no contract «400»
+
+
+def test_enter_on_an_open_list_with_nothing_chosen_is_the_line_s(bar, qtbot, books):
+    """«60 12345» finds Альфа by its VÖEN, but nothing is chosen: Enter posts the line
+    (here it is refused — 60 needs a counterparty), it does not take Альфа."""
+    _conn, ledger, cid, _cat, v = books
+    ledger.set_subconto_value_tax(cid, v["Альфа Трейд"], "1234567890")
+    bar.s.catalog.reload()
+    bar.show()
+    qtbot.waitExposed(bar)
+    bar.edit.setFocus()
+    bar.edit.setText("26 Аренда офиса / 60 Альфа Трейд, ")  # the list had a choice before
+    bar.edit.textEdited.emit(bar.edit.text())
+    bar.edit.setText("26 Аренда офиса / 60 12345")
+    bar.edit.textEdited.emit(bar.edit.text())
+    popup = bar.completer.popup()
+    assert popup.isVisible() and not popup.currentIndex().isValid()
+    qtbot.keyClick(popup, Qt.Key.Key_Return)
+    assert bar.edit.text() == "26 Аренда офиса / 60 12345"
+    assert bar.preview.objectName() == "error"
+
+
 def test_shift_enter_saves_a_draft_and_plus_adds_elements(bar, qtbot):
     bar.edit.setText("26 +Реклама / 50 15")
     posted = []

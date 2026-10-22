@@ -107,8 +107,10 @@ def _suggest_subconto(
     tail = " " if credit and last else (" / " if last else ", ")
     offered = catalog.values(kind, owner)
     name = typed.strip()
-    # on the Kt side the amount and the memo may follow any subconto: "Бета 400 Услуги"
-    amount_typed = credit and any(token_number(w) for w in name.split()[1:])
+    # on the Kt side the amount and the memo may follow any subconto: "Бета 400 Услуги",
+    # or stand in place of one left empty: "60 Бета, 400" — a number is never a new name
+    words = name.split()
+    amount_typed = credit and any(token_number(w) for w in words)
     if typed.startswith(NEW):  # "+Name": only the new element, once the name is typed
         if not name[1:].strip() or amount_typed:
             return Suggestions(start)
@@ -120,6 +122,8 @@ def _suggest_subconto(
     known = any(fold(v.name) == fold(name) for v in offered)
     if (name or not offered) and not known and not amount_typed:
         found.items += _new_value(catalog.kinds[kind], name, tail)
+    if credit and words and token_number(words[0]):
+        found.typed = False  # a VÖEN is found, but Enter posts the amount
     return found
 
 

@@ -11,7 +11,7 @@ from datetime import date
 from fractions import Fraction
 from typing import cast
 
-from PySide6.QtCore import QStringListModel, Qt, Signal
+from PySide6.QtCore import QModelIndex, QStringListModel, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCompleter,
@@ -97,6 +97,7 @@ class QuickEntryBar(QWidget):
             self.take
         )
         PickWithKeys(popup, self.take)
+        popup.installEventFilter(self)  # after PickWithKeys: runs first
         self.edit.textEdited.connect(lambda _text: self.suggest())
 
     def suggest(self) -> list[str]:
@@ -131,6 +132,8 @@ class QuickEntryBar(QWidget):
         fit_popup(popup, len(labels), self.completer.maxVisibleItems())
         if self._found.typed:  # Enter takes the best match
             popup.setCurrentIndex(self._names.index(0))
+        else:  # nothing chosen: Enter posts (an arrow key picks from the list)
+            popup.setCurrentIndex(QModelIndex())
         return labels
 
     def take(self, label: str) -> None:
@@ -193,9 +196,15 @@ class QuickEntryBar(QWidget):
     # ---- actions -----------------------------------------------------------------------
 
     def eventFilter(self, obj, event) -> bool:
-        if obj is self.edit and event.type() == event.Type.KeyPress:
-            key, mods = event.key(), event.modifiers()
-            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+        if event.type() != event.Type.KeyPress:
+            return super().eventFilter(obj, event)
+        key, mods = event.key(), event.modifiers()
+        enter = key in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        if enter and obj is self.completer.popup() and not obj.currentIndex().isValid():
+            obj.hide()  # the list is open, nothing chosen in it: Enter is the line's
+            obj = self.edit
+        if obj is self.edit:
+            if enter:
                 if mods & Qt.KeyboardModifier.ControlModifier:
                     self.to_form()
                 else:
