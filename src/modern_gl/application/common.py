@@ -34,6 +34,12 @@ def pad_subconto(values: Sequence[int | None], line_no: int | None = None) -> Su
     return first, second, third
 
 
+def closed_on(company: Row, day: str) -> bool:
+    """Whether a day (ISO) is in the company's closed period: on `closed_through` or before."""
+    closed = company["closed_through"]
+    return closed is not None and day <= closed
+
+
 def company_row(conn: Connection, company_id: int) -> Row:
     row = conn.execute("SELECT * FROM companies WHERE id = ?", (company_id,)).fetchone()
     if row is None:

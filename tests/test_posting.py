@@ -138,7 +138,7 @@ def test_reverse_twice_or_reverse_storno_rejected(demo):
 def test_closed_period_blocks_posting_and_reversal(demo):
     led, cid = demo.ledger, demo.company_id
     led.set_closed_through(cid, "2026-01-31")
-    with pytest.raises(PeriodClosedError):
+    with pytest.raises(PeriodClosedError, match=r"закрыт по 31\.01\.2026"):
         led.post_new(cid, "2026-01-31", [demo.p("721", "221", "1")])
     with pytest.raises(PeriodClosedError):
         led.reverse(cid, demo.docs[0], "2026-01-20")

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 
+from modern_gl.application.common import closed_on
 from modern_gl.application.inventory.base import InventoryBase
 from modern_gl.application.inventory.model import ACCRUED_CODE
 from modern_gl.application.ledger import PostingInput
@@ -112,14 +113,14 @@ class AccrualCommands(InventoryBase):
         if accrual_id is not None:
             self.ledger.rewrite_linked(company_id, accrual_id, doc["expense_date"], postings, memo)
             return
-        closed = self._company(company_id)["closed_through"]
-        if closed is not None and doc["expense_date"] <= closed:
+        company = self._company(company_id)
+        if closed_on(company, doc["expense_date"]):
             raise PeriodClosedError(
                 tr(
                     "расход за {month} не отнести: период закрыт по {closed}. Выберите в "
                     "«Расход за» месяц документа",
                     month=month_name(doc["expense_date"][:7]),
-                    closed=ru_date(closed),
+                    closed=ru_date(company["closed_through"]),
                 )
             )
         accrual_id = self.ledger.post_new(company_id, doc["expense_date"], postings, memo)

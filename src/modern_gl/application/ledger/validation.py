@@ -5,13 +5,14 @@ from __future__ import annotations
 
 import json
 
-from modern_gl.application.common import MAX_SUBCONTO
+from modern_gl.application.common import MAX_SUBCONTO, closed_on
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.inputs import SIDES
 from modern_gl.application.ledger.subconto import SubcontoCommands
 from modern_gl.application.queries import is_opening_document
 from modern_gl.domain.accounts import OPENING_BALANCE
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
+from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import PeriodClosedError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row
@@ -47,14 +48,14 @@ class PostingChecks(SubcontoCommands):
             self._validate_line(p, accounts, values, optional, is_reversal)
 
     def _require_open_period(self, company_id: int, doc: Row) -> None:
-        closed = self._company(company_id)["closed_through"]
-        if closed is not None and doc["doc_date"] <= closed:
+        company = self._company(company_id)
+        if closed_on(company, doc["doc_date"]):
             raise PeriodClosedError(
                 tr(
                     "документ №{number} от {date}: период закрыт по {closed}",
                     number=doc["number"],
-                    date=doc["doc_date"],
-                    closed=closed,
+                    date=ru_date(doc["doc_date"]),
+                    closed=ru_date(company["closed_through"]),
                 )
             )
 

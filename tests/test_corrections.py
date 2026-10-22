@@ -94,7 +94,8 @@ def test_storno_and_closed_period_cannot_be_edited_in_place(demo):
 def test_closed_period_still_allows_only_storno(demo):
     led, cid = demo.ledger, demo.company_id
     led.set_closed_through(cid, "2026-02-28")
-    with pytest.raises(PeriodClosedError, match="сторно"):
+    # dates as the user reads them, not ISO
+    with pytest.raises(PeriodClosedError, match=r"\d\d\.02\.2026: период закрыт по 28\.02\.2026"):
         led.delete_document(cid, demo.docs[5])
     with pytest.raises(PeriodClosedError):
         led.unpost(cid, demo.docs[5])

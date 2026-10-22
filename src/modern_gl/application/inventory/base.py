@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from modern_gl.application.common import company_row, write_audit
+from modern_gl.application.common import closed_on, company_row, write_audit
 from modern_gl.application.ledger import Ledger
+from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
@@ -136,8 +137,7 @@ class InventoryBase:
         return row["id"]
 
     def _closed(self, doc: Row) -> bool:
-        closed = self._company(doc["company_id"])["closed_through"]
-        return closed is not None and doc["doc_date"] <= closed
+        return closed_on(self._company(doc["company_id"]), doc["doc_date"])
 
     def _require_inventory_draft(self, company_id: int, document_id: int) -> Row:
         doc = self._document(company_id, document_id)
@@ -146,14 +146,14 @@ class InventoryBase:
         return doc
 
     def _require_open_period(self, doc: Row) -> None:
-        closed = self._company(doc["company_id"])["closed_through"]
-        if closed is not None and doc["doc_date"] <= closed:
+        company = self._company(doc["company_id"])
+        if closed_on(company, doc["doc_date"]):
             raise PeriodClosedError(
                 tr(
                     "складской документ №{number} от {date}: период закрыт по {closed}",
                     number=doc["number"],
-                    date=doc["doc_date"],
-                    closed=closed,
+                    date=ru_date(doc["doc_date"]),
+                    closed=ru_date(company["closed_through"]),
                 )
             )
 

@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import date
 
-from modern_gl.application.common import insert, now, pad_subconto
+from modern_gl.application.common import closed_on, insert, now, pad_subconto
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.validation import PostingChecks
-from modern_gl.domain.dates import iso_date
+from modern_gl.domain.dates import iso_date, ru_date
 from modern_gl.domain.errors import (
     LedgerError,
     NotFoundError,
@@ -237,14 +237,14 @@ class DocumentCommands(PostingChecks):
             self._audit(company_id, "document", doc_id, "delete", snapshot)
 
     def _require_changeable(self, company_id: int, doc: Row) -> None:
-        closed = self._company(company_id)["closed_through"]
-        if closed is not None and doc["doc_date"] <= closed:
+        company = self._company(company_id)
+        if closed_on(company, doc["doc_date"]):
             raise PeriodClosedError(
                 tr(
                     "документ №{number} от {date}: период закрыт по {closed}",
                     number=doc["number"],
-                    date=doc["doc_date"],
-                    closed=closed,
+                    date=ru_date(doc["doc_date"]),
+                    closed=ru_date(company["closed_through"]),
                 )
                 + ". "
                 + tr("Исправьте его сторно в открытом периоде.")
