@@ -62,7 +62,10 @@ def test_a_period_typed_short(typed, period):
     assert parse_period(typed, TODAY) == (d(period[0]), d(period[1]))
 
 
-@pytest.mark.parametrize("typed", ["", "  ", "13", "ок", "кв5", "15.10-1.10", "32.10", "abc"])
+@pytest.mark.parametrize(
+    "typed",
+    ["", "  ", "13", "ок", "кв5", "15.10-1.10", "32.10", "abc", "1.10-5.10.99999999999999999999"],
+)
 def test_what_is_not_a_period(typed):
     assert parse_period(typed, TODAY) is None
 
@@ -94,7 +97,9 @@ def test_a_bare_day_is_in_the_month_shown():
     assert parse_date("5", TODAY, shown=date(2026, 3, 17)) == date(2026, 3, 5)
 
 
-@pytest.mark.parametrize("typed", ["", "31.02", "0", "5.13", "завтра утром"])
+@pytest.mark.parametrize(
+    "typed", ["", "31.02", "0", "5.13", "завтра утром", "5.10.99999999999999999999", "9" * 20]
+)
 def test_what_is_not_a_date(typed):
     assert parse_date(typed, TODAY) is None
 

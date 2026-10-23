@@ -169,7 +169,7 @@ def _numeric_date(t: str, base: date) -> date | None:
     year = _full_year(parts[2]) if len(parts) > 2 else base.year
     try:
         return date(year, month, day)
-    except ValueError:
+    except (ValueError, OverflowError):  # 31.02; a number too long for a date
         return None
 
 
