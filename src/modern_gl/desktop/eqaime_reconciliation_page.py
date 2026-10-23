@@ -229,13 +229,11 @@ class EqaimeReconciliationDialog(QDialog):
 
     def _signed_in(self) -> str | None:
         from modern_gl.desktop import portal_login
+        from modern_gl.desktop.portal_company import company_token
 
-        token = self.token
-        if token is None or not portal_login.token_alive(token):
-            sign_in = self.sign_in or portal_login.sign_in
-            token = sign_in(self)
-            if not token:
-                return None
+        token = company_token(self, self.s, self.sign_in)  # this company's, D111
+        if not token:
+            return None
         self.token = token
         name, tin = portal_login.company_name(token), portal_login.company_tin(token)
         self.company.setText(tr("Портал: {name} · VÖEN {tin}", name=name, tin=tin))
@@ -274,6 +272,9 @@ class EqaimeReconciliationDialog(QDialog):
         self.load_button.setEnabled(True)
         self.status.setText(message)
         self.token = None
+        from modern_gl.desktop import portal_login
+
+        portal_login.forget_token()  # a new sign-in next time
 
     def _loaded(self, lists: PortalLists) -> None:
         self.load_button.setEnabled(True)

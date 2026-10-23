@@ -74,6 +74,15 @@ def fields_as_in_the_app(qapp):
 
 
 @pytest.fixture(autouse=True)
+def no_portal_session():
+    """The portal's token is kept in memory for the program's life (D110): not from one
+    test into another."""
+    from modern_gl.desktop import portal_login
+
+    portal_login.forget_token()
+
+
+@pytest.fixture(autouse=True)
 def reason_dialog_answers(monkeypatch):
     """«Почему?» (D96) is modal: in tests it is answered at once — yes, with the reason in
     `REASON["text"]` (a test sets it, or None to change its mind)."""

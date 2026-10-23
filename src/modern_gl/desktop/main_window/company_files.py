@@ -32,9 +32,10 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.queries import company_name, posting_count
+from modern_gl.application.queries import company_name, company_tax_id, posting_count
 from modern_gl.desktop import theme
 from modern_gl.desktop.background import LARGE
+from modern_gl.desktop.portal_company import ask_tax_id
 from modern_gl.desktop.reports_page.table import set_zebra
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
@@ -124,6 +125,9 @@ class CompanyFiles(QMainWindow):
         if not ok:
             return False
         mode = STOCK_ONLY if kind == kinds[1] else FULL
+        tax_id = ask_tax_id(self)  # checked against the portal (D111)
+        if tax_id is None:
+            return False
         target = self._ask_file(tr("Где сохранить файл компании"), name.strip())
         if target is None:
             return False
@@ -135,7 +139,7 @@ class CompanyFiles(QMainWindow):
         if not self._confirm_close_all():
             return False
         try:
-            path = self.workspace.create(name.strip(), path=target, mode=mode)
+            path = self.workspace.create(name.strip(), path=target, mode=mode, tax_id=tax_id)
         except (LedgerError, OSError, Error) as e:
             QMessageBox.warning(self, tr("Новая компания"), str(e))
             return False
@@ -465,6 +469,19 @@ class CompanyFiles(QMainWindow):
             QMessageBox.warning(self, tr("Параллельные книги (МСФО, налог)"), str(e))
             return
         self.open_company(self.company_path)
+
+    def edit_tax_id(self) -> None:
+        """The company's VÖEN (D111): what the tax portal is checked against."""
+        if self.session is None:
+            return
+        current = company_tax_id(self.session.conn, self.session.company_id) or ""
+        typed = ask_tax_id(self, current)
+        if typed is None:
+            return
+        try:
+            self.session.ledger.set_company_tax_id(self.session.company_id, typed or None)
+        except LedgerError as e:
+            QMessageBox.warning(self, tr("VÖEN компании"), str(e))
 
     def set_stock_only(self, on: bool) -> None:
         """Only the warehouse, or the whole program (D90): the sidebar is built again."""

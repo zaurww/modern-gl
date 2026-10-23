@@ -96,6 +96,12 @@ def parallel_books(conn: Connection, company_id: int) -> bool:
     return bool(row.fetchone()[0])
 
 
+def company_tax_id(conn: Connection, company_id: int) -> str | None:
+    """The company's own VÖEN (D111); None — not known yet."""
+    row = conn.execute("SELECT tax_id FROM companies WHERE id = ?", (company_id,))
+    return row.fetchone()[0]
+
+
 def company_mode(conn: Connection, company_id: int) -> str:
     """How the company is kept (D90): FULL, or STOCK_ONLY — only the warehouse is shown."""
     row = conn.execute("SELECT mode FROM companies WHERE id = ?", (company_id,))

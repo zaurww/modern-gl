@@ -92,11 +92,13 @@ class Workspace:
         chart: str | None = DEFAULT_TEMPLATE,
         path: Path | None = None,
         mode: str = FULL,
+        tax_id: str | None = None,
     ) -> Path:
         """New company file with the chart template (in the interface language); in the
         folder unless `path` is given (then it is remembered). The file is built aside and
         put in place only when complete, so a failure leaves nothing half-made. `mode`:
-        how it is kept (D90) — a warehouse only still gets the chart, unseen."""
+        how it is kept (D90) — a warehouse only still gets the chart, unseen; `tax_id` —
+        its VÖEN (D111)."""
         path = self._free_path(name) if path is None else Path(path)
         partial = path.with_name(path.name + ".part")
         for leftover in (partial, *_sidecars(partial)):
@@ -110,6 +112,8 @@ class Workspace:
                     apply_chart_template(ledger, company_id, chart)
                 if mode != FULL:
                     ledger.set_company_mode(company_id, mode)
+                if tax_id:
+                    ledger.set_company_tax_id(company_id, tax_id)
                 conn.execute("PRAGMA journal_mode = DELETE")  # a single self-contained file
             finally:
                 conn.close()

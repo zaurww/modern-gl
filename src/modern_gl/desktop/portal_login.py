@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import time
+from collections.abc import Callable
 
 from PySide6.QtCore import QStandardPaths, QTimer, QUrl
 from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QWidget
@@ -39,8 +40,9 @@ def token_alive(token: str | None, margin: int = 60) -> bool:
 class PortalLoginDialog(QDialog):
     """The portal page; `token` is set when the user has signed in."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, company: str = "") -> None:
         super().__init__(parent)
+        self.company = company  # the VÖEN wanted (D111): a token of another firm waits
         # imported here: the web engine is big and only this window needs it
         from PySide6.QtWebEngineWidgets import QWebEngineView
 
@@ -49,7 +51,14 @@ class PortalLoginDialog(QDialog):
         self.resize(1100, 780)
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 16)
-        hint = QLabel(tr("Войдите через ASAN İmza и выберите компанию — окно закроется само."))
+        hint = QLabel(
+            tr(
+                "Войдите через ASAN İmza и выберите компанию с VÖEN {tin} — окно закроется само.",
+                tin=company,
+            )
+            if company
+            else tr("Войдите через ASAN İmza и выберите компанию — окно закроется само.")
+        )
         hint.setObjectName("secondary")
         hint.setFont(fonts().small)
         root.addWidget(hint)
@@ -71,7 +80,9 @@ class PortalLoginDialog(QDialog):
 
     def _found(self, token: object) -> None:
         # a token of the portal user is there before a company is chosen: wait for its VÖEN
-        if isinstance(token, str) and token_alive(token) and _company_of(token):
+        if not (isinstance(token, str) and token_alive(token)):
+            return
+        if _company_of(token) and (not self.company or _company_of(token) == self.company):
             self.timer.stop()
             self.token = token
             self.accept()
@@ -140,9 +151,34 @@ def company_tin(token: str) -> str:
     return _company_of(token)
 
 
-def sign_in(parent: QWidget | None = None) -> str | None:
-    """Open the portal and wait for the user to sign in; the token, or None."""
-    dialog = PortalLoginDialog(parent)
+def sign_in(parent: QWidget | None = None, company: str = "") -> str | None:
+    """Open the portal and wait for the user to sign in (for the firm with the VÖEN
+    `company`, if given); the token, or None."""
+    dialog = PortalLoginDialog(parent, company)
     if dialog.exec() == QDialog.DialogCode.Accepted:
         return dialog.token
     return None
+
+
+_TOKEN: list[str] = []  # the portal session open in the program: in memory only (D72)
+
+
+def portal_token(
+    parent: QWidget | None = None,
+    ask: Callable[..., str | None] | None = None,
+    company: str = "",
+) -> str | None:
+    """The token of the portal session open in the program, or a sign-in: the portal's
+    page, which closes by itself at once while the portal still knows the browser (D110).
+    `company`: the VÖEN wanted — a token of another firm is not taken (D111)."""
+    if _TOKEN and token_alive(_TOKEN[0]) and company in ("", _company_of(_TOKEN[0])):
+        return _TOKEN[0]
+    token = ask(parent) if ask else sign_in(parent, company)
+    if token:
+        _TOKEN[:] = [token]
+    return token
+
+
+def forget_token() -> None:
+    """The portal refused the token: the next call signs in again."""
+    _TOKEN.clear()

@@ -1,5 +1,6 @@
-"""The e-qaimə API of new.e-taxes.gov.az, as the user's etaxes-ext extension calls it
-(its `lib/api.js`, `docs/api-reference.md`).
+"""The API of new.e-taxes.gov.az: the e-qaimə, as the user's etaxes-ext extension calls it
+(its `lib/api.js`, `docs/api-reference.md`), and the ƏDV deposit account (D110, as the
+portal's own page «ƏDV depozit hesabı» calls it).
 
 Signing in is the portal's own (ASAN İmza in its page); this client only carries the JWT
 the portal keeps in `localStorage['aztax-jwt']`. The token lives 10 minutes. Amounts come
@@ -24,6 +25,8 @@ PORTAL_TOKEN_KEY = "aztax-jwt"  # where the portal page keeps the token
 INBOX = "/api/po/invoice/public/v2/invoice/find.inbox"  # received: purchases
 OUTBOX = "/api/po/invoice/public/v2/invoice/find.outbox"  # sent: sales
 DETAIL = "/api/po/invoice/public/v2/invoice/"
+VAT_ACCOUNT = "/api/po/vatacc/public/v1/accountInfo"  # the ƏDV deposit account's balance
+VAT_OPERATIONS = "/api/po/vatacc/public/v1/operation/find.outbox"  # its operations
 PAGE_SIZE = 50
 APPROVED = TURNOVER  # the API takes one status at a time
 
@@ -149,3 +152,38 @@ class EtaxesClient:
         """One e-qaimə with its lines (items)."""
         data = self._call("GET", f"{DETAIL}{invoice_id}?sourceSystem={source_system or 'avis'}")
         return data.get("invoice", data)
+
+    def vat_deposit_balance(self) -> tuple[Decimal, str]:
+        """The ƏDV deposit account's balance now, and when the portal read it
+        ("2026-10-23T12:18:35.2…")."""
+        data = self._call("GET", VAT_ACCOUNT)
+        return Decimal(str(data.get("mainAccount") or 0)), str(data.get("informationOn") or "")
+
+    def vat_deposit_operations(self, date_from: date, date_to: date) -> Iterator[dict]:
+        """The operations of the ƏDV deposit account in a period, all statuses."""
+        offset = 0
+        while True:
+            data = self._call(
+                "POST",
+                VAT_OPERATIONS,
+                {
+                    "creationDateFrom": date_from.isoformat(),
+                    "creationDateTo": date_to.isoformat(),
+                    "accounts": None,
+                    "operationTypes": [],
+                    "operationStatuses": [],
+                    "receiptNumber": None,
+                    "taxCodes": None,
+                    "offset": offset,
+                    "maxCount": PAGE_SIZE,
+                    "counterpartyTin": None,
+                    "sortAsc": True,
+                    "sortBy": "DATE",
+                    "paymentTypes": None,
+                },
+            )
+            page = data.get("operations") or []
+            yield from page
+            if not data.get("hasMore") or not page:
+                break
+            offset += PAGE_SIZE
