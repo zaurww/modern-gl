@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Signal
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
 
 from modern_gl.desktop.reports_page.statement_columns import (
@@ -68,6 +68,7 @@ def segments(captions: list[tuple[str, str]], on_click) -> tuple[QWidget, dict[s
 
 class StatementsPage(ReportPage):
     key = ("statements",)
+    view_changed = Signal()  # the sidebar chooses the pinned view shown (D111)
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Финансовая отчётность"), params)
@@ -99,6 +100,15 @@ class StatementsPage(ReportPage):
         names = {BALANCE: "Баланс", PROFIT: "Прибыли и убытки", CASH: "Движение денег"}
         return tr(names[self.view])
 
+    def show_view(self, view: str) -> None:
+        """«Баланс», «Прибыли и убытки» or «Движение денег» chosen from «Отчёты» (D111)."""
+        if view in self.view_buttons and view != self.view:
+            self.view_buttons[view].setChecked(True)
+            self.refresh()
+
+    def nav_key(self) -> tuple:
+        return (*self.key, self.view)
+
     @property
     def view(self) -> str:
         return next((k for k, b in self.view_buttons.items() if b.isChecked()), BALANCE)
@@ -113,6 +123,8 @@ class StatementsPage(ReportPage):
         if hasattr(self, "detail_buttons"):  # the first refresh comes from ReportPage
             self.detail_buttons[ITEMS].setVisible(self.view == PROFIT)
             settings = QSettings()
+            if settings.value(VIEW_SETTING) != self.view:
+                self.view_changed.emit()
             settings.setValue(VIEW_SETTING, self.view)
             chosen = next(k for k, b in self.detail_buttons.items() if b.isChecked())
             settings.setValue(DETAIL_SETTING, chosen)

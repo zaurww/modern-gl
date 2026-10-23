@@ -19,7 +19,7 @@ from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
-from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow, NavDelegate
+from modern_gl.desktop.main_window import SIDEBAR_KEYS, MainWindow, NavDelegate
 from modern_gl.desktop.opening_balances_page import CREDIT_AMOUNT, OpeningBalancesPage
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
 from modern_gl.desktop.reports_page import NAME_MAX, NAME_MIN, OsvPage, SectionRow, figure
@@ -429,7 +429,7 @@ def test_close_cross_in_sidebar(window, qtbot):
     qtbot.mouseClick(nav.viewport(), Qt.MouseButton.LeftButton, pos=cross)
     assert window.sidebar.item_for(page.key) is None
     assert current_page(window).title() == "Журнал"
-    places = [window.sidebar.item_for(k) for k in PLACE_KEYS]
+    places = [window.sidebar.item_for(k) for k in SIDEBAR_KEYS]
     assert all(places)  # places can't be closed
 
 

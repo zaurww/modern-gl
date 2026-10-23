@@ -53,7 +53,20 @@ GLYPHS: dict[str, str] = {
     "books": "git-compare",
     "statements": "chart-pie",
     "calendar": "calendar",
+    # the reports' page (D111)
+    "reports": "layout-grid",
+    "profit": "trending-up",
+    "cash": "banknote",
+    "subconto": "table-2",
+    "card": "scroll-text",
+    "analysis": "split",
+    "archive": "archive",
+    "reconcile": "file-check",
+    "landed": "ship",
+    "star": "star",
+    "pinned": "star",  # filled: a pinned report
 }
+FILLED = {"pinned"}  # drawn filled with its color, not only outlined
 
 _CACHE: dict[tuple[str, str, int, str], QIcon] = {}
 
@@ -61,6 +74,8 @@ _CACHE: dict[tuple[str, str, int, str], QIcon] = {}
 def _pixmap(name: str, color: str, size: int) -> QPixmap:
     svg = (FOLDER / f"{GLYPHS[name]}.svg").read_text(encoding="utf-8")
     svg = svg.replace("currentColor", color).replace('stroke-width="2"', f'stroke-width="{STROKE}"')
+    if name in FILLED:
+        svg = svg.replace('fill="none"', f'fill="{color}"')
     pm = QPixmap(size * 2, size * 2)
     pm.setDevicePixelRatio(2)
     pm.fill(Qt.GlobalColor.transparent)
