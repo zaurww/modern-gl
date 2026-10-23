@@ -11,7 +11,7 @@ from datetime import date
 from modern_gl.domain.accounts import ACCOUNT_TYPES
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.report_common import COMMON, _accounts, _params
-from modern_gl.reporting.statements import UNTYPED, Line, Statement
+from modern_gl.reporting.statements import TYPES, UNTYPED, Line, Names, Statement
 
 MONEY_TYPES = frozenset({"cash", "bank", "vat_deposit", "transit"})
 INVESTING = frozenset(
@@ -45,14 +45,17 @@ def cash_flow(
     date_from: date | str,
     date_to: date | str,
     layers: tuple[str, ...] = COMMON,
+    detail: str = TYPES,
 ) -> Statement:
     """Money at the start, the flows of the period by activity, money at the end;
-    `unbalanced` is what the end differs from start + flows by (0 when all is read)."""
+    `unbalanced` is what the end differs from start + flows by (0 when all is read).
+    `detail` ACCOUNTS: a line opens into the other accounts (D102)."""
     params = _params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     money = {i for i, a in accounts.items() if a["account_type"] in MONEY_TYPES}
     opening = closing = 0
     flows: dict[str, int] = defaultdict(int)
+    by_account: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
     for r in conn.execute(
         """
         SELECT d.doc_date, p.debit_account_id AS dt, p.credit_account_id AS ct, p.amount
@@ -72,6 +75,8 @@ def cash_flow(
         elif change:
             other = accounts[r["ct"] if r["dt"] in money else r["dt"]]
             flows[other["account_type"] or UNTYPED] += change
+            by_account[other["account_type"] or UNTYPED][other["id"]] += change
+    names = Names.read(conn, company_id) if detail != TYPES else None
     lines = [Line("Деньги на начало периода", opening, "subtotal")]
     net = 0
     for index, (title, subtotal) in enumerate(ACTIVITIES):
@@ -81,9 +86,13 @@ def cash_flow(
             if activity(account_type) == index and flows.get(account_type):
                 lines.append(Line(name, flows[account_type], account_type=account_type))
                 total += flows[account_type]
+                if names is not None:
+                    lines.extend(names.account_lines(by_account[account_type]))
         if index == 0 and flows.get(UNTYPED):
             lines.append(Line("Счета без типа", flows[UNTYPED], account_type=UNTYPED))
             total += flows[UNTYPED]
+            if names is not None:
+                lines.extend(names.account_lines(by_account[UNTYPED]))
         if lines[-1].kind == "heading":  # nothing in it: not shown
             lines.pop()
             continue

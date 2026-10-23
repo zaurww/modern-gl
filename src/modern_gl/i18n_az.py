@@ -1689,4 +1689,23 @@ AZ: dict[str, str] = {
     "Чистый поток от финансовой деятельности": "Maliyyə fəaliyyətindən xalis axın",
     # ---- profit and loss: expenses where they were spent, accounts and items (D102) --------
     "НДС с продаж": "Satışdan ƏDV",
+    "Кратко": "Qısa",
+    "По счетам": "Hesablar üzrə",
+    "По статьям": "Maddələr üzrə",
+    "Двойной щелчок по счёту — его карточка": "Hesaba iki dəfə klik — onun kartı",
+    # ---- stripes in tables, optional (D103) ------------------------------------------------
+    "Полосы в таблицах": "Cədvəllərdə zolaqlar",
+    # ---- a report for Excel (D104) ---------------------------------------------------------
+    "В Excel…": "Excel-ə…",
+    "В Excel": "Excel-ə",
+    "Копировать для Excel  Ctrl+C": "Excel üçün köçür  Ctrl+C",
+    "Сохранить в Excel": "Excel-ə saxla",
+    "Не удалось сохранить файл: {e}": "Faylı saxlamaq alınmadı: {e}",
+    "Скопировано — вставьте в Excel (Ctrl+V)": "Köçürüldü — Excel-ə yapışdırın (Ctrl+V)",
+    "Компания": "Şirkət",
+    "Период": "Dövr",
+    "Сформирован": "Tərtib edilib",
+    "Параметры": "Parametrlər",
+    "Отчёт": "Hesabat",
+    "Уровень": "Səviyyə",
 }

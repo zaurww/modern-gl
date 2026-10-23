@@ -130,6 +130,31 @@ def test_profit_and_loss_leaves_out_the_closing(books):
     assert january.lines[-1].amount == 0
 
 
+def code(line) -> str:
+    """An account line by its code («62  62» — the test accounts are named by code)."""
+    return line.title.split()[0] if line.kind == "account" else line.title
+
+
+def test_a_balance_line_opens_into_its_accounts(books):
+    """Fixed assets 2 900 = 01 3 000 − 02 100; 60 is in two lines: A's debt 5 000 among the
+    liabilities, B's advance 500 among the assets; 76 under «Счета без типа» (D102)."""
+    from modern_gl.reporting.statements import ACCOUNTS
+
+    conn, cid = books
+    sheet = balance_sheet(conn, cid, "2026-02-28", detail=ACCOUNTS)
+    rows = [(ln.kind, code(ln), ln.amount) for ln in sheet.lines]
+    fixed = rows.index(("line", "Основные средства", 290_000))
+    assert rows[fixed + 1 : fixed + 3] == [("account", "01", 300_000), ("account", "02", -10_000)]
+    advance = rows.index(("line", "Авансы выданные", 50_000))
+    assert rows[advance + 1] == ("account", "60", 50_000)
+    untyped = rows.index(("line", "Счета без типа", 30_000))
+    assert rows[untyped + 1] == ("account", "76", 30_000)
+    assert sheet.unbalanced == 0
+    assert [ln for ln in sheet.lines if ln.kind != "account"] == balance_sheet(
+        conn, cid, "2026-02-28"
+    ).lines
+
+
 def test_the_ifrs_book_adds_its_adjustments(books, ledger):
     conn, cid = books
     ledger.set_parallel_books(cid, True)
@@ -312,3 +337,27 @@ def test_the_page_switches_between_the_balance_and_the_profit(window, qtbot):
     assert page.model.rows[-1].title == "Чистая прибыль (убыток)"
     window.set_stock_only(True)  # the books are not shown: no statements either
     assert window.sidebar.item_for(("statements",)) is None
+
+
+def test_a_line_of_the_page_leads_to_the_card(window, qtbot):
+    """«По статьям»: an item of an expense account; a double click — its card with only
+    that item; the page remembers the view and the detail (D102, D106)."""
+    from modern_gl.desktop.reports_page import StatementsPage
+    from modern_gl.desktop.reports_page.account import CardPage
+
+    window.show_place(("statements",))
+    page = window.stack.currentWidget()
+    assert isinstance(page, StatementsPage)
+    page.profit_button.click()
+    page.detail_buttons["items"].click()
+    qtbot.waitUntil(lambda: any(r.kind == "item" for r in page.model.rows))
+    item = next(r for r in page.model.rows if r.kind == "item")
+    assert page.model.rows[page.model.rows.index(item) - 1].kind in ("account", "item")
+    page.drill(item)
+    card = window.stack.currentWidget()
+    assert isinstance(card, CardPage)
+    assert card.account_id == item.account_id
+    assert card.params.subconto == (item.value_id,)
+    again = StatementsPage(window.session)
+    assert (again.view, again.detail) == ("profit", "items")
+    again.deleteLater()

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.cash_flow import cash_flow
-from tests.test_statements import books, shown, window
+from tests.test_statements import books, code, shown, window
 
 __all__ = ["books", "window"]  # the fixtures
 
@@ -65,6 +65,19 @@ def test_a_fee_paid_straight_to_the_result_is_operating(books, ledger):
     assert figures["Финансовый результат"] == -700
     assert figures["Чистый поток от операционной деятельности"] == 104_300
     assert "Финансовая деятельность" not in figures
+
+
+def test_a_flow_opens_into_the_other_accounts(books):
+    from modern_gl.reporting.statements import ACCOUNTS
+
+    conn, cid = books
+    flow = cash_flow(conn, cid, "2026-01-01", "2026-02-28", detail=ACCOUNTS)
+    rows = [(ln.kind, code(ln), ln.amount) for ln in flow.lines]
+    customers = rows.index(("line", "Покупатели и заказчики", 100_000))
+    assert rows[customers + 1] == ("account", "62", 100_000)
+    capital = rows.index(("line", "Уставный капитал", 1_000_000))
+    assert rows[capital + 1] == ("account", "80", 1_000_000)
+    assert flow.unbalanced == 0
 
 
 def test_the_page_shows_the_cash_flow(window, qtbot):

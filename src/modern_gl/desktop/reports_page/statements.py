@@ -1,10 +1,15 @@
 """Финансовая отчётность (D99, D100): the balance sheet on the period's last day, the
 profit and loss or the cash flow of the period — one place, a switch between them; lines
-by account type."""
+by account type. A line opens into its accounts, in the profit and loss also into the
+cost items (D102); a double click on an account or an item opens its card, and the card
+the documents — every figure leads to where it came from."""
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QWidget
+from dataclasses import replace
+
+from PySide6.QtCore import QSettings
+from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
 
 from modern_gl.desktop.reports_page.table import figure
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
@@ -15,9 +20,17 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.cash_flow import cash_flow
 from modern_gl.reporting.profit_loss import profit_and_loss
-from modern_gl.reporting.statements import Line, Statement, balance_sheet
+from modern_gl.reporting.statements import (
+    ACCOUNTS,
+    ITEMS,
+    TYPES,
+    Line,
+    Statement,
+    balance_sheet,
+)
 
 BALANCE, PROFIT, CASH = "balance", "profit", "cash"
+VIEW_SETTING, DETAIL_SETTING = "reports/statements_view", "reports/statements_detail"
 # the parts of the balance sheet: their subtotal reads «Итого: …»
 SECTIONS = (
     "Оборотные активы",
@@ -26,6 +39,26 @@ SECTIONS = (
     "Долгосрочные обязательства",
     "Капитал",
 )
+INDENT = "      "
+DEPTH = {"line": 1, "account": 2, "item": 3}
+
+
+def segments(captions: list[tuple[str, str]], on_click) -> tuple[QWidget, dict[str, QPushButton]]:
+    """A row of segment buttons, one of them checked."""
+    box = QWidget()
+    row = QHBoxLayout(box)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(6)
+    group = QButtonGroup(box)
+    buttons: dict[str, QPushButton] = {}
+    for key, caption in captions:
+        b = button(tr(caption), "segment")
+        b.setCheckable(True)
+        b.clicked.connect(lambda _=False: on_click())
+        group.addButton(b)
+        row.addWidget(b)
+        buttons[key] = b
+    return box, buttons
 
 
 class StatementsPage(ReportPage):
@@ -33,66 +66,90 @@ class StatementsPage(ReportPage):
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Финансовая отчётность"), params)
-        self.views = QButtonGroup(self)
-        switch = QWidget()
-        row = QHBoxLayout(switch)
-        row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(6)
-        self.balance_button = button(tr("Баланс"), "segment")
-        self.profit_button = button(tr("Прибыли и убытки"), "segment")
-        self.cash_button = button(tr("Движение денег"), "segment")
-        for b in (self.balance_button, self.profit_button, self.cash_button):
-            b.setCheckable(True)
-            b.clicked.connect(lambda _=False: self.refresh())
-            self.views.addButton(b)
-            row.addWidget(b)
-        self.balance_button.setChecked(True)
-        self.header.add_action(switch)
+        views, self.view_buttons = segments(
+            [(BALANCE, "Баланс"), (PROFIT, "Прибыли и убытки"), (CASH, "Движение денег")],
+            self.refresh,
+        )
+        self.balance_button = self.view_buttons[BALANCE]
+        self.profit_button = self.view_buttons[PROFIT]
+        self.cash_button = self.view_buttons[CASH]
+        details, self.detail_buttons = segments(
+            [(TYPES, "Кратко"), (ACCOUNTS, "По счетам"), (ITEMS, "По статьям")], self.refresh
+        )
+        settings = QSettings()
+        view = str(settings.value(VIEW_SETTING, BALANCE))
+        detail = str(settings.value(DETAIL_SETTING, ACCOUNTS))
+        self.view_buttons.get(view, self.balance_button).setChecked(True)
+        self.detail_buttons.get(detail, self.detail_buttons[ACCOUNTS]).setChecked(True)
+        self.header.add_action(details)
+        self.header.add_action(views)
         self.refresh()
 
     def title(self) -> str:
         return tr("Финансовая отчётность")
 
+    def export_title(self) -> str:
+        names = {BALANCE: "Баланс", PROFIT: "Прибыли и убытки", CASH: "Движение денег"}
+        return tr(names[self.view])
+
     @property
     def view(self) -> str:
-        if self.cash_button.isChecked():
-            return CASH
-        return PROFIT if self.profit_button.isChecked() else BALANCE
+        return next((k for k, b in self.view_buttons.items() if b.isChecked()), BALANCE)
+
+    @property
+    def detail(self) -> str:
+        """Cost items are a part of the profit and loss only; elsewhere — the accounts."""
+        chosen = next((k for k, b in self.detail_buttons.items() if b.isChecked()), ACCOUNTS)
+        return ACCOUNTS if chosen == ITEMS and self.view != PROFIT else chosen
+
+    def refresh(self) -> None:
+        if hasattr(self, "detail_buttons"):  # the first refresh comes from ReportPage
+            self.detail_buttons[ITEMS].setVisible(self.view == PROFIT)
+            settings = QSettings()
+            settings.setValue(VIEW_SETTING, self.view)
+            chosen = next(k for k, b in self.detail_buttons.items() if b.isChecked())
+            settings.setValue(DETAIL_SETTING, chosen)
+        super().refresh()
 
     def job(self):
-        cid, p, view = self.s.company_id, self.params, self.view
+        cid, p, view, detail = self.s.company_id, self.params, self.view, self.detail
         if view == BALANCE:
-            return lambda conn: balance_sheet(conn, cid, p.date_to, p.layers)
+            return lambda conn: balance_sheet(conn, cid, p.date_to, p.layers, detail)
         if view == CASH:
-            return lambda conn: cash_flow(conn, cid, p.date_from, p.date_to, p.layers)
-        return lambda conn: profit_and_loss(conn, cid, p.date_from, p.date_to, p.layers)
+            return lambda conn: cash_flow(conn, cid, p.date_from, p.date_to, p.layers, detail)
+        return lambda conn: profit_and_loss(conn, cid, p.date_from, p.date_to, p.layers, detail)
 
     def fetch(self, conn: Connection) -> Statement:
         return self.job()(conn)
 
     def present(self, data: Statement) -> None:
-        indent = "      "
         columns = [
-            Column(tr("Статья"), lambda r: self._title(r, indent)),
+            Column(tr("Статья"), self._title),
             Column(
                 self._amount_title(),
                 lambda r: None if r.kind == "heading" else figure(r.amount),
                 right=True,
+                value=lambda r: None if r.kind == "heading" else r.amount,
             ),
         ]
         self.model.set(
             columns,
             data.lines,
             emphasis=lambda r: r.kind in ("subtotal", "total"),
+            muted=lambda r: r.kind == "item",
             total=lambda r: r.kind == "total",
             section=lambda r: r.kind == "heading",
         )
         self._footer(data)
 
     @staticmethod
-    def _title(r: Line, indent: str) -> str:
+    def _title(r: Line) -> str:
+        if r.kind == "account":
+            return INDENT * 2 + r.title
+        if r.kind == "item":
+            return INDENT * 3 + (r.title or tr("Без статьи"))
         if r.kind == "line":
-            return indent + tr(r.title)
+            return INDENT + tr(r.title)
         if r.kind == "subtotal" and r.title in SECTIONS:
             return tr("Итого: {what}", what=tr(r.title))
         return tr(r.title)
@@ -115,8 +172,26 @@ class StatementsPage(ReportPage):
             notes.append(tr("Остаток денег сходится с потоками  ✓"))
         if untyped:
             notes.append(tr("Есть счета без типа — укажите тип в плане счетов"))
+        notes.append(tr("Двойной щелчок по счёту — его карточка"))
         self.footer.setText("      ".join(notes))
         self.footer.setStyleSheet(f"color: {P.red};" if data.unbalanced else "")
 
-    def drill(self, row: Line) -> None:
-        pass  # a line is several accounts: the ОСВ shows them
+    def drill(self, row: Line | None) -> None:
+        """An account or an item: its card for the period (the balance sheet: the year up
+        to the day). A line in «Кратко»: open the accounts. The profit of the period in the
+        balance sheet: the profit and loss."""
+        if row is None:
+            return
+        params = self.params
+        if self.view == BALANCE:  # a balance is read from the start of its year
+            params = replace(params, date_from=params.date_to.replace(month=1, day=1))
+        if row.kind == "account" and row.account_id is not None:
+            self.open_report.emit("card", row.account_id, params)
+        elif row.kind == "item" and row.account_id is not None:
+            self.open_report.emit("card", row.account_id, replace(params, subconto=(row.value_id,)))
+        elif row.kind == "line" and row.account_type is not None and self.detail == TYPES:
+            self.detail_buttons[ACCOUNTS].setChecked(True)
+            self.refresh()
+        elif row.kind == "line" and row.title == "Прибыль (убыток) текущего периода":
+            self.profit_button.setChecked(True)
+            self.refresh()

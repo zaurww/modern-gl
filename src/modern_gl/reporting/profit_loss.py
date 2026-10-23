@@ -9,14 +9,23 @@ add up."""
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import date
 
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import COMMON, _accounts, _params
-from modern_gl.reporting.statements import CLOSING_TYPES, UNTYPED, Line, Statement, _type_line
+from modern_gl.reporting.statements import (
+    ACCOUNTS,
+    CLOSING_TYPES,
+    ITEMS,
+    TYPES,
+    UNTYPED,
+    Line,
+    Names,
+    Statement,
+    _type_line,
+)
 
-TYPES, ACCOUNTS, ITEMS = "types", "accounts", "items"  # how much a line shows under it
+__all__ = ["ACCOUNTS", "ITEMS", "TYPES", "profit_and_loss"]
 SALES_VAT = "sales_vat"  # Dt sales Kt the output VAT account: a line of its own
 PL_CLASSES = ("revenue", "expense")
 # (line, account, the account's first subconto) -> amount
@@ -36,7 +45,7 @@ def profit_and_loss(
     the moves between income and expense accounts (26, 44 closed into 46): an expense
     shows where it was spent. `detail`: TYPES, or ACCOUNTS / ITEMS under each line."""
     t = _turnovers(conn, company_id, date_from, date_to, layers)
-    names = _Names.read(conn, company_id) if detail != TYPES else None
+    names = Names.read(conn, company_id) if detail != TYPES else None
     lines: list[Line] = []
 
     def add(key: str) -> int:
@@ -69,29 +78,7 @@ def _pl_line(key: str, amount: int) -> Line:
     return _type_line(key, amount)
 
 
-@dataclass
-class _Names:
-    accounts: dict[int, str]  # «26  Ümumtəsərrüfat xərcləri»
-    order: dict[int, int]  # the place in the chart
-    values: dict[int, str]
-
-    @classmethod
-    def read(cls, conn: Connection, company_id: int) -> _Names:
-        accounts = _accounts(conn, company_id)
-        values = {
-            r["id"]: r["name"]
-            for r in conn.execute(
-                "SELECT id, name FROM subconto_values WHERE company_id = ?", (company_id,)
-            )
-        }
-        return cls(
-            {i: f"{a['code'] or ''}  {a['name']}".strip() for i, a in accounts.items()},
-            {i: n for n, i in enumerate(accounts)},
-            values,
-        )
-
-
-def _detail(t: Turnovers, key: str, names: _Names, items: bool) -> list[Line]:
+def _detail(t: Turnovers, key: str, names: Names, items: bool) -> list[Line]:
     """The accounts of a line in the order of the chart, each with its items by name
     (the postings without one last)."""
     by_account: dict[int, dict[int | None, int]] = defaultdict(lambda: defaultdict(int))
@@ -106,11 +93,11 @@ def _detail(t: Turnovers, key: str, names: _Names, items: bool) -> list[Line]:
         if not total or not items or set(values) == {None}:
             continue
         titles = {v: names.values.get(v, "") if v is not None else "" for v in values}
-        for value_id in sorted(values, key=lambda v: (v is None, titles[v])):
-            if values[value_id]:
-                lines.append(
-                    Line(titles[value_id], values[value_id], "item", None, account_id, value_id)
-                )
+        lines.extend(
+            Line(titles[v], values[v], "item", None, account_id, v)
+            for v in sorted(values, key=lambda v: (v is None, titles[v]))
+            if values[v]
+        )
     return lines
 
 

@@ -22,6 +22,7 @@ UNTYPED = ""  # an account without a type: its own line, so it is seen and given
 FLIPPED = {"payable": "advance_paid", "receivable": "advance_received"}
 # where income and expense are closed: such postings are not income or expense (CLOSING)
 CLOSING_TYPES = ("profit_loss", "retained_earnings")
+TYPES, ACCOUNTS, ITEMS = "types", "accounts", "items"  # how much a line shows under it
 
 
 @dataclass
@@ -44,24 +45,91 @@ class Statement:
 
 
 def balance_sheet(
-    conn: Connection, company_id: int, day: date | str, layers: tuple[str, ...] = COMMON
+    conn: Connection,
+    company_id: int,
+    day: date | str,
+    layers: tuple[str, ...] = COMMON,
+    detail: str = TYPES,
 ) -> Statement:
     """Assets, liabilities and equity on the day; the profit not yet closed into equity
-    (the balances of income and expense accounts) is a line of equity."""
-    by_type = _balances(conn, company_id, iso_date(day), layers)
+    (the balances of income and expense accounts) is a line of equity. `detail` ACCOUNTS:
+    each line opens into its accounts (D102)."""
+    balances = _balances(conn, company_id, iso_date(day), layers)
+    by_type: dict[str, int] = defaultdict(int)
+    for (key, _), net in balances.items():
+        by_type[key] += net
+    names = Names.read(conn, company_id) if detail != TYPES else None
     profit = -sum(v for t, v in by_type.items() if _class(t) in ("revenue", "expense"))
     lines: list[Line] = [Line("Активы", kind="heading")]
-    current = _section(lines, "Оборотные активы", by_type, "asset", True)
-    long_term = _section(lines, "Долгосрочные активы", by_type, "asset", False)
+
+    def section(title: str, cls: str, current: bool | None, sign: int = 1, profit=None) -> int:
+        start = len(lines)
+        total = _section(lines, title, by_type, cls, current, sign, profit)
+        if names is not None:
+            _open_accounts(lines, start, balances, names, sign, cls)
+        return total
+
+    current = section("Оборотные активы", "asset", True)
+    long_term = section("Долгосрочные активы", "asset", False)
     assets = current + long_term
     lines.append(Line("Итого активы", assets, "total"))
     lines.append(Line("Обязательства и капитал", kind="heading"))
-    short = _section(lines, "Краткосрочные обязательства", by_type, "liability", True, -1)
-    long_debt = _section(lines, "Долгосрочные обязательства", by_type, "liability", False, -1)
-    equity = _section(lines, "Капитал", by_type, "equity", None, -1, profit)
+    short = section("Краткосрочные обязательства", "liability", True, -1)
+    long_debt = section("Долгосрочные обязательства", "liability", False, -1)
+    equity = section("Капитал", "equity", None, -1, profit)
     total = short + long_debt + equity
     lines.append(Line("Итого обязательства и капитал", total, "total"))
     return Statement(lines, assets - total)
+
+
+@dataclass
+class Names:
+    """What the detail of a statement is titled by and ordered in."""
+
+    accounts: dict[int, str]  # «26  Ümumtəsərrüfat xərcləri»
+    order: dict[int, int]  # the place in the chart
+    values: dict[int, str]  # subconto values
+
+    @classmethod
+    def read(cls, conn: Connection, company_id: int) -> Names:
+        accounts = _accounts(conn, company_id)
+        values = {
+            r["id"]: r["name"]
+            for r in conn.execute(
+                "SELECT id, name FROM subconto_values WHERE company_id = ?", (company_id,)
+            )
+        }
+        return cls(
+            {i: f"{a['code'] or ''}  {a['name']}".strip() for i, a in accounts.items()},
+            {i: n for n, i in enumerate(accounts)},
+            values,
+        )
+
+    def account_lines(self, amounts: dict[int, int], sign: int = 1) -> list[Line]:
+        """A line per account with an amount, in the order of the chart."""
+        return [
+            Line(self.accounts[i], sign * amounts[i], "account", account_id=i)
+            for i in sorted(amounts, key=self.order.__getitem__)
+            if amounts[i]
+        ]
+
+
+def _open_accounts(
+    lines: list[Line], start: int, by_key: dict, names: Names, sign: int, cls: str
+) -> None:
+    """Put under each type line from `start` on its accounts (`by_key`: (key, account) ->
+    amount; the untyped accounts of the class under «Счета без типа»)."""
+    opened: list[Line] = lines[:start]
+    for line in lines[start:]:
+        opened.append(line)
+        if line.kind == "line" and line.account_type is not None:
+            key = line.account_type or f"{UNTYPED}:{cls}"
+            amounts: dict[int, int] = defaultdict(int)
+            for (k, account_id), net in by_key.items():
+                if k == key:
+                    amounts[account_id] += net
+            opened.extend(names.account_lines(amounts, sign))
+    lines[:] = opened
 
 
 # ---- the parts ---------------------------------------------------------------------------
@@ -112,12 +180,12 @@ def _section(
     return total
 
 
-def _balances(conn: Connection, company_id: int, day: str, layers) -> dict[str, int]:
-    """Dt − Ct by type on the day; a two-sided account with a first subconto is split per
-    counterparty (an advance is not netted against a debt)."""
+def _balances(conn: Connection, company_id: int, day: str, layers) -> dict[tuple[str, int], int]:
+    """Dt − Ct by (type, account) on the day; a two-sided account with a first subconto
+    is split per counterparty (an advance is not netted against a debt)."""
     params = _params(conn, company_id, day, day, layers)
     accounts = _accounts(conn, company_id)
-    by_type: dict[str, int] = defaultdict(int)
+    by_key: dict[tuple[str, int], int] = defaultdict(int)
     for r in conn.execute(
         """
         WITH docs AS (
@@ -143,8 +211,8 @@ def _balances(conn: Connection, company_id: int, day: str, layers) -> dict[str, 
         key = a["account_type"] or f"{UNTYPED}:{a['account_class']}"
         if a["two_sided"] and a["sc1_kind_id"] is not None:
             key = _split_key(key, a["account_class"], r["net"])
-        by_type[key] += r["net"]
-    return by_type
+        by_key[(key, r["account_id"])] += r["net"]
+    return by_key
 
 
 def _split_key(key: str, cls: str, net: int) -> str:
