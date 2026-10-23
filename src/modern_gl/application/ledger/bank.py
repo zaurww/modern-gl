@@ -11,6 +11,7 @@ amount in the currency kept on the posting.
 from __future__ import annotations
 
 from dataclasses import fields, replace
+from datetime import date
 
 from modern_gl.application.bank import (
     IN,
@@ -28,11 +29,11 @@ from modern_gl.application.common import pad_subconto
 from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
-from modern_gl.application.ledger.module import ModuleDocumentCommands
+from modern_gl.application.ledger.module import ModuleDocumentCommands, rebuild_start
 from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
 from modern_gl.domain.currency import to_base
-from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.dates import iso_date, ru_date
+from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
@@ -144,6 +145,37 @@ class BankCommands(ModuleDocumentCommands):
             self.conn.execute("DELETE FROM bank_operations WHERE id = ?", (operation_id,))
             self._remove_document(company_id, doc)
             self._audit(company_id, "bank_operation", operation_id, "delete", {})
+
+    def rebuild_postings(self, company_id: int, since: date | str) -> list[int]:
+        """Build the GL documents of posted operations from `since` on (not in the closed
+        period) again from the operations (D101); the GL documents that changed."""
+        changed: list[int] = []
+        with transaction(self.conn):
+            start = rebuild_start(self._company(company_id), since)
+            for row in self.conn.execute(
+                "SELECT o.id FROM bank_operations o JOIN documents d "
+                "ON d.company_id = o.company_id AND d.id = o.document_id "
+                "WHERE o.company_id = ? AND d.status = 'posted' AND d.doc_date >= ? "
+                "ORDER BY d.doc_date, d.number",
+                (company_id, start),
+            ).fetchall():
+                op = load_bank_operation(self.conn, company_id, row["id"])
+                try:
+                    postings = self._bank_postings(company_id, op)
+                    if self._rebuild_module_document(
+                        company_id, op.document_id, op.doc_date, postings, op.memo
+                    ):
+                        changed.append(op.document_id)
+                except LedgerError as exc:
+                    raise ValidationError(
+                        tr(
+                            "банковская операция №{n} от {date}: {error}",
+                            n=op.number,
+                            date=ru_date(op.doc_date),
+                            error=exc,
+                        )
+                    ) from exc
+        return changed
 
     def move_bank_operations(
         self,

@@ -11,24 +11,28 @@ with the credit, at the rate of its day.
 
 from __future__ import annotations
 
+from datetime import date
+
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.conversions import (
+    Conversion,
     ConversionCalc,
     ConversionFee,
     ConversionInput,
     ConversionSide,
     calculate,
     fee_on_credit,
+    load_conversion,
     same_day,
 )
 from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
-from modern_gl.application.ledger.module import ModuleDocumentCommands
+from modern_gl.application.ledger.module import ModuleDocumentCommands, rebuild_start
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
-from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.dates import iso_date, ru_date
+from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
@@ -165,6 +169,33 @@ class ConversionCommands(ModuleDocumentCommands):
             self.conn.execute("DELETE FROM currency_conversions WHERE id = ?", (conversion_id,))
             self._remove_document(company_id, doc)
             self._audit(company_id, "conversion", conversion_id, "delete", {})
+
+    def rebuild_postings(self, company_id: int, since: date | str) -> list[int]:
+        """Build the GL documents of posted conversions from `since` on (not in the closed
+        period) again from the conversions (D101); the GL documents that changed."""
+        changed: list[int] = []
+        with transaction(self.conn):
+            start = rebuild_start(self._company(company_id), since)
+            for row in self.conn.execute(
+                "SELECT c.id FROM currency_conversions c JOIN documents d "
+                "ON d.company_id = c.company_id AND d.id = c.document_id "
+                "WHERE c.company_id = ? AND d.status = 'posted' AND d.doc_date >= ? "
+                "ORDER BY d.doc_date, d.number",
+                (company_id, start),
+            ).fetchall():
+                conversion = load_conversion(self.conn, company_id, row["id"])
+                try:
+                    changed += self._rebuild_conversion(company_id, conversion)
+                except LedgerError as exc:
+                    raise ValidationError(
+                        tr(
+                            "конвертация №{n} от {date}: {error}",
+                            n=self._document(company_id, conversion.document_id)["number"],
+                            date=ru_date(conversion.doc_date),
+                            error=exc,
+                        )
+                    ) from exc
+        return changed
 
     # ---- internals --------------------------------------------------------------------
 
@@ -308,6 +339,27 @@ class ConversionCommands(ModuleDocumentCommands):
             posting = self._fee_line(company_id, fee, value or 0)
             (credit_lines if fee_on_credit(data, fee) else debit_lines).append(posting)
         return debit_lines, credit_lines
+
+    def _rebuild_conversion(self, company_id: int, conversion: Conversion) -> list[int]:
+        """Its one or two GL documents again; a credit made on another day keeps its own."""
+        debit_lines, credit_lines = self._conversion_postings(company_id, conversion)
+        if same_day(conversion):
+            parts = [(conversion.document_id, conversion.doc_date, debit_lines + credit_lines)]
+        else:
+            assert conversion.credit_document_id is not None  # posted on two days
+            parts = [
+                (conversion.document_id, conversion.doc_date, debit_lines),
+                (
+                    conversion.credit_document_id,
+                    conversion.target_date or conversion.doc_date,
+                    credit_lines,
+                ),
+            ]
+        return [
+            doc_id
+            for doc_id, day, lines in parts
+            if self._rebuild_module_document(company_id, doc_id, day, lines, conversion.memo)
+        ]
 
     def _transit_account(self, company_id: int) -> Row:
         transit = self._role_account(
