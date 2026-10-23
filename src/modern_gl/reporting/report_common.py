@@ -17,17 +17,38 @@ IFRS = ("common", "ifrs_adj")
 TAX = ("common", "tax_adj")
 BOOKS = {"common": COMMON, "ifrs": IFRS, "tax": TAX}  # by the name a file or a client uses
 
-# Posted documents of the requested book up to :date_to.
-_DOCS_CTE = """
+FROM, AFTER = "from", "after"  # where `docs_cte` starts: :date_from, the day after :after
+
+
+def docs_cte(
+    columns: str = "d.id",
+    *,
+    start: str = "",
+    every_layer: bool = False,
+    status: str = "'posted'",
+) -> str:
+    """`docs AS (…)`: the posted documents of the requested book (:layers) up to :date_to —
+    the one meaning of «in the book» for every report. `start` — FROM :date_from or AFTER
+    :after (else from the beginning); `every_layer` — all the books (the caller tells
+    them apart by `l.code`); `status` — another SQL value instead of posted."""
+    since = {
+        "": "",
+        FROM: "\n      AND d.doc_date >= :date_from",
+        AFTER: "\n      AND d.doc_date > :after",
+    }[start]
+    book = "" if every_layer else "\n      AND l.code IN (SELECT value FROM json_each(:layers))"
+    return f"""
 docs AS (
-    SELECT d.id, d.doc_date, d.number, d.memo
+    SELECT {columns}
     FROM documents d
     JOIN layers l ON l.id = d.layer_id
     WHERE d.company_id = :company_id
-      AND d.status = 'posted'
-      AND d.doc_date <= :date_to
-      AND l.code IN (SELECT value FROM json_each(:layers))
+      AND d.status = {status}{since}
+      AND d.doc_date <= :date_to{book}
 )"""
+
+
+_DOCS_CTE = docs_cte("d.id, d.doc_date, d.number, d.memo")
 
 
 @dataclass

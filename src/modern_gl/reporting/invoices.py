@@ -24,10 +24,10 @@ from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.overview import Attention, attention_source
-from modern_gl.reporting.reports import _DOCS_CTE, COMMON, _params
+from modern_gl.reporting.report_common import COMMON, _params, docs_cte
 
 # documents of a status: drafts too, for the e-qaimə a payment may name
-_STATUS_DOCS_CTE = _DOCS_CTE.replace("d.status = 'posted'", "d.status = :status")
+_STATUS_DOCS_CTE = docs_cte("d.id, d.doc_date, d.number, d.memo", status=":status")
 
 
 @dataclass

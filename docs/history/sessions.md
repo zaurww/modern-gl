@@ -151,3 +151,6 @@
   курсы — `bank_operation_page`, `document_page/rates`, `conversion_page`; месяц — `dates.month_end`,
   `period_input.month_bounds`, `periods.month_bounds`, `reports_page/view.month_of`; период —
   `documents._require_changeable`, `validation._require_open_period`, `inventory/base`, `accruals`.
+- «Долг» 13, первый пункт закрыт: «проведённые документы книги» — один построитель
+  `report_common.docs_cte(columns, start=FROM|AFTER, every_layer=, status=)`; на нём ОСВ,
+  баланс, ОПиУ, ДДС, сравнение книг, переоценка, e-qaimə (без `str.replace` по SQL).

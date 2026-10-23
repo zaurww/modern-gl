@@ -16,7 +16,7 @@ from modern_gl.domain.accounts import ACCOUNT_TYPES, NONCURRENT_TYPES, TYPE_CLAS
 from modern_gl.domain.dates import iso_date
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.columns import Amounts, total
-from modern_gl.reporting.report_common import COMMON, _accounts, _params
+from modern_gl.reporting.report_common import AFTER, COMMON, _accounts, _params, docs_cte
 
 UNTYPED = ""  # an account without a type: its own line, so it is seen and given one
 # a debit balance of a counterparty on a liability account is an advance paid, a credit
@@ -217,13 +217,8 @@ def _moves(conn: Connection, company_id: int, after: str, day: str, layers):
     params = _params(conn, company_id, day, day, layers)
     params["after"] = after
     return conn.execute(
-        """
-        WITH docs AS (
-            SELECT d.id FROM documents d JOIN layers l ON l.id = d.layer_id
-            WHERE d.company_id = :company_id AND d.status = 'posted'
-              AND d.doc_date > :after AND d.doc_date <= :date_to
-              AND l.code IN (SELECT value FROM json_each(:layers))
-        ),
+        f"""
+        WITH {docs_cte(start=AFTER)},
         moves AS (
             SELECT p.debit_account_id AS account_id, p.dt_sc1 AS sc, p.amount AS net
             FROM postings p JOIN docs ON docs.id = p.document_id

@@ -13,7 +13,7 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.period_input import Period
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.columns import Amounts
-from modern_gl.reporting.report_common import COMMON, _accounts, _params
+from modern_gl.reporting.report_common import COMMON, _accounts, _params, docs_cte
 from modern_gl.reporting.statements import TYPES, UNTYPED, Line, Names, Statement
 
 MONEY_TYPES = frozenset({"cash", "bank", "vat_deposit", "transit"})
@@ -96,16 +96,13 @@ def _read(conn: Connection, company_id: int, columns: list[tuple[str, str]], lay
     flows: dict[str, Amounts] = defaultdict(Amounts)
     by_account: dict[str, dict[int, Amounts]] = defaultdict(lambda: defaultdict(Amounts))
     for r in conn.execute(
-        """
-        SELECT d.doc_date, p.debit_account_id AS dt, p.credit_account_id AS ct,
+        f"""
+        WITH {docs_cte("d.id, d.doc_date")}
+        SELECT docs.doc_date, p.debit_account_id AS dt, p.credit_account_id AS ct,
                SUM(p.amount) AS amount
-        FROM postings p
-        JOIN documents d ON d.company_id = p.company_id AND d.id = p.document_id
-        JOIN layers l ON l.id = d.layer_id
-        WHERE p.company_id = :company_id AND d.status = 'posted'
-          AND d.doc_date <= :date_to
-          AND l.code IN (SELECT value FROM json_each(:layers))
-        GROUP BY d.doc_date, p.debit_account_id, p.credit_account_id
+        FROM postings p JOIN docs ON docs.id = p.document_id
+        WHERE p.company_id = :company_id
+        GROUP BY docs.doc_date, p.debit_account_id, p.credit_account_id
         """,
         params,
     ):
