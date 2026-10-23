@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from modern_gl.application.bank.operations import (
@@ -159,6 +159,15 @@ class PortalLoad:
     loaded_at: str
     operations: int
 
+    @property
+    def closed_to(self) -> str:
+        """The last day of the period that had ended when it was loaded: a day loaded on
+        that day may get an operation later — it is loaded again."""
+        moment = datetime.fromisoformat(self.loaded_at)
+        if moment.tzinfo is not None:
+            moment = moment.astimezone()  # the portal's day is the user's day
+        return min(self.date_to, (moment.date() - timedelta(days=1)).isoformat())
+
 
 def portal_loads(conn: Connection, company_id: int, place: BankPlace) -> list[PortalLoad]:
     """The periods loaded into the account, the earliest first."""
@@ -174,19 +183,37 @@ def portal_loads(conn: Connection, company_id: int, place: BankPlace) -> list[Po
 
 
 def loaded_spans(loads: Sequence[PortalLoad]) -> list[tuple[str, str]]:
-    """The loaded periods joined: overlapping ones and ones that go on the next day."""
+    """The loaded periods joined: overlapping ones and ones that go on the next day; a day
+    loaded before it ended is not counted (`PortalLoad.closed_to`)."""
     spans: list[tuple[str, str]] = []
-    for load in sorted(loads, key=lambda x: (x.date_from, x.date_to)):
-        if spans and load.date_from <= _next_day(spans[-1][1]):
-            spans[-1] = (spans[-1][0], max(spans[-1][1], load.date_to))
+    closed = [(x.date_from, x.closed_to) for x in loads if x.date_from <= x.closed_to]
+    for first, last in sorted(closed):
+        if spans and first <= _next_day(spans[-1][1]):
+            spans[-1] = (spans[-1][0], max(spans[-1][1], last))
         else:
-            spans.append((load.date_from, load.date_to))
+            spans.append((first, last))
     return spans
 
 
 def loaded_already(loads: Sequence[PortalLoad], date_from: str, date_to: str) -> bool:
     """Every day of the period was loaded before."""
     return any(a <= date_from and date_to <= b for a, b in loaded_spans(loads))
+
+
+def next_to_load(loads: Sequence[PortalLoad]) -> str | None:
+    """The day to load from: after the last loaded one (a day loaded before it ended — that
+    day again); nothing loaded — None."""
+    spans = loaded_spans(loads)
+    if spans:
+        return _next_day(spans[-1][1])
+    return min((x.date_from for x in loads), default=None)
+
+
+def unfinished_days(loads: Sequence[PortalLoad]) -> list[str]:
+    """The days loaded before they ended that no later load covers: to load again."""
+    spans = loaded_spans(loads)
+    days = {x.date_to for x in loads if x.closed_to < x.date_to}
+    return sorted(d for d in days if not any(a <= d <= b for a, b in spans))
 
 
 def _next_day(day: str) -> str:

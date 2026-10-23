@@ -7,7 +7,7 @@ thread."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date
 
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
@@ -18,7 +18,9 @@ from modern_gl.application.bank.deposit_import import (
     fetch_deposit,
     loaded_already,
     loaded_spans,
+    next_to_load,
     portal_loads,
+    unfinished_days,
 )
 from modern_gl.application.ledger.bank_deposit import DepositImported
 from modern_gl.desktop import portal_login
@@ -100,12 +102,12 @@ class DepositDialog(QDialog):
         root.addLayout(actions)
 
     def _suggest_period(self) -> None:
-        """From the day after the last one loaded up to today; nothing loaded yet — this
-        month."""
-        spans = loaded_spans(self.loads)
-        if not spans:
+        """From the day after the last one loaded (a day loaded before it ended — from it)
+        up to today; nothing loaded yet — this month."""
+        start = next_to_load(self.loads)
+        if start is None:
             return
-        following = date.fromisoformat(spans[-1][1]) + timedelta(days=1)
+        following = date.fromisoformat(start)
         if following <= self.today:
             self.period_bar.set_period(following, self.today)
 
@@ -116,16 +118,11 @@ class DepositDialog(QDialog):
 
     def _show_loaded(self) -> None:
         spans = loaded_spans(self.loads)
-        if not spans:
+        if not self.loads:
             self.loaded.setObjectName("secondary")
             self.loaded.setText(tr("С портала в этот счёт ещё ничего не загружалось."))
         else:
-            text = tr(
-                "Уже загружено с портала: {periods}.",
-                periods=", ".join(
-                    period_dates(date.fromisoformat(a), date.fromisoformat(b)) for a, b in spans
-                ),
-            )
+            text = " ".join(self._loaded_texts(spans))
             first, last = self.period()
             again = loaded_already(self.loads, first.isoformat(), last.isoformat())
             if again:
@@ -134,6 +131,24 @@ class DepositDialog(QDialog):
             self.loaded.setText(text)
         self.loaded.style().unpolish(self.loaded)
         self.loaded.style().polish(self.loaded)
+
+    def _loaded_texts(self, spans: list[tuple[str, str]]) -> list[str]:
+        texts = []
+        if spans:
+            periods = (period_dates(date.fromisoformat(a), date.fromisoformat(b)) for a, b in spans)
+            texts.append(tr("Уже загружено с портала: {periods}.", periods=", ".join(periods)))
+        unfinished = [
+            date.fromisoformat(d).strftime("%d.%m.%Y") for d in unfinished_days(self.loads)
+        ]
+        if unfinished:
+            texts.append(
+                tr(
+                    "{days} загружено, пока день не кончился: поздние операции этого дня "
+                    "возьмутся при следующей загрузке.",
+                    days=", ".join(unfinished),
+                )
+            )
+        return texts
 
     # ---- loading -------------------------------------------------------------------
 

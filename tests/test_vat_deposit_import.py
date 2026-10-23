@@ -385,6 +385,19 @@ def test_loaded_periods_are_joined():
     assert not loaded_already([], "2026-10-01", "2026-10-01")
 
 
+def test_a_day_loaded_on_that_day_is_not_closed():
+    """Loaded on 23.10 at 15:00 for 20–23.10: 23.10 had not ended, a later operation of it
+    may come — only 20–22.10 count as loaded; loaded on 24.10 — the whole period."""
+    same_day = PortalLoad("2026-10-20", "2026-10-23", "2026-10-23T15:00:00", 0)
+    assert loaded_spans([same_day]) == [("2026-10-20", "2026-10-22")]
+    assert not loaded_already([same_day], "2026-10-23", "2026-10-23")
+    assert loaded_already([same_day], "2026-10-21", "2026-10-22")
+    next_day = PortalLoad("2026-10-20", "2026-10-23", "2026-10-24T09:00:00", 0)
+    assert loaded_spans([next_day]) == [("2026-10-20", "2026-10-23")]
+    only_today = PortalLoad("2026-10-23", "2026-10-23", "2026-10-23T15:00:00", 0)
+    assert loaded_spans([only_today]) == []
+
+
 def test_the_sign_in_window_says_what_it_waits_for():
     from modern_gl.desktop.portal_login import waiting_for
     from tests.test_eqaime_import import fake_token
@@ -472,6 +485,33 @@ def test_a_period_loaded_already_is_asked_about(qtbot, ledger, firm, deposit_ses
     monkeypatch.setattr(module.QMessageBox, "question", no)
     dialog.load()
     assert len(asked) == 1 and portal.calls == []  # not loaded: the portal not asked
+
+
+def test_a_day_loaded_before_it_ended_is_suggested_again(qtbot, ledger, firm, deposit_session):
+    """Loaded on 03.10 for 01–03.10: next day the window starts from 03.10 and says why."""
+    from modern_gl.desktop.bank_page.portal import DepositDialog
+
+    s, _messages, token, _portal = deposit_session
+    cid, place = firm["cid"], firm["place"]
+    ledger.conn.execute(
+        "INSERT INTO bank_portal_loads (company_id, account_id, value_id, date_from, date_to, "
+        "loaded_at, operations) VALUES (?, ?, ?, '2026-10-01', '2026-10-03', "
+        "'2026-10-03T14:00:00', 4)",
+        (cid, place.account_id, place.value_id),
+    )
+    dialog = DepositDialog(s, place, sign_in=lambda _parent: token, today=date(2026, 10, 4))
+    qtbot.addWidget(dialog)
+    assert dialog.period() == (date(2026, 10, 3), date(2026, 10, 4))
+    assert dialog.loaded.text() == " ".join(
+        [
+            tr("Уже загружено с портала: {periods}.", periods="01.10–02.10.2026"),
+            tr(
+                "{days} загружено, пока день не кончился: поздние операции этого дня "
+                "возьмутся при следующей загрузке.",
+                days="03.10.2026",
+            ),
+        ]
+    )
 
 
 def test_the_bank_page_has_one_menu_with_the_portal(qtbot, firm, deposit_session, monkeypatch):

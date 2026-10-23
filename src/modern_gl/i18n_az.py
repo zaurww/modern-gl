@@ -1747,6 +1747,7 @@ AZ: dict[str, str] = {
     "С портала в этот счёт ещё ничего не загружалось.": "Bu hesaba portaldan hələ heç nə yüklənməyib.",
     "Уже загружено с портала: {periods}.": "Portaldan artıq yüklənib: {periods}.",
     "Выбранный период уже загружен.": "Seçilmiş dövr artıq yüklənib.",
+    "{days} загружено, пока день не кончился: поздние операции этого дня возьмутся при следующей загрузке.": "{days} gün bitməmiş yüklənib: həmin günün sonrakı əməliyyatları növbəti yükləmədə götürüləcək.",
     "Период {period} уже загружен с портала. Загрузить снова?\n\nДвойных операций не будет: добавятся только новые, появившиеся на портале после прошлой загрузки.": "{period} dövrü portaldan artıq yüklənib. Yenidən yükləmək?\n\nƏməliyyatlar təkrarlanmayacaq: yalnız əvvəlki yükləmədən sonra portalda yaranan yeniləri əlavə olunacaq.",
     " — новых операций нет": " — yeni əməliyyat yoxdur",
     "портал ответил непонятно: {error}": "portalın cavabı anlaşılmadı: {error}",
