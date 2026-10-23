@@ -757,3 +757,28 @@ def test_viewing_only_shows_the_statements_and_changes_nothing(qtbot, session):
     assert page.reconcile.bank.isReadOnly()
     titles = [item[0] for item in page.more_items() if item]  # only to Excel
     assert "Реквизиты счёта…" not in titles and "В Excel…" in titles
+
+
+def test_rates_not_loaded_leave_the_note_and_tell_why(qtbot, session):
+    """One «Загрузить курс ЦБА» for the document, the bank operation and the conversion
+    (desktop/rate_note): an error is shown on the form, no toast; then a toast with how
+    many rates came."""
+    from modern_gl.infrastructure.cbar import RatesUnavailable
+
+    page = new_page(qtbot, session)
+    choose(page.account, "52  Валютные счета")
+    told: list[str] = []
+    session.notify = told.append
+
+    def unavailable(day):
+        raise RatesUnavailable("cbar.az не отвечает")
+
+    session.fetch_rates = unavailable
+    page.load_rates()
+    assert page.rate_note.isVisibleTo(page)
+    assert page.error.isVisibleTo(page) and page.error.text() == "cbar.az не отвечает"
+    assert told == []
+    session.fetch_rates = lambda day: {"USD": (1_701_000, 1)}
+    page.load_rates()
+    assert not page.rate_note.isVisibleTo(page)
+    assert told == ["Курсы ЦБА на 05.03.2026 загружены: 1"]

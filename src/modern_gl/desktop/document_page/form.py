@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QComboBox,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -35,6 +34,7 @@ from modern_gl.desktop.postings import (
     PostingsModel,
     PostingsTable,
 )
+from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
@@ -163,18 +163,9 @@ class DocumentForm(QWidget):
 
     def _build_rate_note(self, root: QVBoxLayout) -> None:
         """No rate of the document date: load the Central Bank's rates right from here."""
-        self.rate_note = QFrame()
-        self.rate_note.setObjectName("note")
-        note = QHBoxLayout(self.rate_note)
-        note.setContentsMargins(14, 6, 6, 6)
-        self.rate_text = QLabel()
-        self.rate_text.setWordWrap(True)
-        note.addWidget(self.rate_text, 1)
-        self.btn_rates = button(
-            tr("Загрузить курс ЦБА"), "flat", tr("Курсы с cbar.az на дату документа")
+        self.rate_note, self.rate_text, self.btn_rates = rate_note(
+            tr("Курсы с cbar.az на дату документа")
         )
-        note.addWidget(self.btn_rates)
-        self.rate_note.hide()
         root.addWidget(self.rate_note)
 
     def _build_total(self, root: QVBoxLayout) -> None:
