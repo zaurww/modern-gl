@@ -1723,6 +1723,8 @@ AZ: dict[str, str] = {
     "Обычные периоды": "Adi dövrlər",
     "Выбрать даты…": "Tarixləri seçin…",
     "Выбрать даты": "Tarixləri seçin",
+    "Календарь": "Təqvim",
+    "Дата: {hint}": "Tarix: {hint}",
     "{n} квартал {year}": "{year}, {n} rüb",
     "Первый день": "İlk gün",
     "Последний день": "Son gün",

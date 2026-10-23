@@ -6,14 +6,13 @@ from collections.abc import Callable
 from datetime import date
 from typing import ClassVar, cast
 
-from PySide6.QtCore import QDate, QEvent, QObject, QPoint, QRect, QSize, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QFontMetrics, QHelpEvent, QIcon, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
     QApplication,
     QComboBox,
-    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -29,6 +28,13 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop import icons
+from modern_gl.desktop.date_field import (
+    ENTER_KEYS,
+    DateEdit,
+    date_edit,
+    edited_date,
+    to_qdate,
+)
 from modern_gl.desktop.icons import status_mark
 from modern_gl.desktop.theme import P, check_icon, dot_icon, fonts
 from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_NAMES
@@ -36,9 +42,8 @@ from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 
-DATE_FORMAT = "dd.MM.yyyy"
-
-__all__ = ["ru_date"]  # re-exported for the pages
+# re-exported for the pages
+__all__ = ["DateEdit", "date_edit", "edited_date", "ru_date", "to_qdate"]
 
 
 def money(minor: int | None, blank_zero: bool = True) -> str:
@@ -51,26 +56,6 @@ def balance_text(net: int) -> str:
     if net == 0:
         return "0.00"
     return f"{format_minor(abs(net))} {tr('Дт') if net > 0 else tr('Кт')}"
-
-
-def to_qdate(d: date) -> QDate:
-    return QDate(d.year, d.month, d.day)
-
-
-def edited_date(edit: QDateEdit) -> date:
-    """The date in a date editor (PySide types QDate.toPython() as object)."""
-    return cast(date, edit.date().toPython())
-
-
-class DateEdit(QDateEdit):
-    """Tab leaves the field, as from any other (Qt's own walks day → month → year);
-    the parts are typed one after another: a full part moves on to the next."""
-
-    def focusNextPrevChild(self, next: bool) -> bool:
-        return QWidget.focusNextPrevChild(self, next)
-
-
-ENTER_KEYS = (Qt.Key.Key_Return, Qt.Key.Key_Enter)
 
 
 def enter_goes_on(page: QWidget, event) -> bool:
@@ -94,13 +79,6 @@ def enter_goes_on(page: QWidget, event) -> bool:
         parent = parent.parentWidget()
     page.focusNextChild()
     return True
-
-
-def date_edit(value: date, parent: QWidget | None = None) -> QDateEdit:
-    w = DateEdit(to_qdate(value), parent)
-    w.setDisplayFormat(DATE_FORMAT)
-    w.setCalendarPopup(True)
-    return w
 
 
 def button(text: str, kind: str = "", tooltip: str = "") -> QPushButton:

@@ -52,6 +52,7 @@ GLYPHS: dict[str, str] = {
     "lock": "lock",
     "books": "git-compare",
     "statements": "chart-pie",
+    "calendar": "calendar",
 }
 
 _CACHE: dict[tuple[str, str, int, str], QIcon] = {}
