@@ -64,6 +64,7 @@ class EqaimeImportForm(QDialog):
         self.token: str | None = None
         self.plans: list[InvoicePlan] = []
         self.created: list[int] = []
+        self.attached: list[int] = []  # waiting purchases given their e-qaimə (D119)
         self.worker: QThread | None = None
         self.setWindowTitle(tr("E-qaimə с портала"))
         self.resize(1180, 720)

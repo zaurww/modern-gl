@@ -22,6 +22,7 @@ class TradeDocument:
     tax_ids: str  # their VÖEN
     amount: int  # without VAT
     vat: int
+    awaits_invoice: int = 0  # 1: a purchase whose e-qaimə comes later (D119)
 
     @property
     def total(self) -> int:
@@ -38,7 +39,7 @@ def trade_documents(
     rows = conn.execute(
         f"""
         SELECT d.id, d.doc_type, d.number, d.doc_date, d.status, d.memo,
-               COALESCE(d.invoice, '') AS invoice,
+               COALESCE(d.invoice, '') AS invoice, d.awaits_invoice,
                COALESCE((
                    SELECT string_agg(name, ', ') FROM (
                        SELECT DISTINCT v.name FROM inventory_lines x

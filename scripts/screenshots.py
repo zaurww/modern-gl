@@ -433,8 +433,30 @@ def main() -> None:
             supplier.offset_subconto,
             vat_rate=STANDARD_VAT_RATE,
         )
+    waiting = stock.create_receipt_draft(  # goods came before their e-qaimə (D119)
+        cid,
+        "2026-02-28",
+        [
+            ReceiptLine(
+                None,
+                None,
+                None,
+                "250",
+                i18n.tr("Картриджи"),
+                expense_account_id=ledger.account_id(cid, "26"),
+                expense_subconto=[kind_value("cost_item", i18n.tr("Картриджи"))],
+            )
+        ],
+        supplier.offset_account_id,
+        supplier.offset_subconto,
+        awaits_invoice=True,
+    )
+    stock.post_document(cid, waiting)
+    session.catalog.reload()  # its new cost item
     win.show_place(("purchases",))
     shot("8c0_purchases")
+    win.open_inventory_document(waiting)
+    shot("8c10_purchase_awaiting")
     win.show_place(("sales",))
     shot("8c0_sales")
     from modern_gl.application.eqaime_import import parse_invoice

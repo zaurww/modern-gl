@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.eqaime_import import (
+    AwaitingPurchase,
     EInvoice,
     InvoicePlan,
     LinePlan,
@@ -139,6 +140,8 @@ class EqaimeImportDialog(EqaimeImportForm):
             self.tree.addTopLevelItem(item)
             if plan.importable and plan.has_expenses:
                 self.tree.setItemWidget(item, EXPENSE_MONTH, self._expense_month(plan))
+            if plan.importable and plan.awaiting:
+                self.tree.setItemWidget(item, BECOMES, self._awaiting_box(plan, item))
         self.tree.blockSignals(False)
         self._show_count()
 
@@ -193,11 +196,47 @@ class EqaimeImportDialog(EqaimeImportForm):
         box.activated.connect(chosen)
         return box
 
+    def _awaiting_box(self, plan: InvoicePlan, item: QTreeWidgetItem) -> PickBox:
+        """The supplier's purchases waiting for an e-qaimə (D119): the e-qaimə goes into
+        one of them or becomes a new draft; the choice goes into the plan."""
+        box = PickBox()
+        box.addItem(tr("Новый черновик: {state}", state=self._new_state(plan)), None)
+        for purchase in plan.awaiting:
+            box.addItem(self._awaiting_label(plan, purchase), purchase)
+        box.setCurrentIndex(max(box.findData(plan.attach_to), 0))
+
+        def chosen(_index: int) -> None:
+            plan.attach_to = box.currentData()
+            month = self.tree.itemWidget(item, EXPENSE_MONTH)
+            if month is not None:  # the purchase has its own month
+                month.setEnabled(plan.attach_to is None)
+            self._show_count()
+
+        box.activated.connect(chosen)
+        chosen(box.currentIndex())
+        return box
+
+    @staticmethod
+    def _awaiting_label(plan: InvoicePlan, purchase: AwaitingPurchase) -> str:
+        text = tr(
+            "В покупку №{n} от {date} ({amount}), ждёт e-qaimə",
+            n=purchase.number,
+            date=ru_date(purchase.doc_date),
+            amount=money(purchase.amount, blank_zero=False),
+        )
+        if plan.agrees(purchase):
+            return text
+        return text + " · " + tr("сумма другая — проверьте покупку")
+
     def _invoice_state(self, plan: InvoicePlan) -> str:
         if plan.existing is not None:
             return tr("уже есть: документ №{n}", n=plan.existing)
         if plan.skip_reason:
             return plan.skip_reason
+        return self._new_state(plan)
+
+    @staticmethod
+    def _new_state(plan: InvoicePlan) -> str:
         parts = [tr("ожидает подтверждения")] if plan.invoice.pending else []
         if plan.counterparty_id is None:
             parts.append(tr("новый контрагент"))
@@ -265,10 +304,25 @@ class EqaimeImportDialog(EqaimeImportForm):
                 result.append(item.data(0, Qt.ItemDataRole.UserRole))
         return result
 
+    def outcome(self) -> str:
+        """What the import did, for the toast after it."""
+        parts = []
+        if self.created:
+            parts.append(tr("Создано черновиков: {n} — проверьте и проведите", n=len(self.created)))
+        if self.attached:
+            parts.append(tr("e-qaimə дописана в покупки: {n}", n=len(self.attached)))
+        return " · ".join(parts)
+
     def _show_count(self) -> None:
         chosen = self._checked()
         self.import_button.setEnabled(bool(chosen))
-        self.import_button.setText(tr("Создать черновики: {n}", n=len(chosen)))
+        attached = sum(1 for p in chosen if p.attach_to is not None)
+        text = tr("Создать черновики: {n}", n=len(chosen) - attached)
+        if attached:  # written into waiting purchases (D119)
+            text = tr(
+                "Загрузить: черновиков {n}, в покупки {m}", n=len(chosen) - attached, m=attached
+            )
+        self.import_button.setText(text)
         if self.plans:
             new = sum(1 for p in self.plans if p.importable)
             self.status.setText(
@@ -392,5 +446,6 @@ class EqaimeImportDialog(EqaimeImportForm):
         except LedgerError as exc:
             self.status.setText(str(exc))
             return
+        self.attached = [p.attach_to.document_id for p in chosen if p.attach_to is not None]
         self.s.catalog.reload()  # new counterparties
         self.accept()

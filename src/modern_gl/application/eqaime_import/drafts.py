@@ -31,9 +31,11 @@ def import_drafts(
     plans: Sequence[InvoicePlan],
     names: Mapping[str, str] | None = None,
 ) -> list[int]:
-    """Write the importable plans as drafts in one transaction. Missing counterparties are
-    added first, once per VÖEN, under `names` (key -> name) or a shortened portal name;
-    the settlement account is the one of its type (60 / 62)."""
+    """Write the importable plans as drafts in one transaction; the new drafts. Missing
+    counterparties are added first, once per VÖEN, under `names` (key -> name) or a
+    shortened portal name; the settlement account is the one of its type (60 / 62).
+    A plan with `attach_to` is written into that waiting purchase instead (D119): its
+    number, and its VAT when the amounts agree."""
     ledger = inventory.ledger
     conn = inventory.conn
     chosen = [plan for plan in plans if plan.importable]
@@ -48,6 +50,12 @@ def import_drafts(
         warehouse = _only_warehouse(conn, company_id)
         for plan in chosen:
             invoice = plan.invoice
+            if plan.attach_to is not None:
+                vat = invoice.vat if plan.agrees(plan.attach_to) else None
+                inventory.attach_invoice(
+                    company_id, plan.attach_to.document_id, invoice.number, vat
+                )
+                continue
             assert plan.counterparty_id is not None  # added above
             account = _settlement_account(conn, company_id, invoice.outgoing)
             subconto = _place(conn, company_id, account, kind, plan.counterparty_id)

@@ -307,6 +307,7 @@ class InventoryBase:
             "currency_rate": doc["currency_rate"],
             "invoice": doc["invoice"],
             "invoice_kind": doc["invoice_kind"],
+            "awaits_invoice": doc["awaits_invoice"],
             "expense_date": doc["expense_date"],
             "accrual_document_id": doc["accrual_document_id"],
             "lines": lines,

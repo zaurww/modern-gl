@@ -497,10 +497,8 @@ class EqaimeReconciliationDialog(QDialog):
         )
         dialog.token = self.token
         dialog.period_bar.set_period(*self.period_bar.period())
-        if dialog.exec() and dialog.created:
-            self.s.notify(
-                tr("Создано черновиков: {n} — проверьте и проведите", n=len(dialog.created))
-            )
+        if dialog.exec() and (dialog.created or dialog.attached):
+            self.s.notify(dialog.outcome())
 
 
 def _signed(minor: int) -> str:
