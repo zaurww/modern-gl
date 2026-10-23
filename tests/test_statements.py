@@ -29,7 +29,8 @@ from __future__ import annotations
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
-from modern_gl.reporting.statements import balance_sheet, profit_and_loss
+from modern_gl.reporting.profit_loss import profit_and_loss
+from modern_gl.reporting.statements import balance_sheet
 
 
 @pytest.fixture

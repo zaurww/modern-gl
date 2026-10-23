@@ -14,7 +14,8 @@ from modern_gl.desktop.widgets import button, ru_date
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.cash_flow import cash_flow
-from modern_gl.reporting.statements import Line, Statement, balance_sheet, profit_and_loss
+from modern_gl.reporting.profit_loss import profit_and_loss
+from modern_gl.reporting.statements import Line, Statement, balance_sheet
 
 BALANCE, PROFIT, CASH = "balance", "profit", "cash"
 # the parts of the balance sheet: their subtotal reads «Итого: …»
