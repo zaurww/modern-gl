@@ -457,6 +457,8 @@ def main() -> None:
     shot("8c0_purchases")
     win.open_inventory_document(waiting)
     shot("8c10_purchase_awaiting")
+    win.show_place(("home",))
+    shot("0_home_awaiting")  # «Bu gün» reminds of it
     win.show_place(("sales",))
     shot("8c0_sales")
     from modern_gl.application.eqaime_import import parse_invoice

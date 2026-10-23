@@ -284,3 +284,24 @@ def test_import_dialog_offers_the_waiting_purchase(shop, conn, qtbot):
     assert dialog.outcome() == "e-qaimə дописана в покупки: 1"
     doc = shop.inventory.load_document(shop.company_id, document_id)
     assert (doc.invoice, sum(line.vat_amount for line in doc.lines)) == ("MT0305", 2_700)
+
+
+def test_bu_gun_reminds_of_purchases_waiting(shop, conn):
+    """Waiting purchases of 02.03 and 03.03: on 03.03 «Bu gün» shows 2, since 02.03; on
+    02.03 only the first; once the e-qaimə is in both, nothing."""
+    from modern_gl.reporting.overview import attention
+
+    first, second = waiting(shop, "2026-03-02"), waiting(shop, "2026-03-03")
+
+    def rows(day: str) -> list[tuple]:
+        return [
+            (r.text, r.count, r.place)
+            for r in attention(conn, shop.company_id, day)
+            if r.place == ("purchases",)
+        ]
+
+    assert rows("2026-03-03") == [("Покупки ждут e-qaimə, с 02.03.2026", 2, ("purchases",))]
+    assert rows("2026-03-02") == [("Покупки ждут e-qaimə, с 02.03.2026", 1, ("purchases",))]
+    shop.inventory.attach_invoice(shop.company_id, first, "MT1")
+    shop.inventory.attach_invoice(shop.company_id, second, "MT2")
+    assert rows("2026-03-03") == []
