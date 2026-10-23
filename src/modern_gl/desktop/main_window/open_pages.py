@@ -244,11 +244,15 @@ class OpenPages(CompanyFiles):
         if ask and not self._confirm_close(page):
             return
         item = self.sidebar.item_for(key)
+        # the sidebar moves its current item to a neighbour: not a place to open (Esc
+        # would build and read the warehouse on its way back)
+        self.sidebar.nav.blockSignals(True)
         if item is not None:
             self.sidebar.nav.takeItem(self.sidebar.nav.row(item))
         del self.pages[key]
         self.recent = [k for k in self.recent if k != key]
         self.sidebar.arrange_open(self.recent)
+        self.sidebar.nav.blockSignals(False)
         self.stack.removeWidget(page)
         page.deleteLater()
         back = self.came_from.pop(page, None)
