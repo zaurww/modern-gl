@@ -8,8 +8,8 @@ from modern_gl.application.inventory import (
     STANDARD_VAT_RATE,
 )
 from modern_gl.application.inventory import VAT_DOCUMENTS as INVENTORY_VAT_DOCUMENTS
+from modern_gl.application.table_text import header_names
 from modern_gl.i18n import fold
-from modern_gl.i18n_az import AZ
 
 ITEM = "item"
 WAREHOUSE = "warehouse"
@@ -105,25 +105,20 @@ HINT = (
 )
 
 
-def _names(*sources: str) -> set[str]:
-    """A header in Russian and in Azerbaijani, folded for matching."""
-    return {fold(name) for src in sources for name in (src, AZ.get(src, src))}
-
-
 # Excel header -> column; "Субконто" columns go in a row after the account
 PASTE_HEADERS = [
-    (_names("Товар", "Наименование", "Номенклатура", "Mal", "Malın adı", "Ad"), ITEM),
-    (_names("Склад", "Anbar"), WAREHOUSE),
-    (_names("Склад-получатель"), TO_WAREHOUSE),
-    (_names("Количество", "Кол-во", "Miqdar"), QUANTITY),
-    (_names("Ед.", "Ед", "Единица", "Единица измерения", "Vahid", "Ölçü vahidi"), UNIT),
-    (_names("Цена", "Qiymət"), PRICE),
-    (_names("Сумма", "Məbləğ", "Сумма без НДС", "ƏDV-siz məbləğ"), AMOUNT),
-    (_names("НДС", "Сумма НДС", "ƏDV", "ƏDV məbləği"), VAT),
-    (_names("Корр. счёт", "Счёт", "Hesab"), ACCOUNT),
-    (_names("Комментарий", "Содержание", "Şərh", "Məzmun"), MEMO),
+    (header_names("Товар", "Наименование", "Номенклатура", "Mal", "Malın adı", "Ad"), ITEM),
+    (header_names("Склад", "Anbar"), WAREHOUSE),
+    (header_names("Склад-получатель"), TO_WAREHOUSE),
+    (header_names("Количество", "Кол-во", "Miqdar"), QUANTITY),
+    (header_names("Ед.", "Ед", "Единица", "Единица измерения", "Vahid", "Ölçü vahidi"), UNIT),
+    (header_names("Цена", "Qiymət"), PRICE),
+    (header_names("Сумма", "Məbləğ", "Сумма без НДС", "ƏDV-siz məbləğ"), AMOUNT),
+    (header_names("НДС", "Сумма НДС", "ƏDV", "ƏDV məbləği"), VAT),
+    (header_names("Корр. счёт", "Счёт", "Hesab"), ACCOUNT),
+    (header_names("Комментарий", "Содержание", "Şərh", "Məzmun"), MEMO),
 ]
-SUBCONTO_HEADERS = _names("Субконто", "Subkonto")
+SUBCONTO_HEADERS = header_names("Субконто", "Subkonto")
 # accounts before their subconto, the quantity before a price, a pasted amount over a price
 PASTE_ORDER = [
     ITEM,

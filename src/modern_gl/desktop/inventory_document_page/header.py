@@ -6,11 +6,11 @@ from __future__ import annotations
 from fractions import Fraction
 
 from modern_gl.application.currencies import rate_on
+from modern_gl.application.table_text import plain_number
 from modern_gl.desktop.inventory_document_page.columns import (
     VAT_DOCUMENTS,
 )
 from modern_gl.desktop.inventory_document_page.form import InventoryDocumentForm
-from modern_gl.desktop.postings import plain_number
 from modern_gl.desktop.widgets import (
     edited_date,
 )

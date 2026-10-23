@@ -9,6 +9,7 @@ from PySide6.QtCore import (
 from modern_gl.application.inventory import (
     to_quantity,
 )
+from modern_gl.application.table_text import plain_number
 from modern_gl.desktop.cell_editing import resolve_choice
 from modern_gl.desktop.inventory_document_page.columns import (
     ACCOUNT,
@@ -34,9 +35,6 @@ from modern_gl.desktop.inventory_document_page.columns import (
     paste_columns,
 )
 from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
-from modern_gl.desktop.postings import (
-    plain_number,
-)
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr

@@ -6,6 +6,7 @@ from PySide6.QtCore import (
     Qt,
 )
 
+from modern_gl.application.table_text import plain_number
 from modern_gl.desktop.postings.base import PostingsBase
 from modern_gl.desktop.postings.columns import (
     ARITHMETIC,
@@ -17,7 +18,6 @@ from modern_gl.desktop.postings.columns import (
     UnknownValue,
     column_role,
     header_columns,
-    plain_number,
 )
 from modern_gl.domain import formula
 from modern_gl.domain.currency import (
