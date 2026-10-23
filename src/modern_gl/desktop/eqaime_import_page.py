@@ -69,13 +69,11 @@ class EqaimeImportDialog(EqaimeImportForm):
 
     def load(self) -> None:
         from modern_gl.desktop import portal_login
+        from modern_gl.desktop.portal_company import company_token
 
-        token = self.token
-        if token is None or not portal_login.token_alive(token):  # 10 minutes
-            sign_in = self.sign_in or portal_login.sign_in
-            token = sign_in(self)
-            if not token:
-                return
+        token = company_token(self, self.s, self.sign_in)  # this company's, D113
+        if not token:
+            return
         self.token = token
         name = portal_login.company_name(token)
         tin = portal_login.company_tin(token)
@@ -110,6 +108,9 @@ class EqaimeImportDialog(EqaimeImportForm):
         self.load_button.setEnabled(True)
         self.status.setText(message)
         self.token = None  # a new sign-in next time
+        from modern_gl.desktop import portal_login
+
+        portal_login.forget_token()
 
     def _loaded(self, fetched: Fetched) -> None:
         """Remember what the portal shows (D53), warn of changes in reconciled months."""

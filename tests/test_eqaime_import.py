@@ -333,6 +333,7 @@ def test_import_dialog_loads_shows_and_creates_drafts(shop, conn, qtbot, monkeyp
         Catalog(conn, shop.company_id),
         working_date=date(2026, 3, 20),
     )
+    shop.ledger.set_company_tax_id(shop.company_id, "1402375141")  # the portal's firm (D113)
     dialog = EqaimeImportDialog(session, sign_in=lambda parent: fake_token())
     qtbot.addWidget(dialog)
     dialog.sales.setChecked(False)
@@ -440,6 +441,7 @@ def test_import_dialog_adds_counterparties_with_edited_names(shop, conn, qtbot):
         detail["sender"] = {"tin": SUPPLIER_TIN, "name": long_name}
         invoices.append(parse_invoice(row, detail, outgoing=False))
     session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    shop.ledger.set_company_tax_id(shop.company_id, "1402375141")  # the portal's firm (D113)
     dialog = EqaimeImportDialog(session)
     qtbot.addWidget(dialog)
     assert dialog.parties.isHidden()  # nothing loaded yet
@@ -574,6 +576,7 @@ def test_import_dialog_renames_a_counterparty(shop, conn, qtbot):
     shop.ledger.set_subconto_value_tax(shop.company_id, shop.supplier[0], SUPPLIER_TIN)
     shop.ledger.set_subconto_value_legal_name(shop.company_id, shop.supplier[0], '"ALFA" MMC')
     session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    shop.ledger.set_company_tax_id(shop.company_id, "1402375141")  # the portal's firm (D113)
     dialog = EqaimeImportDialog(session)
     qtbot.addWidget(dialog)
     assert dialog.renames.isHidden()
@@ -609,6 +612,7 @@ def test_import_dialog_from_a_section_loads_one_direction(
     from modern_gl.desktop.session import Session
 
     session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    shop.ledger.set_company_tax_id(shop.company_id, "1402375141")  # the portal's firm (D113)
     dialog = EqaimeImportDialog(session, direction=direction)
     qtbot.addWidget(dialog)
     assert (dialog.purchases.isChecked(), dialog.sales.isChecked()) == (purchases, sales)

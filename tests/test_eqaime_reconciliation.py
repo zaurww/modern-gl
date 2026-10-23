@@ -432,6 +432,7 @@ def test_reconciliation_dialog(firm, qtbot, monkeypatch):
         working_date=date(2026, 3, 20),
         notify=lambda _text: None,
     )
+    firm.ledger.set_company_tax_id(firm.cid, "1402375141")  # the portal's firm (D113)
     dialog = EqaimeReconciliationDialog(
         session, sign_in=lambda parent: fake_token(), today=date(2026, 4, 1)
     )
@@ -541,6 +542,7 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
         Catalog(conn, shop.company_id),
         working_date=date(2026, 3, 20),
     )
+    shop.ledger.set_company_tax_id(shop.company_id, "1402375141")  # the portal's firm (D113)
     dialog = EqaimeImportDialog(session, sign_in=lambda parent: fake_token(), direction="receipt")
     qtbot.addWidget(dialog)
     dialog.load()

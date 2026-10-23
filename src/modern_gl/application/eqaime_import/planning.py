@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
+from modern_gl.application.counterparties import known_counterparty
 from modern_gl.application.eqaime_import.parsing import RETURN_KINDS, EInvoice, EInvoiceLine
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection, Row
@@ -104,33 +105,6 @@ def _line_plan(
     if not line.service and key in items:
         return LinePlan(line, item_id=items[key], found="name")
     return LinePlan(line)
-
-
-def known_counterparty(
-    conn: Connection, company_id: int, tax_id: str, name: str = ""
-) -> int | None:
-    """The company's counterparty with this VÖEN; one without a VÖEN (a non-resident,
-    a person) by exactly the same name."""
-    if tax_id:
-        row = conn.execute(
-            "SELECT v.id FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id "
-            "WHERE v.company_id = ? AND k.code = 'counterparty' AND v.tax_id = ? "
-            "ORDER BY v.active DESC, v.id LIMIT 1",
-            (company_id, tax_id),
-        ).fetchone()
-        return row["id"] if row else None
-    if not name.strip():
-        return None
-    wanted = fold(" ".join(name.split()))
-    for row in conn.execute(
-        "SELECT v.id, v.name FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id "
-        "WHERE v.company_id = ? AND k.code = 'counterparty' AND v.tax_id IS NULL "
-        "AND v.is_group = 0 ORDER BY v.active DESC, v.id",
-        (company_id,),
-    ):
-        if fold(" ".join(row["name"].split())) == wanted:
-            return row["id"]
-    return None
 
 
 def _history(

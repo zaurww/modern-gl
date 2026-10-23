@@ -163,6 +163,7 @@ class MainWindow(ReportPlaces):
         menu.addAction(tr("Восстановить из копии…")).triggered.connect(self.restore_company)
         menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
         menu.addSeparator()
+        menu.addAction(tr("VÖEN компании…")).triggered.connect(self.edit_tax_id)
         stock_only = menu.addAction(tr("Только склад (без бухгалтерии)"))
         stock_only.setCheckable(True)
         stock_only.setChecked(s.stock_only)

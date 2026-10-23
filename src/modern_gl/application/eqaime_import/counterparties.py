@@ -6,8 +6,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from modern_gl.application.counterparties import known_counterparty, short_name
 from modern_gl.application.eqaime_import.parsing import EInvoice
-from modern_gl.application.eqaime_import.planning import InvoicePlan, known_counterparty
+from modern_gl.application.eqaime_import.planning import InvoicePlan
 from modern_gl.application.ledger import Ledger
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection, transaction
@@ -30,35 +31,6 @@ class NewCounterparty:
 
 def _party_key(tax_id: str, name: str) -> str:
     return tax_id or f"name:{fold(name)}"  # a non-resident without VÖEN: by its name
-
-
-# legal forms written out in full on the portal and their usual short forms
-_LEGAL_FORMS = (
-    ("MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ", "MMC"),
-    ("AÇIQ SƏHMDAR CƏMİYYƏTİ", "ASC"),
-    ("QAPALI SƏHMDAR CƏMİYYƏTİ", "QSC"),
-    ("SƏHMDAR CƏMİYYƏTİ", "SC"),
-    ("PUBLİK HÜQUQİ ŞƏXS", "PHŞ"),
-    ("FƏRDİ SAHİBKAR", "FS"),
-)
-
-
-def short_name(name: str) -> str:
-    """A suggestion for the program's name: the legal form shortened and put last, quotes
-    and extra spaces dropped ('"ALFA TREYD" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ' -> 'ALFA TREYD
-    MMC'). The user corrects it as they like."""
-    text = " ".join(name.split())
-    form = ""
-    for full, short in _LEGAL_FORMS:
-        position = fold(text).find(fold(full))
-        if position >= 0:
-            text = (text[:position] + text[position + len(full) :]).strip(" ,")
-            form = short
-            break
-    for quote in "\"“”„«»'":
-        text = text.replace(quote, "")
-    text = " ".join(text.split())
-    return f"{text} {form}".strip() if text else name.strip()
 
 
 def new_counterparties(plans: Sequence[InvoicePlan]) -> list[NewCounterparty]:

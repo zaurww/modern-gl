@@ -9,8 +9,7 @@ from __future__ import annotations
 from functools import cached_property
 
 from modern_gl.application.ledger.account_form import AccountForm, AccountFormCommands
-from modern_gl.application.ledger.bank import BankCommands
-from modern_gl.application.ledger.bank_statements import BankStatementCommands
+from modern_gl.application.ledger.bank_deposit import VatDepositCommands
 from modern_gl.application.ledger.companies import CompanyCommands
 from modern_gl.application.ledger.conversion import ConversionCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
@@ -52,8 +51,9 @@ __all__ = [
 ]
 
 
-class BankModule(BankCommands, BankStatementCommands):
-    """The bank (D47, D78): bank accounts, statements, operations, advances."""
+class BankModule(VatDepositCommands):
+    """The bank (D47, D78): bank accounts, statements, operations, advances, the ƏDV
+    deposit account from the portal (D112)."""
 
 
 class ConversionModule(ConversionCommands):

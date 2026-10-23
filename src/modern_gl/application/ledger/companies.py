@@ -52,6 +52,20 @@ class CompanyCommands(LedgerBase):
             self.conn.execute("UPDATE companies SET name = ? WHERE id = ?", (name, company_id))
             self._audit(company_id, "company", company_id, "rename", {"from": old, "to": name})
 
+    def set_company_tax_id(self, company_id: int, tax_id: str | None) -> None:
+        """The company's own VÖEN (D113): 10 digits, or None — not known. Audited."""
+        tax_id = "".join((tax_id or "").split()) or None
+        if tax_id is not None and not (tax_id.isdigit() and len(tax_id) == 10):
+            raise ValidationError(tr("VÖEN — 10 цифр, а не «{text}»", text=tax_id))
+        with transaction(self.conn):
+            old = self._company(company_id)["tax_id"]
+            if old == tax_id:
+                return
+            self.conn.execute("UPDATE companies SET tax_id = ? WHERE id = ?", (tax_id, company_id))
+            self._audit(
+                company_id, "company", company_id, "set_tax_id", {"from": old, "to": tax_id}
+            )
+
     def set_parallel_books(self, company_id: int, on: bool) -> None:
         """Parallel books (IFRS, tax) on or off (D63): off hides the «Book» field of a
         document and the book switch of reports. Not while documents lie outside the

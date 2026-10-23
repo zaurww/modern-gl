@@ -47,6 +47,7 @@ from modern_gl.desktop.bank_page.levels import (
     where,
 )
 from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
+from modern_gl.desktop.bank_page.portal import DepositPortal
 from modern_gl.desktop.bank_page.reconcile import ReconcileBar
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
 from modern_gl.desktop.reports_page import ReportPage
@@ -105,6 +106,8 @@ class BankPage(ReportPage):
         self.entry.expand.connect(self.new_bank_operation.emit)
         self.reconcile = ReconcileBar()
         self.reconcile.entered.connect(self._bank_closing_entered)
+        self.portal = DepositPortal(session, self)
+        self.portal.imported.connect(self.refresh)
         root = self.layout()
         assert isinstance(root, QVBoxLayout)
         root.addWidget(self.entry)
@@ -184,6 +187,9 @@ class BankPage(ReportPage):
                     lambda: self.set_amount_mode(TWO if one else ONE),
                 )
             )
+        place = self.place
+        if self.level != ACCOUNTS and place is not None and place.account_type == "vat_deposit":
+            items.append((tr("Загрузить с портала…"), self.load_from_portal))
         if self.level != ACCOUNTS:
             items.append((tr("Реквизиты счёта…"), self.edit_account))
         else:
@@ -451,6 +457,14 @@ class BankPage(ReportPage):
             self.s.notify(str(e))
             return
         self.refresh()
+
+    def load_from_portal(self) -> None:
+        """The ƏDV deposit account from the portal (D112), again from its last day."""
+        if self.place is None:
+            return
+        last = self.statements[-1].date_to if self.statements else None
+        start = date.fromisoformat(last) if last else self.s.working_date.replace(month=1, day=1)
+        self.portal.load(self.place, start)
 
     def new_account(self) -> None:
         if BankAccountDialog(self.s, None, self).exec() == QDialog.DialogCode.Accepted:
