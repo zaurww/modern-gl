@@ -1124,6 +1124,17 @@ def test_sidebar_shows_the_last_open_pages_and_all_under_a_menu(window):
     assert window.sidebar.item_for(ALL_OPEN) is None
 
 
+def test_sidebar_open_heading_only_with_open_pages(window):
+    """With nothing open the heading «Open» is not shown; it comes with the first page."""
+    nav = window.sidebar.nav
+    heading = next(nav.item(i) for i in range(nav.count()) if nav.item(i).text() == "Открытые")
+    for key in list(window.recent):
+        window.close_page(key, ask=False)
+    assert heading.isHidden()
+    window.open_document(window.pages[("journal",)].model.docs[0].id)
+    assert not heading.isHidden()
+
+
 def test_closing_a_page_does_not_open_the_all_menu(window, monkeypatch):
     """Closing moves the current item; landing on «All (N)…» must not pop its menu."""
     from PySide6.QtWidgets import QMenu

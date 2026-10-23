@@ -92,7 +92,7 @@ class OpenPages(CompanyFiles):
                 self.sidebar.add_section(tr(heading))
             for key, text in places:
                 self.sidebar.add_item(key, tr(text), place_icon(key))
-        self.sidebar.add_section(tr("Открытые"))
+        self.sidebar.add_section(tr("Открытые")).setHidden(True)  # arrange_open shows it
         self.show_place(("home",))
 
     def _drop_pages(self) -> None:
