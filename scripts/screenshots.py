@@ -153,6 +153,9 @@ def main() -> None:
     statements = cast(StatementsPage, win.pages[("statements",)])
     statements.profit_button.click()
     shot("20b_profit_and_loss")
+    statements.detail_buttons["items"].click()  # D102: the accounts and their cost items
+    shot("20d_profit_by_items")
+    statements.detail_buttons["accounts"].click()
     statements.cash_button.click()
     shot("20c_cash_flow")  # D100
     win.open_books()  # «Сравнение книг» (D98): the demo's IFRS write-down of stock

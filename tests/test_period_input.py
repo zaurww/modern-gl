@@ -108,6 +108,42 @@ def test_how_a_period_is_shown():
     assert describe((d("2025-12-29"), d("2026-01-04"))) == "29.12.2025 — 04.01.2026"
 
 
+def test_the_period_field_of_a_report(qtbot):
+    """One field: type «пм» and Enter; ↑ — the month before; what is not understood is
+    marked and the period stays; Esc drops what was typed."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    from modern_gl.desktop.period_field import PeriodField
+
+    field = PeriodField((d("2026-10-01"), d("2026-10-31")), TODAY)
+    qtbot.addWidget(field)
+    field.show()
+    assert field.edit.text() == "Октябрь 2026"
+    seen = []
+    field.changed.connect(lambda: seen.append(field.period()))
+
+    def typed(text: str) -> None:
+        field.edit.setText(text)
+        field.edit.setModified(True)
+        field.edit.textEdited.emit(text)
+        QTest.keyClick(field.edit, Qt.Key.Key_Return)
+
+    typed("пм")
+    assert field.period() == (d("2026-09-01"), d("2026-09-30"))
+    assert field.edit.text() == "Сентябрь 2026"
+    QTest.keyClick(field.edit, Qt.Key.Key_Up)
+    assert field.period() == (d("2026-08-01"), d("2026-08-31"))
+    typed("кв3")
+    assert field.edit.text() == "3 квартал 2026"
+    typed("что-то")
+    assert field.edit.property("invalid") is True
+    assert field.period() == (d("2026-07-01"), d("2026-09-30"))
+    QTest.keyClick(field.edit, Qt.Key.Key_Escape)
+    assert field.edit.text() == "3 квартал 2026" and not field.edit.property("invalid")
+    assert len(seen) == 3  # пм, ↑, кв3 — the wrong text changed nothing
+
+
 def test_the_arrows_move_by_the_same_kind_of_period():
     october = (d("2026-10-01"), d("2026-10-31"))
     assert shift(october, -1) == (d("2026-09-01"), d("2026-09-30"))

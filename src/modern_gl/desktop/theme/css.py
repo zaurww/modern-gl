@@ -108,6 +108,7 @@ QLineEdit#titleEdit {{
     background: transparent; border: none; padding: 0; color: {P.text};
 }}
 QLineEdit#search {{ padding-left: 10px; min-width: 320px; }}
+QLineEdit[invalid="true"] {{ color: {P.red}; border: 1px solid {P.red}; }}
 QComboBox::drop-down, QDateEdit::drop-down {{ border: none; width: 18px; }}
 QComboBox QAbstractItemView {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 8px;

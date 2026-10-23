@@ -81,8 +81,8 @@ class StatementsPage(ReportPage):
         detail = str(settings.value(DETAIL_SETTING, ACCOUNTS))
         self.view_buttons.get(view, self.balance_button).setChecked(True)
         self.detail_buttons.get(detail, self.detail_buttons[ACCOUNTS]).setChecked(True)
-        self.header.add_action(details)
         self.header.add_action(views)
+        self.bar.insertWidget(self.bar.count() - 2, details)  # by the period: how much of it
         self.refresh()
 
     def title(self) -> str:

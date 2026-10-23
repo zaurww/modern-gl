@@ -281,8 +281,7 @@ def test_reverse_from_document_opens_storno(window, monkeypatch):
 def test_osv_drill_down_to_card_and_document(window):
     window.show_place(("osv",))
     osv = current_page(window)
-    osv.date_from.setDate(date(2026, 2, 1))
-    osv.date_to.setDate(date(2026, 2, 28))
+    osv.period.set_period(date(2026, 2, 1), date(2026, 2, 28))
     osv.refresh()
     assert osv.footer.text().startswith("Дебет и кредит сходятся")
     row = next(r for r in osv.model.rows if r.code == "51")
@@ -299,8 +298,7 @@ def test_osv_drill_down_to_card_and_document(window):
 def test_books_switch_in_osv(window):
     window.show_place(("osv",))
     osv = current_page(window)
-    osv.date_from.setDate(date(2026, 2, 1))
-    osv.date_to.setDate(date(2026, 2, 28))
+    osv.period.set_period(date(2026, 2, 1), date(2026, 2, 28))
     totals = []
     for book in (0, 1):
         osv.book.setCurrentIndex(book)
@@ -412,8 +410,7 @@ def test_group_found_by_code_name_or_label_only_in_full(window):
 def test_osv_top_level_only(window):
     window.show_place(("osv",))
     osv = current_page(window)
-    osv.date_from.setDate(date(2026, 2, 1))
-    osv.date_to.setDate(date(2026, 2, 28))
+    osv.period.set_period(date(2026, 2, 1), date(2026, 2, 28))
     osv.top_only.setChecked(True)
     codes = [r.code for r in osv.model.rows]
     assert "68" in codes and "68.2" not in codes
@@ -450,8 +447,7 @@ def test_switch_language_rebuilds_interface(window):
 def test_osv_sections_by_class(window):
     window.show_place(("osv",))
     osv = current_page(window)
-    osv.date_from.setDate(date(2026, 2, 1))
-    osv.date_to.setDate(date(2026, 2, 28))
+    osv.period.set_period(date(2026, 2, 1), date(2026, 2, 28))
     osv.sections.setChecked(True)
     rows = osv.model.rows
     headers = [r for r in rows if isinstance(r, SectionRow)]
@@ -510,8 +506,7 @@ def test_open_reports_are_translated_in_sidebar(window):
 def test_osv_expanded_by_subconto(window):
     window.show_place(("osv",))
     osv = current_page(window)
-    osv.date_from.setDate(date(2026, 2, 1))
-    osv.date_to.setDate(date(2026, 2, 28))
+    osv.period.set_period(date(2026, 2, 1), date(2026, 2, 28))
     osv.expand.setChecked(True)
     rows = osv.model.rows
     i = next(i for i, r in enumerate(rows) if r.code == "60")
@@ -583,8 +578,7 @@ def test_osv_highlights_balance_on_wrong_side(window):
     )
     window.show_place(("osv",))
     osv = current_page(window)
-    osv.date_from.setDate(date(2026, 2, 1))
-    osv.date_to.setDate(date(2026, 2, 28))
+    osv.period.set_period(date(2026, 2, 1), date(2026, 2, 28))
     osv.refresh()
     i = next(i for i, r in enumerate(osv.model.rows) if r.code == "50")
     closing_ct = osv.model.index(i, 7)
