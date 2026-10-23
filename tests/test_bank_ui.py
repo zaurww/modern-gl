@@ -754,4 +754,6 @@ def test_viewing_only_shows_the_statements_and_changes_nothing(qtbot, session):
     page.drill(page.model.rows[0])
     assert page.level == "statement"
     assert page.entry.isHidden() and page.money_in.isHidden() and page.money_out.isHidden()
-    assert page.more.isHidden() and page.reconcile.bank.isReadOnly()
+    assert page.reconcile.bank.isReadOnly()
+    titles = [item[0] for item in page.more_items() if item]  # only to Excel
+    assert "Реквизиты счёта…" not in titles and "В Excel…" in titles

@@ -47,17 +47,17 @@ from modern_gl.desktop.bank_page.levels import (
     where,
 )
 from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
-from modern_gl.desktop.bank_page.portal import DepositPortal
+from modern_gl.desktop.bank_page.portal import DepositDialog
+from modern_gl.desktop.bank_page.portal import summary as portal_summary
 from modern_gl.desktop.bank_page.reconcile import ReconcileBar
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
 from modern_gl.desktop.reports_page import ReportPage
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     EmptyState,
+    MenuItem,
     button,
-    hide_when_viewing,
     icon_button,
-    more_button,
     ru_date,
 )
 from modern_gl.domain.errors import LedgerError
@@ -106,8 +106,7 @@ class BankPage(ReportPage):
         self.entry.expand.connect(self.new_bank_operation.emit)
         self.reconcile = ReconcileBar()
         self.reconcile.entered.connect(self._bank_closing_entered)
-        self.portal = DepositPortal(session, self)
-        self.portal.imported.connect(self.refresh)
+        self.portal_sign_in: Callable[..., str | None] | None = None  # tests: a token
         root = self.layout()
         assert isinstance(root, QVBoxLayout)
         root.addWidget(self.entry)
@@ -170,12 +169,16 @@ class BankPage(ReportPage):
             self.money_out,
         ):
             self.header.add_action(control)
-        self.more = more_button(self._more)
-        self.header.add_action(self.more)
-        hide_when_viewing(self.s.read_only, self.more)
 
-    def _more(self) -> list:
-        items: list = []
+    def more_items(self) -> list[MenuItem]:
+        """The one «⋯» of the page (D86): the bank's actions, then the report's (to Excel);
+        a company open for viewing gets only the report's."""
+        if self.s.read_only:
+            return super().more_items()
+        return [*self._bank_items(), None, *super().more_items()]
+
+    def _bank_items(self) -> list[MenuItem]:
+        items: list[MenuItem] = []
         if self.level == JOURNAL:
             items.append((tr("Выписка за период…"), self.new_period))
         if self.level == STATEMENT:
@@ -187,8 +190,8 @@ class BankPage(ReportPage):
                     lambda: self.set_amount_mode(TWO if one else ONE),
                 )
             )
-        place = self.place
-        if self.level != ACCOUNTS and place is not None and place.account_type == "vat_deposit":
+        place = self.place  # at the list of accounts: the one under the cursor
+        if place is not None and place.account_type == "vat_deposit":
             items.append((tr("Загрузить с портала…"), self.load_from_portal))
         if self.level != ACCOUNTS:
             items.append((tr("Реквизиты счёта…"), self.edit_account))
@@ -459,12 +462,14 @@ class BankPage(ReportPage):
         self.refresh()
 
     def load_from_portal(self) -> None:
-        """The ƏDV deposit account from the portal (D112), again from its last day."""
-        if self.place is None:
+        """The ƏDV deposit account from the portal (D112) for a period chosen (D115)."""
+        place = self.place
+        if place is None:
             return
-        last = self.statements[-1].date_to if self.statements else None
-        start = date.fromisoformat(last) if last else self.s.working_date.replace(month=1, day=1)
-        self.portal.load(self.place, start)
+        dialog = DepositDialog(self.s, place, self, self.portal_sign_in)
+        if dialog.exec() and dialog.imported is not None:
+            self.s.notify(portal_summary(dialog.imported))
+            self.refresh()
 
     def new_account(self) -> None:
         if BankAccountDialog(self.s, None, self).exec() == QDialog.DialogCode.Accepted:
