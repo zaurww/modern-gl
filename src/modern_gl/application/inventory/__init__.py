@@ -38,7 +38,7 @@ from modern_gl.application.inventory.model import (
     SaleLine,
     TransferLine,
 )
-from modern_gl.application.inventory.posting import PostingCommands
+from modern_gl.application.inventory.rebuild import RebuildCommands
 
 __all__ = [
     "ACCRUED_CODE",
@@ -73,6 +73,6 @@ __all__ = [
 ]
 
 
-class Inventory(CatalogCommands, PostingCommands):
+class Inventory(CatalogCommands, RebuildCommands):
     """Write-side API for inventory catalogs, movements and landed cost; each group
     lives in its own module."""
