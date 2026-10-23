@@ -1,15 +1,11 @@
 """Reconciliation of the books with the tax portal (D53): the e-qaimə of a period on the
 portal against the posted postings with their numbers (D38), purchases or sales.
 
-In the books an e-qaimə is its accrual: a purchase is the credit of a settlement account
-(of a settlement type, or without a type but with the counterparty directory) against
-anything but money or another settlement — Dt 41 / Kt 60 and Dt 19 / Kt 60; a sale the
-debit of one — Dt 62 / Kt 46. The total is with ƏDV. The ƏDV is the debit (a sale: the
-credit) of an ƏDV account against anything but money or ƏDV: Dt 19 / Kt 60, and in the
-classic chart Dt 46 / Kt 68.2, apart from the customer's account; paying it to the budget
-(Dt 68.2 / Kt 51) is not. Payments (Dt 60 / Kt 51) and offsets (Dt 60 / Kt 62) carry
-the number too, but are not the e-qaimə's amount. Customs declarations are left out: the
-portal has none of them. Only posted documents of the common book count.
+In the books an e-qaimə is its accrual and the ƏDV of it (`invoice_rules`, D120): a
+purchase is the credit of a settlement account (Dt 41 / Kt 60, Dt 19 / Kt 60), a sale the
+debit of one (Dt 62 / Kt 46). The total is with ƏDV. Payments and offsets carry the number
+too, but are not the e-qaimə's amount. Customs declarations are left out: the portal has
+none of them. Only posted documents of the common book count.
 """
 
 from __future__ import annotations
@@ -18,13 +14,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
-from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
 from modern_gl.infrastructure.db import Connection, Row
+from modern_gl.reporting.invoice_rules import invoice_accounts, is_accrual, is_vat_accrual
 from modern_gl.reporting.report_common import _DOCS_CTE, COMMON, _params
-
-MONEY_TYPES = frozenset({"cash", "bank", "vat_deposit"})
 
 # the groups of the report, the problems first
 MISSING = "missing"  # on the portal, not in the books: forgotten
@@ -143,29 +137,7 @@ def book_invoices(
 ) -> dict[str, BookInvoice]:
     """The e-qaimə of the books by number, purchases or sales, every date: their accruals.
     One reversed to nothing (red storno) is not there."""
-    accounts = {
-        r["id"]: r
-        for r in conn.execute(
-            "SELECT id, account_type, sc1_kind_id, sc2_kind_id, sc3_kind_id FROM accounts "
-            "WHERE company_id = ?",
-            (company_id,),
-        )
-    }
-    kind = conn.execute(
-        "SELECT id FROM subconto_kinds WHERE company_id = ? AND code = 'counterparty'",
-        (company_id,),
-    ).fetchone()
-    partner = kind["id"] if kind else None
-
-    def partner_at(account: Row) -> int | None:
-        if partner is None:
-            return None
-        return next((i for i in (1, 2, 3) if account[f"sc{i}_kind_id"] == partner), None)
-
-    def settlement(account: Row) -> bool:
-        kind = account["account_type"]
-        return kind in SETTLEMENT_TYPES or (kind is None and partner_at(account) is not None)
-
+    accounts = invoice_accounts(conn, company_id)
     params = _params(conn, company_id, "0001-01-01", "9999-12-31", layers)
     result: dict[str, BookInvoice] = {}
     for p in conn.execute(
@@ -180,22 +152,16 @@ def book_invoices(
         params,
     ):
         debit, credit = accounts[p["debit_account_id"]], accounts[p["credit_account_id"]]
-        # the settlement side, and what it is against
+        # the settlement side, and what it is against; the ƏDV the other way round
         side, prefix, other = (debit, "dt", credit) if outgoing else (credit, "ct", debit)
-        accrual = not (
-            not settlement(side) or settlement(other) or other["account_type"] in MONEY_TYPES
-        )
-        # the ƏDV: the other way round, an ƏDV account against anything but money or ƏDV
-        tax, against = (credit, debit) if outgoing else (debit, credit)
-        vat = tax["account_type"] in VAT_TYPES and against["account_type"] not in (
-            MONEY_TYPES | VAT_TYPES
-        )
+        accrual = is_accrual(side, other)
+        vat = is_vat_accrual(other, side)
         if not (accrual or vat):
             continue
         row = result.setdefault(p["invoice"], BookInvoice(p["invoice"], p["doc_date"]))
         if accrual:
             row.total += p["amount"]
-            slot = partner_at(side)
+            slot = side.partner_at
             who = p[f"{prefix}_sc{slot}"] if slot else None
             if who is not None and who not in row.parties:
                 row.parties.append(who)
