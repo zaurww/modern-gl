@@ -27,6 +27,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.desktop.period_field import PeriodField
+from modern_gl.desktop.reports_page.export import copy_to_clipboard, save_to_excel
 from modern_gl.desktop.reports_page.table import (
     GROUP_GAP,
     NAME_MAX,
@@ -41,11 +43,10 @@ from modern_gl.desktop.reports_page.table import (
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     EmptyState,
+    MenuItem,
     PageHeader,
     button,
     class_name,
-    date_edit,
-    edited_date,
     ru_date,
     type_choices,
     type_name,
@@ -131,6 +132,7 @@ class ReportPage(QWidget):
         root.setSpacing(16)
 
         self.header = PageHeader(title, "")
+        self.header.more(self.more_items)
         root.addWidget(self.header)
 
         self._build_period_bar(root)
@@ -154,6 +156,7 @@ class ReportPage(QWidget):
 
         for keys, fn in (
             ("F5", self.refresh),
+            ("Ctrl+C", lambda: copy_to_clipboard(self)),
             ("Return", self._drill_current),
             ("Enter", self._drill_current),
         ):
@@ -166,20 +169,21 @@ class ReportPage(QWidget):
         if self.has_period:
             bar = QHBoxLayout()
             bar.setSpacing(8)
-            self.date_from = date_edit(self.params.date_from)
-            self.date_to = date_edit(self.params.date_to)
+            # one field for the period, the same on every report (D105); a new period
+            # is shown at once
+            self.period = PeriodField(
+                (self.params.date_from, self.params.date_to), self.s.working_date
+            )
+            self.period.changed.connect(self.refresh)
             self.book = QComboBox()
             for name, _ in BOOKS:
                 self.book.addItem(tr(name))
             self.book.setCurrentIndex(self.params.book)
-            for caption, w, width in (
-                (tr("Период с"), self.date_from, 130),
-                (tr("по"), self.date_to, 130),
-                (tr("Книга"), self.book, 170),
-            ):
+            self.book.setFixedWidth(170)
+            self.book.currentIndexChanged.connect(lambda _i: self.refresh())
+            for caption, w in ((tr("Период"), self.period), (tr("Книга"), self.book)):
                 label = QLabel(caption)
                 label.setObjectName("secondary")
-                w.setFixedWidth(width)
                 bar.addWidget(label)
                 bar.addWidget(w)
                 bar.addSpacing(6)
@@ -201,7 +205,8 @@ class ReportPage(QWidget):
         self.table.setModel(self.model)
         self.table.setItemDelegate(ReportDelegate(self.table))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # several rows: Ctrl+C copies them (D104); one: the whole report
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
         self.table.setWordWrap(False)
@@ -241,6 +246,20 @@ class ReportPage(QWidget):
     def menu_actions(self, row: Any) -> list[MenuAction | None]:
         return []
 
+    def title(self) -> str:
+        raise NotImplementedError
+
+    def export_title(self) -> str:
+        """The name of the report in Excel (D104): the page's, a page with views — the view's."""
+        return self.title()
+
+    def more_items(self) -> list[MenuItem]:
+        """«⋯» of every report: to Excel; a page adds its own in front."""
+        return [
+            (tr("В Excel…"), lambda: save_to_excel(self)),
+            (tr("Копировать для Excel  Ctrl+C"), lambda: copy_to_clipboard(self)),
+        ]
+
     # ---- common ----------------------------------------------------------------------
 
     def is_dirty(self) -> bool:
@@ -252,8 +271,7 @@ class ReportPage(QWidget):
     def refresh(self) -> None:
         if self.has_period:
             self.params = ReportParams(
-                edited_date(self.date_from),
-                edited_date(self.date_to),
+                *self.period.period(),
                 self.book.currentIndex(),
                 self.params.subconto,
             )
@@ -304,6 +322,8 @@ class ReportPage(QWidget):
                 self.table.setRowHeight(r, SECTION_HEIGHT)
             elif self.model.total(row):
                 self.table.setRowHeight(r, TOTAL_HEIGHT)
+            else:  # a row where another view of the page had a header or a total
+                self.table.setRowHeight(r, ROW_HEIGHT)
         self.table.horizontalHeader().updateGeometry()
         self._fit_columns()
 

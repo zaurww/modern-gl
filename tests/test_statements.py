@@ -26,10 +26,13 @@ income), gross 2 500; operating −400 → 2 100; other income 50 → 2 150 befo
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
-from modern_gl.reporting.statements import balance_sheet, profit_and_loss
+from modern_gl.reporting.profit_loss import profit_and_loss
+from modern_gl.reporting.statements import balance_sheet
 
 
 @pytest.fixture
@@ -129,6 +132,31 @@ def test_profit_and_loss_leaves_out_the_closing(books):
     assert january.lines[-1].amount == 0
 
 
+def code(line) -> str:
+    """An account line by its code («62  62» — the test accounts are named by code)."""
+    return line.title.split()[0] if line.kind == "account" else line.title
+
+
+def test_a_balance_line_opens_into_its_accounts(books):
+    """Fixed assets 2 900 = 01 3 000 − 02 100; 60 is in two lines: A's debt 5 000 among the
+    liabilities, B's advance 500 among the assets; 76 under «Счета без типа» (D102)."""
+    from modern_gl.reporting.statements import ACCOUNTS
+
+    conn, cid = books
+    sheet = balance_sheet(conn, cid, "2026-02-28", detail=ACCOUNTS)
+    rows = [(ln.kind, code(ln), ln.amount) for ln in sheet.lines]
+    fixed = rows.index(("line", "Основные средства", 290_000))
+    assert rows[fixed + 1 : fixed + 3] == [("account", "01", 300_000), ("account", "02", -10_000)]
+    advance = rows.index(("line", "Авансы выданные", 50_000))
+    assert rows[advance + 1] == ("account", "60", 50_000)
+    untyped = rows.index(("line", "Счета без типа", 30_000))
+    assert rows[untyped + 1] == ("account", "76", 30_000)
+    assert sheet.unbalanced == 0
+    assert [ln for ln in sheet.lines if ln.kind != "account"] == balance_sheet(
+        conn, cid, "2026-02-28"
+    ).lines
+
+
 def test_the_ifrs_book_adds_its_adjustments(books, ledger):
     conn, cid = books
     ledger.set_parallel_books(cid, True)
@@ -158,8 +186,117 @@ def test_every_title_of_the_statements_has_azerbaijani_translation(books):
     conn, cid = books
     titles = {ln.title for ln in balance_sheet(conn, cid, "2026-02-28").lines}
     titles |= {ln.title for ln in profit_and_loss(conn, cid, "2026-01-01", "2026-12-31").lines}
-    titles |= {"Доходы без типа", "Расходы без типа"}
+    titles |= {"Доходы без типа", "Расходы без типа", "НДС с продаж"}
     assert sorted(t for t in titles if t not in AZ) == []
+
+
+# ---- the short chart (1C 7.7 «classic»): everything through 46 and 80 (D102) ----------
+#
+#   1 05.03  Dt 50             Kt 46            1 180   a sale for cash, with ƏDV
+#   2 05.03  Dt 46             Kt 68.2            180   its ƏDV (68.2 — the output VAT role)
+#   3 05.03  Dt 46             Kt 41              600   its cost
+#   4 10.03  Dt 26 [Аренда]    Kt 50              100
+#   5 12.03  Dt 26 [Связь]     Kt 50               40
+#   6 15.03  Dt 44 [Транспорт] Kt 50               30
+#   7 20.03  Dt 80             Kt 50                5   a bank fee straight to the result
+#   8 22.03  Dt 50             Kt 80                8   an exchange gain, the same
+#   9 31.03  Dt 46             Kt 26 [Аренда]     100   the month's expenses closed into 46
+#  10 31.03  Dt 46             Kt 26 [Связь]       40
+#  11 31.03  Dt 46             Kt 44 [Транспорт]   30
+#  12 31.03  Dt 46             Kt 80              230   the result: 1 180 − 180 − 600 − 170
+#  13 31.03  Dt 80             Kt 68.3             20   the profit tax
+#
+# Profit and loss of March: sales 1 180, ƏDV −180, cost −600, gross 400; operating −170
+# (26: −140 = rent −100 + communication −40; 44: −30) → 230; other income 8, other
+# expense −5 → 233 before tax; tax −20 → net 213 — what is left on 80: 230 + 8 − 5 − 20.
+# Before D102 the closing 9–11 hid the expenses inside 46 and 7, 8, 13 were not read.
+
+
+@pytest.fixture
+def classic(ledger: Ledger):
+    from modern_gl.infrastructure.chart_csv import apply_chart_template
+
+    cid = ledger.create_company("Классика")
+    apply_chart_template(ledger, cid, "classic", "ru")
+
+    def value(kind: str, name: str) -> int:
+        return ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, kind), name)
+
+    rent, phone, transport = (value("cost_item", n) for n in ("Аренда", "Связь", "Транспорт"))
+    goods = [value("item", "Бумага"), value("warehouse", "Склад")]
+    codes = ("26", "41", "44", "46", "50", "68.2", "68.3", "80")
+    acc = {c: ledger.account_id(cid, c) for c in codes}
+
+    def p(dt, ct, amount, dt_sc=(), ct_sc=()):
+        return PostingInput(acc[dt], acc[ct], amount, dt_sc, ct_sc)
+
+    ledger.post_new(cid, "2026-02-27", [p("41", "50", "600", goods)])  # the goods
+    for day, posting in [
+        ("2026-03-05", p("50", "46", "1180")),
+        ("2026-03-05", p("46", "68.2", "180")),
+        ("2026-03-05", p("46", "41", "600", ct_sc=goods)),
+        ("2026-03-10", p("26", "50", "100", [rent])),
+        ("2026-03-12", p("26", "50", "40", [phone])),
+        ("2026-03-15", p("44", "50", "30", [transport])),
+        ("2026-03-20", p("80", "50", "5")),
+        ("2026-03-22", p("50", "80", "8")),
+        ("2026-03-31", p("46", "26", "100", ct_sc=[rent])),
+        ("2026-03-31", p("46", "26", "40", ct_sc=[phone])),
+        ("2026-03-31", p("46", "44", "30", ct_sc=[transport])),
+        ("2026-03-31", p("46", "80", "230")),
+        ("2026-03-31", p("80", "68.3", "20")),
+    ]:
+        ledger.post_new(cid, day, [posting])
+    return ledger.conn, cid
+
+
+def test_the_short_chart_shows_the_expenses_where_they_were_spent(classic):
+    conn, cid = classic
+    march = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31")
+    assert shown(march) == [
+        ("Выручка", 118_000),
+        ("НДС с продаж", -18_000),
+        ("Себестоимость продаж", -60_000),
+        ("Валовая прибыль", 40_000),
+        ("Операционные расходы", -17_000),
+        ("Операционная прибыль", 23_000),
+        ("Прочие доходы", 800),
+        ("Прочие расходы", -500),
+        ("Прибыль до налогообложения", 23_300),
+        ("Налог на прибыль", -2_000),
+        ("Чистая прибыль (убыток)", 21_300),
+    ]
+
+
+def test_a_line_opens_into_its_accounts_and_their_items(classic):
+    from modern_gl.reporting.profit_loss import ACCOUNTS, ITEMS
+
+    conn, cid = classic
+
+    def part(statement, title: str, size: int):
+        start = next(i for i, ln in enumerate(statement.lines) if ln.title == title)
+        return [
+            (ln.kind, ln.title.split()[0], ln.amount)
+            for ln in statement.lines[start : start + size]
+        ]
+
+    accounts = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31", detail=ACCOUNTS)
+    assert part(accounts, "Себестоимость продаж", 4) == [
+        ("line", "Себестоимость", -60_000),
+        ("account", "46", -60_000),
+        ("subtotal", "Валовая", 40_000),
+        ("line", "Операционные", -17_000),
+    ]
+    items = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31", detail=ITEMS)
+    assert part(items, "Операционные расходы", 6) == [
+        ("line", "Операционные", -17_000),
+        ("account", "26", -14_000),
+        ("item", "Аренда", -10_000),
+        ("item", "Связь", -4_000),
+        ("account", "44", -3_000),
+        ("item", "Транспорт", -3_000),
+    ]
+    assert items.lines[-1].amount == 21_300  # the detail does not change the sums
 
 
 @pytest.fixture
@@ -202,3 +339,127 @@ def test_the_page_switches_between_the_balance_and_the_profit(window, qtbot):
     assert page.model.rows[-1].title == "Чистая прибыль (убыток)"
     window.set_stock_only(True)  # the books are not shown: no statements either
     assert window.sidebar.item_for(("statements",)) is None
+
+
+def test_a_line_of_the_page_leads_to_the_card(window, qtbot):
+    """«По статьям»: an item of an expense account; a double click — its card with only
+    that item; the page remembers the view and the detail (D102, D106)."""
+    from modern_gl.desktop.reports_page import StatementsPage
+    from modern_gl.desktop.reports_page.account import CardPage
+
+    window.show_place(("statements",))
+    page = window.stack.currentWidget()
+    assert isinstance(page, StatementsPage)
+    page.profit_button.click()
+    page.detail_buttons["items"].click()
+    qtbot.waitUntil(lambda: any(r.kind == "item" for r in page.model.rows))
+    item = next(r for r in page.model.rows if r.kind == "item")
+    assert page.model.rows[page.model.rows.index(item) - 1].kind in ("account", "item")
+    page.drill(item)
+    card = window.stack.currentWidget()
+    assert isinstance(card, CardPage)
+    assert card.account_id == item.account_id
+    assert card.params.subconto == (item.value_id,)
+    again = StatementsPage(window.session)
+    assert (again.view, again.detail) == ("profit", "items")
+    again.deleteLater()
+
+
+def test_the_page_by_months_leads_to_the_card_of_a_month(window, qtbot):
+    """«Колонки: По месяцам» on January–March: a column per month and «Итого»; a double
+    click on February of an account — its card for February (D107)."""
+    from modern_gl.desktop.reports_page import StatementsPage
+    from modern_gl.desktop.reports_page.account import CardPage
+
+    window.show_place(("statements",))
+    page = window.stack.currentWidget()
+    assert isinstance(page, StatementsPage)
+    page.profit_button.click()
+    page.detail_buttons["accounts"].click()
+    page.period.set_period(date(2026, 1, 1), date(2026, 3, 31))
+    page.columns.choose("months")
+    qtbot.waitUntil(lambda: page.model.columnCount() == 5)
+    titles = [page.model.title(i) for i in range(5)]
+    assert titles == ["Статья", "Январь", "Февраль", "Март", "Итого"]
+    account = next(r for r in page.model.rows if r.kind == "account")
+    row = page.model.rows.index(account)
+    page.table.setCurrentIndex(page.model.index(row, 2))
+    page.drill(account)
+    card = window.stack.currentWidget()
+    assert isinstance(card, CardPage)
+    assert (card.params.date_from, card.params.date_to) == (date(2026, 2, 1), date(2026, 2, 28))
+    again = StatementsPage(window.session)
+    assert again.columns.mode == "months"  # remembered
+    again.deleteLater()
+
+
+def test_balance_sheet_on_two_days(books):
+    """D107: a column per day. On 31.01: bank 10 000 − 500 = 9 500, B's advance 500 →
+    current 10 000; equipment 3 000; A is owed 3 000, capital 10 000 → 13 000 both sides.
+    28.02 — as above."""
+    from modern_gl.reporting.columns import Amounts
+
+    conn, cid = books
+    sheet = balance_sheet(conn, cid, "2026-02-28", days=["2026-01-31", "2026-02-28"])
+    figures = {ln.title: tuple(ln.amount) for ln in sheet.lines if ln.kind != "heading"}
+    assert figures["Касса"] == (0, 5_000)
+    assert figures["Банковские счета"] == (950_000, 1_050_000)
+    assert figures["Авансы выданные"] == (50_000, 50_000)
+    assert figures["Основные средства"] == (300_000, 290_000)
+    assert figures["Итого активы"] == (1_300_000, 1_745_000)
+    assert figures["Поставщики и подрядчики"] == (300_000, 500_000)
+    assert figures["Прибыль (убыток) текущего периода"] == (0, -35_000)
+    assert figures["Итого обязательства и капитал"] == (1_300_000, 1_745_000)
+    assert sheet.unbalanced == Amounts((0, 0))
+    # the last column is the balance on its day read alone
+    alone = balance_sheet(conn, cid, "2026-02-28")
+    assert [(ln.title, ln.amount[1]) for ln in sheet.lines] == [
+        (ln.title, ln.amount[0]) for ln in alone.lines
+    ]
+
+
+def test_profit_and_loss_by_months_and_the_whole(books):
+    """January, February and the whole: the whole is the report of the two months, and
+    each line's months add up to it."""
+    from modern_gl.reporting.columns import MONTHS, column_periods
+
+    conn, cid = books
+    periods = column_periods(MONTHS, (date(2026, 1, 1), date(2026, 2, 28)))
+    pl = profit_and_loss(conn, cid, "2026-01-01", "2026-02-28", periods=periods)
+    figures = {ln.title: tuple(ln.amount) for ln in pl.lines}
+    assert figures["Выручка"] == (0, 400_000, 400_000)
+    assert figures["Себестоимость продаж"] == (0, -150_000, -150_000)
+    assert figures["Операционные расходы"] == (0, -40_000, -40_000)
+    assert figures["Чистая прибыль (убыток)"] == (0, 215_000, 215_000)
+    for ln in pl.lines:
+        assert ln.amount[0] + ln.amount[1] == ln.amount[2]
+
+
+def test_cash_flow_by_months(books):
+    """Money: January +10 000 capital (financing), −500 the advance to B (operating);
+    February +1 000 from C, +50 other income (operating). The start of February is the
+    end of January; the whole begins at 0 and ends at 10 550."""
+    from modern_gl.reporting.cash_flow import cash_flow
+    from modern_gl.reporting.columns import MONTHS, column_periods
+
+    conn, cid = books
+    periods = column_periods(MONTHS, (date(2026, 1, 1), date(2026, 2, 28)))
+    flow = cash_flow(conn, cid, "2026-01-01", "2026-02-28", periods=periods)
+    figures = {ln.title: tuple(ln.amount) for ln in flow.lines if ln.kind != "heading"}
+    assert figures["Деньги на начало периода"] == (0, 950_000, 0)
+    assert figures["Чистый поток от операционной деятельности"] == (-50_000, 105_000, 55_000)
+    assert figures["Чистый поток от финансовой деятельности"] == (1_000_000, 0, 1_000_000)
+    assert figures["Деньги на конец периода"] == (950_000, 1_055_000, 1_055_000)
+    assert not flow.unbalanced
+
+
+def test_february_against_january(books):
+    from modern_gl.reporting.columns import PREVIOUS, column_periods, difference, percent
+
+    conn, cid = books
+    periods = column_periods(PREVIOUS, (date(2026, 2, 1), date(2026, 2, 28)))
+    pl = profit_and_loss(conn, cid, "2026-02-01", "2026-02-28", periods=periods)
+    net = pl.lines[-1].amount
+    assert tuple(net) == (215_000, 0)
+    assert difference(net) == 215_000
+    assert percent(net) is None  # nothing in January to compare with

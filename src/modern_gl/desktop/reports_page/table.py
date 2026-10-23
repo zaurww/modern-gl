@@ -12,6 +12,7 @@ from PySide6.QtCore import (
     QModelIndex,
     QPersistentModelIndex,
     QRect,
+    QSettings,
     QSize,
     Qt,
 )
@@ -33,8 +34,9 @@ RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
 # Reports follow Jon Moon (Clarity & Impact): a table as wide as its content, so the
-# amounts stand next to the names; whitespace and soft zebra rows instead of
-# rules; a dash under the units for nothing; negatives in brackets that hang right.
+# amounts stand next to the names; whitespace instead of rules (soft zebra rows only
+# when the user turns them on, D103); a dash under the units for nothing; negatives in
+# brackets that hang right.
 DASH = "–"
 
 NAME_MAX = 380  # px: a longer name is cut with "…" (the whole of it shows under the mouse)
@@ -42,6 +44,8 @@ NAME_MAX = 380  # px: a longer name is cut with "…" (the whole of it shows und
 GROUP_GAP = 24  # px of air in front of each Dt/Kt pair
 
 BAND = 1  # rows in a band: plain zebra
+
+ZEBRA_SETTING = "reports/zebra"  # «Оформление → Полосы в таблицах», off by default (D103)
 
 ROW_HEIGHT = 24
 
@@ -64,6 +68,17 @@ class Column:
     tone: Callable[[Any], str | None] | None = None  # a palette color of the text (status)
     group: str = ""  # a caption over the columns next to each other that share it
     fill: bool = False  # takes the free room: the table reaches the right edge (bank)
+    # the amount (minor units) behind a column of text, for Excel (D104); a money column
+    # needs none
+    value: Callable[[Any], int | None] | None = None
+
+
+def zebra() -> bool:
+    return bool(QSettings().value(ZEBRA_SETTING, False, type=bool))
+
+
+def set_zebra(on: bool) -> None:
+    QSettings().setValue(ZEBRA_SETTING, on)
 
 
 def figure(minor: int | None) -> str:
@@ -102,9 +117,9 @@ class ReportModel(QAbstractTableModel):
         self.total = total or (lambda r: False)  # a rule above it
         self.section = section or (lambda r: False)  # a header: air above, bands restart
         self.banded = []
-        run = 0
+        run, bands = 0, self.bands and zebra()
         for r in rows:
-            if not self.bands or self.total(r) or self.section(r):
+            if not bands or self.total(r) or self.section(r):
                 self.banded.append(False)
                 run = 0
             else:

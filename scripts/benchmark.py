@@ -74,14 +74,31 @@ def measure(path: Path) -> list[tuple[float, str]]:
     import modern_gl.desktop.main_window  # noqa: F401  modules add their rows of «Bu gün»
     from modern_gl.application.bank import bank_places, bank_statements
     from modern_gl.reporting import invoices, overview, reports
+    from modern_gl.reporting.cash_flow import cash_flow
+    from modern_gl.reporting.columns import MONTHS, column_periods
+    from modern_gl.reporting.profit_loss import profit_and_loss
+    from modern_gl.reporting.statements import ACCOUNTS, balance_sheet
 
     conn = connect(path)
     cid = conn.execute("SELECT id FROM companies").fetchone()["id"]
     a60 = conn.execute("SELECT id FROM accounts WHERE company_id = ? AND code = '60'", (cid,))
     a60 = a60.fetchone()["id"]
     year = ("2026-01-01", "2026-12-31")
+    months = column_periods(MONTHS, (date(2026, 1, 1), date(2026, 12, 31)))
+    ends = [last for _, last in months[:-1]]
     cases = {
         "ОСВ, год": lambda: reports.trial_balance(conn, cid, *year),
+        "Баланс по счетам": lambda: balance_sheet(conn, cid, year[1], detail=ACCOUNTS),
+        "Баланс по месяцам (D107)": lambda: balance_sheet(
+            conn, cid, year[1], detail=ACCOUNTS, days=ends
+        ),
+        "ОПиУ, год": lambda: profit_and_loss(conn, cid, *year, detail=ACCOUNTS),
+        "ОПиУ по месяцам (D107)": lambda: profit_and_loss(
+            conn, cid, *year, detail=ACCOUNTS, periods=months
+        ),
+        "Движение денег по месяцам (D107)": lambda: cash_flow(
+            conn, cid, *year, detail=ACCOUNTS, periods=months
+        ),
         "Карточка 60, год": lambda: reports.account_card(conn, cid, a60, *year),
         "ОСВ по субконто 60, год": lambda: reports.subconto_balance(conn, cid, a60, *year),
         "Журнал: все документы": lambda: list_documents(conn, cid),

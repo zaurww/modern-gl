@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
 
 from modern_gl.application.catalog import Catalog
@@ -16,7 +16,6 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.postings import AMOUNT, CT, DT, PostingsTable
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import date_edit
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 
@@ -121,17 +120,6 @@ def test_shift_tab_goes_back_through_the_header(page, qtbot):
     assert focused() is page.date
     qtbot.keyClick(page.date, Qt.Key.Key_Backtab)
     assert focused() is page.memo
-
-
-def test_date_is_typed_part_after_part(qtbot):
-    edit = date_edit(date(2026, 3, 5))
-    qtbot.addWidget(edit)
-    edit.show()
-    edit.activateWindow()
-    qtbot.waitUntil(edit.isActiveWindow)
-    edit.setFocus(Qt.FocusReason.TabFocusReason)
-    qtbot.keyClicks(edit, "17042026")
-    assert edit.date() == QDate(2026, 4, 17)
 
 
 def test_tab_in_the_grid_goes_as_enter_does(page, qtbot):

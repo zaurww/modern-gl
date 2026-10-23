@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.cash_flow import cash_flow
-from tests.test_statements import books, shown, window
+from tests.test_statements import books, code, shown, window
 
 __all__ = ["books", "window"]  # the fixtures
 
@@ -49,6 +49,34 @@ def test_february_starts_with_januarys_money_and_transfers_are_no_flow(books, le
     assert figures["Чистый поток от операционной деятельности"] == 105_000
     assert "Финансовая деятельность" not in figures
     assert figures["Деньги на конец периода"] == 1_055_000
+    assert flow.unbalanced == 0
+
+
+def test_a_fee_paid_straight_to_the_result_is_operating(books, ledger):
+    """The short chart writes a bank fee as Dt 80 (or 99) Kt 51: money spent working, not
+    financing (D102). February: 1 050 operating as above, minus the fee 7 → 1 043."""
+    conn, cid = books
+    code = {
+        r["code"]: r["id"]
+        for r in conn.execute("SELECT id, code FROM accounts WHERE company_id = ?", (cid,))
+    }
+    ledger.post_new(cid, "2026-02-27", [PostingInput(code["99"], code["51"], "7")])
+    figures = dict(shown(cash_flow(conn, cid, "2026-02-01", "2026-02-28")))
+    assert figures["Финансовый результат"] == -700
+    assert figures["Чистый поток от операционной деятельности"] == 104_300
+    assert "Финансовая деятельность" not in figures
+
+
+def test_a_flow_opens_into_the_other_accounts(books):
+    from modern_gl.reporting.statements import ACCOUNTS
+
+    conn, cid = books
+    flow = cash_flow(conn, cid, "2026-01-01", "2026-02-28", detail=ACCOUNTS)
+    rows = [(ln.kind, code(ln), ln.amount) for ln in flow.lines]
+    customers = rows.index(("line", "Покупатели и заказчики", 100_000))
+    assert rows[customers + 1] == ("account", "62", 100_000)
+    capital = rows.index(("line", "Уставный капитал", 1_000_000))
+    assert rows[capital + 1] == ("account", "80", 1_000_000)
     assert flow.unbalanced == 0
 
 

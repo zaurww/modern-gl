@@ -51,6 +51,20 @@ class Demo:
         return PostingInput(self.acc[dt], self.acc[ct], amount, dt_sc, ct_sc)
 
 
+@pytest.fixture(autouse=True)
+def own_settings(tmp_path_factory):
+    """What a page remembers (QSettings) is each test's own, in a file of its own — not
+    the user's registry, and not left over from another test."""
+    from PySide6.QtCore import QSettings
+
+    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QSettings.setPath(
+        QSettings.Format.IniFormat,
+        QSettings.Scope.UserScope,
+        str(tmp_path_factory.mktemp("settings")),
+    )
+
+
 @pytest.fixture(autouse=True, scope="session")
 def fields_as_in_the_app(qapp):
     """The application-wide behaviour of fields that `app.main` installs."""

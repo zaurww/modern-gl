@@ -77,20 +77,43 @@ class BooksPage(ReportPage):
 
     def present(self, data: list[BookRow]) -> None:
         indent = "      "
+        # `value`: in Excel a balance is a number, Dt +, Kt − (D104)
         columns = [
             Column(tr("Счёт"), lambda r: indent * r.depth + r.code, width=90),
             Column(tr("Наименование"), lambda r: r.name),
-            Column(tr("Общий учёт"), lambda r: balance_text(r.common), right=True),
-            Column(tr("Книга"), lambda r: balance_text(r.ifrs), right=True, group=tr("МСФО")),
-            Column(tr("Разница"), lambda r: difference(r.ifrs_adj), right=True, group=tr("МСФО")),
             Column(
-                tr("Книга"), lambda r: balance_text(r.tax), right=True, group=tr("Налоговый учёт")
+                tr("Общий учёт"),
+                lambda r: balance_text(r.common),
+                right=True,
+                value=lambda r: r.common,
+            ),
+            Column(
+                tr("Книга"),
+                lambda r: balance_text(r.ifrs),
+                right=True,
+                group=tr("МСФО"),
+                value=lambda r: r.ifrs,
+            ),
+            Column(
+                tr("Разница"),
+                lambda r: difference(r.ifrs_adj),
+                right=True,
+                group=tr("МСФО"),
+                value=lambda r: r.ifrs_adj,
+            ),
+            Column(
+                tr("Книга"),
+                lambda r: balance_text(r.tax),
+                right=True,
+                group=tr("Налоговый учёт"),
+                value=lambda r: r.tax,
             ),
             Column(
                 tr("Разница"),
                 lambda r: difference(r.tax_adj),
                 right=True,
                 group=tr("Налоговый учёт"),
+                value=lambda r: r.tax_adj,
             ),
         ]
         self.model.set(columns, data, emphasis=lambda r: r.is_group, muted=lambda r: r.depth > 0)
