@@ -2,12 +2,13 @@
 e-qaimə window (a day, a week, a month or any dates), what was loaded before shown and a
 period loaded already not loaded again unasked (D115); signed in to the portal for this
 company already — at once, else its page (D113); the operations read off the window's
-thread."""
+thread, then shown with what each becomes before anything is written, and what became of
+them after — in the window, each opening its document."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date
 
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
@@ -18,10 +19,14 @@ from modern_gl.application.bank.deposit_import import (
     fetch_deposit,
     loaded_already,
     loaded_spans,
+    next_to_load,
     portal_loads,
+    unfinished_days,
 )
-from modern_gl.application.ledger.bank_deposit import DepositImported
+from modern_gl.application.bank.statement import place_balance
+from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED, DepositImported
 from modern_gl.desktop import portal_login
+from modern_gl.desktop.bank_page.deposit_rows import DepositRows
 from modern_gl.desktop.eqaime_portal_loader import PortalLoader
 from modern_gl.desktop.period_bar import PeriodBar, period_dates
 from modern_gl.desktop.portal_company import company_token
@@ -29,16 +34,19 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
 from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.money import format_minor
 from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
 
 TITLE = "ƏDV depozit с портала"
+PERIOD, PREVIEW, DONE = "period", "preview", "done"  # the window's steps
 
 
 class DepositDialog(QDialog):
-    """Period → sign in → the portal's operations of the period into the account's
-    statements; `imported` — what the import did."""
+    """Period → sign in → the portal's operations of the period, what each becomes →
+    «Провести» (or «Создать черновики») → what became of them; `imported` — what the
+    import did, `chosen_document` — the document double-clicked to open."""
 
     def __init__(
         self,
@@ -55,7 +63,10 @@ class DepositDialog(QDialog):
         self.today = today or date.today()
         self.worker: QThread | None = None
         self.loader: PortalLoader | None = None
+        self.fetched: DepositFetched | None = None
         self.imported: DepositImported | None = None
+        self.chosen_document: int | None = None
+        self.step = PERIOD
         self.loads = portal_loads(session.conn, session.company_id, place)
         self.setWindowTitle(tr(TITLE))
         self.resize(860, 300)
@@ -69,11 +80,18 @@ class DepositDialog(QDialog):
         account.setObjectName("secondary")
         root.addWidget(account)
         self.period_bar = PeriodBar(self.today, MONTH, through_today=True)
-        self.period_bar.changed.connect(self._show_loaded)
+        self.period_bar.changed.connect(self._period_changed)
         root.addWidget(self.period_bar)
         self.loaded = QLabel()
         self.loaded.setWordWrap(True)
         root.addWidget(self.loaded)
+        self._build_rows(root)
+        self._build_actions(root)
+        self._suggest_period()
+        self._show_loaded()
+        self._show_step(PERIOD)
+
+    def _build_rows(self, root: QVBoxLayout) -> None:
         self.status = QLabel(
             tr(
                 "Выберите период и нажмите «Загрузить с портала»: если вход на портал не "
@@ -83,29 +101,54 @@ class DepositDialog(QDialog):
         self.status.setObjectName("secondary")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
-        root.addStretch(1)
-        self._build_actions(root)
-        self._suggest_period()
-        self._show_loaded()
+        self.rows = DepositRows()
+        self.rows.itemChanged.connect(lambda *_: self._show_balances())
+        self.rows.document_chosen.connect(self._open_document)
+        root.addWidget(self.rows, 1)
+        self.balances = QLabel()
+        self.balances.setWordWrap(True)
+        root.addWidget(self.balances)
+        self.spacer = QWidget()  # the air under the period while there are no rows
+        root.addWidget(self.spacer, 1)
 
     def _build_actions(self, root: QVBoxLayout) -> None:
         actions = QHBoxLayout()
         actions.addStretch(1)
-        close = button(tr("Закрыть"), "flat")
-        close.clicked.connect(self.reject)
-        actions.addWidget(close)
+        self.close_button = button(tr("Закрыть"), "flat")
+        self.close_button.clicked.connect(self.reject)
+        actions.addWidget(self.close_button)
+        self.drafts_button = button(tr("Создать черновики"), "flat")
+        self.drafts_button.clicked.connect(lambda: self.write(post=False))
+        actions.addWidget(self.drafts_button)
+        self.post_button = button(tr("Провести"), "primary")
+        self.post_button.clicked.connect(lambda: self.write(post=True))
+        actions.addWidget(self.post_button)
         self.load_button = button(tr("Загрузить с портала"), "primary")
         self.load_button.clicked.connect(self.load)
         actions.addWidget(self.load_button)
         root.addLayout(actions)
 
+    def _show_step(self, step: str) -> None:
+        """One blue button at a time (D86): load, then post, then nothing — «Готово»."""
+        self.step = step
+        self.load_button.setVisible(step == PERIOD)
+        self.post_button.setVisible(step == PREVIEW)
+        self.drafts_button.setVisible(step == PREVIEW)
+        self.rows.setVisible(step != PERIOD)
+        self.balances.setVisible(step != PERIOD)
+        self.spacer.setVisible(step == PERIOD)
+        self.period_bar.setEnabled(step != DONE)
+        self.close_button.setText(tr("Готово") if step == DONE else tr("Закрыть"))
+        if step != PERIOD:
+            self.resize(max(self.width(), 1040), max(self.height(), 560))
+
     def _suggest_period(self) -> None:
-        """From the day after the last one loaded up to today; nothing loaded yet — this
-        month."""
-        spans = loaded_spans(self.loads)
-        if not spans:
+        """From the day after the last one loaded (a day loaded before it ended — from it)
+        up to today; nothing loaded yet — this month."""
+        start = next_to_load(self.loads)
+        if start is None:
             return
-        following = date.fromisoformat(spans[-1][1]) + timedelta(days=1)
+        following = date.fromisoformat(start)
         if following <= self.today:
             self.period_bar.set_period(following, self.today)
 
@@ -114,26 +157,48 @@ class DepositDialog(QDialog):
         first, last = self.period_bar.period()
         return first, min(last, self.today)
 
+    def _period_changed(self) -> None:
+        self._show_loaded()
+        if self.step == PREVIEW:  # the rows were of another period
+            self.fetched = None
+            self.status.setText(tr("Период изменён — загрузите его с портала."))
+            self._show_step(PERIOD)
+
     def _show_loaded(self) -> None:
         spans = loaded_spans(self.loads)
-        if not spans:
+        if not self.loads:
             self.loaded.setObjectName("secondary")
             self.loaded.setText(tr("С портала в этот счёт ещё ничего не загружалось."))
         else:
-            text = tr(
-                "Уже загружено с портала: {periods}.",
-                periods=", ".join(
-                    period_dates(date.fromisoformat(a), date.fromisoformat(b)) for a, b in spans
-                ),
-            )
+            text = " ".join(self._loaded_texts(spans))
             first, last = self.period()
-            again = loaded_already(self.loads, first.isoformat(), last.isoformat())
+            again = self.step != DONE and loaded_already(
+                self.loads, first.isoformat(), last.isoformat()
+            )
             if again:
                 text += " " + tr("Выбранный период уже загружен.")
             self.loaded.setObjectName("warning" if again else "secondary")
             self.loaded.setText(text)
         self.loaded.style().unpolish(self.loaded)
         self.loaded.style().polish(self.loaded)
+
+    def _loaded_texts(self, spans: list[tuple[str, str]]) -> list[str]:
+        texts = []
+        if spans:
+            periods = (period_dates(date.fromisoformat(a), date.fromisoformat(b)) for a, b in spans)
+            texts.append(tr("Уже загружено с портала: {periods}.", periods=", ".join(periods)))
+        unfinished = [
+            date.fromisoformat(d).strftime("%d.%m.%Y") for d in unfinished_days(self.loads)
+        ]
+        if unfinished:
+            texts.append(
+                tr(
+                    "{days} загружено, пока день не кончился: поздние операции этого дня "
+                    "возьмутся при следующей загрузке.",
+                    days=", ".join(unfinished),
+                )
+            )
+        return texts
 
     # ---- loading -------------------------------------------------------------------
 
@@ -183,9 +248,10 @@ class DepositDialog(QDialog):
         self.status.setText(message)
 
     def _loaded(self, fetched: DepositFetched) -> None:
+        """What the import would do, shown; nothing written yet."""
         self.load_button.setEnabled(True)
         try:
-            self.imported = self.s.ledger.bank.import_vat_deposit(
+            seen = self.s.ledger.bank.preview_vat_deposit(
                 self.s.company_id,
                 self.place,
                 fetched.operations,
@@ -195,7 +261,90 @@ class DepositDialog(QDialog):
         except LedgerError as e:
             self.status.setText(str(e))
             return
+        self.fetched = fetched
+        self.rows.blockSignals(True)
+        self.rows.show_rows(seen.rows, written=False)
+        self.rows.blockSignals(False)
+        self.status.setText(preview_summary(seen))
+        self._show_step(PREVIEW)
+        self._show_balances()
+
+    def write(self, post: bool) -> None:
+        """The operations ticked into the books: posted, or all of them drafts."""
+        fetched = self.fetched
+        if fetched is None:
+            return
+        try:
+            done = self.s.ledger.bank.import_vat_deposit(
+                self.s.company_id,
+                self.place,
+                fetched.operations,
+                fetched.balance,
+                (fetched.date_from, fetched.date_to),
+                take=self.rows.taken(),
+                post=post,
+            )
+        except LedgerError as e:
+            self.status.setText(str(e))
+            return
+        self.imported = done
+        self.loads = portal_loads(self.s.conn, self.s.company_id, self.place)
+        self.step = DONE
+        self._show_loaded()
+        self.rows.show_rows(done.rows, written=True)
+        text = summary(done)
+        if any(row.document_id is not None for row in done.rows):
+            text += ". " + tr("Двойной щелчок по строке — открыть документ.")
+        self.status.setText(text)
+        self._show_step(DONE)
+        self._show_balances()
+
+    def _show_balances(self) -> None:
+        """The portal's balance now beside the books' — and, before writing, the books'
+        after the operations ticked are posted."""
+        if self.fetched is None:
+            return
+        books = place_balance(self.s.conn, self.s.company_id, self.place, self.today.isoformat())
+        portal = self.fetched.balance
+        text = tr(
+            "На портале сейчас {portal} ₼, в программе {books} ₼",
+            portal=format_minor(portal),
+            books=format_minor(books),
+        )
+        after = books
+        if self.step == PREVIEW:
+            after += sum(r.op.net for r in self.rows.rows(ticked_only=True) if r.state == POSTED)
+            text += tr(", после загрузки будет {after} ₼", after=format_minor(after))
+        if after != portal:
+            text += tr(" — разница {diff} ₼", diff=format_minor(portal - after))
+        self.balances.setText(text + ".")
+        self.balances.setObjectName("warning" if after != portal else "secondary")
+        self.balances.style().unpolish(self.balances)
+        self.balances.style().polish(self.balances)
+
+    def _open_document(self, document_id: int) -> None:
+        self.chosen_document = document_id
         self.accept()
+
+
+def preview_summary(seen: DepositImported) -> str:
+    """What the import is about to do, in one line over the rows."""
+    posted = sum(1 for row in seen.rows if row.state == POSTED)
+    drafts = sum(1 for row in seen.rows if row.state == DRAFT)
+    if not (posted or drafts or seen.linked):
+        return tr("Новых операций нет — запишутся только остатки дней по порталу.")
+    text = tr(
+        "Будет проведено {posted}, черновиками {drafts} (причина — в строке)",
+        posted=posted,
+        drafts=drafts,
+    )
+    if seen.linked:
+        text += tr(", введённых вручную будет связано {n}", n=seen.linked)
+    if seen.known:
+        text += tr(", уже есть {n}", n=seen.known)
+    if seen.counterparties:
+        text += tr(", новых контрагентов {n}", n=seen.counterparties)
+    return text + ". " + tr("Снимите галочку с того, что загружать не нужно.")
 
 
 def summary(done: DepositImported) -> str:
