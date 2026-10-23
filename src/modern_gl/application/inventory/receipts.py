@@ -47,12 +47,14 @@ class ReceiptDraftCommands(StockCommands):
         invoice: str = "",
         invoice_kind: str = "",
         expense_date: date | str | None = None,
+        awaits_invoice: bool = False,
     ) -> int:
         """Save an editable receipt/opening document — or, with `incoming_reason`, a mədaxil
         without a purchase (D91) — without affecting stock or GL.
 
         A draft may be unfinished: only the item of each line is required. Line amounts
-        are without VAT; each line's VAT is given (`vat_rate` only remembers the rate)."""
+        are without VAT; each line's VAT is given (`vat_rate` only remembers the rate).
+        `awaits_invoice`: a purchase whose goods came before their e-qaimə (D119)."""
         check_reason(incoming_reason)
         doc_type = "incoming" if incoming_reason else "opening" if opening else "receipt"
         purchase = doc_type == "receipt"
@@ -62,7 +64,12 @@ class ReceiptDraftCommands(StockCommands):
             )
             self._set_vat_rate(document_id, vat_rate if purchase else None)
             self._set_currency(company_id, document_id, currency_id, currency_rate)
-            self._set_invoice(document_id, invoice if purchase else "", invoice_kind)
+            self._set_invoice(
+                document_id,
+                invoice if purchase else "",
+                invoice_kind,
+                awaits=purchase and awaits_invoice,
+            )
             self._set_expense_date(document_id, expense_date if purchase else None)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
@@ -93,6 +100,7 @@ class ReceiptDraftCommands(StockCommands):
         invoice: str = "",
         invoice_kind: str = "",
         expense_date: date | str | None = None,
+        awaits_invoice: bool = False,
     ) -> None:
         check_reason(incoming_reason)
         with transaction(self.conn):
@@ -106,7 +114,12 @@ class ReceiptDraftCommands(StockCommands):
             self._set_vat_rate(document_id, vat_rate if doc["doc_type"] == "receipt" else None)
             self._set_currency(company_id, document_id, currency_id, currency_rate)
             receipt = doc["doc_type"] == "receipt"
-            self._set_invoice(document_id, invoice if receipt else "", invoice_kind)
+            self._set_invoice(
+                document_id,
+                invoice if receipt else "",
+                invoice_kind,
+                awaits=receipt and awaits_invoice,
+            )
             self._set_expense_date(document_id, expense_date if receipt else None)
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(

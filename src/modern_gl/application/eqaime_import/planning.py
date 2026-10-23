@@ -21,6 +21,17 @@ class LinePlan:
     found: str = ""  # how it was found: "history", "name", "" (the user chooses)
 
 
+@dataclass(frozen=True)
+class AwaitingPurchase:
+    """A purchase of the supplier that waits for its e-qaimə (D119)."""
+
+    document_id: int
+    number: int
+    doc_date: str
+    amount: int  # without VAT, the lines of this supplier
+    vat: int
+
+
 @dataclass
 class InvoicePlan:
     invoice: EInvoice
@@ -30,10 +41,18 @@ class InvoicePlan:
     skip_reason: str = ""
     # a purchase's services of an earlier month (D65): the last day of that month
     expense_date: str | None = None
+    # the supplier's purchases waiting for an e-qaimə (D119), and the one this e-qaimə is
+    # written into instead of a new draft (None: a new draft)
+    awaiting: list[AwaitingPurchase] = field(default_factory=list)
+    attach_to: AwaitingPurchase | None = None
 
     @property
     def importable(self) -> bool:
         return self.existing is None and not self.skip_reason
+
+    def agrees(self, purchase: AwaitingPurchase) -> bool:
+        """The e-qaimə's amount without VAT is the purchase's: its VAT is taken over."""
+        return purchase.amount == self.invoice.amount
 
     @property
     def has_expenses(self) -> bool:
@@ -63,6 +82,7 @@ def plan_import(
             (company_id,),
         )
     }
+    awaiting = _awaiting(conn, company_id)
     plans = []
     for invoice in invoices:
         counterparty = known_counterparty(conn, company_id, invoice.party_tin, invoice.party_name)
@@ -80,8 +100,51 @@ def plan_import(
         history = _history(conn, company_id, invoice.doc_type, counterparty)
         for line in invoice.lines:
             plan.lines.append(_line_plan(line, history, items, invoice.outgoing))
+        if plan.importable and not invoice.outgoing and counterparty is not None:
+            plan.awaiting = awaiting.get(counterparty, [])
         plans.append(plan)
+    _choose_awaiting(plans)
     return plans
+
+
+def _awaiting(conn: Connection, company_id: int) -> dict[int, list[AwaitingPurchase]]:
+    """The purchases waiting for an e-qaimə in the open period, by their supplier
+    (a counterparty of their settlement lines), oldest first."""
+    result: dict[int, list[AwaitingPurchase]] = {}
+    for row in conn.execute(
+        """
+        SELECT d.id, d.number, d.doc_date, v.id AS counterparty_id,
+               SUM(l.amount) AS amount, SUM(l.vat_amount) AS vat
+        FROM inventory_documents d
+        JOIN companies c ON c.id = d.company_id
+        JOIN inventory_lines l ON l.company_id = d.company_id AND l.document_id = d.id
+        JOIN subconto_values v
+          ON v.company_id = l.company_id AND v.id IN (l.offset_sc1, l.offset_sc2, l.offset_sc3)
+        JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'counterparty'
+        WHERE d.company_id = ? AND d.awaits_invoice = 1 AND d.currency_id IS NULL
+          AND (c.closed_through IS NULL OR d.doc_date > c.closed_through)
+        GROUP BY d.id, d.number, d.doc_date, v.id
+        ORDER BY d.doc_date, d.id
+        """,
+        (company_id,),
+    ):
+        result.setdefault(row["counterparty_id"], []).append(
+            AwaitingPurchase(row["id"], row["number"], row["doc_date"], row["amount"], row["vat"])
+        )
+    return result
+
+
+def _choose_awaiting(plans: Sequence[InvoicePlan]) -> None:
+    """Each e-qaimə, oldest first, is written into the supplier's oldest waiting purchase
+    of the same amount without VAT that no other e-qaimə took; other amounts are only
+    offered — the user chooses."""
+    taken: set[int] = set()
+    for plan in sorted(plans, key=lambda p: (p.invoice.doc_date, p.invoice.number)):
+        for purchase in plan.awaiting:
+            if purchase.document_id not in taken and plan.agrees(purchase):
+                plan.attach_to = purchase
+                taken.add(purchase.document_id)
+                break
 
 
 def _line_plan(

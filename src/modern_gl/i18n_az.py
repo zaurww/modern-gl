@@ -1130,9 +1130,6 @@ AZ: dict[str, str] = {
     "В валюте на конец": "Sonda valyuta ilə",
     "неизвестный вид документа: {kind}": "naməlum sənəd növü: {kind}",
     "Декларация": "Bəyannamə",
-    "Основание: e-qaimə или таможенная декларация (импорт)": (
-        "Əsas: e-qaimə və ya gömrük bəyannaməsi (idxal)"
-    ),
     "номер": "nömrə",
     "декларация": "bəyannamə",
     "Номер": "Nömrə",
@@ -1843,4 +1840,19 @@ AZ: dict[str, str] = {
     "Таможня и доставка импорта по декларациям": "İdxalın gömrük və çatdırılma xərcləri bəyannamələr üzrə",
     "Остатки, движения и документы склада": "Anbarın qalıqları, hərəkətləri və sənədləri",
     "Банковские счета, выписки по дням и сверка": "Bank hesabları, günlər üzrə çıxarışlar və üzləşdirmə",
+    # D119: goods before their e-qaimə
+    "покупка №{n} не ждёт e-qaimə": "alış №{n} e-qaimə gözləmir",
+    "не указан номер e-qaimə": "e-qaimə nömrəsi göstərilməyib",
+    "Ждёт e-qaimə": "E-qaimə gözləyir",
+    "ждёт e-qaimə": "e-qaimə gözləyir",
+    "Основание: e-qaimə или таможенная декларация (импорт). «Ждёт e-qaimə» — товар пришёл раньше документов: номер и ƏDV допишет загрузка с портала": (
+        "Əsas: e-qaimə və ya gömrük bəyannaməsi (idxal). «E-qaimə gözləyir» — mal "
+        "sənədlərdən əvvəl gəlib: nömrəni və ƏDV-ni portaldan yükləmə əlavə edəcək"
+    ),
+    "придёт позже": "sonra gələcək",
+    "Новый черновик: {state}": "Yeni qaralama: {state}",
+    "В покупку №{n} от {date} ({amount}), ждёт e-qaimə": "Alış №{n} ({date}, {amount}) — e-qaimə gözləyir",
+    "сумма другая — проверьте покупку": "məbləğ fərqlidir — alışı yoxlayın",
+    "e-qaimə дописана в покупки: {n}": "E-qaimə alışlara əlavə edildi: {n}",
+    "Загрузить: черновиков {n}, в покупки {m}": "Yüklə: qaralama {n}, alışlara {m}",
 }

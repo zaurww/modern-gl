@@ -66,7 +66,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
         self.vat_rate.activated.connect(self._vat_rate_changed)
-        self.basis.activated.connect(self._changed)
+        self.basis.activated.connect(self._basis_changed)
         self.reason.activated.connect(self._reason_changed)
         self.invoice.textEdited.connect(self._changed)
         self.expense_month.activated.connect(self._changed)
@@ -202,7 +202,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
             self.status.set(tr("Черновик"), "amber")
         self._apply_mode(read_only)
         self._show_currency(self.doc.currency_id, self.doc.currency_rate)
-        self._show_basis(self.doc.invoice_kind, self.doc.invoice)
+        self._show_basis(self.doc.invoice_kind, self.doc.invoice, self.doc.awaits_invoice)
         self._fill_expense_months(self.doc.expense_date)
         self.dirty = False
         self._show_totals()
@@ -314,6 +314,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
                     currency_id=self._chosen_currency(),
                     currency_rate=self._rate_text(),
                     expense_date=self._expense_date(),
+                    awaits_invoice=self._awaits(),
                     **self._invoice(),
                 )
             self.inventory.update_receipt_draft(
@@ -329,6 +330,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
                 currency_id=self._chosen_currency(),
                 currency_rate=self._rate_text(),
                 expense_date=self._expense_date(),
+                awaits_invoice=self._awaits(),
                 **self._invoice(),
             )
             return self.doc.id

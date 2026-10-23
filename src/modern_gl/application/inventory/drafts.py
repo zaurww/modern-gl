@@ -118,6 +118,7 @@ class DraftCommands(InventoryBase):
             expense_date=doc["expense_date"],
             accrual_document_id=doc["accrual_document_id"],
             incoming_reason=doc["incoming_reason"],
+            awaits_invoice=doc["awaits_invoice"] == 1,
         )
 
     def _insert_document(
@@ -189,14 +190,23 @@ class DraftCommands(InventoryBase):
             (self._currency_id(company_id, currency_id), typed_rate(rate), document_id),
         )
 
-    def _set_invoice(self, document_id: int, invoice: str, kind: str = EQAIME) -> None:
-        """The receipt's e-qaimə, or the customs declaration of imported goods."""
+    def _set_invoice(
+        self, document_id: int, invoice: str, kind: str = EQAIME, awaits: bool = False
+    ) -> None:
+        """The receipt's e-qaimə, or the customs declaration of imported goods. `awaits`:
+        a purchase without a number waits for its e-qaimə (D119); a number ends the wait."""
         if kind not in KINDS:
             raise ValidationError(tr("неизвестный вид документа: {kind}", kind=kind))
         number = normalize_invoice(invoice)
         self.conn.execute(
-            "UPDATE inventory_documents SET invoice = ?, invoice_kind = ? WHERE id = ?",
-            (number, (kind or None) if number else None, document_id),
+            "UPDATE inventory_documents SET invoice = ?, invoice_kind = ?, awaits_invoice = ? "
+            "WHERE id = ?",
+            (
+                number,
+                (kind or None) if number else None,
+                1 if awaits and number is None else 0,
+                document_id,
+            ),
         )
 
     def _set_expense_date(self, document_id: int, expense_date: date | str | None) -> None:

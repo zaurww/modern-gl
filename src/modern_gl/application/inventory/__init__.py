@@ -15,6 +15,7 @@ from modern_gl.application.inventory.amounts import (
     unit_price,
     vat_of,
 )
+from modern_gl.application.inventory.awaiting import AwaitingCommands
 from modern_gl.application.inventory.catalog import CatalogCommands
 from modern_gl.application.inventory.defaults import default_vat_rate, line_vat
 from modern_gl.application.inventory.model import (
@@ -73,6 +74,6 @@ __all__ = [
 ]
 
 
-class Inventory(CatalogCommands, RebuildCommands):
+class Inventory(CatalogCommands, AwaitingCommands, RebuildCommands):
     """Write-side API for inventory catalogs, movements and landed cost; each group
     lives in its own module."""

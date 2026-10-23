@@ -204,6 +204,7 @@ class InventoryDocumentData:
     expense_date: str | None = None
     accrual_document_id: int | None = None
     incoming_reason: str | None = None  # a mədaxil's reason: a key of INCOMING_REASONS
+    awaits_invoice: bool = False  # a purchase whose e-qaimə comes later (D119)
 
     @property
     def editable(self) -> bool:
