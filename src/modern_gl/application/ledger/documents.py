@@ -5,15 +5,14 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import date
 
-from modern_gl.application.common import closed_on, insert, now, pad_subconto, with_reason
+from modern_gl.application.common import insert, now, pad_subconto, with_reason
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.validation import PostingChecks
 from modern_gl.application.queries import journal_drafts
-from modern_gl.domain.dates import iso_date, ru_date
+from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import (
     LedgerError,
     NotFoundError,
-    PeriodClosedError,
     ValidationError,
 )
 from modern_gl.domain.invoice import KINDS, normalize_invoice
@@ -240,18 +239,9 @@ class DocumentCommands(PostingChecks):
             self._audit(company_id, "document", doc_id, "delete", with_reason(snapshot, reason))
 
     def _require_changeable(self, company_id: int, doc: Row) -> None:
-        company = self._company(company_id)
-        if closed_on(company, doc["doc_date"]):
-            raise PeriodClosedError(
-                tr(
-                    "документ №{number} от {date}: период закрыт по {closed}",
-                    number=doc["number"],
-                    date=ru_date(doc["doc_date"]),
-                    closed=ru_date(company["closed_through"]),
-                )
-                + ". "
-                + tr("Исправьте его сторно в открытом периоде.")
-            )
+        self._require_open_period(
+            company_id, doc, ". " + tr("Исправьте его сторно в открытом периоде.")
+        )
         user = self._owner(company_id, doc["id"], "uses")
         if user is not None:
             raise ValidationError(_owner_text(user["module"], "uses", doc["number"], user))

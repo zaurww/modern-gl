@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
-from modern_gl.application.common import closed_on, company_row, write_audit
+from modern_gl.application.common import closed_on, company_row, require_open, write_audit
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.dates import ru_date
-from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
+from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 
@@ -189,16 +189,16 @@ class InventoryBase:
         return doc
 
     def _require_open_period(self, doc: Row) -> None:
-        company = self._company(doc["company_id"])
-        if closed_on(company, doc["doc_date"]):
-            raise PeriodClosedError(
-                tr(
-                    "складской документ №{number} от {date}: период закрыт по {closed}",
-                    number=doc["number"],
-                    date=ru_date(doc["doc_date"]),
-                    closed=ru_date(company["closed_through"]),
-                )
-            )
+        require_open(
+            self._company(doc["company_id"]),
+            doc["doc_date"],
+            lambda closed: tr(
+                "складской документ №{number} от {date}: период закрыт по {closed}",
+                number=doc["number"],
+                date=ru_date(doc["doc_date"]),
+                closed=closed,
+            ),
+        )
 
     def _account_kind_ids(self, account: Row) -> tuple[int | None, ...]:
         return tuple(account[f"sc{position}_kind_id"] for position in range(1, 4))
