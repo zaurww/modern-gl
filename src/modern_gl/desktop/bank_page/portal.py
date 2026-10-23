@@ -10,13 +10,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 
-from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
 
 from modern_gl.application.bank import BankPlace
 from modern_gl.application.bank.deposit_import import (
     DepositFetched,
-    fetch_deposit,
     loaded_already,
     loaded_spans,
     next_to_load,
@@ -25,11 +23,9 @@ from modern_gl.application.bank.deposit_import import (
 )
 from modern_gl.application.bank.statement import place_balance
 from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED, DepositImported
-from modern_gl.desktop import portal_login
+from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch
 from modern_gl.desktop.bank_page.deposit_rows import DepositRows
-from modern_gl.desktop.eqaime_portal_loader import PortalLoader
 from modern_gl.desktop.period_bar import PeriodBar, period_dates
-from modern_gl.desktop.portal_company import company_token
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
@@ -37,7 +33,6 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.etaxes import EtaxesClient
 
 TITLE = "ƏDV depozit с портала"
 PERIOD, PREVIEW, DONE = "period", "preview", "done"  # the window's steps
@@ -59,10 +54,11 @@ class DepositDialog(QDialog):
         super().__init__(parent)
         self.s = session
         self.place = place
-        self.sign_in = sign_in
         self.today = today or date.today()
-        self.worker: QThread | None = None
-        self.loader: PortalLoader | None = None
+        self.fetch = DepositFetch(self, session, sign_in, self.today)
+        self.fetch.progress.connect(lambda text: self.status.setText(text))
+        self.fetch.loaded.connect(self._loaded)
+        self.fetch.failed.connect(self._failed)
         self.fetched: DepositFetched | None = None
         self.imported: DepositImported | None = None
         self.chosen_document: int | None = None
@@ -211,12 +207,11 @@ class DepositDialog(QDialog):
             first, last
         ):
             return
-        token = company_token(self, self.s, self.sign_in)  # this company's, D113
-        if not token:
-            return
-        tin = portal_login.company_tin(token)
-        client, today = EtaxesClient(token), self.today
-        self._start(lambda progress: fetch_deposit(client, first, today, tin, progress, last))
+        self.load_button.setEnabled(False)
+        if self.fetch.start(first, last):
+            self.status.setText(tr("Загрузка с портала…"))
+        else:
+            self.load_button.setEnabled(True)
 
     def _again(self, first: date, last: date) -> bool:
         question = tr(
@@ -227,23 +222,7 @@ class DepositDialog(QDialog):
         answer = QMessageBox.question(self, tr(TITLE), question)
         return answer == QMessageBox.StandardButton.Yes
 
-    def _start(self, job: Callable[[Callable[[str], None]], DepositFetched]) -> None:
-        """Talk to the portal off the window's thread: the window stays alive."""
-        self.load_button.setEnabled(False)
-        self.status.setText(tr("Загрузка с портала…"))
-        self.worker = QThread(self)
-        self.loader = PortalLoader(job)
-        self.loader.moveToThread(self.worker)
-        self.worker.started.connect(self.loader.run)
-        self.loader.progress.connect(self.status.setText)
-        self.loader.loaded.connect(self._loaded)
-        self.loader.failed.connect(self._failed)
-        for signal in (self.loader.loaded, self.loader.failed):
-            signal.connect(self.worker.quit)
-        self.worker.start()
-
     def _failed(self, message: str) -> None:
-        portal_login.forget_token()  # a new sign-in next time
         self.load_button.setEnabled(True)
         self.status.setText(message)
 

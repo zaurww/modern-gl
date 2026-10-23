@@ -470,7 +470,7 @@ def test_the_sign_in_window_says_what_it_waits_for():
 def deposit_session(ledger, firm, monkeypatch):
     from modern_gl.application.catalog import Catalog
     from modern_gl.desktop import portal_login
-    from modern_gl.desktop.bank_page import portal as module
+    from modern_gl.desktop.bank_page import deposit_fetch as fetch
     from modern_gl.desktop.session import Session
     from tests.test_eqaime_import import fake_token
 
@@ -483,7 +483,7 @@ def deposit_session(ledger, firm, monkeypatch):
     ledger.set_company_tax_id(cid, OWN_TIN)  # the portal's firm (D113)
     token = fake_token(OWN_TIN)
     portal = FakeDepositPortal(as_json(PORTAL), token=token)
-    monkeypatch.setattr(module, "EtaxesClient", lambda token: EtaxesClient(token, send=portal))
+    monkeypatch.setattr(fetch, "EtaxesClient", lambda token: EtaxesClient(token, send=portal))
     portal_login.forget_token()
     return s, messages, token, portal
 
@@ -617,7 +617,7 @@ def test_the_bank_page_has_one_menu_with_the_portal(qtbot, firm, deposit_session
     assert tr("Загрузить с портала…") in titles and tr("В Excel…") in titles
 
     def run(dialog):
-        dialog.sign_in = lambda _parent: token
+        dialog.fetch.sign_in = lambda _parent: token
         dialog.load()
         qtbot.waitUntil(lambda: dialog.step == module.PREVIEW, timeout=5000)
         dialog.post_button.click()

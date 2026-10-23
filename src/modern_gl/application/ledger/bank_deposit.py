@@ -26,6 +26,10 @@ from modern_gl.application.bank.deposit_import import (
     plan_deposit_import,
     previous_lines,
 )
+from modern_gl.application.bank.deposit_reconciliation import (
+    DepositReconciliation,
+    books_figures,
+)
 from modern_gl.application.common import now
 from modern_gl.application.counterparties import known_counterparty, short_name
 from modern_gl.application.ledger.bank import BankCommands
@@ -181,6 +185,42 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
         done.drafts.append((op, reason))
         document = self._bank_row(company_id, saved)["document_id"]
         return DepositRow(op, DRAFT, lines, reason, document)
+
+    def mark_deposit_reconciled(
+        self, company_id: int, place: BankPlace, seen: DepositReconciliation
+    ) -> None:
+        """The period reconciled with the portal (D118): the portal's figures as seen, the
+        books' as they are now; marked again — the new ones."""
+        first, last = seen.date_from, seen.date_to
+        if last < first:
+            raise ValidationError(tr("начало периода позже конца"))
+        books = books_figures(self.conn, company_id, place, first, last)
+        key = (company_id, place.account_id, place.value_id or 0, first, last)
+        with transaction(self.conn):
+            self.conn.execute(
+                "DELETE FROM bank_portal_reconciled WHERE company_id = ? AND account_id = ? "
+                "AND COALESCE(value_id, 0) = ? AND date_from = ? AND date_to = ?",
+                key,
+            )
+            self.conn.execute(
+                "INSERT INTO bank_portal_reconciled (company_id, account_id, value_id, "
+                "date_from, date_to, reconciled_at, portal_opening, portal_in, portal_out, "
+                "books_opening, books_in, books_out) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    company_id,
+                    place.account_id,
+                    place.value_id,
+                    first,
+                    last,
+                    now(),
+                    seen.portal.opening,
+                    seen.portal.money_in,
+                    seen.portal.money_out,
+                    books.opening,
+                    books.money_in,
+                    books.money_out,
+                ),
+            )
 
     def _remember_load(
         self,

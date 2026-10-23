@@ -264,14 +264,14 @@ def plan_deposit_import(
     done = sorted((op for op in operations if op.done), key=lambda op: op.moment)
     if not done:
         return plan
-    references = _references(conn, company_id, place)
+    references = deposit_references(conn, company_id, place)
     lines = statement(conn, company_id, place, done[0].day, done[-1].day).lines
     free = [line for line in lines if references.get(line.document_id, "") == ""]
     for op in done:
         if op.reference in references.values():
             plan.known.append(op)
             continue
-        line = _same_line(free, op)
+        line = same_line(free, op)
         if line is None:
             plan.new.append(op)
             continue
@@ -284,12 +284,12 @@ def plan_deposit_import(
     return plan
 
 
-def _same_line(lines: list[StatementLine], op: DepositOperation) -> StatementLine | None:
+def same_line(lines: list[StatementLine], op: DepositOperation) -> StatementLine | None:
     money = (lambda line: line.money_in) if op.direction == IN else (lambda line: line.money_out)
     return next((x for x in lines if x.doc_date == op.day and money(x) == op.amount), None)
 
 
-def _references(conn: Connection, company_id: int, place: BankPlace) -> dict[int, str]:
+def deposit_references(conn: Connection, company_id: int, place: BankPlace) -> dict[int, str]:
     """document -> reference of the bank operations on the deposit account."""
     return {
         r["document_id"]: r["reference"]
