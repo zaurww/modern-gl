@@ -4,7 +4,7 @@
 
 **Дата:** 2026-10-19
 
-**Связанные документы:** `SPEC.md`, `ARCHITECTURE.md`, `docs/DECISIONS.md`
+**Связанные документы:** `docs/CONCEPT.md`, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`
 
 ## 1. Цель
 
