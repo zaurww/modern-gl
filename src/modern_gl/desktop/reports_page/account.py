@@ -123,6 +123,7 @@ class CardPage(AccountReportPage):
                 tr("Сальдо"),
                 lambda ln: balance_text(ln.balance) if ln.balance else "",
                 right=True,
+                value=lambda ln: ln.balance,  # in Excel: Dt +, Kt −
             ),
         ]
         if card.currency_closing or self.account.currency:

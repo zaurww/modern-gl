@@ -51,6 +51,7 @@ from modern_gl.desktop.reports_page import (
     ReportParams,
     StatementsPage,
 )
+from modern_gl.desktop.reports_page.table import zebra
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.widgets import EmptyState
@@ -137,6 +138,9 @@ class MainWindow(OpenPages):
         for name, (title, _) in theme.THEMES.items():
             act = looks.addAction(("✓  " if name == theme.current_theme() else "    ") + tr(title))
             act.triggered.connect(lambda _=False, n=name: self.set_ui_theme(n))
+        looks.addSeparator()
+        stripes = looks.addAction(("✓  " if zebra() else "    ") + tr("Полосы в таблицах"))
+        stripes.triggered.connect(lambda: self.set_zebra(not zebra()))
         btn = self.sidebar.company
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 

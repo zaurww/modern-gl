@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.desktop.reports_page.export import copy_to_clipboard, save_to_excel
 from modern_gl.desktop.reports_page.table import (
     GROUP_GAP,
     NAME_MAX,
@@ -41,6 +42,7 @@ from modern_gl.desktop.reports_page.table import (
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     EmptyState,
+    MenuItem,
     PageHeader,
     button,
     class_name,
@@ -131,6 +133,7 @@ class ReportPage(QWidget):
         root.setSpacing(16)
 
         self.header = PageHeader(title, "")
+        self.header.more(self.more_items)
         root.addWidget(self.header)
 
         self._build_period_bar(root)
@@ -154,6 +157,7 @@ class ReportPage(QWidget):
 
         for keys, fn in (
             ("F5", self.refresh),
+            ("Ctrl+C", lambda: copy_to_clipboard(self)),
             ("Return", self._drill_current),
             ("Enter", self._drill_current),
         ):
@@ -201,7 +205,8 @@ class ReportPage(QWidget):
         self.table.setModel(self.model)
         self.table.setItemDelegate(ReportDelegate(self.table))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # several rows: Ctrl+C copies them (D104); one: the whole report
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setShowGrid(False)
         self.table.setWordWrap(False)
@@ -240,6 +245,20 @@ class ReportPage(QWidget):
 
     def menu_actions(self, row: Any) -> list[MenuAction | None]:
         return []
+
+    def title(self) -> str:
+        raise NotImplementedError
+
+    def export_title(self) -> str:
+        """The name of the report in Excel (D104): the page's, a page with views — the view's."""
+        return self.title()
+
+    def more_items(self) -> list[MenuItem]:
+        """«⋯» of every report: to Excel; a page adds its own in front."""
+        return [
+            (tr("В Excel…"), lambda: save_to_excel(self)),
+            (tr("Копировать для Excel  Ctrl+C"), lambda: copy_to_clipboard(self)),
+        ]
 
     # ---- common ----------------------------------------------------------------------
 

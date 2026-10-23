@@ -915,8 +915,14 @@ def test_osv_amounts_stand_next_to_the_names(window, qtbot):
         "123.45",
         "(123.45)",
     ]
-    # soft zebra rows; the total is not banded
+    # no zebra rows unless turned on (D103); then soft ones, the total not banded
+    from modern_gl.desktop.reports_page.table import set_zebra
+
     rows = len(page.model.rows)
+    assert not any(page.model.banded)
+    set_zebra(True)
+    page.refresh()
+    qtbot.waitUntil(lambda: any(page.model.banded))
     assert page.model.banded == [i % 2 == 1 for i in range(rows - 1)] + [False]
 
 

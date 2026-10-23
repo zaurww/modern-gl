@@ -35,6 +35,7 @@ from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_name, posting_count
 from modern_gl.desktop import theme
 from modern_gl.desktop.background import LARGE
+from modern_gl.desktop.reports_page.table import set_zebra
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
@@ -486,6 +487,11 @@ class CompanyFiles(QMainWindow):
         if self.settings:
             self.settings.setValue("theme", name)
         self._repaint()
+
+    def set_zebra(self, on: bool) -> None:
+        """«Полосы в таблицах» (D103): every report and list, built again."""
+        set_zebra(on)
+        self._repaint(reopen=not self._dirty_pages())
 
     def follow_system_theme(self) -> None:
         """The system turned light or dark: «as the system» follows it. Pages with

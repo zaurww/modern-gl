@@ -338,9 +338,12 @@ class PageHeader(QWidget):
         self.action_row = QHBoxLayout()
         self.action_row.setSpacing(14)
         outer.addLayout(self.action_row)
+        self._more: QPushButton | None = None
 
     def add_action(self, widget: QWidget) -> QWidget:
-        self.action_row.addWidget(widget, 0, Qt.AlignmentFlag.AlignBottom)
+        """In order, but always in front of «⋯», which stays the last."""
+        at = self.action_row.indexOf(self._more) if self._more is not None else -1
+        self.action_row.insertWidget(at, widget, 0, Qt.AlignmentFlag.AlignBottom)
         return widget
 
     def primary(self, text: str, slot: Callable[[], object], tooltip: str = "") -> QPushButton:
@@ -354,6 +357,7 @@ class PageHeader(QWidget):
         """«⋯»: the page's less frequent actions."""
         b = more_button(items, tooltip)
         self.add_action(b)
+        self._more = b
         return b
 
 
