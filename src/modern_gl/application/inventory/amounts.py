@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from modern_gl.application.inventory.model import QUANTITY_FACTOR, QUANTITY_SCALE, VAT_RATE_SCALE
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import from_minor, round_ratio, to_minor
+from modern_gl.domain.money import from_minor, read_decimal, round_ratio, to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row
 
@@ -17,16 +17,7 @@ _QUANTITY_QUANTUM = Decimal(1).scaleb(-QUANTITY_SCALE)
 
 def to_quantity(value: str | int | Decimal) -> int:
     """Convert a user quantity to millionths of a base unit, without float rounding."""
-    if isinstance(value, (bool, float)):
-        raise TypeError("quantities must be str, int or Decimal, never float")
-    if isinstance(value, str):
-        value = value.strip().replace(" ", "").replace(" ", "").replace(",", ".")
-    try:
-        result = Decimal(value)
-    except InvalidOperation:
-        raise ValueError(tr("не число: {value}", value=value)) from None
-    if not result.is_finite():
-        raise ValueError(tr("не число: {value}", value=value))
+    result = read_decimal(value, "quantities")
     if result != result.quantize(_QUANTITY_QUANTUM):
         raise ValueError(
             tr("больше {n} знаков после запятой: {value}", n=QUANTITY_SCALE, value=value)

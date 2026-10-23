@@ -6,13 +6,12 @@ Balances are net (debit − credit, minor units); groups sum their children."""
 
 from __future__ import annotations
 
-from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
 
 from modern_gl.domain.dates import iso_date
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.report_common import _accounts
+from modern_gl.reporting.report_common import _accounts, docs_cte, fold_chart
 
 ADJUSTMENTS = ("ifrs_adj", "tax_adj")
 
@@ -53,52 +52,38 @@ def compare_books(
     `only_differences` — those where IFRS or tax differ from the common book."""
     balances = _balances(conn, company_id, iso_date(day))
     accounts = _accounts(conn, company_id)
-    children: dict[int | None, list[int]] = defaultdict(list)
-    for a in accounts.values():  # already ordered by code
-        children[a["parent_id"]].append(a["id"])
-    rows: list[BookRow] = []
 
-    def visit(account_id: int, depth: int) -> BookRow:
-        acc: Row = accounts[account_id]
-        row = BookRow(account_id, acc["code"] or "", acc["name"], depth, bool(acc["is_group"]))
-        position = len(rows)
-        rows.append(row)
-        own = balances.get(account_id)
+    def make(acc: Row, depth: int) -> BookRow:
+        row = BookRow(acc["id"], acc["code"] or "", acc["name"], depth, bool(acc["is_group"]))
+        own = balances.get(acc["id"])
         if own is not None:
             row.add(own)
-        for child in children[account_id]:
-            row.add(visit(child, depth + 1))
-        silent = not (row.common or row.differs)
-        if silent or (only_differences and not row.differs):
-            del rows[position:]
         return row
 
-    for top in children[None]:
-        visit(top, 0)
-    return rows
+    def keep(row: BookRow) -> bool:
+        return bool(row.common or row.differs) and (row.differs or not only_differences)
+
+    return fold_chart(accounts, make, keep)[0]
 
 
 def _balances(conn: Connection, company_id: int, day: str) -> dict[int, BookRow]:
     """Each account's own balance (not its children's) per layer, posted up to the day."""
     found: dict[int, BookRow] = {}
     for r in conn.execute(
-        """
-        WITH moves AS (
-            SELECT p.debit_account_id AS account_id, l.code AS layer, p.amount AS net
-            FROM postings p
-            JOIN documents d ON d.company_id = p.company_id AND d.id = p.document_id
-            JOIN layers l ON l.id = d.layer_id
-            WHERE p.company_id = :company_id AND d.status = 'posted' AND d.doc_date <= :day
+        f"""
+        WITH {docs_cte("d.id, l.code AS layer", every_layer=True)},
+        moves AS (
+            SELECT p.debit_account_id AS account_id, docs.layer, p.amount AS net
+            FROM postings p JOIN docs ON docs.id = p.document_id
+            WHERE p.company_id = :company_id
             UNION ALL
-            SELECT p.credit_account_id, l.code, -p.amount
-            FROM postings p
-            JOIN documents d ON d.company_id = p.company_id AND d.id = p.document_id
-            JOIN layers l ON l.id = d.layer_id
-            WHERE p.company_id = :company_id AND d.status = 'posted' AND d.doc_date <= :day
+            SELECT p.credit_account_id, docs.layer, -p.amount
+            FROM postings p JOIN docs ON docs.id = p.document_id
+            WHERE p.company_id = :company_id
         )
         SELECT account_id, layer, SUM(net) AS net FROM moves GROUP BY account_id, layer
         """,
-        {"company_id": company_id, "day": day},
+        {"company_id": company_id, "date_to": day},
     ):
         row = found.setdefault(r["account_id"], BookRow(r["account_id"]))
         layer = r["layer"]

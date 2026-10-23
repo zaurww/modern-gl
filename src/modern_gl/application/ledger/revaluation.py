@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from modern_gl.application.currencies import no_rate_text, rate_on
@@ -14,6 +15,7 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
+from modern_gl.reporting.report_common import COMMON, docs_cte
 
 
 class RevaluationCommands(DocumentCommands):
@@ -78,12 +80,8 @@ class RevaluationCommands(DocumentCommands):
         """Balances of currency accounts on `day` (common layer), in manat and in currency,
         per account, subconto values and currency."""
         return self.conn.execute(
-            """
-            WITH docs AS (
-                SELECT d.id FROM documents d JOIN layers l ON l.id = d.layer_id
-                WHERE d.company_id = :company_id AND d.status = 'posted'
-                  AND d.doc_date <= :day AND l.code = 'common'
-            ),
+            f"""
+            WITH {docs_cte()},
             moves AS (
                 SELECT p.debit_account_id AS account_id, p.dt_sc1 AS sc1, p.dt_sc2 AS sc2,
                        p.dt_sc3 AS sc3, p.currency_id, p.amount, p.currency_amount
@@ -105,5 +103,5 @@ class RevaluationCommands(DocumentCommands):
             GROUP BY m.account_id, m.sc1, m.sc2, m.sc3, m.currency_id
             ORDER BY m.account_id, c.code, m.sc1, m.sc2, m.sc3
             """,
-            {"company_id": company_id, "day": day},
+            {"company_id": company_id, "date_to": day, "layers": json.dumps(COMMON)},
         ).fetchall()

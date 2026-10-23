@@ -7,10 +7,10 @@ units with two decimals, the same as manat amounts.
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from fractions import Fraction
 
-from modern_gl.domain.money import round_half_away
+from modern_gl.domain.money import read_decimal, round_half_away
 from modern_gl.i18n import language, tr
 
 RATE_SCALE = 6
@@ -79,15 +79,8 @@ def check_code(code: str) -> str:
 
 def parse_rate(text: str | int | Decimal) -> int:
     """'1,7' / '1.7000' / Decimal('1.7') -> 1700000 (millionths). Must be positive."""
-    if isinstance(text, (bool, float)):
-        raise TypeError("rates must be str, int or Decimal, never float")
-    if isinstance(text, str):
-        text = text.strip().replace(" ", "").replace(",", ".")
-    try:
-        d = Decimal(text)
-    except InvalidOperation:
-        raise ValueError(tr("не число: {value}", value=text)) from None
-    if not d.is_finite() or d <= 0:
+    d = read_decimal(text, "rates")
+    if d <= 0:
         raise ValueError(tr("курс должен быть больше нуля: {value}", value=text))
     scaled = d.scaleb(RATE_SCALE)
     if scaled != scaled.to_integral_value():

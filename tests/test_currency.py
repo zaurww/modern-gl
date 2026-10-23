@@ -83,6 +83,7 @@ def post_example(ledger, books):
 def test_rates_are_exact():
     assert parse_rate("1,7") == 1_700_000
     assert parse_rate(" 1.7000 ") == 1_700_000
+    assert parse_rate("1\u00a0234,5") == 1_234_500_000  # as Excel copies it, like amounts
     assert format_rate(1_700_000) == "1.7000"
     assert format_rate(parse_rate("1.123456")) == "1.123456"
     assert format_rate(1_130_000, 100) == "0.0113"  # 100 JPY = 1.13 AZN

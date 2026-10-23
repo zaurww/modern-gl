@@ -14,7 +14,7 @@ from datetime import date
 from modern_gl.domain.period_input import Period
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.columns import Amounts, total
-from modern_gl.reporting.report_common import COMMON, _accounts, _params
+from modern_gl.reporting.report_common import COMMON, FROM, _accounts, _params, docs_cte
 from modern_gl.reporting.statements import (
     ACCOUNTS,
     CLOSING_TYPES,
@@ -138,13 +138,8 @@ def _turnovers(
     }
     result: dict[tuple[str, int, int | None], int] = defaultdict(int)
     for r in conn.execute(
-        """
-        WITH docs AS (
-            SELECT d.id FROM documents d JOIN layers l ON l.id = d.layer_id
-            WHERE d.company_id = :company_id AND d.status = 'posted'
-              AND d.doc_date BETWEEN :date_from AND :date_to
-              AND l.code IN (SELECT value FROM json_each(:layers))
-        ),
+        f"""
+        WITH {docs_cte(start=FROM)},
         legs AS (
             SELECT p.debit_account_id AS account_id, p.credit_account_id AS other,
                    p.dt_sc1 AS sc, -p.amount AS net

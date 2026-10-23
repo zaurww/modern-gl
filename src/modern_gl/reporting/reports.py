@@ -33,6 +33,7 @@ from modern_gl.reporting.report_common import (
     _find_account,
     _params,
     _subtree,
+    fold_chart,
 )
 
 # a path of a row (its values from the first subconto on, an e-qaimə number last) -> its
@@ -144,36 +145,25 @@ def _osv_rows(
 ) -> tuple[list[OsvRow], Turnovers]:
     """The rows in the order of the chart, groups summing their children; silent
     accounts (and their silent subtrees) are left out."""
-    children: dict[int | None, list[int]] = defaultdict(list)
-    for a in accounts.values():  # already ordered by code
-        children[a["parent_id"]].append(a["id"])
 
-    rows: list[OsvRow] = []
-    total = Turnovers()
-
-    def visit(account_id: int, depth: int) -> Turnovers:
-        acc = accounts[account_id]
+    def make(acc: Row, depth: int) -> OsvRow:
         row = OsvRow(
-            account_id=account_id,
+            account_id=acc["id"],
             code=acc["code"] or "",
             name=acc["name"],
             depth=depth,
             is_group=bool(acc["is_group"]),
         )
-        position = len(rows)
-        rows.append(row)
-        own = values.get(account_id)
+        own = values.get(acc["id"])
         if own is not None:
             row.add(own)
-            row.opening_wrong, row.closing_wrong = flags[account_id]
-        for child in children[account_id]:
-            row.add(visit(child, depth + 1))
-        if row.is_zero():
-            del rows[position:]  # drop silent accounts (and their silent subtree)
+            row.opening_wrong, row.closing_wrong = flags[acc["id"]]
         return row
 
-    for top in children[None]:
-        total.add(visit(top, 0))
+    rows, tops = fold_chart(accounts, make, lambda row: not row.is_zero())
+    total = Turnovers()
+    for top in tops:
+        total.add(top)
     return rows, total
 
 

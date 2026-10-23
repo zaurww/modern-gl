@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-import calendar
 from datetime import date, timedelta
+
+from modern_gl.domain.dates import month_days
 
 DAY, WEEK, LAST_WEEK, MONTH, LAST_MONTH = "day", "week", "last_week", "month", "last_month"
 SPANS = (DAY, WEEK, LAST_WEEK, MONTH, LAST_MONTH)
@@ -12,8 +13,7 @@ SPANS = (DAY, WEEK, LAST_WEEK, MONTH, LAST_MONTH)
 
 def month_bounds(month: str) -> tuple[date, date]:
     """'2026-09' -> 1 and 30 September 2026."""
-    year, number = int(month[:4]), int(month[5:7])
-    return date(year, number, 1), date(year, number, calendar.monthrange(year, number)[1])
+    return month_days(int(month[:4]), int(month[5:7]))
 
 
 def full_month(date_from: date, date_to: date) -> str | None:
