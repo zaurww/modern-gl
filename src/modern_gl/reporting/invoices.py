@@ -3,8 +3,8 @@ the customs declaration of imported goods — kept apart from e-qaimə numbers).
 
 A purchase (Dt 41 / Kt 60), its ƏDV (Dt 19 / Kt 60) and the payment (Dt 60 / Kt 51)
 carry the same number. Per invoice the report sums the turnovers of the settlement
-accounts (of a settlement type, or without a type but with the counterparty directory),
-the ƏDV (lines on ƏDV / tax accounts), and what is left unpaid; it names the
+accounts, the ƏDV (lines on ƏDV / tax accounts) and what is left unpaid — the rule is
+`invoice_rules` (D120); it names the
 counterparty and contract of the settlement lines and the documents.
 
 An invoice is shown when it has a posting in the period; the amounts are everything
@@ -19,10 +19,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
-from modern_gl.domain.accounts import SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
+from modern_gl.reporting.invoice_rules import invoice_accounts, turnover_sides
 from modern_gl.reporting.overview import Attention, attention_source
 from modern_gl.reporting.report_common import COMMON, _params, docs_cte
 
@@ -98,73 +98,39 @@ def _gathered(
 
 
 class _Chart:
-    """What each account of the company is to an invoice: a settlement with a partner
-    (where its counterparty and contract are) or ƏDV."""
+    """What each account of the company is to an invoice (`invoice_rules`, D120)."""
 
     def __init__(self, conn: Connection, company_id: int) -> None:
-        self.accounts = {
-            r["id"]: r
-            for r in conn.execute(
-                "SELECT id, account_type, sc1_kind_id, sc2_kind_id, sc3_kind_id "
-                "FROM accounts WHERE company_id = ?",
-                (company_id,),
-            )
-        }
-        kinds = {
-            r["code"]: r["id"]
-            for r in conn.execute(
-                "SELECT id, code FROM subconto_kinds WHERE company_id = ? "
-                "AND code IN ('counterparty', 'contract')",
-                (company_id,),
-            )
-        }
-        self.partner, self.contract = kinds.get("counterparty"), kinds.get("contract")
-        # per account, once: its type and where its partner and contract are
-        self.info = {
-            account_id: (a["account_type"], self.slot(a, self.partner), self.slot(a, self.contract))
-            for account_id, a in self.accounts.items()
-        }
-
-    def slot(self, account: Row, kind: int | None) -> int | None:
-        if kind is None:
-            return None
-        return next((i for i in (1, 2, 3) if account[f"sc{i}_kind_id"] == kind), None)
+        self.accounts = invoice_accounts(conn, company_id)
 
     def add(self, row: InvoiceRow, p: Row) -> None:
         """One posting of the invoice: settlement turnovers, partner, contract, ƏDV."""
-        vat = deposit = False
-        sides = (
-            ("debit", "dt", self.info[p["debit_account_id"]]),
-            ("credit", "ct", self.info[p["credit_account_id"]]),
-        )
-        types = {info[0] for _, _, info in sides}
-        # an advance set against the e-qaimə (D78: Dt 60.1 [e-qaimə] / Ct 60.2): only the
-        # settlement side pays it, the advance side is no turnover of the e-qaimə
-        offset = bool(types & ADVANCE_TYPES) and bool(types & {"payable", "receivable"})
-        for side, prefix, (kind, partner_at, contract_at) in sides:
-            vat |= kind in VAT_TYPES
-            deposit |= kind == "vat_deposit"
-            if not (kind in SETTLEMENT_TYPES or (kind is None and partner_at is not None)):
-                continue
-            if offset and kind in ADVANCE_TYPES:
+        debit = self.accounts[p["debit_account_id"]]
+        credit = self.accounts[p["credit_account_id"]]
+        counts = turnover_sides(debit, credit)
+        for side, prefix, account, turnover in (
+            ("debit", "dt", debit, counts[0]),
+            ("credit", "ct", credit, counts[1]),
+        ):
+            if not turnover:
                 continue
             if side == "debit":
                 row.debit += p["amount"]
             else:
                 row.credit += p["amount"]
-            who = p[f"{prefix}_sc{partner_at}"] if partner_at else None
+            at = account.partner_at
+            who = p[f"{prefix}_sc{at}"] if at else None
             if who is not None and who not in row.counterparties:
                 row.counterparties.append(who)
-            if contract_at and row.contract_id is None:
-                row.contract_id = p[f"{prefix}_sc{contract_at}"]
-        if vat:
+            if account.contract_at and row.contract_id is None:
+                row.contract_id = p[f"{prefix}_sc{account.contract_at}"]
+        if debit.vat or credit.vat:
             row.vat += p["amount"]
-        if deposit:
+        if "vat_deposit" in (debit.account_type, credit.account_type):
             row.deposit += p["amount"]
 
 
 SIDES = ("debit", "credit")
-ADVANCE_TYPES = frozenset({"advance_paid", "advance_received"})
 
 
 DRAFT, PORTAL = "draft", "portal"  # where an open e-qaimə is known from, but the books
