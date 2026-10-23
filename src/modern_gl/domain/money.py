@@ -11,21 +11,28 @@ SCALE = 2
 _QUANTUM = Decimal(1).scaleb(-SCALE)
 
 
-def to_minor(value: str | int | Decimal) -> int:
-    """Convert '1 234,50' / Decimal('1234.5') / 1234 to minor units.
-
-    More than two decimal places is an error, never silently rounded.
-    """
+def read_decimal(value: str | int | Decimal, what: str = "amounts") -> Decimal:
+    """'1 234,50' (spaces, a non-breaking one too; a comma) / Decimal / int -> a finite
+    Decimal: how amounts, quantities and rates are typed and pasted. Never a float."""
     if isinstance(value, (bool, float)):
-        raise TypeError("amounts must be str, int or Decimal, never float")
+        raise TypeError(f"{what} must be str, int or Decimal, never float")
     if isinstance(value, str):
-        value = value.strip().replace(" ", "").replace(" ", "").replace(",", ".")
+        value = value.strip().replace(" ", "").replace("\u00a0", "").replace(",", ".")
     try:
         d = Decimal(value)
     except InvalidOperation:
         raise ValueError(tr("не число: {value}", value=value)) from None
     if not d.is_finite():
         raise ValueError(tr("не число: {value}", value=value))
+    return d
+
+
+def to_minor(value: str | int | Decimal) -> int:
+    """Convert '1 234,50' / Decimal('1234.5') / 1234 to minor units.
+
+    More than two decimal places is an error, never silently rounded.
+    """
+    d = read_decimal(value)
     if d != d.quantize(_QUANTUM):
         raise ValueError(tr("больше {n} знаков после запятой: {value}", n=SCALE, value=value))
     return int(d.scaleb(SCALE))
