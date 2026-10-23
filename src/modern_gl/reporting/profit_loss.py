@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date
 
+from modern_gl.domain.period_input import Period
 from modern_gl.infrastructure.db import Connection, Row
+from modern_gl.reporting.columns import Amounts, total
 from modern_gl.reporting.report_common import COMMON, _accounts, _params
 from modern_gl.reporting.statements import (
     ACCOUNTS,
@@ -28,8 +30,8 @@ from modern_gl.reporting.statements import (
 __all__ = ["ACCOUNTS", "ITEMS", "TYPES", "profit_and_loss"]
 SALES_VAT = "sales_vat"  # Dt sales Kt the output VAT account: a line of its own
 PL_CLASSES = ("revenue", "expense")
-# (line, account, the account's first subconto) -> amount
-Turnovers = dict[tuple[str, int, int | None], int]
+# (line, account, the account's first subconto) -> a figure per column
+Turnovers = dict[tuple[str, int, int | None], Amounts]
 
 
 def profit_and_loss(
@@ -39,17 +41,23 @@ def profit_and_loss(
     date_to: date | str,
     layers: tuple[str, ...] = COMMON,
     detail: str = TYPES,
+    periods: list[Period] | None = None,
 ) -> Statement:
     """Income and expense of the period, without the closing of them into the result
     (postings against a «Financial result» or «Retained earnings» account) and without
     the moves between income and expense accounts (26, 44 closed into 46): an expense
-    shows where it was spent. `detail`: TYPES, or ACCOUNTS / ITEMS under each line."""
-    t = _turnovers(conn, company_id, date_from, date_to, layers)
+    shows where it was spent. `detail`: TYPES, or ACCOUNTS / ITEMS under each line.
+    `periods`: a column per period (D107), else the one from `date_from` to `date_to`."""
+    t: Turnovers = defaultdict(Amounts)
+    columns = periods or [(date_from, date_to)]
+    for i, (first, last) in enumerate(columns):
+        for k, net in _turnovers(conn, company_id, first, last, layers).items():
+            t[k] += Amounts.at(i, len(columns), net)
     names = Names.read(conn, company_id) if detail != TYPES else None
     lines: list[Line] = []
 
-    def add(key: str) -> int:
-        amount = sum(v for (k, _, _), v in t.items() if k == key)
+    def add(key: str) -> Amounts:
+        amount = total(v for (k, _, _), v in t.items() if k == key)
         if amount:
             lines.append(_pl_line(key, amount))
             if names is not None:
@@ -69,7 +77,7 @@ def profit_and_loss(
     return Statement(lines)
 
 
-def _pl_line(key: str, amount: int) -> Line:
+def _pl_line(key: str, amount: Amounts) -> Line:
     if key == SALES_VAT:
         return Line("НДС с продаж", amount, account_type=SALES_VAT)
     if key.startswith(":"):
@@ -81,16 +89,16 @@ def _pl_line(key: str, amount: int) -> Line:
 def _detail(t: Turnovers, key: str, names: Names, items: bool) -> list[Line]:
     """The accounts of a line in the order of the chart, each with its items by name
     (the postings without one last)."""
-    by_account: dict[int, dict[int | None, int]] = defaultdict(lambda: defaultdict(int))
+    by_account: dict[int, dict[int | None, Amounts]] = defaultdict(lambda: defaultdict(Amounts))
     for (k, account_id, value_id), amount in t.items():
         if k == key:
             by_account[account_id][value_id] += amount
     lines: list[Line] = []
     for account_id in sorted(by_account, key=names.order.__getitem__):
         values = by_account[account_id]
-        if total := sum(values.values()):
-            lines.append(Line(names.accounts[account_id], total, "account", account_id=account_id))
-        if not total or not items or set(values) == {None}:
+        if whole := total(values.values()):
+            lines.append(Line(names.accounts[account_id], whole, "account", account_id=account_id))
+        if not whole or not items or set(values) == {None}:
             continue
         titles = {v: names.values.get(v, "") if v is not None else "" for v in values}
         lines.extend(
@@ -101,7 +109,9 @@ def _detail(t: Turnovers, key: str, names: Names, items: bool) -> list[Line]:
     return lines
 
 
-def _turnovers(conn: Connection, company_id: int, date_from, date_to, layers) -> Turnovers:
+def _turnovers(
+    conn: Connection, company_id: int, date_from, date_to, layers
+) -> dict[tuple[str, int, int | None], int]:
     """Income (Ct − Dt) and expense (−(Dt − Ct)) of the period by line, account and the
     account's first subconto, signed so they add; each leg judged by `_pl_key`."""
     params = _params(conn, company_id, date_from, date_to, layers)
@@ -113,7 +123,7 @@ def _turnovers(conn: Connection, company_id: int, date_from, date_to, layers) ->
             (company_id,),
         )
     }
-    result: Turnovers = defaultdict(int)
+    result: dict[tuple[str, int, int | None], int] = defaultdict(int)
     for r in conn.execute(
         """
         WITH docs AS (

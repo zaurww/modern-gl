@@ -158,6 +158,14 @@ def main() -> None:
     statements.detail_buttons["accounts"].click()
     statements.cash_button.click()
     shot("20c_cash_flow")  # D100
+    statements.profit_button.click()  # D107: months side by side, a comparison
+    statements.period.set_period(date(2026, 1, 1), date(2026, 2, 28))
+    statements.columns.choose("months")
+    shot("20e_profit_by_months")
+    statements.balance_button.click()
+    statements.columns.choose("year_ago")
+    shot("20f_balance_year_ago")
+    statements.columns.choose("one")
     win.open_books()  # «Сравнение книг» (D98): the demo's IFRS write-down of stock
     shot("19_books_compare")
     win.close_current()

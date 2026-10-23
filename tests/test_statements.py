@@ -26,6 +26,8 @@ income), gross 2 500; operating −400 → 2 100; other income 50 → 2 150 befo
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
@@ -361,3 +363,103 @@ def test_a_line_of_the_page_leads_to_the_card(window, qtbot):
     again = StatementsPage(window.session)
     assert (again.view, again.detail) == ("profit", "items")
     again.deleteLater()
+
+
+def test_the_page_by_months_leads_to_the_card_of_a_month(window, qtbot):
+    """«Колонки: По месяцам» on January–March: a column per month and «Итого»; a double
+    click on February of an account — its card for February (D107)."""
+    from modern_gl.desktop.reports_page import StatementsPage
+    from modern_gl.desktop.reports_page.account import CardPage
+
+    window.show_place(("statements",))
+    page = window.stack.currentWidget()
+    assert isinstance(page, StatementsPage)
+    page.profit_button.click()
+    page.detail_buttons["accounts"].click()
+    page.period.set_period(date(2026, 1, 1), date(2026, 3, 31))
+    page.columns.choose("months")
+    qtbot.waitUntil(lambda: page.model.columnCount() == 5)
+    titles = [page.model.title(i) for i in range(5)]
+    assert titles == ["Статья", "Январь", "Февраль", "Март", "Итого"]
+    account = next(r for r in page.model.rows if r.kind == "account")
+    row = page.model.rows.index(account)
+    page.table.setCurrentIndex(page.model.index(row, 2))
+    page.drill(account)
+    card = window.stack.currentWidget()
+    assert isinstance(card, CardPage)
+    assert (card.params.date_from, card.params.date_to) == (date(2026, 2, 1), date(2026, 2, 28))
+    again = StatementsPage(window.session)
+    assert again.columns.mode == "months"  # remembered
+    again.deleteLater()
+
+
+def test_balance_sheet_on_two_days(books):
+    """D107: a column per day. On 31.01: bank 10 000 − 500 = 9 500, B's advance 500 →
+    current 10 000; equipment 3 000; A is owed 3 000, capital 10 000 → 13 000 both sides.
+    28.02 — as above."""
+    from modern_gl.reporting.columns import Amounts
+
+    conn, cid = books
+    sheet = balance_sheet(conn, cid, "2026-02-28", days=["2026-01-31", "2026-02-28"])
+    figures = {ln.title: tuple(ln.amount) for ln in sheet.lines if ln.kind != "heading"}
+    assert figures["Касса"] == (0, 5_000)
+    assert figures["Банковские счета"] == (950_000, 1_050_000)
+    assert figures["Авансы выданные"] == (50_000, 50_000)
+    assert figures["Основные средства"] == (300_000, 290_000)
+    assert figures["Итого активы"] == (1_300_000, 1_745_000)
+    assert figures["Поставщики и подрядчики"] == (300_000, 500_000)
+    assert figures["Прибыль (убыток) текущего периода"] == (0, -35_000)
+    assert figures["Итого обязательства и капитал"] == (1_300_000, 1_745_000)
+    assert sheet.unbalanced == Amounts((0, 0))
+    # the last column is the balance on its day read alone
+    alone = balance_sheet(conn, cid, "2026-02-28")
+    assert [(ln.title, ln.amount[1]) for ln in sheet.lines] == [
+        (ln.title, ln.amount[0]) for ln in alone.lines
+    ]
+
+
+def test_profit_and_loss_by_months_and_the_whole(books):
+    """January, February and the whole: the whole is the report of the two months, and
+    each line's months add up to it."""
+    from modern_gl.reporting.columns import MONTHS, column_periods
+
+    conn, cid = books
+    periods = column_periods(MONTHS, (date(2026, 1, 1), date(2026, 2, 28)))
+    pl = profit_and_loss(conn, cid, "2026-01-01", "2026-02-28", periods=periods)
+    figures = {ln.title: tuple(ln.amount) for ln in pl.lines}
+    assert figures["Выручка"] == (0, 400_000, 400_000)
+    assert figures["Себестоимость продаж"] == (0, -150_000, -150_000)
+    assert figures["Операционные расходы"] == (0, -40_000, -40_000)
+    assert figures["Чистая прибыль (убыток)"] == (0, 215_000, 215_000)
+    for ln in pl.lines:
+        assert ln.amount[0] + ln.amount[1] == ln.amount[2]
+
+
+def test_cash_flow_by_months(books):
+    """Money: January +10 000 capital (financing), −500 the advance to B (operating);
+    February +1 000 from C, +50 other income (operating). The start of February is the
+    end of January; the whole begins at 0 and ends at 10 550."""
+    from modern_gl.reporting.cash_flow import cash_flow
+    from modern_gl.reporting.columns import MONTHS, column_periods
+
+    conn, cid = books
+    periods = column_periods(MONTHS, (date(2026, 1, 1), date(2026, 2, 28)))
+    flow = cash_flow(conn, cid, "2026-01-01", "2026-02-28", periods=periods)
+    figures = {ln.title: tuple(ln.amount) for ln in flow.lines if ln.kind != "heading"}
+    assert figures["Деньги на начало периода"] == (0, 950_000, 0)
+    assert figures["Чистый поток от операционной деятельности"] == (-50_000, 105_000, 55_000)
+    assert figures["Чистый поток от финансовой деятельности"] == (1_000_000, 0, 1_000_000)
+    assert figures["Деньги на конец периода"] == (950_000, 1_055_000, 1_055_000)
+    assert not flow.unbalanced
+
+
+def test_february_against_january(books):
+    from modern_gl.reporting.columns import PREVIOUS, column_periods, difference, percent
+
+    conn, cid = books
+    periods = column_periods(PREVIOUS, (date(2026, 2, 1), date(2026, 2, 28)))
+    pl = profit_and_loss(conn, cid, "2026-02-01", "2026-02-28", periods=periods)
+    net = pl.lines[-1].amount
+    assert tuple(net) == (215_000, 0)
+    assert difference(net) == 215_000
+    assert percent(net) is None  # nothing in January to compare with

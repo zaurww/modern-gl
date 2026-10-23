@@ -3,7 +3,8 @@ period, read from the accounts' types (D35) — whatever the codes of the chart.
 the classification: a line per type, current and long-term apart (D89).
 
 Amounts are minor units: assets and expenses as Dt − Ct, liabilities, equity and income
-as Ct − Dt; in the profit and loss an expense is negative, so the lines simply add up."""
+as Ct − Dt; in the profit and loss an expense is negative, so the lines simply add up.
+A figure is `Amounts`, one per column of the statement (D107, `columns`)."""
 
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ from datetime import date
 from modern_gl.domain.accounts import ACCOUNT_TYPES, NONCURRENT_TYPES, TYPE_CLASS
 from modern_gl.domain.dates import iso_date
 from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting.columns import Amounts, total
 from modern_gl.reporting.report_common import COMMON, _accounts, _params
 
 UNTYPED = ""  # an account without a type: its own line, so it is seen and given one
@@ -28,7 +30,7 @@ TYPES, ACCOUNTS, ITEMS = "types", "accounts", "items"  # how much a line shows u
 @dataclass
 class Line:
     title: str  # Russian, for tr(): a type's name, or a caption of the statement
-    amount: int = 0
+    amount: Amounts = field(default_factory=Amounts)  # a figure per column
     kind: str = "line"  # line | account | item | subtotal | total | heading
     account_type: str | None = None  # the type of a «line» (UNTYPED: none)
     # the detail under a line of the profit and loss (D102): an «account», an «item» of
@@ -41,7 +43,7 @@ class Line:
 class Statement:
     lines: list[Line] = field(default_factory=list)
     # balance sheet: assets − (liabilities + equity); profit and loss: 0
-    unbalanced: int = 0
+    unbalanced: Amounts = field(default_factory=Amounts)
 
 
 def balance_sheet(
@@ -50,19 +52,20 @@ def balance_sheet(
     day: date | str,
     layers: tuple[str, ...] = COMMON,
     detail: str = TYPES,
+    days: list[date] | None = None,
 ) -> Statement:
     """Assets, liabilities and equity on the day; the profit not yet closed into equity
     (the balances of income and expense accounts) is a line of equity. `detail` ACCOUNTS:
-    each line opens into its accounts (D102)."""
-    balances = _balances(conn, company_id, iso_date(day), layers)
-    by_type: dict[str, int] = defaultdict(int)
+    each line opens into its accounts (D102). `days`: a column per day (D107)."""
+    balances = _balances(conn, company_id, [iso_date(x) for x in days or [day]], layers)
+    by_type: dict[str, Amounts] = defaultdict(Amounts)
     for (key, _), net in balances.items():
         by_type[key] += net
     names = Names.read(conn, company_id) if detail != TYPES else None
-    profit = -sum(v for t, v in by_type.items() if _class(t) in ("revenue", "expense"))
+    profit = -total(v for t, v in by_type.items() if _class(t) in ("revenue", "expense"))
     lines: list[Line] = [Line("Активы", kind="heading")]
 
-    def section(title: str, cls: str, current: bool | None, sign: int = 1, profit=None) -> int:
+    def section(title: str, cls: str, current: bool | None, sign: int = 1, profit=None) -> Amounts:
         start = len(lines)
         total = _section(lines, title, by_type, cls, current, sign, profit)
         if names is not None:
@@ -77,9 +80,9 @@ def balance_sheet(
     short = section("Краткосрочные обязательства", "liability", True, -1)
     long_debt = section("Долгосрочные обязательства", "liability", False, -1)
     equity = section("Капитал", "equity", None, -1, profit)
-    total = short + long_debt + equity
-    lines.append(Line("Итого обязательства и капитал", total, "total"))
-    return Statement(lines, assets - total)
+    sources = short + long_debt + equity
+    lines.append(Line("Итого обязательства и капитал", sources, "total"))
+    return Statement(lines, assets - sources)
 
 
 @dataclass
@@ -105,10 +108,10 @@ class Names:
             values,
         )
 
-    def account_lines(self, amounts: dict[int, int], sign: int = 1) -> list[Line]:
+    def account_lines(self, amounts: dict[int, Amounts], sign: int = 1) -> list[Line]:
         """A line per account with an amount, in the order of the chart."""
         return [
-            Line(self.accounts[i], sign * amounts[i], "account", account_id=i)
+            Line(self.accounts[i], amounts[i] * sign, "account", account_id=i)
             for i in sorted(amounts, key=self.order.__getitem__)
             if amounts[i]
         ]
@@ -124,7 +127,7 @@ def _open_accounts(
         opened.append(line)
         if line.kind == "line" and line.account_type is not None:
             key = line.account_type or f"{UNTYPED}:{cls}"
-            amounts: dict[int, int] = defaultdict(int)
+            amounts: dict[int, Amounts] = defaultdict(Amounts)
             for (k, account_id), net in by_key.items():
                 if k == key:
                     amounts[account_id] += net
@@ -140,7 +143,7 @@ def _class(key: str) -> str | None:
     return key.split(":", 1)[1] if key.startswith(":") else TYPE_CLASS.get(key)
 
 
-def _type_line(account_type: str, amount: int) -> Line:
+def _type_line(account_type: str, amount: Amounts) -> Line:
     title = dict((t, name) for t, _, name in ACCOUNT_TYPES)[account_type]
     return Line(title, amount, account_type=account_type)
 
@@ -148,50 +151,75 @@ def _type_line(account_type: str, amount: int) -> Line:
 def _section(
     lines: list[Line],
     title: str,
-    by_type: dict[str, int],
+    by_type: dict[str, Amounts],
     cls: str,
     current: bool | None,
     sign: int = 1,
-    profit: int | None = None,
-) -> int:
+    profit: Amounts | None = None,
+) -> Amounts:
     """A heading, a line per type of the class (in the program's order), the subtotal;
     a section without lines is left out."""
     lines.append(Line(title, kind="heading"))
-    total = 0
+    result = Amounts()
     for account_type, type_class, _ in ACCOUNT_TYPES:
         long_term = account_type in NONCURRENT_TYPES
         if type_class != cls or (current is not None and long_term == current):
             continue
-        amount = sign * by_type.get(account_type, 0)
+        amount = by_type.get(account_type, Amounts()) * sign
         if amount:
             lines.append(_type_line(account_type, amount))
-            total += amount
-    untyped = sign * by_type.get(f"{UNTYPED}:{cls}", 0)
+            result += amount
+    untyped = by_type.get(f"{UNTYPED}:{cls}", Amounts()) * sign
     if untyped and current is not False:  # untyped assets and debts count as current
         lines.append(Line("Счета без типа", untyped, account_type=UNTYPED))
-        total += untyped
+        result += untyped
     if profit:
         lines.append(Line("Прибыль (убыток) текущего периода", profit))
-        total += profit
+        result += profit
     if lines[-1].kind == "heading":  # nothing in it: not shown at all
         lines.pop()
-        return 0
-    lines.append(Line(title, total, "subtotal"))  # «Итого: …» when shown
-    return total
+        return Amounts()
+    lines.append(Line(title, result, "subtotal"))  # «Итого: …» when shown
+    return result
 
 
-def _balances(conn: Connection, company_id: int, day: str, layers) -> dict[tuple[str, int], int]:
-    """Dt − Ct by (type, account) on the day; a two-sided account with a first subconto
-    is split per counterparty (an advance is not netted against a debt)."""
-    params = _params(conn, company_id, day, day, layers)
+def _balances(
+    conn: Connection, company_id: int, days: list[str], layers
+) -> dict[tuple[str, int], Amounts]:
+    """Dt − Ct by (type, account) on each day, a column per day; a two-sided account with
+    a first subconto is split per counterparty (an advance is not netted against a debt).
+    One query per stretch between the days, added up: not a read from the start per day."""
     accounts = _accounts(conn, company_id)
-    by_key: dict[tuple[str, int], int] = defaultdict(int)
-    for r in conn.execute(
+    by_key: dict[tuple[str, int], Amounts] = defaultdict(Amounts)
+    running: dict[tuple[int, int | None], int] = defaultdict(int)  # (account, subconto)
+    after = ""
+    for day in sorted(set(days)):
+        for r in _moves(conn, company_id, after, day, layers):
+            running[(r["account_id"], r["sc"])] += r["net"]
+        after = day
+        for column in (i for i, d in enumerate(days) if d == day):
+            for (account_id, _sc), net in running.items():
+                if not net:
+                    continue
+                a = accounts[account_id]
+                key = a["account_type"] or f"{UNTYPED}:{a['account_class']}"
+                if a["two_sided"] and a["sc1_kind_id"] is not None:
+                    key = _split_key(key, a["account_class"], net)
+                by_key[(key, account_id)] += Amounts.at(column, len(days), net)
+    return by_key
+
+
+def _moves(conn: Connection, company_id: int, after: str, day: str, layers):
+    """Dt − Ct by account and its first subconto of the documents after `after` (""
+    from the start) up to the day."""
+    params = _params(conn, company_id, day, day, layers)
+    params["after"] = after
+    return conn.execute(
         """
         WITH docs AS (
             SELECT d.id FROM documents d JOIN layers l ON l.id = d.layer_id
             WHERE d.company_id = :company_id AND d.status = 'posted'
-              AND d.doc_date <= :date_to
+              AND d.doc_date > :after AND d.doc_date <= :date_to
               AND l.code IN (SELECT value FROM json_each(:layers))
         ),
         moves AS (
@@ -206,13 +234,7 @@ def _balances(conn: Connection, company_id: int, day: str, layers) -> dict[tuple
         SELECT account_id, sc, SUM(net) AS net FROM moves GROUP BY account_id, sc
         """,
         params,
-    ):
-        a = accounts[r["account_id"]]
-        key = a["account_type"] or f"{UNTYPED}:{a['account_class']}"
-        if a["two_sided"] and a["sc1_kind_id"] is not None:
-            key = _split_key(key, a["account_class"], r["net"])
-        by_key[(key, r["account_id"])] += r["net"]
-    return by_key
+    )
 
 
 def _split_key(key: str, cls: str, net: int) -> str:

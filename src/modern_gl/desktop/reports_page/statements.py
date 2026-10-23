@@ -11,11 +11,16 @@ from dataclasses import replace
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
 
-from modern_gl.desktop.reports_page.table import figure
+from modern_gl.desktop.reports_page.statement_columns import (
+    ColumnsChoice,
+    amount_columns,
+    column_period,
+    periods_of,
+)
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
-from modern_gl.desktop.widgets import button, ru_date
+from modern_gl.desktop.widgets import button
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.cash_flow import cash_flow
@@ -81,8 +86,10 @@ class StatementsPage(ReportPage):
         detail = str(settings.value(DETAIL_SETTING, ACCOUNTS))
         self.view_buttons.get(view, self.balance_button).setChecked(True)
         self.detail_buttons.get(detail, self.detail_buttons[ACCOUNTS]).setChecked(True)
+        self.columns = ColumnsChoice(self.refresh)  # months side by side, a comparison (D107)
         self.header.add_action(views)
         self.bar.insertWidget(self.bar.count() - 2, details)  # by the period: how much of it
+        self.bar.insertWidget(self.bar.count() - 2, self.columns.button)
         self.refresh()
 
     def title(self) -> str:
@@ -111,26 +118,30 @@ class StatementsPage(ReportPage):
             settings.setValue(DETAIL_SETTING, chosen)
         super().refresh()
 
+    @property
+    def periods(self):
+        """The periods of the columns (a balance: the days are their ends)."""
+        mode = self.columns.mode if hasattr(self, "columns") else "one"
+        period = (self.params.date_from, self.params.date_to)
+        return periods_of(mode, period, self.view == BALANCE)
+
     def job(self):
         cid, p, view, detail = self.s.company_id, self.params, self.view, self.detail
+        periods = self.periods
         if view == BALANCE:
-            return lambda conn: balance_sheet(conn, cid, p.date_to, p.layers, detail)
-        if view == CASH:
-            return lambda conn: cash_flow(conn, cid, p.date_from, p.date_to, p.layers, detail)
-        return lambda conn: profit_and_loss(conn, cid, p.date_from, p.date_to, p.layers, detail)
+            days = [last for _, last in periods]
+            return lambda conn: balance_sheet(conn, cid, p.date_to, p.layers, detail, days)
+        statement = cash_flow if view == CASH else profit_and_loss
+        return lambda conn: statement(conn, cid, p.date_from, p.date_to, p.layers, detail, periods)
 
     def fetch(self, conn: Connection) -> Statement:
         return self.job()(conn)
 
     def present(self, data: Statement) -> None:
+        mode = self.columns.mode if hasattr(self, "columns") else "one"
         columns = [
             Column(tr("Статья"), self._title),
-            Column(
-                self._amount_title(),
-                lambda r: None if r.kind == "heading" else figure(r.amount),
-                right=True,
-                value=lambda r: None if r.kind == "heading" else r.amount,
-            ),
+            *amount_columns(mode, self.periods, self.view == BALANCE),
         ]
         self.model.set(
             columns,
@@ -153,11 +164,6 @@ class StatementsPage(ReportPage):
         if r.kind == "subtotal" and r.title in SECTIONS:
             return tr("Итого: {what}", what=tr(r.title))
         return tr(r.title)
-
-    def _amount_title(self) -> str:
-        if self.view == BALANCE:
-            return tr("На {day}", day=ru_date(self.params.date_to.isoformat()))
-        return tr("За период")
 
     def _footer(self, data: Statement) -> None:
         untyped = any(ln.account_type == "" for ln in data.lines)
@@ -183,6 +189,9 @@ class StatementsPage(ReportPage):
         if row is None:
             return
         params = self.params
+        cell = column_period(self.columns.mode, self.periods, self.table.currentIndex().column())
+        if cell is not None:  # a figure of a month: the card of that month
+            params = replace(params, date_from=cell[0], date_to=cell[1])
         if self.view == BALANCE:  # a balance is read from the start of its year
             params = replace(params, date_from=params.date_to.replace(month=1, day=1))
         if row.kind == "account" and row.account_id is not None:
