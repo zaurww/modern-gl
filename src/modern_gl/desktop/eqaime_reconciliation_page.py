@@ -231,7 +231,7 @@ class EqaimeReconciliationDialog(QDialog):
         from modern_gl.desktop import portal_login
         from modern_gl.desktop.portal_company import company_token
 
-        token = company_token(self, self.s, self.sign_in)  # this company's, D111
+        token = company_token(self, self.s, self.sign_in)  # this company's, D113
         if not token:
             return None
         self.token = token

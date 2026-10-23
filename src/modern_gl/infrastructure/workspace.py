@@ -98,7 +98,7 @@ class Workspace:
         folder unless `path` is given (then it is remembered). The file is built aside and
         put in place only when complete, so a failure leaves nothing half-made. `mode`:
         how it is kept (D90) — a warehouse only still gets the chart, unseen; `tax_id` —
-        its VÖEN (D111)."""
+        its VÖEN (D113)."""
         path = self._free_path(name) if path is None else Path(path)
         partial = path.with_name(path.name + ".part")
         for leftover in (partial, *_sidecars(partial)):

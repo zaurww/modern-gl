@@ -97,7 +97,7 @@ def parallel_books(conn: Connection, company_id: int) -> bool:
 
 
 def company_tax_id(conn: Connection, company_id: int) -> str | None:
-    """The company's own VÖEN (D111); None — not known yet."""
+    """The company's own VÖEN (D113); None — not known yet."""
     row = conn.execute("SELECT tax_id FROM companies WHERE id = ?", (company_id,))
     return row.fetchone()[0]
 

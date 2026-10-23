@@ -1,4 +1,4 @@
--- The company's own VÖEN (D111): what the tax portal is checked against before anything is
+-- The company's own VÖEN (D113): what the tax portal is checked against before anything is
 -- loaded from it — e-qaimə, the ƏDV deposit account. NULL: not known yet (the first sign-in
 -- to the portal offers its VÖEN).
 

@@ -53,7 +53,7 @@ class CompanyCommands(LedgerBase):
             self._audit(company_id, "company", company_id, "rename", {"from": old, "to": name})
 
     def set_company_tax_id(self, company_id: int, tax_id: str | None) -> None:
-        """The company's own VÖEN (D111): 10 digits, or None — not known. Audited."""
+        """The company's own VÖEN (D113): 10 digits, or None — not known. Audited."""
         tax_id = "".join((tax_id or "").split()) or None
         if tax_id is not None and not (tax_id.isdigit() and len(tax_id) == 10):
             raise ValidationError(tr("VÖEN — 10 цифр, а не «{text}»", text=tax_id))

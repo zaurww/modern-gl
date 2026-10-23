@@ -75,7 +75,7 @@ def fields_as_in_the_app(qapp):
 
 @pytest.fixture(autouse=True)
 def no_portal_session():
-    """The portal's token is kept in memory for the program's life (D110): not from one
+    """The portal's token is kept in memory for the program's life (D112): not from one
     test into another."""
     from modern_gl.desktop import portal_login
 

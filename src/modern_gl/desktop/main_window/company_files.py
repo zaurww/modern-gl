@@ -125,7 +125,7 @@ class CompanyFiles(QMainWindow):
         if not ok:
             return False
         mode = STOCK_ONLY if kind == kinds[1] else FULL
-        tax_id = ask_tax_id(self)  # checked against the portal (D111)
+        tax_id = ask_tax_id(self)  # checked against the portal (D113)
         if tax_id is None:
             return False
         target = self._ask_file(tr("Где сохранить файл компании"), name.strip())
@@ -471,7 +471,7 @@ class CompanyFiles(QMainWindow):
         self.open_company(self.company_path)
 
     def edit_tax_id(self) -> None:
-        """The company's VÖEN (D111): what the tax portal is checked against."""
+        """The company's VÖEN (D113): what the tax portal is checked against."""
         if self.session is None:
             return
         current = company_tax_id(self.session.conn, self.session.company_id) or ""

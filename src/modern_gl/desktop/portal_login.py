@@ -42,7 +42,7 @@ class PortalLoginDialog(QDialog):
 
     def __init__(self, parent: QWidget | None = None, company: str = "") -> None:
         super().__init__(parent)
-        self.company = company  # the VÖEN wanted (D111): a token of another firm waits
+        self.company = company  # the VÖEN wanted (D113): a token of another firm waits
         # imported here: the web engine is big and only this window needs it
         from PySide6.QtWebEngineWidgets import QWebEngineView
 
@@ -169,8 +169,8 @@ def portal_token(
     company: str = "",
 ) -> str | None:
     """The token of the portal session open in the program, or a sign-in: the portal's
-    page, which closes by itself at once while the portal still knows the browser (D110).
-    `company`: the VÖEN wanted — a token of another firm is not taken (D111)."""
+    page, which closes by itself at once while the portal still knows the browser (D112).
+    `company`: the VÖEN wanted — a token of another firm is not taken (D113)."""
     if _TOKEN and token_alive(_TOKEN[0]) and company in ("", _company_of(_TOKEN[0])):
         return _TOKEN[0]
     token = ask(parent) if ask else sign_in(parent, company)

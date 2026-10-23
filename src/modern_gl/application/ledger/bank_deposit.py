@@ -1,4 +1,4 @@
-"""The ƏDV deposit account's statement from the tax portal (D110): one scenario, one
+"""The ƏDV deposit account's statement from the tax portal (D112): one scenario, one
 transaction — the operations the books do not have become bank operations (posted when
 everything is known, else drafts: «не разнесены»), those entered by hand get their
 reference, every day gets the balance by the portal."""

@@ -53,7 +53,7 @@ __all__ = [
 
 class BankModule(VatDepositCommands):
     """The bank (D47, D78): bank accounts, statements, operations, advances, the ƏDV
-    deposit account from the portal (D110)."""
+    deposit account from the portal (D112)."""
 
 
 class ConversionModule(ConversionCommands):

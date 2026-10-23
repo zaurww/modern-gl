@@ -1,5 +1,5 @@
 """The API of new.e-taxes.gov.az: the e-qaimə, as the user's etaxes-ext extension calls it
-(its `lib/api.js`, `docs/api-reference.md`), and the ƏDV deposit account (D110, as the
+(its `lib/api.js`, `docs/api-reference.md`), and the ƏDV deposit account (D112, as the
 portal's own page «ƏDV depozit hesabı» calls it).
 
 Signing in is the portal's own (ASAN İmza in its page); this client only carries the JWT

@@ -12,6 +12,7 @@ from PySide6.QtCore import (
     QModelIndex,
     QPersistentModelIndex,
     QRect,
+    QRectF,
     QSettings,
     QSize,
     Qt,
@@ -71,6 +72,9 @@ class Column:
     # the amount (minor units) behind a column of text, for Excel (D104); a money column
     # needs none
     value: Callable[[Any], int | None] | None = None
+    # a figure of one period beside others (a month): the row is selected whole, the
+    # current cell of such a column is outlined — a double click opens that period
+    cell: bool = False
 
 
 def zebra() -> bool:
@@ -287,6 +291,10 @@ class ReportDelegate(QStyledItemDelegate):
             painter.setPen(pen if isinstance(pen, QColor) else QColor(P.text))
             align = index.data(Qt.ItemDataRole.TextAlignmentRole)
             painter.drawText(opt.rect.adjusted(0, 0, -(11 + hang), 0), align, text)
+            if col.cell and index == self.table.currentIndex():
+                painter.setPen(QColor(P.accent))
+                painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+                painter.drawRoundedRect(QRectF(opt.rect).adjusted(2.5, 2.5, -2.5, -2.5), 4, 4)
             painter.restore()
         else:
             super().paint(painter, option, index)

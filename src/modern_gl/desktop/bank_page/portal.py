@@ -1,5 +1,5 @@
-"""«Загрузить с портала» on the ƏDV deposit account (D110): signed in to the portal for
-this company already — at once, else its page (D111); the operations read off the
+"""«Загрузить с портала» on the ƏDV deposit account (D112): signed in to the portal for
+this company already — at once, else its page (D113); the operations read off the
 window's thread."""
 
 from __future__ import annotations

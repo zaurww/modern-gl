@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (
     QComboBox,
     QLabel,
@@ -28,6 +29,9 @@ from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import SubcontoRow, Turnovers
 
+# ОСВ по субконто: how deep (an index of «Детализация»; -1: the deepest the account has)
+LEVELS_SETTING = "reports/subconto_levels"
+
 
 class AccountReportPage(ReportPage):
     kind = ""
@@ -39,7 +43,8 @@ class AccountReportPage(ReportPage):
         super().__init__(session, f"{tr(self.caption)} {acc.short}", params)
         self.header.title.setText(self.title())
         self.header.subtitle.setText(acc.name)
-        self.key = (self.kind, account_id, *self.params.subconto)
+        invoice = () if self.params.invoice is None else (self.params.invoice,)
+        self.key = (self.kind, account_id, *self.params.subconto, *invoice)
         self.add_filters()
         self.refresh()
 
@@ -55,11 +60,14 @@ class AccountReportPage(ReportPage):
         return f"{tr(self.caption)} {self.account.short}" + (f" · {names[-1]}" if names else "")
 
     def _subconto_names(self) -> list[str]:
-        """The counterparty (and contract) the report is about, if it is about one."""
-        return [
+        """The counterparty (and contract, and e-qaimə) the report is about, if one."""
+        names = [
             self.s.catalog.value(v).name if v is not None else tr("<не указано>")
             for v in self.params.subconto
         ]
+        if self.params.invoice is not None:
+            names.append(self.params.invoice or tr("<без e-qaimə>"))
+        return names
 
     def refresh(self) -> None:
         super().refresh()
@@ -105,7 +113,14 @@ class CardPage(AccountReportPage):
     def fetch(self, conn: Connection) -> reports.AccountCard:
         p = self.params
         return reports.account_card(
-            conn, self.s.company_id, self.account_id, p.date_from, p.date_to, p.layers, p.subconto
+            conn,
+            self.s.company_id,
+            self.account_id,
+            p.date_from,
+            p.date_to,
+            p.layers,
+            p.subconto,
+            p.invoice,
         )
 
     def present(self, data: reports.AccountCard) -> None:
@@ -176,7 +191,8 @@ class SubcontoPage(AccountReportPage):
     def add_filters(self) -> None:
         """«Метка»: only the elements with it — the related parties, the landlords (D64).
         Shown when some element of the directory has a tag. «Детализация»: counterparties,
-        or counterparties and their contracts under them — when the account has both."""
+        or counterparties and their contracts under them — when the account has both;
+        an account of settlements — down to the e-qaimə (D110). The choice is remembered."""
         self.tag = QComboBox()
         self.tag.setMinimumWidth(190)
         self.tag_label = QLabel(tr("Метка"))
@@ -184,9 +200,16 @@ class SubcontoPage(AccountReportPage):
         self.levels = QComboBox()
         self.levels.setMinimumWidth(190)
         kinds = self._kinds()
+        # a level is named by its last part: «Детализация: Договоры» — down to them; the
+        # whole way («Контрагенты / Договоры») is the column's title
         for n in range(1, len(kinds) + 1):
-            self.levels.addItem(" → ".join(kinds[:n]))
-        self.levels.setCurrentIndex(len(kinds) - 1)  # down to the contracts, as asked for
+            self.levels.addItem(kinds[n - 1], (n, False))
+        if self.s.catalog.takes_invoice(self.account_id):
+            self.levels.addItem("E-qaimə", (len(kinds), True))
+        deepest = self.levels.count() - 1  # down to the e-qaimə, as in 1C
+        chosen = QSettings().value(LEVELS_SETTING, -1, type=int)
+        chosen = chosen if isinstance(chosen, int) else -1
+        self.levels.setCurrentIndex(deepest if chosen < 0 else min(chosen, deepest))
         levels_label = QLabel(tr("Детализация"))
         levels_label.setObjectName("secondary")
         at = self.bar.count() - 2  # before «Сформировать»
@@ -197,10 +220,19 @@ class SubcontoPage(AccountReportPage):
                 self.bar.insertSpacing(at, 6)
                 at += 1
         for w in (levels_label, self.levels):
-            w.setVisible(len(kinds) > 1)
+            w.setVisible(self.levels.count() > 1)
         self._fill_tags()
         self.tag.activated.connect(lambda _: self.refresh())
-        self.levels.activated.connect(lambda _: self.refresh())
+        self.levels.activated.connect(self._choose_levels)
+
+    def _choose_levels(self, index: int) -> None:
+        QSettings().setValue(LEVELS_SETTING, -1 if index == self.levels.count() - 1 else index)
+        self.refresh()
+
+    @property
+    def detail(self) -> tuple[int, bool]:
+        """How many subconto levels, and the e-qaimə under the last."""
+        return self.levels.currentData() or (1, False)
 
     def _kinds(self) -> list[str]:
         """The names of the account's subconto in a row: Контрагенты, Договоры."""
@@ -227,12 +259,20 @@ class SubcontoPage(AccountReportPage):
 
     def job(self) -> Callable[[Connection], list[reports.SubcontoRow]]:
         self._fill_tags()  # a tag given in «Справочники» since the report was opened
-        tag_id, levels = self.tag.currentData(), self.levels.currentIndex() + 1
+        tag_id, (levels, invoices) = self.tag.currentData(), self.detail
         p, cid, account = self.params, self.s.company_id, self.account_id
 
         def read(conn: Connection) -> list[reports.SubcontoRow]:
             return reports.subconto_balance(
-                conn, cid, account, p.date_from, p.date_to, p.layers, tag_id=tag_id, levels=levels
+                conn,
+                cid,
+                account,
+                p.date_from,
+                p.date_to,
+                p.layers,
+                tag_id=tag_id,
+                levels=levels,
+                invoices=invoices,
             )
 
         return read
@@ -242,7 +282,7 @@ class SubcontoPage(AccountReportPage):
 
     def present(self, data: list[reports.SubcontoRow]) -> None:
         rows = data
-        levels = self.levels.currentIndex() + 1
+        levels, invoices = self.detail
         total = SubcontoRow(name=tr("Итого"))
         for r in rows:
             if r.depth == 0:  # a contract is in its counterparty already
@@ -257,7 +297,10 @@ class SubcontoPage(AccountReportPage):
                     )
                 )
         columns = [
-            Column(" / ".join(self._kinds()[:levels]), lambda r: "      " * r.depth + r.name)
+            Column(
+                " / ".join([*self._kinds()[:levels], *(["E-qaimə"] if invoices else [])]),
+                lambda r: "      " * r.depth + r.name,
+            )
         ]
         if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN
             columns.append(Column(tr("VÖEN"), self._tax_id, width=130))
@@ -267,7 +310,7 @@ class SubcontoPage(AccountReportPage):
         self.model.set(
             columns,
             [*rows, total] if rows else [],
-            emphasis=lambda r: r is total or (levels > 1 and r.depth == 0),
+            emphasis=lambda r: r is total or (levels + invoices > 1 and r.depth == 0),
             muted=lambda r: r.depth > 0,
             total=lambda r: r is total,
         )
@@ -278,9 +321,11 @@ class SubcontoPage(AccountReportPage):
         )
 
     def drill(self, row) -> None:
-        """The card of this counterparty (or contract) — and from it the documents."""
+        """The card of this counterparty (or contract, or e-qaimə) — and from it the
+        documents."""
         if row is not None and row.path:
-            self.open_report.emit("card", self.account_id, replace(self.params, subconto=row.path))
+            params = replace(self.params, subconto=row.path, invoice=row.invoice)
+            self.open_report.emit("card", self.account_id, params)
 
     @staticmethod
     def _in_currency(row: SubcontoRow) -> str:

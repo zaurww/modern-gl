@@ -207,7 +207,8 @@ def test_open_lines_offer_where_they_went_last_time(shop, conn):
     offered. With the phone bill, which never went anywhere, nothing is offered."""
     yanacaq, petrol, diesel, bill = socar_month(shop)
     lines = open_lines(shop.inventory, shop.company_id, [petrol, diesel])
-    assert lines == OpenLines("receipt", 2, Booking(shop.acc["26"], (yanacaq, None, None)))
+    booked = Booking(shop.acc["26"], (yanacaq, None, None))
+    assert lines == OpenLines("receipt", 2, booked, shop.acc["60"])
     lines = open_lines(shop.inventory, shop.company_id, [petrol, bill])
     assert (lines.count, lines.suggested) == (2, None)
 
@@ -233,6 +234,26 @@ def test_the_chosen_account_goes_to_every_open_line(shop, conn):
     phone = shop.inventory.load_document(shop.company_id, bill).lines[0].offset_subconto
     march = draft(shop, "2026-03-15", "Rabitə xidməti", "20", "3.60", [phone[0]])
     assert open_lines(shop.inventory, shop.company_id, [march]).suggested == chosen
+
+
+def test_the_chosen_credit_account_goes_to_the_open_lines(shop, conn):
+    """The phone bill 20.00 + 3.60 of «Rabitə MMC» booked to 26 [Rabitə] against 76, not
+    the 60 the import put in; the supplier moves with it (76 has «Контрагенты» too):
+      Dt 26 [Rabitə] / Kt 76 [Rabitə MMC]  20.00    Dt 19 / Kt 76 [Rabitə MMC]  3.60
+    The window offers the 60 the open lines have now."""
+    _, _, _, bill = socar_month(shop)
+    phone_item = rabite(shop)
+    lines = open_lines(shop.inventory, shop.company_id, [bill])
+    assert lines.offset_account_id == shop.acc["60"]
+    party = shop.inventory.load_document(shop.company_id, bill).lines[0].offset_subconto[0]
+    chosen = Booking(shop.acc["26"], (phone_item, None, None), shop.acc["76"])
+
+    result = post_drafts(shop.inventory, shop.company_id, [bill], chosen)
+
+    assert (result.posted, result.failed) == ([bill], [])
+    assert [p[:3] for p in shop.postings(bill)] == [("26", "76", 2_000), ("19", "76", 360)]
+    line = shop.inventory.load_document(shop.company_id, bill).lines[0]
+    assert (line.offset_account_id, line.offset_subconto) == (shop.acc["76"], (party, None, None))
 
 
 def test_sale_drafts_take_the_chosen_sales_group(shop, conn):
@@ -323,3 +344,24 @@ def test_dialog_left_empty_posts_like_last_time(shop, conn, qtbot):
     qtbot.addWidget(dialog)
     dialog.ok.click()
     assert (dialog.result(), dialog.booking) == (1, None)
+
+
+def test_dialog_takes_another_credit_account_and_adds_a_cost_item(shop, conn, qtbot):
+    """The phone bill: 26, a cost item not in the directory yet — «+ Добавить «Mobil
+    rabitə»» adds it right there; Kt 60 as imported is changed to 76."""
+    _, _, _, bill = socar_month(shop)
+    session = session_of(shop, conn)
+    lines = open_lines(shop.inventory, shop.company_id, [bill])
+    dialog = BatchPostDialog(session, 1, "Rabitə MMC", lines, [])
+    qtbot.addWidget(dialog)
+    assert dialog.account is not None and dialog.offset is not None
+    assert dialog.offset.currentData() == shop.acc["60"]  # what the drafts have
+    dialog.account.setCurrentIndex(dialog.account.findData(shop.acc["26"]))
+    dialog._account_chosen()
+    ((_, item),) = dialog.fields
+    item.added.emit("Mobil rabitə")
+    new = item.currentData()
+    assert new is not None and session.catalog.value(new).name == "Mobil rabitə"
+    dialog.offset.setCurrentIndex(dialog.offset.findData(shop.acc["76"]))
+    dialog.ok.click()
+    assert dialog.booking == Booking(shop.acc["26"], (new, None, None), shop.acc["76"])

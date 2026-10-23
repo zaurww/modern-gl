@@ -459,7 +459,7 @@ class BankPage(ReportPage):
         self.refresh()
 
     def load_from_portal(self) -> None:
-        """The ƏDV deposit account from the portal (D110), again from its last day."""
+        """The ƏDV deposit account from the portal (D112), again from its last day."""
         if self.place is None:
             return
         last = self.statements[-1].date_to if self.statements else None

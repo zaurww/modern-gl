@@ -1,4 +1,4 @@
-"""The ƏDV deposit account from the tax portal (D110): its operations read into the bank
+"""The ƏDV deposit account from the tax portal (D112): its operations read into the bank
 module's statements — what each one is, which of them the books already have, the
 balance at the end of each day.
 

@@ -1,4 +1,4 @@
-"""The ƏDV deposit account from the tax portal (D110).
+"""The ƏDV deposit account from the tax portal (D112).
 
 The portal's operations of 01–03.10.2026 (as `vatacc/…/operation/find.outbox` gives them),
 the balance on the portal now 1 000.00. Hand-calculated:
@@ -357,7 +357,7 @@ def test_the_bank_page_loads_the_deposit_from_the_portal(qtbot, ledger, firm, mo
     s.working_date = date(2026, 10, 5)
     asked: list[date] = []
     monkeypatch.setattr(module, "ask_date", lambda _w, _t, _p, start: asked.append(start) or start)
-    ledger.set_company_tax_id(cid, OWN_TIN)  # the portal's firm (D111)
+    ledger.set_company_tax_id(cid, OWN_TIN)  # the portal's firm (D113)
     token = fake_token(OWN_TIN)
     portal = FakeDepositPortal(as_json(PORTAL), token=token)
     monkeypatch.setattr(module, "EtaxesClient", lambda token: EtaxesClient(token, send=portal))

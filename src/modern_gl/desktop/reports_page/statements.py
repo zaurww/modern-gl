@@ -158,7 +158,7 @@ class StatementsPage(ReportPage):
         if r.kind == "account":
             return INDENT * 2 + r.title
         if r.kind == "item":
-            return INDENT * 3 + (r.title or tr("Без статьи"))
+            return INDENT * (2 if r.under_line else 3) + (r.title or tr("Без статьи"))
         if r.kind == "line":
             return INDENT + tr(r.title)
         if r.kind == "subtotal" and r.title in SECTIONS:
@@ -183,9 +183,9 @@ class StatementsPage(ReportPage):
         self.footer.setStyleSheet(f"color: {P.red};" if data.unbalanced else "")
 
     def drill(self, row: Line | None) -> None:
-        """An account or an item: its card for the period (the balance sheet: the year up
-        to the day). A line in «Кратко»: open the accounts. The profit of the period in the
-        balance sheet: the profit and loss."""
+        """An account, an item or a line of one account: its card for the period (the
+        balance sheet: the year up to the day). A line in «Кратко»: open the accounts. The
+        profit of the period in the balance sheet: the profit and loss."""
         if row is None:
             return
         params = self.params
@@ -194,7 +194,7 @@ class StatementsPage(ReportPage):
             params = replace(params, date_from=cell[0], date_to=cell[1])
         if self.view == BALANCE:  # a balance is read from the start of its year
             params = replace(params, date_from=params.date_to.replace(month=1, day=1))
-        if row.kind == "account" and row.account_id is not None:
+        if row.kind in ("account", "line") and row.account_id is not None:
             self.open_report.emit("card", row.account_id, params)
         elif row.kind == "item" and row.account_id is not None:
             self.open_report.emit("card", row.account_id, replace(params, subconto=(row.value_id,)))
