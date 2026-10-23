@@ -52,6 +52,21 @@ def test_february_starts_with_januarys_money_and_transfers_are_no_flow(books, le
     assert flow.unbalanced == 0
 
 
+def test_a_fee_paid_straight_to_the_result_is_operating(books, ledger):
+    """The short chart writes a bank fee as Dt 80 (or 99) Kt 51: money spent working, not
+    financing (D102). February: 1 050 operating as above, minus the fee 7 → 1 043."""
+    conn, cid = books
+    code = {
+        r["code"]: r["id"]
+        for r in conn.execute("SELECT id, code FROM accounts WHERE company_id = ?", (cid,))
+    }
+    ledger.post_new(cid, "2026-02-27", [PostingInput(code["99"], code["51"], "7")])
+    figures = dict(shown(cash_flow(conn, cid, "2026-02-01", "2026-02-28")))
+    assert figures["Финансовый результат"] == -700
+    assert figures["Чистый поток от операционной деятельности"] == 104_300
+    assert "Финансовая деятельность" not in figures
+
+
 def test_the_page_shows_the_cash_flow(window, qtbot):
     from modern_gl.desktop.reports_page import StatementsPage
 

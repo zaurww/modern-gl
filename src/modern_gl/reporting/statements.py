@@ -28,8 +28,12 @@ CLOSING_TYPES = ("profit_loss", "retained_earnings")
 class Line:
     title: str  # Russian, for tr(): a type's name, or a caption of the statement
     amount: int = 0
-    kind: str = "line"  # line | subtotal | total | heading
+    kind: str = "line"  # line | account | item | subtotal | total | heading
     account_type: str | None = None  # the type of a «line» (UNTYPED: none)
+    # the detail under a line of the profit and loss (D102): an «account», an «item» of
+    # it (its first subconto, None: not given); their titles are names, not for tr()
+    account_id: int | None = None
+    value_id: int | None = None
 
 
 @dataclass

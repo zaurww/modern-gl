@@ -159,8 +159,117 @@ def test_every_title_of_the_statements_has_azerbaijani_translation(books):
     conn, cid = books
     titles = {ln.title for ln in balance_sheet(conn, cid, "2026-02-28").lines}
     titles |= {ln.title for ln in profit_and_loss(conn, cid, "2026-01-01", "2026-12-31").lines}
-    titles |= {"Доходы без типа", "Расходы без типа"}
+    titles |= {"Доходы без типа", "Расходы без типа", "НДС с продаж"}
     assert sorted(t for t in titles if t not in AZ) == []
+
+
+# ---- the short chart (1C 7.7 «classic»): everything through 46 and 80 (D102) ----------
+#
+#   1 05.03  Dt 50             Kt 46            1 180   a sale for cash, with ƏDV
+#   2 05.03  Dt 46             Kt 68.2            180   its ƏDV (68.2 — the output VAT role)
+#   3 05.03  Dt 46             Kt 41              600   its cost
+#   4 10.03  Dt 26 [Аренда]    Kt 50              100
+#   5 12.03  Dt 26 [Связь]     Kt 50               40
+#   6 15.03  Dt 44 [Транспорт] Kt 50               30
+#   7 20.03  Dt 80             Kt 50                5   a bank fee straight to the result
+#   8 22.03  Dt 50             Kt 80                8   an exchange gain, the same
+#   9 31.03  Dt 46             Kt 26 [Аренда]     100   the month's expenses closed into 46
+#  10 31.03  Dt 46             Kt 26 [Связь]       40
+#  11 31.03  Dt 46             Kt 44 [Транспорт]   30
+#  12 31.03  Dt 46             Kt 80              230   the result: 1 180 − 180 − 600 − 170
+#  13 31.03  Dt 80             Kt 68.3             20   the profit tax
+#
+# Profit and loss of March: sales 1 180, ƏDV −180, cost −600, gross 400; operating −170
+# (26: −140 = rent −100 + communication −40; 44: −30) → 230; other income 8, other
+# expense −5 → 233 before tax; tax −20 → net 213 — what is left on 80: 230 + 8 − 5 − 20.
+# Before D102 the closing 9–11 hid the expenses inside 46 and 7, 8, 13 were not read.
+
+
+@pytest.fixture
+def classic(ledger: Ledger):
+    from modern_gl.infrastructure.chart_csv import apply_chart_template
+
+    cid = ledger.create_company("Классика")
+    apply_chart_template(ledger, cid, "classic", "ru")
+
+    def value(kind: str, name: str) -> int:
+        return ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, kind), name)
+
+    rent, phone, transport = (value("cost_item", n) for n in ("Аренда", "Связь", "Транспорт"))
+    goods = [value("item", "Бумага"), value("warehouse", "Склад")]
+    codes = ("26", "41", "44", "46", "50", "68.2", "68.3", "80")
+    acc = {c: ledger.account_id(cid, c) for c in codes}
+
+    def p(dt, ct, amount, dt_sc=(), ct_sc=()):
+        return PostingInput(acc[dt], acc[ct], amount, dt_sc, ct_sc)
+
+    ledger.post_new(cid, "2026-02-27", [p("41", "50", "600", goods)])  # the goods
+    for day, posting in [
+        ("2026-03-05", p("50", "46", "1180")),
+        ("2026-03-05", p("46", "68.2", "180")),
+        ("2026-03-05", p("46", "41", "600", ct_sc=goods)),
+        ("2026-03-10", p("26", "50", "100", [rent])),
+        ("2026-03-12", p("26", "50", "40", [phone])),
+        ("2026-03-15", p("44", "50", "30", [transport])),
+        ("2026-03-20", p("80", "50", "5")),
+        ("2026-03-22", p("50", "80", "8")),
+        ("2026-03-31", p("46", "26", "100", ct_sc=[rent])),
+        ("2026-03-31", p("46", "26", "40", ct_sc=[phone])),
+        ("2026-03-31", p("46", "44", "30", ct_sc=[transport])),
+        ("2026-03-31", p("46", "80", "230")),
+        ("2026-03-31", p("80", "68.3", "20")),
+    ]:
+        ledger.post_new(cid, day, [posting])
+    return ledger.conn, cid
+
+
+def test_the_short_chart_shows_the_expenses_where_they_were_spent(classic):
+    conn, cid = classic
+    march = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31")
+    assert shown(march) == [
+        ("Выручка", 118_000),
+        ("НДС с продаж", -18_000),
+        ("Себестоимость продаж", -60_000),
+        ("Валовая прибыль", 40_000),
+        ("Операционные расходы", -17_000),
+        ("Операционная прибыль", 23_000),
+        ("Прочие доходы", 800),
+        ("Прочие расходы", -500),
+        ("Прибыль до налогообложения", 23_300),
+        ("Налог на прибыль", -2_000),
+        ("Чистая прибыль (убыток)", 21_300),
+    ]
+
+
+def test_a_line_opens_into_its_accounts_and_their_items(classic):
+    from modern_gl.reporting.profit_loss import ACCOUNTS, ITEMS
+
+    conn, cid = classic
+
+    def part(statement, title: str, size: int):
+        start = next(i for i, ln in enumerate(statement.lines) if ln.title == title)
+        return [
+            (ln.kind, ln.title.split()[0], ln.amount)
+            for ln in statement.lines[start : start + size]
+        ]
+
+    accounts = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31", detail=ACCOUNTS)
+    assert part(accounts, "Себестоимость продаж", 4) == [
+        ("line", "Себестоимость", -60_000),
+        ("account", "46", -60_000),
+        ("subtotal", "Валовая", 40_000),
+        ("line", "Операционные", -17_000),
+    ]
+    items = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31", detail=ITEMS)
+    assert part(items, "Операционные расходы", 6) == [
+        ("line", "Операционные", -17_000),
+        ("account", "26", -14_000),
+        ("item", "Аренда", -10_000),
+        ("item", "Связь", -4_000),
+        ("account", "44", -3_000),
+        ("item", "Транспорт", -3_000),
+    ]
+    assert items.lines[-1].amount == 21_300  # the detail does not change the sums
 
 
 @pytest.fixture

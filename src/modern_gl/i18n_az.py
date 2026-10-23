@@ -1687,4 +1687,6 @@ AZ: dict[str, str] = {
     "Чистый поток от операционной деятельности": "Əməliyyat fəaliyyətindən xalis axın",
     "Чистый поток от инвестиционной деятельности": "İnvestisiya fəaliyyətindən xalis axın",
     "Чистый поток от финансовой деятельности": "Maliyyə fəaliyyətindən xalis axın",
+    # ---- profit and loss: expenses where they were spent, accounts and items (D102) --------
+    "НДС с продаж": "Satışdan ƏDV",
 }

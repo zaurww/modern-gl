@@ -22,7 +22,6 @@ FINANCING = frozenset(
         "share_capital",
         "other_equity",
         "retained_earnings",
-        "profit_loss",
         "short_term_loan",
         "long_term_loan",
         "other_long_term_liability",
