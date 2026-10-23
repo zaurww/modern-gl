@@ -238,4 +238,18 @@ QFrame#card {{
 QFrame#card QLabel {{ background: transparent; border: none; }}
 QFrame#note QLabel {{ color: {P.text}; background: transparent; }}
 QFrame#note QPushButton#flat:hover {{ background: {P.selection}; }}
+/* the period with the mouse (D105): quiet cells, the chosen ones blue */
+QFrame#periodWindow {{
+    background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 12px;
+}}
+QLabel#periodYear {{ color: {P.text}; font-weight: 600; }}
+QPushButton#periodPreset, QPushButton#periodCell {{
+    background: transparent; border: none; border-radius: 7px; color: {P.text};
+    padding: 6px 12px;
+}}
+QPushButton#periodPreset {{ text-align: left; }}
+QPushButton#periodPreset:hover, QPushButton#periodCell:hover {{ background: {P.field_hover}; }}
+QPushButton#periodPreset:checked, QPushButton#periodCell:checked {{
+    background: {P.accent_soft}; color: {P.accent}; font-weight: 600;
+}}
 """

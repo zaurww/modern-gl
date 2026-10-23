@@ -179,3 +179,46 @@ def test_the_arrows_move_by_the_same_kind_of_period():
     assert shift(year, -1) == (d("2025-01-01"), d("2025-12-31"))
     week = (d("2026-10-19"), d("2026-10-25"))
     assert shift(week, 1) == (d("2026-10-26"), d("2026-11-01"))
+
+
+def test_the_period_with_the_mouse(qtbot):
+    """▾ opens the panel: the chosen months are blue; a month, Shift — a stretch of
+    months, a usual period, a quarter of the year before, the exact dates (D105)."""
+    from PySide6.QtCore import QDate, Qt
+    from PySide6.QtTest import QTest
+
+    from modern_gl.desktop.period_field import PeriodField
+
+    field = PeriodField((d("2026-10-01"), d("2026-10-31")), TODAY)
+    qtbot.addWidget(field)
+    field.show()
+
+    def panel():
+        field.show_presets()
+        return field.window_shown
+
+    window = panel()
+    assert [b.isChecked() for b in window.month_buttons].index(True) == 9  # October
+    assert window.preset_buttons["м"].isChecked()
+    window.month_buttons[2].click()  # March
+    assert field.period() == (d("2026-03-01"), d("2026-03-31"))
+    assert not window.isVisible()
+
+    panel().choose_month(5, extend=True)  # Shift+click on May: March … May
+    assert field.period() == (d("2026-03-01"), d("2026-05-31"))
+    assert field.edit.text() == "01.03 — 31.05.2026"
+
+    panel().preset_buttons["пм"].click()
+    assert field.period() == (d("2026-09-01"), d("2026-09-30"))
+
+    window = panel()
+    window._step_year(-1)
+    assert window.year_label.text() == "2025"
+    window.quarter_buttons[1].click()
+    assert field.period() == (d("2025-04-01"), d("2025-06-30"))
+
+    window = panel()
+    window.first.setDate(QDate(2026, 1, 10))
+    window.last.setDate(QDate(2026, 1, 20))
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    assert field.period() == (d("2026-01-10"), d("2026-01-20"))
