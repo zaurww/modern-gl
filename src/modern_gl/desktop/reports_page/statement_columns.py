@@ -84,7 +84,7 @@ def amount_columns(mode: str, periods: list[Period], balance: bool) -> list[Colu
         group = tr("На конец месяца")
     elif balance and mode == QUARTERS and len(periods) > 1:
         group = tr("На конец квартала")
-    columns = [_figure_column(title, i, group) for i, title in enumerate(titles)]
+    columns = [_figure_column(title, i, group, len(titles) > 1) for i, title in enumerate(titles)]
     if mode in COMPARISONS:
         columns.append(_column(tr("Разница"), difference))
         columns.append(_column("%", percent))
@@ -134,8 +134,10 @@ def _part_title(mode: str, period: Period, with_year: bool) -> str:
     return name
 
 
-def _figure_column(title: str, index: int, group: str) -> Column:
-    return _column(title, lambda amounts: amounts[index], group)
+def _figure_column(title: str, index: int, group: str, cell: bool) -> Column:
+    column = _column(title, lambda amounts: amounts[index], group)
+    column.cell = cell
+    return column
 
 
 def _column(title: str, how, group: str = "") -> Column:

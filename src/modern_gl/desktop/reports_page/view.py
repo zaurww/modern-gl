@@ -77,6 +77,8 @@ class ReportParams:
     # a card of one counterparty or contract, opened from ОСВ по субконто: the values
     # from the first subconto on (None = «не указано»)
     subconto: tuple[int | None, ...] = ()
+    # and of one e-qaimə of it ("" — the lines without one; D110)
+    invoice: str | None = None
 
     @property
     def layers(self) -> tuple[str, ...]:
@@ -274,6 +276,7 @@ class ReportPage(QWidget):
                 *self.period.period(),
                 self.book.currentIndex(),
                 self.params.subconto,
+                self.params.invoice,
             )
             book = self.s.parallel_books and self.has_book
             self.header.subtitle.setText(self.params.describe(book))

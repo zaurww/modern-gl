@@ -121,10 +121,13 @@ class ReceiptDraftCommands(StockCommands):
         line_id: int,
         account_id: int,
         subconto: Sequence[int | None] = (),
+        offset_account_id: int | None = None,
     ) -> None:
         """Give a purchase draft's line without an item and without an account the account
         its value goes to (D73: drafts posted in bulk, like the supplier's last purchase).
-        A line that has an item or an account already is left as it is."""
+        A line that has an item or an account already is left as it is. `offset_account_id`:
+        the line is owed on it instead (76, not the 60 of the import; D110) — its supplier
+        and contract go with it where the account has their directories."""
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
             if doc["doc_type"] != "receipt":
@@ -140,13 +143,41 @@ class ReceiptDraftCommands(StockCommands):
                 "AND item_id IS NULL AND cost_account_id IS NULL",
                 (account_id, *sc, company_id, document_id, line_id),
             )
+            if offset_account_id is not None:
+                self._move_offset(company_id, document_id, line_id, offset_account_id)
             self._audit(
                 company_id,
                 "inventory_document",
                 document_id,
                 "fill_expense_account",
-                {"line_id": line_id, "account_id": account_id},
+                {
+                    "line_id": line_id,
+                    "account_id": account_id,
+                    "offset_account_id": offset_account_id,
+                },
             )
+
+    def _move_offset(
+        self, company_id: int, document_id: int, line_id: int, account_id: int
+    ) -> None:
+        """The line owed on `account_id`: each of its subconto takes the value of the same
+        directory the line had (the supplier, its contract), else none."""
+        account = self._account(company_id, account_id)
+        line = self.conn.execute(
+            "SELECT offset_sc1, offset_sc2, offset_sc3 FROM inventory_lines "
+            "WHERE company_id = ? AND document_id = ? AND id = ?",
+            (company_id, document_id, line_id),
+        ).fetchone()
+        had = {}
+        for value_id in (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]):
+            if value_id is not None:
+                had[self._subconto_value(company_id, value_id)["kind_id"]] = value_id
+        sc = [had.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3)]
+        self.conn.execute(
+            "UPDATE inventory_lines SET offset_account_id = ?, offset_sc1 = ?, offset_sc2 = ?, "
+            "offset_sc3 = ? WHERE company_id = ? AND document_id = ? AND id = ?",
+            (account_id, *sc, company_id, document_id, line_id),
+        )
 
     def _write_receipt_draft(
         self,

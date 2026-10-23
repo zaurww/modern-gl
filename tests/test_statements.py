@@ -281,12 +281,14 @@ def test_a_line_opens_into_its_accounts_and_their_items(classic):
         ]
 
     accounts = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31", detail=ACCOUNTS)
-    assert part(accounts, "Себестоимость продаж", 4) == [
+    # the only account of a line is not repeated under it: the line itself leads to it
+    assert part(accounts, "Себестоимость продаж", 3) == [
         ("line", "Себестоимость", -60_000),
-        ("account", "46", -60_000),
         ("subtotal", "Валовая", 40_000),
         ("line", "Операционные", -17_000),
     ]
+    cost = next(ln for ln in accounts.lines if ln.title == "Себестоимость продаж")
+    assert cost.account_id == ledger_account(conn, cid, "46")
     items = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31", detail=ITEMS)
     assert part(items, "Операционные расходы", 6) == [
         ("line", "Операционные", -17_000),
@@ -297,6 +299,26 @@ def test_a_line_opens_into_its_accounts_and_their_items(classic):
         ("item", "Транспорт", -3_000),
     ]
     assert items.lines[-1].amount == 21_300  # the detail does not change the sums
+
+
+def ledger_account(conn, cid: int, code: str) -> int:
+    return Ledger(conn).account_id(cid, code)
+
+
+def test_a_cost_written_straight_to_the_sales_account_is_cost_of_sales(classic):
+    """Dt 46 Kt 60: a carriage of goods already sold, written on the sales account — a
+    cost of sales, not less revenue (demo year: «Daşınma xərcləri», D102)."""
+    conn, cid = classic
+    acc = {c: ledger_account(conn, cid, c) for c in ("46", "60", "80")}
+    ledger = Ledger(conn)
+    carrier = ledger.add_subconto_value(
+        cid, ledger.subconto_kind_id(cid, "counterparty"), "Перевозчик"
+    )
+    ledger.post_new(cid, "2026-04-10", [PostingInput(acc["46"], acc["60"], "50", (), [carrier])])
+    ledger.post_new(cid, "2026-04-30", [PostingInput(acc["80"], acc["46"], "50")])
+    april = profit_and_loss(conn, cid, "2026-04-01", "2026-04-30")
+    assert shown(april)[:2] == [("Себестоимость продаж", -5_000), ("Валовая прибыль", -5_000)]
+    assert april.lines[-1].amount == -5_000
 
 
 @pytest.fixture
@@ -354,7 +376,7 @@ def test_a_line_of_the_page_leads_to_the_card(window, qtbot):
     page.detail_buttons["items"].click()
     qtbot.waitUntil(lambda: any(r.kind == "item" for r in page.model.rows))
     item = next(r for r in page.model.rows if r.kind == "item")
-    assert page.model.rows[page.model.rows.index(item) - 1].kind in ("account", "item")
+    assert page.model.rows[page.model.rows.index(item) - 1].kind in ("line", "account", "item")
     page.drill(item)
     card = window.stack.currentWidget()
     assert isinstance(card, CardPage)
@@ -367,7 +389,8 @@ def test_a_line_of_the_page_leads_to_the_card(window, qtbot):
 
 def test_the_page_by_months_leads_to_the_card_of_a_month(window, qtbot):
     """«Колонки: По месяцам» on January–March: a column per month and «Итого»; a double
-    click on February of an account — its card for February (D107)."""
+    click on February of an account (or a line of one account) — its card for February
+    (D107)."""
     from modern_gl.desktop.reports_page import StatementsPage
     from modern_gl.desktop.reports_page.account import CardPage
 
@@ -381,7 +404,7 @@ def test_the_page_by_months_leads_to_the_card_of_a_month(window, qtbot):
     qtbot.waitUntil(lambda: page.model.columnCount() == 5)
     titles = [page.model.title(i) for i in range(5)]
     assert titles == ["Статья", "Январь", "Февраль", "Март", "Итого"]
-    account = next(r for r in page.model.rows if r.kind == "account")
+    account = next(r for r in page.model.rows if r.account_id is not None)
     row = page.model.rows.index(account)
     page.table.setCurrentIndex(page.model.index(row, 2))
     page.drill(account)
