@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from modern_gl.domain.dates import ru_date
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting.overview import Attention, attention_source
 
 PURCHASE, SALE = "receipt", "sale"
 
@@ -72,3 +75,18 @@ def trade_documents(
         (company_id, *types, limit),
     )
     return [TradeDocument(**dict(r)) for r in rows]
+
+
+@attention_source
+def awaiting_invoices(conn: Connection, company_id: int, day: str) -> list[Attention]:
+    """«Bu gün» (D86): purchases whose goods came before their e-qaimə (D119) — a
+    forgotten one is ƏDV not taken; the oldest one's day tells how long they wait."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS n, MIN(doc_date) AS oldest FROM inventory_documents "
+        "WHERE company_id = ? AND awaits_invoice = 1 AND doc_date <= ?",
+        (company_id, day),
+    ).fetchone()
+    if not row["n"]:
+        return []
+    text = tr("Покупки ждут e-qaimə, с {date}", date=ru_date(row["oldest"]))
+    return [Attention(text, row["n"], ("purchases",))]

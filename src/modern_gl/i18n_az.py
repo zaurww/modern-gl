@@ -1855,4 +1855,5 @@ AZ: dict[str, str] = {
     "сумма другая — проверьте покупку": "məbləğ fərqlidir — alışı yoxlayın",
     "e-qaimə дописана в покупки: {n}": "E-qaimə alışlara əlavə edildi: {n}",
     "Загрузить: черновиков {n}, в покупки {m}": "Yüklə: qaralama {n}, alışlara {m}",
+    "Покупки ждут e-qaimə, с {date}": "E-qaimə gözləyən alışlar, {date} tarixindən",
 }
