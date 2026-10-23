@@ -158,3 +158,5 @@
   теперь понимает неразрывный пробел из Excel (тест).
 - «Долг» 13: границы месяца — одна `domain/dates.month_days`; `month_end`, обе
   `month_bounds` и `reports_page/view.month_of` — через неё.
+- «Долг» 13: дерево плана счетов в отчёте — одна `report_common.fold_chart(accounts, make,
+  keep)`; ОСВ и сравнение книг — через неё.

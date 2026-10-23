@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
@@ -215,10 +217,42 @@ def _accounts(conn: Connection, company_id: int) -> dict[int, Row]:
     }
 
 
-def _subtree(accounts: dict[int, Row], root_id: int) -> list[int]:
-    children = defaultdict(list)
+class Adds(Protocol):
+    def add(self, other: Any) -> None: ...
+
+
+def _children(accounts: dict[int, Row]) -> dict[int | None, list[int]]:
+    """parent -> its accounts, in the order of `accounts` (by code)."""
+    children: dict[int | None, list[int]] = defaultdict(list)
     for a in accounts.values():
         children[a["parent_id"]].append(a["id"])
+    return children
+
+
+def fold_chart[R: Adds](
+    accounts: dict[int, Row], make: Callable[[Row, int], R], keep: Callable[[R], bool]
+) -> tuple[list[R], list[R]]:
+    """The rows of a report in the order of the chart, a group adding up its children:
+    `make` — an account's row at a depth with its own figures; `keep` false drops the
+    row with its subtree. Returns the rows kept and the top rows (all, for a total)."""
+    children = _children(accounts)
+    rows: list[R] = []
+
+    def visit(account_id: int, depth: int) -> R:
+        row = make(accounts[account_id], depth)
+        position = len(rows)
+        rows.append(row)
+        for child in children[account_id]:
+            row.add(visit(child, depth + 1))
+        if not keep(row):
+            del rows[position:]  # a silent account and its silent subtree
+        return row
+
+    return rows, [visit(top, 0) for top in children[None]]
+
+
+def _subtree(accounts: dict[int, Row], root_id: int) -> list[int]:
+    children = _children(accounts)
     result, stack = [], [root_id]
     while stack:
         current = stack.pop()
