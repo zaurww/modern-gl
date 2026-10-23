@@ -148,7 +148,10 @@ def test_same_vöen_twice_is_asked_about(session, qtbot, monkeypatch):
     assert all(v.name != "Альфа, филиал" for v in session.catalog.all_values(cp))
 
 
-def test_subconto_report_shows_vöen_once_there_is_one(session, qtbot):
+def test_subconto_report_shows_vöen_on_request(session, qtbot):
+    """VÖEN is rarely needed in the report: hidden until the user ticks it in the
+    captions' menu; then shown in every subconto report (remembered), once somebody has
+    one. Other columns can be hidden too — a Dt/Kt pair as one; «по умолчанию» undoes."""
     from datetime import date
 
     from modern_gl.application.ledger import PostingInput
@@ -174,5 +177,22 @@ def test_subconto_report_shows_vöen_once_there_is_one(session, qtbot):
     s.ledger.set_subconto_value_tax(cid, alfa, "1234567890")
     s.catalog.reload()
     page.build()
+    assert page.model.headerData(1, Qt.Orientation.Horizontal) != "VÖEN"  # not asked for
+    assert "VÖEN" in [c.title for c in page.model.all_columns]  # but can be
+    page.columns_choice().choose("VÖEN", True)
+    page.build()
     assert page.model.headerData(1, Qt.Orientation.Horizontal) == "VÖEN"
     assert page.model.index(0, 1).data() == "1234567890"
+    other = SubcontoPage(s, acc["60"].id, params)  # another one remembers it
+    qtbot.addWidget(other)
+    other.build()
+    assert other.model.headerData(1, Qt.Orientation.Horizontal) == "VÖEN"
+
+    page.columns_choice().choose("Обороты", False)
+    page.build()
+    groups = [c.group for c in page.model.columns]
+    assert "Обороты" not in groups and groups.count("Сальдо на конец") == 2
+    page.columns_choice().reset()
+    page.build()
+    assert page.model.headerData(1, Qt.Orientation.Horizontal) != "VÖEN"
+    assert [c.group for c in page.model.columns].count("Обороты") == 2

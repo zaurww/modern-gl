@@ -13,7 +13,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QAction, QFontMetrics, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCursor, QFontMetrics, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop.period_field import PeriodField
+from modern_gl.desktop.reports_page.column_choice import ColumnChoice
 from modern_gl.desktop.reports_page.export import copy_to_clipboard, save_to_excel
 from modern_gl.desktop.reports_page.table import (
     GROUP_GAP,
@@ -120,7 +121,9 @@ class ReportPage(QWidget):
     open_document = Signal(int)
     open_report = Signal(str, int, object)  # kind, account id, ReportParams
 
+    key: tuple[Any, ...] = ("report",)  # what opens the page again; [0] is its kind
     has_period = True
+    choosable_columns = True  # «Колонки…»: a page with a choice of its own says no
     has_book = True  # the book choice, when the company keeps parallel books
     summary_on_top = True
 
@@ -203,8 +206,16 @@ class ReportPage(QWidget):
         self.model = ReportModel()
         self.table = QTableView()
         self.table.setObjectName("report")
-        self.table.setHorizontalHeader(GroupHeader(self.table))
+        captions = GroupHeader(self.table)
+        self.table.setHorizontalHeader(captions)
         self.table.setModel(self.model)
+        # a right click on the captions: which columns to show
+        captions.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        captions.customContextMenuRequested.connect(
+            lambda pos: self.choose_columns(captions.mapToGlobal(pos))
+        )
+        if self.choosable_columns:
+            self.model.shown = lambda col: self.columns_choice().shown(col)
         self.table.setItemDelegate(ReportDelegate(self.table))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         # several rows: Ctrl+C copies them (D104); one: the whole report
@@ -257,12 +268,25 @@ class ReportPage(QWidget):
 
     def more_items(self) -> list[MenuItem]:
         """«⋯» of every report: to Excel; a page adds its own in front."""
+        columns: list[MenuItem] = [
+            (tr("Колонки…"), lambda: self.choose_columns(QCursor.pos())),
+            None,
+        ]
         return [
+            *(columns if self.choosable_columns else []),
             (tr("В Excel…"), lambda: save_to_excel(self)),
             (tr("Копировать для Excel  Ctrl+C"), lambda: copy_to_clipboard(self)),
         ]
 
     # ---- common ----------------------------------------------------------------------
+
+    def columns_choice(self) -> ColumnChoice:
+        """Remembered for the kind of report (the first part of its key)."""
+        return ColumnChoice(self.key[0], self.refresh)
+
+    def choose_columns(self, at) -> None:
+        if self.choosable_columns:
+            self.columns_choice().popup(self.model.all_columns, self, at)
 
     def is_dirty(self) -> bool:
         return False

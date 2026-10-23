@@ -302,8 +302,8 @@ class SubcontoPage(AccountReportPage):
                 lambda r: "      " * r.depth + r.name,
             )
         ]
-        if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN
-            columns.append(Column(tr("VÖEN"), self._tax_id, width=130))
+        if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN: on request
+            columns.append(Column(tr("VÖEN"), self._tax_id, width=130, optional=True))
         columns += turnover_columns()
         if any(r.currency_closing for r in rows):  # a foreign partner: USD and EUR apart
             columns.append(Column(tr("В валюте на конец"), self._in_currency, width=200))
