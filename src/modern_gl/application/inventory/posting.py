@@ -41,7 +41,7 @@ _SEQUENCE_RANK = {
 }
 
 
-def _sequence_key(doc: Row) -> tuple[str, int, int]:
+def sequence_key(doc: Row) -> tuple[str, int, int]:
     return doc["doc_date"], _SEQUENCE_RANK[doc["doc_type"]], doc["number"]
 
 
@@ -279,7 +279,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
 
     def _withdraw_after(self, company_id: int, doc: Row) -> list[int]:
         """Withdraw every posted document that comes after `doc` (latest first)."""
-        key = _sequence_key(doc)
+        key = sequence_key(doc)
         later = sorted(
             (
                 row
@@ -288,9 +288,9 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
                     "WHERE company_id = ? AND status = 'posted' AND doc_date >= ? AND id <> ?",
                     (company_id, doc["doc_date"], doc["id"]),
                 )
-                if _sequence_key(row) > key
+                if sequence_key(row) > key
             ),
-            key=_sequence_key,
+            key=sequence_key,
             reverse=True,
         )
         for row in later:
@@ -342,7 +342,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             self._apply_sorted(company_id, document_id, docs)
 
     def _apply_sorted(self, company_id: int, document_id: int | None, docs: list[Row]) -> None:
-        for doc in sorted(docs, key=_sequence_key):
+        for doc in sorted(docs, key=sequence_key):
             if doc["id"] == document_id:
                 self._apply(company_id, doc)
                 continue

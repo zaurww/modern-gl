@@ -1687,4 +1687,6 @@ AZ: dict[str, str] = {
     "Чистый поток от операционной деятельности": "Əməliyyat fəaliyyətindən xalis axın",
     "Чистый поток от инвестиционной деятельности": "İnvestisiya fəaliyyətindən xalis axın",
     "Чистый поток от финансовой деятельности": "Maliyyə fəaliyyətindən xalis axın",
+    "банковская операция №{n} от {date}: {error}": "{date} tarixli №{n} bank əməliyyatı: {error}",
+    "конвертация №{n} от {date}: {error}": "{date} tarixli №{n} konvertasiya: {error}",
 }

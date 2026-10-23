@@ -1,16 +1,53 @@
 """What documents of modules share (currency conversion, bank operations): their GL
-documents are written and removed only by them, never by the journal."""
+documents are written and removed only by them, never by the journal.
+
+Every module that makes GL documents can build them again from its own documents from a
+day on (`rebuild_postings`, D101): after a rule is fixed, the books follow the documents.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import date
+from collections.abc import Iterable, Sequence
+from datetime import date, timedelta
 
 from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.domain.dates import iso_date
 from modern_gl.infrastructure.db import Row
+
+# what a GL document says, posting by posting — as `DocumentCommands._same_content` compares
+POSTING_CONTENT = (
+    "p.debit_account_id, p.credit_account_id, p.amount, p.dt_sc1, p.dt_sc2, p.dt_sc3, "
+    "p.ct_sc1, p.ct_sc2, p.ct_sc3, p.memo, p.currency_id, p.currency_amount, p.invoice, "
+    "p.invoice_kind"
+)
+
+
+def rebuild_start(company: Row, since: date | str) -> str:
+    """The first day a rebuild may change (ISO): `since`, or the day after the closed
+    period — what is closed stays as it is (D5)."""
+    day = iso_date(since)
+    closed = company["closed_through"]
+    if closed is not None and day <= closed:
+        return (date.fromisoformat(closed) + timedelta(days=1)).isoformat()
+    return day
+
+
+def document_contents(rows: Iterable[Row]) -> dict[int, tuple]:
+    """(date, memo, postings) of each GL document, from rows whose columns are
+    `document_id`, `doc_date`, `doc_memo`, then `POSTING_CONTENT`, ordered by line."""
+    contents: dict[int, tuple] = {}
+    for row in rows:
+        doc_id = row["document_id"]
+        _, _, postings = contents.setdefault(doc_id, (row["doc_date"], row["doc_memo"], []))
+        postings.append(tuple(row)[3:])
+    return contents
+
+
+def changed_documents(before: dict[int, tuple], after: dict[int, tuple]) -> list[int]:
+    """GL documents whose date, memo or postings differ (made or removed ones too)."""
+    return sorted(i for i in before.keys() | after.keys() if before.get(i) != after.get(i))
 
 
 class ModuleDocumentCommands(ChartCommands, DocumentCommands):
@@ -57,6 +94,23 @@ class ModuleDocumentCommands(ChartCommands, DocumentCommands):
         self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
         self._insert_postings(company_id, doc_id, postings)
         self._post(company_id, doc_id)
+
+    def _rebuild_module_document(
+        self,
+        company_id: int,
+        doc_id: int,
+        doc_date: date | str,
+        postings: Sequence[PostingInput],
+        memo: str,
+    ) -> bool:
+        """Write a posted module document again from its source; True if it changed.
+        A document that may not change (a landed cost uses it…) stops the rebuild."""
+        doc = self._document(company_id, doc_id)
+        if self._same_content(doc, doc_date, postings, memo):
+            return False
+        self._require_changeable(company_id, doc)
+        self._write_module_document(company_id, doc_id, doc_date, postings, memo)
+        return True
 
     def _remove_document(self, company_id: int, doc: Row) -> None:
         snapshot = self._snapshot(doc)
