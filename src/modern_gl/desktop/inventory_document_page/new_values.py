@@ -3,6 +3,8 @@ warehouse, added right from the line."""
 
 from __future__ import annotations
 
+from functools import partial
+
 from PySide6.QtCore import (
     QPersistentModelIndex,
     QTimer,
@@ -22,6 +24,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
 )
 from modern_gl.desktop.inventory_document_page.form import InventoryDocumentForm
 from modern_gl.desktop.inventory_page import ItemDialog
+from modern_gl.desktop.new_cell_value import add_typed_value, ask_add, offer_new_value
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -29,7 +32,7 @@ from modern_gl.i18n import tr
 class NewValuesPart(InventoryDocumentForm):
     def _connect_delegate(self) -> None:
         self.delegate.error.connect(self.show_error)
-        self.delegate.add_value = self._add_typed_value
+        self.delegate.add_value = partial(add_typed_value, self.s)
         # Deferred: the cell editor has to be fully closed before a dialog takes focus.
         self.delegate.unknown_value.connect(
             lambda index, kind_id, text: QTimer.singleShot(
@@ -45,36 +48,16 @@ class NewValuesPart(InventoryDocumentForm):
             )
         )
 
-    def _ask_add(self, text: str, directory: str) -> bool:
-        answer = QMessageBox.question(
-            self,
-            tr("Новый элемент справочника"),
-            tr("«{text}» нет в справочнике «{kind}». Добавить?", text=text, kind=directory),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        return answer == QMessageBox.StandardButton.Yes
-
     def _create_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
-        kind = self.s.catalog.kinds[kind_id]
-        if not index.isValid():
-            return
-        if not self._ask_add(text, kind):
-            edit_again(self.table, index, text)  # the name, to correct it
-            return
-        owner = self.model.owner_at(index.row(), self.model.columns[index.column()])
-        value_id = self._add_typed_value(kind_id, text, owner)
-        self.model.setData(self.model.index(index.row(), index.column()), value_id)
-        edit_next(self.table, index)
-
-    def _add_typed_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
-        value_id = self.s.ledger.add_subconto_value(
-            self.s.company_id, kind_id, text, owner_id=owner_id
+        offer_new_value(
+            self,
+            self.s,
+            self.table,
+            index,
+            kind_id,
+            text,
+            lambda row, column: self.model.owner_at(row, self.model.columns[column]),
         )
-        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
-        kind = self.s.catalog.kinds[kind_id]
-        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
-        return value_id
 
     def _create_item(self, index: QPersistentModelIndex, text: str) -> None:
         if not index.isValid():
@@ -135,7 +118,7 @@ class NewValuesPart(InventoryDocumentForm):
         """A warehouse the list lacks; picked as "+ Добавить «…»" it goes in at once."""
         if not index.isValid():
             return
-        if ask and not self._ask_add(text, tr("Склад")):
+        if ask and not ask_add(self, text, tr("Склад")):
             edit_again(self.table, index, text)
             return
         try:

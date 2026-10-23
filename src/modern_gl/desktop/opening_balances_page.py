@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from fractions import Fraction
+from functools import partial
 
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -14,13 +15,13 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QVBoxLayout,
     QWidget,
 )
 
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import load_document, opening_document
+from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.opening_postings import CREDIT_AMOUNT, OpeningPostingsModel, OpeningRow
 from modern_gl.desktop.postings import (
     AMOUNT,
@@ -128,7 +129,7 @@ class OpeningBalancesPage(QWidget):
         delegate = PostingsDelegate(self.s.catalog, self, EntryHints())
         delegate.error.connect(self.show_error)
         delegate.unknown_value.connect(self._offer_new_value)
-        delegate.add_value = self._add_value
+        delegate.add_value = partial(add_typed_value, self.s)
         self.table = PostingsTable(self.model, delegate)
         for column in range(CT, CT + 4):  # the counter-account is always the same
             self.table.setColumnHidden(column, True)
@@ -379,32 +380,7 @@ class OpeningBalancesPage(QWidget):
         QTimer.singleShot(0, lambda: self._create_value(index, kind_id, text))
 
     def _create_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
-        kind = self.s.catalog.kinds[kind_id]
-        answer = QMessageBox.question(
-            self,
-            tr("Новый элемент справочника"),
-            tr("«{text}» нет в справочнике «{kind}». Добавить?", text=text, kind=kind),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if not index.isValid():
-            return
-        if answer != QMessageBox.StandardButton.Yes:
-            self.table.edit_again(index, text)  # the name, to correct it
-            return
-        owner = self.model.owner_at(index.row(), index.column())
-        value_id = self._add_value(kind_id, text, owner)
-        self.model.setData(self.model.index(index.row(), index.column()), value_id)
-        self.table.edit_next(index)
-
-    def _add_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
-        value_id = self.s.ledger.add_subconto_value(
-            self.s.company_id, kind_id, text, owner_id=owner_id
-        )
-        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
-        kind = self.s.catalog.kinds[kind_id]
-        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
-        return value_id
+        offer_new_value(self, self.s, self.table, index, kind_id, text, self.model.owner_at)
 
     def save(self, post: bool) -> bool:
         if self.model.read_only:

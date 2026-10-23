@@ -14,6 +14,7 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.desktop import theme
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.postings import AMOUNT, CT, DT, PostingsTable
 from modern_gl.desktop.session import Session
 from modern_gl.infrastructure.chart_csv import apply_chart_template
@@ -165,7 +166,7 @@ def test_a_known_name_is_not_offered_to_add(page, qtbot):
     m = page.model
     m.setData(m.index(0, DT), account(page, "20"))
     kind = page.s.catalog.accounts[account(page, "20")].sc_kinds[0]
-    page._add_value(kind, "Аренда", None)
+    add_typed_value(page.s, kind, "Аренда")
     page.table.setCurrentIndex(m.index(0, DT + 1))
     page.table.edit(m.index(0, DT + 1))
     type_text(focused(), "аренда")

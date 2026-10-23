@@ -7,6 +7,7 @@ from typing import cast
 
 from PySide6.QtCore import (
     QEvent,
+    QModelIndex,
     QPersistentModelIndex,
     Qt,
     Signal,
@@ -33,7 +34,9 @@ from modern_gl.desktop.cell_editing import (
     CellEditor,
     attach_account_list,
     attach_list,
+    edit_again,
     edit_current,
+    edit_next,
     holds_on_group,
     resolve_choice,
     tabbed_in,
@@ -243,6 +246,12 @@ class InventoryLinesTable(QTableView):
         self.setTabKeyNavigation(True)
         self.verticalHeader().setDefaultSectionSize(34)
         self.configure_columns()
+
+    def edit_again(self, index: QModelIndex | QPersistentModelIndex, text: str) -> None:
+        edit_again(self, index, text)
+
+    def edit_next(self, index: QModelIndex | QPersistentModelIndex) -> None:
+        edit_next(self, index)
 
     def configure_columns(self) -> None:
         model = self.model()

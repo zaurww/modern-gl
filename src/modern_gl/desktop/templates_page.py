@@ -7,6 +7,8 @@ column holds formulas: S is the operation amount, L1, L2… other lines.
 
 from __future__ import annotations
 
+from functools import partial
+
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
@@ -24,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.ledger import TemplateLine
 from modern_gl.application.queries import TemplateData, list_templates, load_template
+from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.postings import PostingRow, PostingsDelegate, PostingsModel, PostingsTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
@@ -276,7 +279,7 @@ class TemplatePage(QWidget):
         self.btn_save.clicked.connect(lambda: self.save())
         self.btn_delete.clicked.connect(self.delete)
         self.delegate.error.connect(self.show_error)
-        self.delegate.add_value = self._add_value
+        self.delegate.add_value = partial(add_typed_value, self.s)
         self.delegate.unknown_value.connect(
             lambda index, kind_id, text: QTimer.singleShot(
                 0, lambda: self._create_value(index, kind_id, text)
@@ -313,34 +316,9 @@ class TemplatePage(QWidget):
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
 
-    def _add_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
-        value_id = self.s.ledger.add_subconto_value(
-            self.s.company_id, kind_id, text, owner_id=owner_id
-        )
-        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
-        kind = self.s.catalog.kinds[kind_id]
-        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
-        return value_id
-
     def _create_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
         """A name typed with the list closed that its directory lacks: add it?"""
-        kind = self.s.catalog.kinds[kind_id]
-        answer = QMessageBox.question(
-            self,
-            tr("Новый элемент справочника"),
-            tr("«{text}» нет в справочнике «{kind}». Добавить?", text=text, kind=kind),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if not index.isValid():
-            return
-        if answer != QMessageBox.StandardButton.Yes:
-            self.table.edit_again(index, text)  # the name, to correct it
-            return
-        owner = self.model.owner_at(index.row(), index.column())
-        value_id = self._add_value(kind_id, text, owner)
-        self.model.setData(self.model.index(index.row(), index.column()), value_id)
-        self.table.edit_next(index)
+        offer_new_value(self, self.s, self.table, index, kind_id, text, self.model.owner_at)
 
     def _changed(self, *_) -> None:
         self._update_preview()
