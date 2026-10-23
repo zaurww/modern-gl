@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from modern_gl.application.bank.balance import account_balance
 from modern_gl.application.bank.operations import IN, OUT
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.domain.dates import iso_date
@@ -188,23 +189,11 @@ def _drafts(conn: Connection, place: BankPlace, params: dict) -> list[StatementL
 
 def place_balance(conn: Connection, company_id: int, place: BankPlace, day: str) -> int:
     """The balance of a bank account at the end of the day, in its currency."""
-    amount = "COALESCE(p.currency_amount, 0)" if place.currency_id is not None else "p.amount"
-    row = conn.execute(
-        f"""
-        SELECT COALESCE(SUM(CASE
-            WHEN p.debit_account_id = :a
-                 AND (:v IS NULL OR :v IN (p.dt_sc1, p.dt_sc2, p.dt_sc3)) THEN {amount}
-            ELSE 0 END), 0)
-             - COALESCE(SUM(CASE
-            WHEN p.credit_account_id = :a
-                 AND (:v IS NULL OR :v IN (p.ct_sc1, p.ct_sc2, p.ct_sc3)) THEN {amount}
-            ELSE 0 END), 0)
-        FROM postings p
-        JOIN documents d ON d.id = p.document_id AND d.status = 'posted'
-        JOIN layers l ON l.id = d.layer_id AND l.code = 'common'
-        WHERE p.company_id = :c AND d.doc_date <= :day
-          AND (p.debit_account_id = :a OR p.credit_account_id = :a)
-        """,
-        {"c": company_id, "a": place.account_id, "v": place.value_id, "day": iso_date(day)},
-    ).fetchone()
-    return row[0]
+    return account_balance(
+        conn,
+        company_id,
+        place.account_id,
+        place.value_id,
+        day,
+        in_currency=place.currency_id is not None,
+    )

@@ -199,3 +199,6 @@
 - `reporting/invoice_rules.py`: `invoice_accounts`, `turnover_sides`, `is_accrual`,
   `is_vat_accrual`; `invoices.py` и `eqaime_reconciliation.py` — через него, цифры прежние.
   Тест `test_invoice_rules.py` — правило по проводкам.
+- «Долг» 12, пункт 2: остаток «счёт + субконто на дату» — один `application/bank/balance.py::
+  account_balance` (элемент или весь счёт, в манатах или в валюте); `place_balance` и
+  `counterparty_balance` — через него, API прежний. Тест с ручными цифрами.
