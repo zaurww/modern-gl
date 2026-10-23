@@ -469,6 +469,12 @@ def test_chart_fits_the_window_without_sideways_scrolling(window):
         assert chart.table.isColumnHidden(4) is not subconto_shown
         bar = chart.table.horizontalScrollBar()
         assert bar.maximum() == 0, width  # the type is never pushed off the edge
+    window.resize(1900, 820)
+    QApplication.processEvents()
+    table = chart.table
+    used = sum(table.columnWidth(i) for i in range(5))
+    assert used < table.viewport().width() - 200  # the free room on the right, not after the name
+    assert table.columnWidth(1) == chart._content_width(1)  # the name as wide as its text
 
 
 def test_change_type_from_chart_menu(window):

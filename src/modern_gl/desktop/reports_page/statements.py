@@ -68,6 +68,7 @@ def segments(captions: list[tuple[str, str]], on_click) -> tuple[QWidget, dict[s
 
 class StatementsPage(ReportPage):
     key = ("statements",)
+    choosable_columns = False  # periods: «Колонки ▾» by the period chooses them
     view_changed = Signal()  # the sidebar chooses the pinned view shown (D114)
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:

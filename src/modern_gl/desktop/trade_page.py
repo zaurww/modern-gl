@@ -16,7 +16,13 @@ from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import EmptyState, button, hide_when_viewing, status_icon
+from modern_gl.desktop.widgets import (
+    EmptyState,
+    MenuItem,
+    button,
+    hide_when_viewing,
+    status_icon,
+)
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
@@ -88,20 +94,23 @@ class TradePage(ReportPage):
         self.new_button = self.header.primary(
             tr(self.kind.new), lambda: self.new_inventory_document.emit(doc_type)
         )
-        # the portal (ASAN İmza): e-qaimə of a period as drafts; the month against the book
-        self.more = self.header.more(
-            lambda: [
-                (tr("E-qaimə с портала…"), self.import_eqaime),
-                (tr("Сверка с порталом…"), self.reconcile),
-            ]
-        )
-        hide_when_viewing(session.read_only, self.new_button, self.more)
+        hide_when_viewing(session.read_only, self.new_button)
         self.stack.removeWidget(self.empty)
         self.empty = EmptyState("○", tr(self.kind.empty), tr(self.kind.empty_hint))
         self.stack.addWidget(self.empty)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.selectionModel().selectionChanged.connect(lambda *_: self._show_post_button())
         self.refresh()
+
+    def more_items(self) -> list[MenuItem]:
+        """The portal (ASAN İmza): e-qaimə of a period as drafts; the month against the
+        book — in the report's own «⋯», not in a second one."""
+        portal: list[MenuItem] = [
+            (tr("E-qaimə с портала…"), self.import_eqaime),
+            (tr("Сверка с порталом…"), self.reconcile),
+            None,
+        ]
+        return ([] if self.s.read_only else portal) + super().more_items()
 
     def title(self) -> str:
         return tr(self.kind.title)
@@ -117,7 +126,7 @@ class TradePage(ReportPage):
             [
                 Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100),
                 Column(tr("№"), lambda r: r.number, width=60),
-                Column(tr(self.kind.counterparty), lambda r: r.counterparties, fill=True),
+                Column(tr(self.kind.counterparty), lambda r: r.counterparties),
                 Column(tr("E-qaimə"), lambda r: r.invoice, width=150),
                 Column(tr("Сумма"), lambda r: r.amount, money=True, width=120),
                 Column(tr("ƏDV"), lambda r: r.vat, money=True, width=100),

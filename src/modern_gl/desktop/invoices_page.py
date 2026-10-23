@@ -70,8 +70,8 @@ class InvoicesPage(ReportPage):
         columns = [
             Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100),
             Column(tr("E-qaimə"), lambda r: r.invoice, width=170),
-            Column(tr("Контрагент"), self._partners, warn=self._mixed, fill=True),
-            Column(tr("VÖEN"), self._tax_id, width=120),
+            Column(tr("Контрагент"), self._partners, warn=self._mixed),
+            Column(tr("VÖEN"), self._tax_id, width=120, optional=True),
             Column(tr("Договор"), self._contract, width=180),
             Column(tr("Дебет"), lambda r: r.debit, money=True, width=120),
             Column(tr("Кредит"), lambda r: r.credit, money=True, width=120),

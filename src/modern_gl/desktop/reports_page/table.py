@@ -61,7 +61,7 @@ class Column:
     get: Callable[[Any], Any]
     money: bool = False
     # 0 = a name: as wide as its text (at most NAME_MAX), the first to narrow; otherwise
-    # a report fits the column to its text, the chart of accounts keeps this width
+    # the column is fitted to its text and keeps it
     width: int = 0
     icon: Callable[[Any], Any] | None = None  # optional QIcon in front of the text
     warn: Callable[[Any], str | None] | None = None  # text -> red cell with a tooltip
@@ -75,6 +75,8 @@ class Column:
     # a figure of one period beside others (a month): the row is selected whole, the
     # current cell of such a column is outlined — a double click opens that period
     cell: bool = False
+    optional: bool = False  # hidden until the user shows it (a right click on the captions)
+    key: str = ""  # what the column choice remembers it by; the caption when empty
 
 
 def zebra() -> bool:
@@ -112,10 +114,13 @@ class ReportModel(QAbstractTableModel):
         self.section: Callable[[Any], bool] = lambda r: False
         self.banded: list[bool] = []
         self.bands = True  # a list (the chart of accounts) goes without
+        self.all_columns: list[Column] = []  # with the ones the user hid
+        self.shown: Callable[[Column], bool] = lambda c: not c.optional
 
     def set(self, columns, rows, emphasis=None, muted=None, total=None, section=None) -> None:
         self.beginResetModel()
-        self.columns, self.rows = columns, rows
+        self.all_columns, self.rows = columns, rows
+        self.columns = columns[:1] + [c for c in columns[1:] if self.shown(c)]
         self.emphasis = emphasis or (lambda r: False)
         self.muted = muted or (lambda r: False)
         self.total = total or (lambda r: False)  # a rule above it

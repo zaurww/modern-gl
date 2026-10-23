@@ -252,7 +252,7 @@ def test_page_finds_an_invoice_by_vöen(firm, qtbot):
     assert [r.invoice for r in page.model.rows] == ["MT2410001", "MT2410777"]
     page.search.setText("1234567890")  # Alfa's VÖEN
     assert [r.invoice for r in page.model.rows] == ["MT2410001"]
-    assert page.model.index(0, 8).data() == "680.00 Кт"
+    assert page.model.index(0, 7).data() == "680.00 Кт"  # VÖEN only searched, not shown
     opened: list[int] = []
     page.open_document.connect(opened.append)
     page.drill(page.model.rows[0])

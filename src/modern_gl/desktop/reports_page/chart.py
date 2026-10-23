@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import AccountInfo
 from modern_gl.desktop.account_dialog import AccountDialog
 from modern_gl.desktop.reports_page.view import (
+    NAME_MAX,
     Column,
     MenuAction,
     ReportPage,
@@ -29,9 +30,8 @@ from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
-# the chart of accounts: its columns, and the least width of the ones that narrow
-TYPE_COLUMN, SIDE_COLUMN, SUBCONTO_COLUMN = 2, 3, 4
-CHART_NAME_MIN, CHART_TYPE_MIN, CHART_SUBCONTO_MIN = 240, 180, 200
+# the columns that narrow in a narrow window, in this order, and how far
+NARROWING = (("subconto", 200), ("type", 180), ("name", 240))
 
 
 class ChartPage(ReportPage):
@@ -74,13 +74,13 @@ class ChartPage(ReportPage):
 
         # what the account is (the type) reads right after its name; the details follow
         columns = [
-            Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, width=100),
-            Column(tr("Наименование"), name),
+            Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, key="code"),
+            Column(tr("Наименование"), name, key="name"),
             Column(
-                tr("Тип"), self._type_text, width=290, icon=lambda a: class_icon(a.account_class)
+                tr("Тип"), self._type_text, icon=lambda a: class_icon(a.account_class), key="type"
             ),
-            Column(tr("Сальдо"), self._side_text, width=110),
-            Column(tr("Субконто"), subconto, width=280),
+            Column(tr("Сальдо"), self._side_text, key="side"),
+            Column(tr("Субконто"), subconto, key="subconto"),
         ]
         self.model.set(
             columns,
@@ -101,29 +101,46 @@ class ChartPage(ReportPage):
 
     def _layout_columns(self) -> None:
         hh = self.table.horizontalHeader()
-        for i, col in enumerate(self.model.columns):
-            if col.width:
-                hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
-                self.table.setColumnWidth(i, col.width)
-            else:
-                hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
+        hh.setStretchLastSection(False)
+        self._widths = {}
+        for i in range(len(self.model.columns)):
+            hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
+            self._widths[i] = self._content_width(i)
         self._fit_columns()
 
     def _fit_columns(self) -> None:
-        """No sideways scrolling: the type and subconto columns narrow with the window
-        (their text cut with "…"), and in a narrow one the subconto column goes first:
-        it is the least needed, and the account dialog shows it."""
-        width = self.table.viewport().width()
-        if width <= 0 or not self.model.columns:
+        """Every column as wide as its text (a name at most NAME_MAX), the free room on
+        the right, as in a report. No sideways scrolling: in a narrow window the subconto,
+        the type and the name narrow (their text cut with "…"), and then the subconto
+        column goes: it is the least needed, and the account dialog shows it."""
+        room = self.table.viewport().width()
+        if room <= 0 or not self._widths:
             return
-        side = self._content_width(SIDE_COLUMN)
-        self.table.setColumnWidth(SIDE_COLUMN, side)
-        rest = width - self.model.columns[0].width - side
-        narrow = rest < CHART_NAME_MIN + CHART_TYPE_MIN + CHART_SUBCONTO_MIN
-        share = rest * 2 // 5 if narrow else rest * 3 // 10  # the subconto's room to the type
-        self.table.setColumnWidth(TYPE_COLUMN, max(CHART_TYPE_MIN, min(290, share)))
-        self.table.setColumnWidth(SUBCONTO_COLUMN, max(CHART_SUBCONTO_MIN, min(280, rest // 4)))
-        self.table.setColumnHidden(SUBCONTO_COLUMN, narrow)
+        keys = [c.key for c in self.model.columns]
+        subconto = keys.index("subconto") if "subconto" in keys else None
+        widths = self._fitted(room, keys, None)
+        narrow = subconto is not None and sum(widths.values()) > room
+        if narrow:
+            widths = self._fitted(room, keys, subconto)
+        if subconto is not None:
+            self.table.setColumnHidden(subconto, narrow)
+        for i, width in widths.items():
+            self.table.setColumnWidth(i, width)
+
+    def _fitted(self, room: int, keys: list[str], hidden: int | None) -> dict[int, int]:
+        widths = {i: w for i, w in self._widths.items() if i != hidden}
+        if "name" in keys:  # the user may hide even the name
+            name = keys.index("name")
+            widths[name] = min(widths[name], NAME_MAX)
+        over = sum(widths.values()) - room
+        for key, least in NARROWING:
+            i = keys.index(key) if key in keys else None
+            if i is None or i not in widths or over <= 0:
+                continue
+            give = min(over, max(0, widths[i] - least))
+            widths[i] -= give
+            over -= give
+        return widths
 
     def _current(self):
         idx = self.table.currentIndex()
