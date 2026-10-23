@@ -229,6 +229,33 @@ def test_gl_posting_cannot_be_allocated_twice(batch):
     assert cost_sources(b.inventory.conn, b.company_id) == []
 
 
+def test_picker_and_posting_count_what_is_allocated_alike(batch):
+    """The broker's 90.00: a posted batch took 50.00. Another document sees 40.00 left
+    and may take no more; the batch itself, when edited, sees all 90.00 free."""
+    b = batch
+    taken = post_batch(b, [broker_fee(b, "50")])
+    conn = b.inventory.conn
+    left = {s.document_id: s.left for s in cost_sources(conn, b.company_id, taken)}
+    assert left == {b.broker_doc: 9_000}
+    draft = b.inventory.create_landed_cost_draft(
+        b.company_id, "2026-03-06", [LandedCostTarget(b.line_a)], [broker_fee(b, "41")]
+    )
+    assert [s.left for s in cost_sources(conn, b.company_id, draft)] == [4_000]
+    with pytest.raises(ValidationError, match=r"уже распределено 50.00, осталось 40.00"):
+        b.inventory.post_document(b.company_id, draft)
+    with b.inventory.reposting(b.company_id, taken):
+        b.inventory.update_landed_cost_draft(
+            b.company_id,
+            taken,
+            "2026-03-05",
+            [LandedCostTarget(b.line_a)],
+            [broker_fee(b, "90")],
+            "value",
+            "Партия 1",
+        )
+    assert cost_sources(conn, b.company_id) == []
+
+
 def test_gl_document_taken_as_charge_is_protected(batch):
     b = batch
     post_batch(b, [broker_fee(b)])

@@ -131,7 +131,8 @@ def test_no_sql_in_widgets():
 SQLITE_ONLY = re.compile(
     r"\b(GROUP_CONCAT|INSERT\s+OR|REPLACE\s+INTO|PRAGMA|sqlite_master|rowid|lastrowid|"
     r"executescript|iif|instr|ifnull|julianday|typeof|total_changes)\b|"
-    r"COLLATE\s+NOCASE|\b(date|datetime|strftime)\('",
+    r"COLLATE\s+NOCASE|\b(date|datetime|strftime)\('|"
+    r"\bIS\s+NOT\s+\?",  # PostgreSQL: IS DISTINCT FROM ?
     re.IGNORECASE,
 )
 

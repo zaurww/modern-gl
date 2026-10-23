@@ -462,7 +462,7 @@ def remembered_sale_subconto(
         SELECT l.memo, l.cost_sc1, l.cost_sc2, l.cost_sc3,
                ? IN (l.offset_sc1, l.offset_sc2, l.offset_sc3) AS same_party
         FROM inventory_lines l JOIN inventory_documents d ON d.id = l.document_id
-        WHERE l.company_id = ? AND d.doc_type = 'sale' AND d.id IS NOT ?
+        WHERE l.company_id = ? AND d.doc_type = 'sale' AND d.id IS DISTINCT FROM ?
           AND l.item_id IS ? AND (l.item_id IS NOT NULL OR l.memo <> '')
           AND COALESCE(l.cost_sc1, l.cost_sc2, l.cost_sc3) IS NOT NULL
         ORDER BY d.doc_date DESC, d.id DESC, l.line_no

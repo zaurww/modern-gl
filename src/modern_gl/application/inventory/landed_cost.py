@@ -30,6 +30,7 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor, round_ratio
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
+from modern_gl.reporting.inventory.costs import allocated_sql
 
 explain_owner(
     "landed_cost",
@@ -529,10 +530,7 @@ class LandedCostCommands(StockCommands):
             company_id, charge["source_document_id"], charge["source_line_no"]
         )
         used = self.conn.execute(
-            "SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c "
-            "JOIN inventory_documents d ON d.id = c.document_id "
-            "WHERE c.company_id = ? AND c.source_document_id = ? AND c.source_line_no = ? "
-            "AND d.status = 'posted' AND c.document_id <> ?",
+            "SELECT " + allocated_sql("?", "?", "?"),
             (company_id, charge["source_document_id"], charge["source_line_no"], doc["id"]),
         ).fetchone()[0]
         if used + charge["amount"] > posting["amount"]:
