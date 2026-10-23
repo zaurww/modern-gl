@@ -47,6 +47,7 @@ from modern_gl.application.bank.deposit_import import (
     parse_operation,
     portal_loads,
 )
+from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.etaxes import EtaxesClient, Response, TokenExpired
@@ -239,6 +240,55 @@ def test_the_import_posts_what_is_known_and_drafts_the_rest(ledger, firm):
     [(op, _why)] = done.drafts
     own, own_lines = lines(ledger, cid, ids["id20261003110000"])
     assert (op.kind, own.status, own_lines) == (TRANSFER, "draft", [(None, 20000, "")])
+
+
+def test_the_preview_shows_what_the_import_does_and_writes_nothing(ledger, firm):
+    cid, place = firm["cid"], firm["place"]
+    before = ledger.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    seen = ledger.bank.preview_vat_deposit(cid, place, operations(), 100000)
+    assert [(r.op.reference, r.state, r.lines, r.document_id) for r in seen.rows] == [
+        (
+            "2619000000000001",
+            POSTED,
+            (("62.1", "MT260411000001", 54000), ("62.1", "MT260812000002", 5400)),
+            None,
+        ),
+        ("2619000000000002", POSTED, (("60.1", "MT261011000003", 1244),), None),
+        ("2619000000000003", POSTED, (("68.2", "", 94000),), None),
+        ("id20261003100000", POSTED, (("62.1", "MT260912395884", 9000),), None),
+        ("id20261003110000", DRAFT, (("", "", 20000),), None),
+    ]
+    assert seen.rows[-1].reason  # why the transfer is a draft
+    assert ledger.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == before
+    assert by_reference(ledger, cid) == {}
+    assert portal_loads(ledger.conn, cid, place) == []
+    # the import does the same and names the documents
+    done = ledger.bank.import_vat_deposit(cid, place, operations(), 100000)
+    assert [(r.op.reference, r.state) for r in done.rows] == [
+        (r.op.reference, r.state) for r in seen.rows
+    ]
+    assert all(r.document_id for r in done.rows)
+
+
+def test_only_the_operations_taken_are_loaded_as_drafts(ledger, firm):
+    """Alfa's 12.44 and the budget's 940.00 of 02.10 taken, as drafts: the period is not
+    remembered — Beta's 594.00 of 01.10 was left out."""
+    cid, place = firm["cid"], firm["place"]
+    take = {"2619000000000002", "2619000000000003"}
+    done = ledger.bank.import_vat_deposit(
+        cid, place, operations(), 100000, ("2026-10-01", "2026-10-02"), take=take, post=False
+    )
+    assert (done.posted, len(done.drafts), done.counterparties) == (0, 2, 0)
+    assert set(by_reference(ledger, cid)) == take
+    statuses = {
+        r["status"]
+        for r in ledger.conn.execute("SELECT status FROM documents WHERE company_id = ?", (cid,))
+    }
+    assert statuses == {"draft"}
+    assert portal_loads(ledger.conn, cid, place) == []
+    # all of the period taken: remembered
+    ledger.bank.import_vat_deposit(cid, place, operations(), 100000, ("2026-10-01", "2026-10-02"))
+    assert loaded_spans(portal_loads(ledger.conn, cid, place)) == [("2026-10-01", "2026-10-02")]
 
 
 def test_every_day_gets_the_balance_by_the_portal(ledger, firm):
@@ -439,24 +489,52 @@ def deposit_session(ledger, firm, monkeypatch):
 
 
 def test_the_window_loads_the_period_chosen(qtbot, firm, deposit_session):
-    from modern_gl.desktop.bank_page.portal import DepositDialog
+    """02.10: Alfa's 12.44 and the budget's 940.00 shown before anything is written; the
+    budget's left out — only Alfa's posted, the period not remembered."""
+    from PySide6.QtCore import Qt
+
+    from modern_gl.desktop.bank_page.portal import DONE, PREVIEW, DepositDialog
 
     s, _messages, token, portal = deposit_session
-    dialog = DepositDialog(s, firm["place"], sign_in=lambda _parent: token, today=date(2026, 10, 3))
+    place = firm["place"]
+    dialog = DepositDialog(s, place, sign_in=lambda _parent: token, today=date(2026, 10, 3))
     qtbot.addWidget(dialog)
     assert dialog.period() == (date(2026, 10, 1), date(2026, 10, 3))  # this month to today
     assert dialog.loaded.text() == tr("С портала в этот счёт ещё ничего не загружалось.")
     dialog.period_bar.set_period(date(2026, 10, 2), date(2026, 10, 2))
-    with qtbot.waitSignal(dialog.accepted, timeout=5000):
-        dialog.load()
+    dialog.load()
+    qtbot.waitUntil(lambda: dialog.step == PREVIEW, timeout=5000)
     # the operations asked from the period's first day up to today: the balance of 02.10
     # is counted back from now
     asked = portal.calls[1][2]
     assert (asked["creationDateFrom"], asked["creationDateTo"]) == ("2026-10-02", "2026-10-03")
-    assert dialog.imported is not None and dialog.imported.posted == 2
-    assert loaded_spans(portal_loads(s.conn, s.company_id, firm["place"])) == [
-        ("2026-10-02", "2026-10-02")
-    ]
+    assert by_reference(s.ledger, s.company_id) == {}  # nothing written yet
+    assert [(r.op.amount, r.state) for r in dialog.rows.rows()] == [(1244, POSTED), (94000, POSTED)]
+    # the books have nothing yet: after 02.10 they would be 0 − 12.44 − 940.00 = −952.44
+    assert (
+        dialog.balances.text()
+        == tr(
+            "На портале сейчас {portal} ₼, в программе {books} ₼", portal="1 000.00", books="0.00"
+        )
+        + tr(", после загрузки будет {after} ₼", after="-952.44")
+        + tr(" — разница {diff} ₼", diff="1 952.44")
+        + "."
+    )
+
+    dialog.rows.topLevelItem(1).setCheckState(0, Qt.CheckState.Unchecked)
+    assert tr(", после загрузки будет {after} ₼", after="-12.44") in dialog.balances.text()
+    dialog.post_button.click()
+    assert dialog.step == DONE  # what became of them: in the window, not closed
+    assert dialog.imported is not None and dialog.imported.posted == 1
+    assert set(by_reference(s.ledger, s.company_id)) == {"2619000000000002"}
+    assert portal_loads(s.conn, s.company_id, place) == []  # the budget's was left out
+    [row] = dialog.rows.rows()
+    assert row.document_id is not None
+    item = dialog.rows.topLevelItem(0)
+    dialog.rows.itemDoubleClicked.emit(item, 0)
+    assert (
+        dialog.chosen_document == row.document_id and dialog.result() == dialog.DialogCode.Accepted
+    )
 
 
 def test_a_period_loaded_already_is_asked_about(qtbot, ledger, firm, deposit_session, monkeypatch):
@@ -516,7 +594,7 @@ def test_a_day_loaded_before_it_ended_is_suggested_again(qtbot, ledger, firm, de
 
 def test_the_bank_page_has_one_menu_with_the_portal(qtbot, firm, deposit_session, monkeypatch):
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QDialog, QPushButton
+    from PySide6.QtWidgets import QPushButton
 
     from modern_gl.application.bank import BankAccount
     from modern_gl.desktop.bank_page import BankPage
@@ -540,15 +618,21 @@ def test_the_bank_page_has_one_menu_with_the_portal(qtbot, firm, deposit_session
 
     def run(dialog):
         dialog.sign_in = lambda _parent: token
-        with qtbot.waitSignal(dialog.accepted, timeout=5000):
-            dialog.load()
-        return QDialog.DialogCode.Accepted
+        dialog.load()
+        qtbot.waitUntil(lambda: dialog.step == module.PREVIEW, timeout=5000)
+        dialog.post_button.click()
+        dialog.rows.itemDoubleClicked.emit(dialog.rows.topLevelItem(0), 0)  # Beta's 594.00
+        return dialog.result()
 
     monkeypatch.setattr(module.DepositDialog, "exec", run)
     monkeypatch.setattr(
         module.DepositDialog, "period", lambda _self: (date(2026, 10, 1), date(2026, 10, 3))
     )
+    opened: list[int] = []
+    page.open_document.connect(opened.append)
+    told = len(messages)
     page.load_from_portal()
-    assert messages[-1] == tr(
-        "С портала: проведено {posted}, не разнесено {drafts}", posted=4, drafts=1
-    ) + tr(", новых контрагентов {n}", n=1)
+    assert len(messages) == told  # what the import did is said in the window, not a toast
+    beta = by_reference(s.ledger, s.company_id)["2619000000000001"]
+    document = s.conn.execute("SELECT document_id FROM bank_operations WHERE id = ?", (beta,))
+    assert opened == [document.fetchone()[0]]

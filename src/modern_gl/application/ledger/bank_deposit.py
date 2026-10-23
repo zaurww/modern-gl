@@ -5,8 +5,8 @@ reference, every day gets the balance by the portal."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from collections.abc import Collection, Sequence
+from dataclasses import dataclass, field, replace
 
 from modern_gl.application.bank import (
     CUSTOMER,
@@ -35,6 +35,20 @@ from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
+POSTED, DRAFT, LINKED, KNOWN = "posted", "draft", "linked", "known"
+
+
+@dataclass(frozen=True)
+class DepositRow:
+    """What the import does (did) with one operation of the portal: POSTED, DRAFT (and
+    why), LINKED — entered by hand, gets the reference; KNOWN — in the books already."""
+
+    op: DepositOperation
+    state: str
+    lines: tuple[tuple[str, str, int], ...] = ()  # (account's code, e-qaimə, amount)
+    reason: str = ""
+    document_id: int | None = None  # its GL document; None in a preview
+
 
 @dataclass
 class DepositImported:
@@ -46,6 +60,7 @@ class DepositImported:
     known: int = 0  # loaded before
     counterparties: int = 0  # added to the directory by VÖEN
     closings: int = 0  # days whose balance by the portal was written
+    rows: list[DepositRow] = field(default_factory=list)  # in the order of the portal
 
 
 class VatDepositCommands(BankCommands, BankStatementCommands):
@@ -56,44 +71,116 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
         operations: Sequence[DepositOperation],
         balance: int,
         period: tuple[str, str] | None = None,
+        *,
+        take: Collection[str] | None = None,
+        post: bool = True,
     ) -> DepositImported:
         """Load the portal's operations into the deposit account: `operations` — from a day
         up to now, `balance` — the account's balance by the portal now; `period` — the
         days to load (the later operations only count the balance back), remembered as
-        loaded (D115). Loading again adds nothing."""
+        loaded (D115) unless `take` (the references to load; None — all) left one out;
+        `post` False — the new ones become drafts. Loading again adds nothing."""
+        with transaction(self.conn):
+            return self._import_deposit(company_id, place, operations, balance, period, take, post)
+
+    def preview_vat_deposit(
+        self,
+        company_id: int,
+        place: BankPlace,
+        operations: Sequence[DepositOperation],
+        balance: int,
+        period: tuple[str, str] | None = None,
+    ) -> DepositImported:
+        """What the import would do, nothing written: the import itself, rolled back — the
+        preview and the import cannot differ."""
+        with transaction(self.conn):
+            self.conn.execute("SAVEPOINT deposit_preview")
+            try:
+                done = self._import_deposit(company_id, place, operations, balance, period)
+            finally:
+                self.conn.execute("ROLLBACK TO deposit_preview")
+                self.conn.execute("RELEASE deposit_preview")
+        done.rows = [replace(row, document_id=None) for row in done.rows]
+        return done
+
+    def _import_deposit(
+        self,
+        company_id: int,
+        place: BankPlace,
+        operations: Sequence[DepositOperation],
+        balance: int,
+        period: tuple[str, str] | None,
+        take: Collection[str] | None = None,
+        post: bool = True,
+    ) -> DepositImported:
         done = DepositImported()
         closings = day_closings(operations, balance)
         if period is not None:
             first, last = period
             operations = [op for op in operations if first <= op.day <= last]
             closings = {day: n for day, n in closings.items() if first <= day <= last}
-        with transaction(self.conn):
-            if period is not None:
-                self._remember_load(company_id, place, period, operations)
-            plan = plan_deposit_import(self.conn, company_id, place, operations)
-            done.known = len(plan.known)
-            for op, operation_id in plan.linked:
-                self.conn.execute(
-                    "UPDATE bank_operations SET reference = ? WHERE company_id = ? AND id = ?",
-                    (op.reference, company_id, operation_id),
-                )
-                self._audit(company_id, "bank_operation", operation_id, "update", {"reference": ""})
-                done.linked += 1
-            parties = self._deposit_parties(company_id, plan.new, done)
-            for op in plan.new:
-                data = self._deposit_operation(company_id, place, op, parties.get(op.tin))
-                self.conn.execute("SAVEPOINT deposit_operation")
-                try:
-                    self.save_bank_operation(company_id, data, post=True)
-                    done.posted += 1
-                except LedgerError as e:
-                    self.conn.execute("ROLLBACK TO deposit_operation")
-                    self.save_bank_operation(company_id, data, post=False)
-                    done.drafts.append((op, str(e)))
-                self.conn.execute("RELEASE deposit_operation")
-            for day, amount in sorted(closings.items()):
-                done.closings += self._deposit_closing(company_id, place, day, amount)
+        plan = plan_deposit_import(self.conn, company_id, place, operations)
+        done.known = len(plan.known)
+        rows = [DepositRow(op, KNOWN) for op in plan.known]
+        taken = [x for x in plan.linked if take is None or x[0].reference in take]
+        for op, operation_id in taken:
+            self.conn.execute(
+                "UPDATE bank_operations SET reference = ? WHERE company_id = ? AND id = ?",
+                (op.reference, company_id, operation_id),
+            )
+            self._audit(company_id, "bank_operation", operation_id, "update", {"reference": ""})
+            document = self._bank_row(company_id, operation_id)["document_id"]
+            rows.append(DepositRow(op, LINKED, document_id=document))
+            done.linked += 1
+        new = [op for op in plan.new if take is None or op.reference in take]
+        parties = self._deposit_parties(company_id, new, done)
+        rows += [
+            self._deposit_new(company_id, place, x, parties.get(x.tin), post, done) for x in new
+        ]
+        for day, amount in sorted(closings.items()):
+            done.closings += self._deposit_closing(company_id, place, day, amount)
+        if period is not None and len(taken) + len(new) == len(plan.linked) + len(plan.new):
+            self._remember_load(company_id, place, period, operations)
+        done.rows = sorted(rows, key=lambda row: row.op.moment)
         return done
+
+    def _deposit_new(
+        self,
+        company_id: int,
+        place: BankPlace,
+        op: DepositOperation,
+        counterparty: int | None,
+        post: bool,
+        done: DepositImported,
+    ) -> DepositRow:
+        """A new operation posted (a draft, when posting fails — and why)."""
+        data = self._deposit_operation(company_id, place, op, counterparty)
+        lines = tuple(
+            (
+                self._account(company_id, x.account_id)["code"] if x.account_id else "",
+                x.invoice,
+                x.amount,
+            )
+            for x in data.lines
+        )
+        if post:
+            self.conn.execute("SAVEPOINT deposit_operation")
+            try:
+                saved = self.save_bank_operation(company_id, data, post=True)
+                self.conn.execute("RELEASE deposit_operation")
+                done.posted += 1
+                document = self._bank_row(company_id, saved)["document_id"]
+                return DepositRow(op, POSTED, lines, document_id=document)
+            except LedgerError as e:
+                self.conn.execute("ROLLBACK TO deposit_operation")
+                self.conn.execute("RELEASE deposit_operation")
+                reason = str(e)
+        else:
+            reason = tr("загружено черновиком")
+        saved = self.save_bank_operation(company_id, data, post=False)
+        done.drafts.append((op, reason))
+        document = self._bank_row(company_id, saved)["document_id"]
+        return DepositRow(op, DRAFT, lines, reason, document)
 
     def _remember_load(
         self,

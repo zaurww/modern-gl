@@ -48,7 +48,6 @@ from modern_gl.desktop.bank_page.levels import (
 )
 from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
 from modern_gl.desktop.bank_page.portal import DepositDialog
-from modern_gl.desktop.bank_page.portal import summary as portal_summary
 from modern_gl.desktop.bank_page.reconcile import ReconcileBar
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
 from modern_gl.desktop.reports_page import ReportPage
@@ -462,14 +461,17 @@ class BankPage(ReportPage):
         self.refresh()
 
     def load_from_portal(self) -> None:
-        """The ƏDV deposit account from the portal (D112) for a period chosen (D115)."""
+        """The ƏDV deposit account from the portal (D112) for a period chosen (D115): what
+        became of the operations — in the window, a double click opens a document."""
         place = self.place
         if place is None:
             return
         dialog = DepositDialog(self.s, place, self, self.portal_sign_in)
-        if dialog.exec() and dialog.imported is not None:
-            self.s.notify(portal_summary(dialog.imported))
+        dialog.exec()
+        if dialog.imported is not None:
             self.refresh()
+        if dialog.chosen_document is not None:
+            self.open_document.emit(dialog.chosen_document)
 
     def new_account(self) -> None:
         if BankAccountDialog(self.s, None, self).exec() == QDialog.DialogCode.Accepted:
