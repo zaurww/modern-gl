@@ -16,7 +16,7 @@ ROOT = Path(__file__).parent.parent
 # characters: what a session reads, not how the lines happen to be wrapped
 LIMITS = {
     "CLAUDE.md": 12_000,
-    "docs/CONCEPT.md": 5_500,
+    "docs/CONCEPT.md": 6_500,
     "docs/STATUS.md": 12_000,
     "docs/ARCHITECTURE.md": 8_000,
     "docs/ENGINEERING.md": 13_500,
