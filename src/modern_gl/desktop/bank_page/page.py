@@ -35,6 +35,7 @@ from modern_gl.application.bank import (
     statement,
     transfer_targets,
 )
+from modern_gl.desktop.bank_page.deposit_reconcile import DepositReconcileDialog
 from modern_gl.desktop.bank_page.dialogs import BankAccountDialog, PeriodDialog
 from modern_gl.desktop.bank_page.entry import ONE, TWO, EntryLine
 from modern_gl.desktop.bank_page.levels import (
@@ -192,6 +193,7 @@ class BankPage(ReportPage):
         place = self.place  # at the list of accounts: the one under the cursor
         if place is not None and place.account_type == "vat_deposit":
             items.append((tr("Загрузить с портала…"), self.load_from_portal))
+            items.append((tr("Сверить с порталом…"), self.reconcile_with_portal))
         if self.level != ACCOUNTS:
             items.append((tr("Реквизиты счёта…"), self.edit_account))
         else:
@@ -469,6 +471,18 @@ class BankPage(ReportPage):
         dialog = DepositDialog(self.s, place, self, self.portal_sign_in)
         dialog.exec()
         if dialog.imported is not None:
+            self.refresh()
+        if dialog.chosen_document is not None:
+            self.open_document.emit(dialog.chosen_document)
+
+    def reconcile_with_portal(self) -> None:
+        """The ƏDV deposit account against the portal for a period (D118)."""
+        place = self.place
+        if place is None:
+            return
+        dialog = DepositReconcileDialog(self.s, place, self, self.portal_sign_in)
+        dialog.exec()
+        if dialog.changed:
             self.refresh()
         if dialog.chosen_document is not None:
             self.open_document.emit(dialog.chosen_document)
