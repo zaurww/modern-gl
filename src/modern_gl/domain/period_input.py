@@ -1,5 +1,6 @@
 """Periods and dates typed short, as in Todoist (D105): one field, a few letters, in
-Russian or Azerbaijani (with or without the Azerbaijani letters).
+Russian, Azerbaijani (with or without the Azerbaijani letters) or English — all of them,
+whatever the language of the interface.
 
 A period:
   «пм» / «ka» — the last month, «м» / «ay» — this one, «кв» / «rüb» — this quarter,
@@ -26,22 +27,22 @@ from modern_gl.i18n import fold, tr
 Period = tuple[date, date]
 
 # folded: «keçən» == «kecen», «rüb» == «rub»
-TODAY_WORDS = ("сегодня", "сег", "bu gun", "bugun")
-YESTERDAY_WORDS = ("вчера", "dunen")
-TOMORROW_WORDS = ("завтра", "sabah")
+TODAY_WORDS = ("сегодня", "сег", "bu gun", "bugun", "today")
+YESTERDAY_WORDS = ("вчера", "dunen", "yesterday")
+TOMORROW_WORDS = ("завтра", "sabah", "tomorrow")
 MONTH_STEMS = (
-    ("янв", "yan"),
-    ("фев", "fev"),
+    ("янв", "yan", "jan"),
+    ("фев", "fev", "feb"),
     ("мар", "mar"),
     ("апр", "apr"),
     ("май", "мая", "may"),
-    ("июн", "iyn", "iyun"),
-    ("июл", "iyl", "iyul"),
-    ("авг", "avq"),
-    ("сен", "sen"),
-    ("окт", "okt"),
-    ("ноя", "noy"),
-    ("дек", "dek"),
+    ("июн", "iyn", "iyun", "jun"),
+    ("июл", "iyl", "iyul", "jul"),
+    ("авг", "avq", "aug"),
+    ("сен", "sen", "sep"),
+    ("окт", "okt", "oct"),
+    ("ноя", "noy", "nov"),
+    ("дек", "dek", "dec"),
 )
 QUARTER_WORDS = ("кв", "квартал", "q", "r", "rub")
 
@@ -64,18 +65,29 @@ def _presets(today: date) -> dict[str, Period]:
     last_quarter = (today.year, quarter - 1) if quarter > 1 else (today.year - 1, 4)
     quarter_start = quarter_bounds(today.year, quarter)[0]
     periods = {
-        ("м", "мес", "месяц", "этот месяц", "ay", "bu ay"): month_bounds(today.year, today.month),
-        ("пм", "прошлый месяц", "ka", "kecen ay"): month_bounds(last_month.year, last_month.month),
-        ("кв", "квартал", "этот квартал", "rub", "bu rub"): quarter_bounds(today.year, quarter),
-        ("пк", "прошлый квартал", "kr", "kecen rub"): quarter_bounds(*last_quarter),
-        ("г", "год", "этот год", "il", "bu il"): (date(today.year, 1, 1), date(today.year, 12, 31)),
-        ("пг", "прошлый год", "ki", "kecen il"): (
+        ("м", "мес", "месяц", "этот месяц", "ay", "bu ay", "this month"): month_bounds(
+            today.year, today.month
+        ),
+        ("пм", "прошлый месяц", "ka", "kecen ay", "lm", "last month"): month_bounds(
+            last_month.year, last_month.month
+        ),
+        ("кв", "квартал", "этот квартал", "rub", "bu rub", "this quarter"): quarter_bounds(
+            today.year, quarter
+        ),
+        ("пк", "прошлый квартал", "kr", "kecen rub", "lq", "last quarter"): quarter_bounds(
+            *last_quarter
+        ),
+        ("г", "год", "этот год", "il", "bu il", "this year"): (
+            date(today.year, 1, 1),
+            date(today.year, 12, 31),
+        ),
+        ("пг", "прошлый год", "ki", "kecen il", "ly", "last year"): (
             date(today.year - 1, 1, 1),
             date(today.year - 1, 12, 31),
         ),
-        ("сг", "с начала года", "ilb", "ilin evvelinden"): (date(today.year, 1, 1), today),
-        ("ск", "с начала квартала", "rb", "rubun evvelinden"): (quarter_start, today),
-        ("см", "с начала месяца", "ab", "ayin evvelinden"): (today.replace(day=1), today),
+        ("сг", "с начала года", "ilb", "ilin evvelinden", "ytd"): (date(today.year, 1, 1), today),
+        ("ск", "с начала квартала", "rb", "rubun evvelinden", "qtd"): (quarter_start, today),
+        ("см", "с начала месяца", "ab", "ayin evvelinden", "mtd"): (today.replace(day=1), today),
     }
     return {word: period for words, period in periods.items() for word in words}
 

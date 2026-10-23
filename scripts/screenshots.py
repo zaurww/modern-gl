@@ -61,7 +61,7 @@ def main() -> None:
             (
                 w
                 for w in QApplication.topLevelWidgets()
-                if w.objectName() in ("completer", "palette") and w.isVisible()
+                if w.objectName() in ("completer", "palette", "periodWindow") and w.isVisible()
             ),
             None,
         )
@@ -166,6 +166,9 @@ def main() -> None:
     statements.columns.choose("year_ago")
     shot("20f_balance_year_ago")
     statements.columns.choose("one")
+    statements.period.show_presets()  # D105: the period with the mouse
+    shot("20g_period_window")
+    statements.period.window_shown.close()
     win.open_books()  # «Сравнение книг» (D98): the demo's IFRS write-down of stock
     shot("19_books_compare")
     win.close_current()
