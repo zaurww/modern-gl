@@ -29,10 +29,10 @@ from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
-from modern_gl.application.ledger.module import ModuleDocumentCommands, rebuild_start
+from modern_gl.application.ledger.module import ModuleDocumentCommands
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
-from modern_gl.domain.dates import iso_date, ru_date
-from modern_gl.domain.errors import LedgerError, ValidationError
+from modern_gl.domain.dates import iso_date
+from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
@@ -173,29 +173,17 @@ class ConversionCommands(ModuleDocumentCommands):
     def rebuild_postings(self, company_id: int, since: date | str) -> list[int]:
         """Build the GL documents of posted conversions from `since` on (not in the closed
         period) again from the conversions (D101); the GL documents that changed."""
-        changed: list[int] = []
-        with transaction(self.conn):
-            start = rebuild_start(self._company(company_id), since)
-            for row in self.conn.execute(
-                "SELECT c.id FROM currency_conversions c JOIN documents d "
-                "ON d.company_id = c.company_id AND d.id = c.document_id "
-                "WHERE c.company_id = ? AND d.status = 'posted' AND d.doc_date >= ? "
-                "ORDER BY d.doc_date, d.number",
-                (company_id, start),
-            ).fetchall():
-                conversion = load_conversion(self.conn, company_id, row["id"])
-                try:
-                    changed += self._rebuild_conversion(company_id, conversion)
-                except LedgerError as exc:
-                    raise ValidationError(
-                        tr(
-                            "конвертация №{n} от {date}: {error}",
-                            n=self._document(company_id, conversion.document_id)["number"],
-                            date=ru_date(conversion.doc_date),
-                            error=exc,
-                        )
-                    ) from exc
-        return changed
+        return self._rebuild_each(
+            company_id,
+            since,
+            "currency_conversions",
+            lambda conversion_id: self._rebuild_conversion(
+                company_id, load_conversion(self.conn, company_id, conversion_id)
+            ),
+            lambda n, day, error: tr(
+                "конвертация №{n} от {date}: {error}", n=n, date=day, error=error
+            ),
+        )
 
     # ---- internals --------------------------------------------------------------------
 

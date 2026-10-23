@@ -18,6 +18,7 @@ from modern_gl.desktop import icons
 from modern_gl.desktop.conversion_page.common import BASE
 from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.side_panel import SidePanel, Stat
+from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
@@ -82,16 +83,7 @@ class ConversionForm(QWidget):
 
     def _build_rate_note(self, root: QVBoxLayout) -> None:
         """No rate of the date: load the Central Bank's rates right from here."""
-        self.rate_note = QFrame()
-        self.rate_note.setObjectName("note")
-        note = QHBoxLayout(self.rate_note)
-        note.setContentsMargins(14, 8, 8, 8)
-        self.rate_text = QLabel()
-        self.rate_text.setWordWrap(True)
-        note.addWidget(self.rate_text, 1)
-        self.btn_rates = button(tr("Загрузить курс ЦБА"), "flat", tr("Курсы с cbar.az на дату"))
-        note.addWidget(self.btn_rates)
-        self.rate_note.hide()
+        self.rate_note, self.rate_text, self.btn_rates = rate_note(tr("Курсы с cbar.az на дату"))
         root.addWidget(self.rate_note)
 
     def _build_sides(self, root: QVBoxLayout) -> None:

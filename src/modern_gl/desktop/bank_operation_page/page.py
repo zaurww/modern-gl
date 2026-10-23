@@ -11,7 +11,7 @@ from dataclasses import replace
 from datetime import date
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QMessageBox,
@@ -36,6 +36,7 @@ from modern_gl.desktop.bank_operation_page.common import (
 from modern_gl.desktop.bank_operation_page.counterparty import CounterpartyPart
 from modern_gl.desktop.bank_operation_page.folded import FoldedPart
 from modern_gl.desktop.bank_operation_page.lines import LinesPart
+from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     MenuItem,
@@ -327,19 +328,8 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.rate_note.show()
 
     def load_rates(self) -> None:
-        day = edited_date(self.date)
-        QGuiApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            count = self.s.ledger.import_rates(self.s.company_id, day, self.s.fetch_rates(day))
-        except LedgerError as e:
-            self.show_error(str(e))
-            return
-        finally:
-            QGuiApplication.restoreOverrideCursor()
-        self._update()
-        self.s.notify(
-            tr("Курсы ЦБА на {date} загружены: {n}", date=ru_date(day.isoformat()), n=count)
-        )
+        if load_day_rates(self.s, edited_date(self.date), self.show_error):
+            self._update()
 
     def save(self, post: bool) -> bool:
         if self.read_only:

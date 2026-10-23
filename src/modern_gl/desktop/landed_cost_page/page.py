@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from fractions import Fraction
+from functools import partial
 
 from PySide6.QtCore import (
     Qt,
@@ -44,6 +45,7 @@ from modern_gl.desktop.landed_cost_page.pickers import (
     receipt_picker,
     source_label,
 )
+from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     edited_date,
@@ -64,7 +66,7 @@ class LandedCostPage(LandedCostForm):
     def __init__(self, session: Session, document_id: int | None = None) -> None:
         super().__init__(session)
         self.delegate.error.connect(self.show_error)
-        self.delegate.add_value = self._add_value
+        self.delegate.add_value = partial(add_typed_value, self.s)
         self._connect()
 
         self._set_models([], [], read_only=False)
@@ -239,15 +241,6 @@ class LandedCostPage(LandedCostForm):
             current = self.targets_table.currentIndex()
             if current.isValid() and not self.targets.read_only:
                 self.targets.remove_row(current.row())
-
-    def _add_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
-        value_id = self.s.ledger.add_subconto_value(
-            self.s.company_id, kind_id, text, owner_id=owner_id
-        )
-        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
-        kind = self.s.catalog.kinds[kind_id]
-        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
-        return value_id
 
     def keyPressEvent(self, event) -> None:
         """Enter in the title, date or method goes on as Tab does."""

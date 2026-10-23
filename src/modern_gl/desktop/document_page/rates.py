@@ -3,16 +3,13 @@ yet, the Central Bank's rates loaded from here."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
-
 from modern_gl.application.currencies import rate_on
 from modern_gl.desktop.document_page.form import DocumentForm
+from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.widgets import (
     edited_date,
     ru_date,
 )
-from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
 
@@ -50,21 +47,11 @@ class RatesPart(DocumentForm):
 
     def load_rates(self) -> None:
         """Official rates of the document date from cbar.az; the lines take them."""
-        day = edited_date(self.date)
-        QGuiApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            count = self.s.ledger.import_rates(self.s.company_id, day, self.s.fetch_rates(day))
-        except LedgerError as e:
-            self.show_error(str(e))
+        if not load_day_rates(self.s, edited_date(self.date), self.show_error):
             return
-        finally:
-            QGuiApplication.restoreOverrideCursor()
         self.error.hide()
         self.model.refresh_rates()
         self._update_rate_note()
-        self.s.notify(
-            tr("Курсы ЦБА на {date} загружены: {n}", date=ru_date(day.isoformat()), n=count)
-        )
 
     def _date_changed(self, *_) -> None:
         if not self.model.read_only:

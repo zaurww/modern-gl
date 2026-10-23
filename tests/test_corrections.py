@@ -97,7 +97,7 @@ def test_closed_period_still_allows_only_storno(demo):
     # dates as the user reads them, not ISO
     with pytest.raises(PeriodClosedError, match=r"\d\d\.02\.2026: период закрыт по 28\.02\.2026"):
         led.delete_document(cid, demo.docs[5])
-    with pytest.raises(PeriodClosedError):
+    with pytest.raises(PeriodClosedError, match=r"28\.02\.2026\. Исправьте его сторно"):
         led.unpost(cid, demo.docs[5])
     led.reverse(cid, demo.docs[5], "2026-03-01")
 

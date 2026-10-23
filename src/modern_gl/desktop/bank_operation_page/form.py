@@ -35,6 +35,7 @@ from modern_gl.desktop.bank_operation_page.common import (
 from modern_gl.desktop.bank_operation_page.line_row import LineRow
 from modern_gl.desktop.directories_page import added_value, new_value
 from modern_gl.desktop.pick import PickBox, SuggestBox
+from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import Chip, MenuItem, button, date_edit, more_button
@@ -162,16 +163,7 @@ class BankOperationForm(QWidget):
 
     def _build_rate_note(self, root: QVBoxLayout) -> None:
         """No rate of the date: load the Central Bank's rates right from here."""
-        self.rate_note = QFrame()
-        self.rate_note.setObjectName("note")
-        note = QHBoxLayout(self.rate_note)
-        note.setContentsMargins(14, 8, 8, 8)
-        self.rate_text = QLabel()
-        self.rate_text.setWordWrap(True)
-        note.addWidget(self.rate_text, 1)
-        self.btn_rates = button(tr("Загрузить курс ЦБА"), "flat", tr("Курсы с cbar.az на дату"))
-        note.addWidget(self.btn_rates)
-        self.rate_note.hide()
+        self.rate_note, self.rate_text, self.btn_rates = rate_note(tr("Курсы с cbar.az на дату"))
         root.addWidget(self.rate_note)
 
     def _build_path(self, root: QVBoxLayout) -> None:

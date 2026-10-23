@@ -8,7 +8,7 @@ from datetime import date
 from itertools import pairwise
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -34,6 +34,7 @@ from modern_gl.desktop.conversion_page.common import (
 )
 from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.form import ConversionForm
+from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
@@ -354,19 +355,8 @@ class ConversionPage(ConversionForm):
         self.rate_note.show()
 
     def load_rates(self) -> None:
-        day = edited_date(self.date)
-        QGuiApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            count = self.s.ledger.import_rates(self.s.company_id, day, self.s.fetch_rates(day))
-        except LedgerError as e:
-            self.show_error(str(e))
-            return
-        finally:
-            QGuiApplication.restoreOverrideCursor()
-        self._update_summary()
-        self.s.notify(
-            tr("Курсы ЦБА на {date} загружены: {n}", date=ru_date(day.isoformat()), n=count)
-        )
+        if load_day_rates(self.s, edited_date(self.date), self.show_error):
+            self._update_summary()
 
     # ---- actions ---------------------------------------------------------------------
 

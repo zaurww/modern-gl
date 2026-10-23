@@ -175,3 +175,18 @@
   `month_bounds` и `reports_page/view.month_of` — через неё.
 - «Долг» 13: дерево плана счетов в отчёте — одна `report_common.fold_chart(accounts, make,
   keep)`; ОСВ и сравнение книг — через неё.
+
+## Сессия 46 — 2026-10-23, ветка `claude/debt-13-duplicates-refactor-06t8hx` (без новых D)
+- «Долг» 13 закрыт целиком, по коммиту на пункт, с тестами.
+- «Уже распределено» доп. расходов: ошибки не было (проверка проводки всегда исключает свой
+  документ), но `IS NOT ?` — только SQLite (D77). Один `costs.allocated_sql` для списка и
+  проверки, `IS DISTINCT FROM`; ещё одно место — `queries.py` (продажи); `test_architecture`
+  теперь ловит `IS NOT ?`.
+- Закрытый период: одна `common.require_open(company, day, explain)` — книга, склад, начисления;
+  документ книги — через `_require_open_period(hint=)`. Новый тест: склад в закрытом периоде.
+- `rebuild_postings` банка и конвертации — общий `_rebuild_each` в `ledger/module.py`.
+- «Загрузить курс ЦБА»: плашка и загрузка — `desktop/rate_note.py` (документ, банк,
+  конвертация; заодно «Долг» 12 — заметка «курс не загружен»). Отступы плашки документа теперь
+  как у двух других.
+- Элемент из ячейки: `desktop/new_cell_value.py` (`ask_add`, `add_typed_value`,
+  `offer_new_value`) — документ, остатки, шаблоны, склад, доп. расходы.

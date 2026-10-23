@@ -121,3 +121,19 @@ def test_ctrl_k_offers_closing_the_period(window):
     assert p is not None
     commands = [e.title for e in p.entries_shown() if e.group == "Команды"]
     assert "Закрытие периода…" in commands
+
+
+def test_require_open_names_the_last_closed_day(ledger):
+    """One check of the closed period for the ledger, the warehouse and accruals: the
+    last closed day as the user reads it goes into the text of the caller."""
+    from modern_gl.application.common import company_row, require_open
+    from modern_gl.domain.errors import PeriodClosedError
+
+    cid = ledger.create_company("Период")
+    ledger.set_closed_through(cid, "2026-01-31")
+    company = company_row(ledger.conn, cid)
+    require_open(company, "2026-02-01", lambda closed: "не нужен")
+    with pytest.raises(PeriodClosedError, match=r"^31\.01\.2026 — закрыт$"):
+        require_open(company, "2026-01-31", lambda closed: f"{closed} — закрыт")
+    ledger.set_closed_through(cid, None)
+    require_open(company_row(ledger.conn, cid), "2020-01-01", lambda closed: "не нужен")

@@ -4,6 +4,7 @@ the form, the rates, the templates and the clipboard are in their own modules.""
 from __future__ import annotations
 
 from datetime import date
+from functools import partial
 
 from PySide6.QtCore import QTimer
 from shiboken6 import isValid
@@ -19,6 +20,7 @@ from modern_gl.desktop.document_page.clipboard import ClipboardPart
 from modern_gl.desktop.document_page.rates import RatesPart
 from modern_gl.desktop.document_page.templates import TemplatesPart
 from modern_gl.desktop.history_dialog import HistoryDialog
+from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.postings import (
     DT,
     PostingRow,
@@ -64,7 +66,7 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         self.amount.textEdited.connect(self._amount_edited)
         self.delegate.error.connect(self.show_error)
         self.delegate.unknown_value.connect(self._offer_new_value)
-        self.delegate.add_value = self._add_typed_value
+        self.delegate.add_value = partial(add_typed_value, self.s)
         # deferred: the cell editor that picked the template has to close first
         self.delegate.template_chosen.connect(
             lambda row, tid: QTimer.singleShot(0, lambda: self.insert_template(row, tid))

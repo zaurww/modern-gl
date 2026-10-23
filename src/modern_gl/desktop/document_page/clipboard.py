@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop.document_page.form import DocumentForm
+from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.postings import (
     DT,
 )
@@ -62,16 +63,9 @@ class ClipboardPart(DocumentForm):
         for row, col, kind_id, text in unknown:
             key = (kind_id, text, self.model.owner_at(row, col))
             if key not in created:
-                created[key] = self._add_value(kind_id, text, key[2])
+                created[key] = add_typed_value(self.s, kind_id, text, key[2], tell=False)
             self.model.setData(self.model.index(row, col), created[key])
         return True
-
-    def _add_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
-        value_id = self.s.ledger.add_subconto_value(
-            self.s.company_id, kind_id, text, owner_id=owner_id
-        )
-        self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner_id)
-        return value_id
 
     def copy(self) -> None:
         QApplication.clipboard().setText(self.model.copy_text(self._shown))
@@ -82,26 +76,4 @@ class ClipboardPart(DocumentForm):
         QTimer.singleShot(0, lambda: self._create_value(index, kind_id, text))
 
     def _create_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
-        kind = self.s.catalog.kinds[kind_id]
-        answer = QMessageBox.question(
-            self,
-            tr("Новый элемент справочника"),
-            tr("«{text}» нет в справочнике «{kind}». Добавить?", text=text, kind=kind),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if not index.isValid():
-            return
-        if answer != QMessageBox.StandardButton.Yes:
-            self.table.edit_again(index, text)  # the name, to correct it
-            return
-        owner = self.model.owner_at(index.row(), index.column())  # a contract of this partner
-        value_id = self._add_typed_value(kind_id, text, owner)
-        self.model.setData(self.model.index(index.row(), index.column()), value_id)
-        self.table.edit_next(index)
-
-    def _add_typed_value(self, kind_id: int, text: str, owner_id: int | None) -> int:
-        value_id = self._add_value(kind_id, text, owner_id)
-        kind = self.s.catalog.kinds[kind_id]
-        self.s.notify(tr("Добавлено в «{kind}»: {text}", kind=kind, text=text))
-        return value_id
+        offer_new_value(self, self.s, self.table, index, kind_id, text, self.model.owner_at)

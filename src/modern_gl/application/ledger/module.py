@@ -7,14 +7,15 @@ day on (`rebuild_postings`, D101): after a rule is fixed, the books follow the d
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from datetime import date, timedelta
 
 from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
-from modern_gl.domain.dates import iso_date
-from modern_gl.infrastructure.db import Row
+from modern_gl.domain.dates import iso_date, ru_date
+from modern_gl.domain.errors import LedgerError, ValidationError
+from modern_gl.infrastructure.db import Row, transaction
 
 # what a GL document says, posting by posting — as `DocumentCommands._same_content` compares
 POSTING_CONTENT = (
@@ -94,6 +95,35 @@ class ModuleDocumentCommands(ChartCommands, DocumentCommands):
         self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
         self._insert_postings(company_id, doc_id, postings)
         self._post(company_id, doc_id)
+
+    def _rebuild_each(
+        self,
+        company_id: int,
+        since: date | str,
+        table: str,
+        rebuild: Callable[[int], list[int]],
+        explain: Callable[[int, str, LedgerError], str],
+    ) -> list[int]:
+        """`rebuild_postings` of a module: each posted document of `table` (its `id`, the GL
+        `document_id`) from `since` on, not in the closed period, in date order goes to
+        `rebuild(id)` — the GL documents that changed. An error stops it all and names the
+        document: `explain(number, date as the user reads it, error)`."""
+        changed: list[int] = []
+        with transaction(self.conn):
+            start = rebuild_start(self._company(company_id), since)
+            for row in self.conn.execute(
+                f"SELECT m.id, d.number, d.doc_date FROM {table} m JOIN documents d "
+                "ON d.company_id = m.company_id AND d.id = m.document_id "
+                "WHERE m.company_id = ? AND d.status = 'posted' AND d.doc_date >= ? "
+                "ORDER BY d.doc_date, d.number",
+                (company_id, start),
+            ).fetchall():
+                try:
+                    changed += rebuild(row["id"])
+                except LedgerError as exc:
+                    message = explain(row["number"], ru_date(row["doc_date"]), exc)
+                    raise ValidationError(message) from exc
+        return changed
 
     def _rebuild_module_document(
         self,

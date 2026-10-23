@@ -144,6 +144,20 @@ def test_conversion_follows_a_fixed_rate(ledger, conn, conversion_firm):  # noqa
     ]
 
 
+def test_a_conversion_error_names_the_conversion(ledger, conn, conversion_firm):  # noqa: F811
+    f = conversion_firm
+    cid = f["cid"]
+    conversion = load_conversion(
+        conn, cid, ledger.conversion.save_conversion(cid, currency_sale(f), post=True)
+    )
+    number = load_document(conn, cid, conversion.document_id).number
+    ledger.delete_rate(cid, "USD", "2026-03-02")  # no rate on 02.03 any more
+
+    with pytest.raises(ValidationError, match=rf"конвертация №{number} от 02\.03\.2026"):
+        ledger.conversion.rebuild_postings(cid, "2026-03-01")
+    assert audit_count(conn, "repost") == 0
+
+
 def test_warehouse_follows_a_fixed_setting(conn):
     shop = make_shop(conn, "classic")
     receipt = shop.receipt("2026-01-10", "10", "120")

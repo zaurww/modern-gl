@@ -31,6 +31,18 @@ class CostSource:
         return self.amount - self.used
 
 
+def allocated_sql(company: str, document: str, line: str) -> str:
+    """A subquery: how much of the GL posting `document`, `line` (SQL expressions) posted
+    «Расходы по партии» documents took, all but the one of the next parameter (NULL — none
+    left out). The picker and the check on posting count it alike."""
+    return (
+        "(SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c "
+        "JOIN inventory_documents i ON i.id = c.document_id AND i.status = 'posted' "
+        f"WHERE c.company_id = {company} AND c.source_document_id = {document} "
+        f"AND c.source_line_no = {line} AND c.document_id IS DISTINCT FROM ?)"
+    )
+
+
 def cost_sources(
     conn: Connection,
     company_id: int,
@@ -43,7 +55,7 @@ def cost_sources(
     as when posting),
     newest first. `only_left=False`: also those allocated in full."""
     rows = conn.execute(
-        """
+        f"""
         SELECT p.document_id, p.line_no, d.doc_date, d.number, p.amount,
                p.debit_account_id, p.dt_sc1, p.dt_sc2, p.dt_sc3, da.account_class,
                COALESCE(NULLIF(p.memo, ''), d.memo) AS memo,
@@ -52,10 +64,7 @@ def cost_sources(
                 WHERE v.id IN (p.dt_sc1, p.dt_sc2, p.dt_sc3)) AS dt_names,
                (SELECT string_agg(v.name, ', ') FROM subconto_values v
                 WHERE v.id IN (p.ct_sc1, p.ct_sc2, p.ct_sc3)) AS ct_names,
-               (SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c
-                JOIN inventory_documents i ON i.id = c.document_id AND i.status = 'posted'
-                WHERE c.company_id = p.company_id AND c.source_document_id = p.document_id
-                  AND c.source_line_no = p.line_no AND c.document_id IS NOT ?) AS used
+               {allocated_sql("p.company_id", "p.document_id", "p.line_no")} AS used
         FROM postings p
         JOIN documents d ON d.id = p.document_id
         JOIN layers l ON l.id = d.layer_id

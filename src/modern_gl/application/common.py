@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 
-from modern_gl.domain.errors import NotFoundError, ValidationError
+from modern_gl.domain.dates import ru_date
+from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure import db
 from modern_gl.infrastructure.db import Connection, Row
@@ -38,6 +39,13 @@ def closed_on(company: Row, day: str) -> bool:
     """Whether a day (ISO) is in the company's closed period: on `closed_through` or before."""
     closed = company["closed_through"]
     return closed is not None and day <= closed
+
+
+def require_open(company: Row, day: str, explain: Callable[[str], str]) -> None:
+    """Refuse a change dated `day` (ISO) in the company's closed period: PeriodClosedError
+    with `explain(closed)` — the text, given the last closed day as the user reads it."""
+    if closed_on(company, day):
+        raise PeriodClosedError(explain(ru_date(company["closed_through"])))
 
 
 def with_reason(details: dict, reason: str) -> dict:

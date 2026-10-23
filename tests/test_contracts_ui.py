@@ -17,6 +17,7 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.postings import AMOUNT, CT, CURRENCY, CURRENCY_AMOUNT, DT
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.templates_page import TemplatePage
 from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
@@ -58,7 +59,7 @@ def value(s: Session, name: str) -> int:
     )
 
 
-def rent_line(page: DocumentPage) -> None:
+def rent_line(page: DocumentPage | TemplatePage) -> None:
     m, cat = page.model, page.s.catalog
     m.setData(m.index(0, DT), cat.by_code["26"].id)
     m.setData(m.index(0, DT + 1), value(page.s, "Аренда"))
@@ -106,9 +107,13 @@ def test_contract_list_is_the_counterparty_s(session, qtbot):
     assert m.rows[0].credit_sc[1] is None  # Бета's contract left the line
 
 
-def test_new_contract_from_the_line_belongs_to_its_counterparty(session, qtbot):
-    page = DocumentPage(session)
+@pytest.mark.parametrize("make", [DocumentPage, TemplatePage])
+def test_new_contract_from_the_line_belongs_to_its_counterparty(session, qtbot, make):
+    """The document and the template add a name the same way (desktop/new_cell_value)."""
+    page = make(session)
     qtbot.addWidget(page)
+    told: list[str] = []
+    session.notify = told.append
     rent_line(page)
     m = page.model
     m.setData(m.index(0, CT + 1), value(session, "Бета"))
@@ -116,6 +121,7 @@ def test_new_contract_from_the_line_belongs_to_its_counterparty(session, qtbot):
     page._create_value(QPersistentModelIndex(m.index(0, CT + 2)), contracts, "Фактура 15")
     new = session.catalog.value(m.rows[0].credit_sc[1])
     assert (new.name, new.owner_id) == ("Фактура 15", value(session, "Бета"))
+    assert told == ["Добавлено в «Договоры»: Фактура 15"]
 
 
 def test_rate_of_the_document_date_is_loaded_from_the_document(session, qtbot):

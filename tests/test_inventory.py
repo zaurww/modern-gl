@@ -35,7 +35,7 @@ from modern_gl.desktop.inventory_page import (
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.accounts import INPUT_VAT
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.errors import PeriodClosedError, ValidationError
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
 from modern_gl.reporting.inventory import (
@@ -246,6 +246,16 @@ def test_inventory_document_can_be_unposted_edited_and_reposted(inventory_demo, 
     )
     demo.inventory.post_document(demo.company_id, document_id)
     assert stock_balances(conn, demo.company_id)[0].amount == 3_600
+
+
+def test_inventory_document_in_closed_period_is_not_unposted(inventory_demo, ledger):
+    demo = inventory_demo
+    document_id = receipt(demo)
+    ledger.set_closed_through(demo.company_id, "2026-01-31")
+    with pytest.raises(
+        PeriodClosedError, match=r"складской документ №1 от 10\.01\.2026: период закрыт по 31\.01"
+    ):
+        demo.inventory.unpost_document(demo.company_id, document_id)
 
 
 def test_issue_and_transfer_drafts_calculate_cost_when_posted(inventory_demo, conn):

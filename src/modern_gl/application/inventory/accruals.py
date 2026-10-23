@@ -5,13 +5,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 
-from modern_gl.application.common import closed_on
+from modern_gl.application.common import require_open
 from modern_gl.application.inventory.base import InventoryBase
 from modern_gl.application.inventory.model import ACCRUED_CODE
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import ACCRUED_EXPENSES
-from modern_gl.domain.dates import month_name, ru_date
-from modern_gl.domain.errors import PeriodClosedError, ValidationError
+from modern_gl.domain.dates import month_name
+from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row
 
@@ -113,16 +113,16 @@ class AccrualCommands(InventoryBase):
         if accrual_id is not None:
             self.ledger.rewrite_linked(company_id, accrual_id, doc["expense_date"], postings, memo)
             return
-        company = self._company(company_id)
-        if closed_on(company, doc["expense_date"]):
-            raise PeriodClosedError(
-                tr(
-                    "расход за {month} не отнести: период закрыт по {closed}. Выберите в "
-                    "«Расход за» месяц документа",
-                    month=month_name(doc["expense_date"][:7]),
-                    closed=ru_date(company["closed_through"]),
-                )
-            )
+        require_open(
+            self._company(company_id),
+            doc["expense_date"],
+            lambda closed: tr(
+                "расход за {month} не отнести: период закрыт по {closed}. Выберите в "
+                "«Расход за» месяц документа",
+                month=month_name(doc["expense_date"][:7]),
+                closed=closed,
+            ),
+        )
         accrual_id = self.ledger.post_new(company_id, doc["expense_date"], postings, memo)
         self.conn.execute(
             "UPDATE inventory_documents SET accrual_document_id = ? WHERE id = ?",
