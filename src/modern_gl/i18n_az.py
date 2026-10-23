@@ -1734,6 +1734,8 @@ AZ: dict[str, str] = {
     "С прошлым периодом": "Əvvəlki dövrlə",
     "С прошлым годом": "Keçən illə",
     "Колонки: {what}": "Sütunlar: {what}",
+    "Колонки…": "Sütunlar…",
+    "Колонки по умолчанию": "Standart sütunlar",
     "На конец месяца": "Ayın sonuna",
     "На конец квартала": "Rübün sonuna",
     "{n} квартал": "{n}rüb",
