@@ -1739,4 +1739,20 @@ AZ: dict[str, str] = {
     "{n} квартал": "{n}rüb",
     "Дата: {hint}": "Tarix: {hint}",
     "{n} квартал {year}": "{n}rüb {year}",
+    # ƏDV depozit hesabı from the portal (D112)
+    "Загрузить с портала…": "Portaldan yüklə…",
+    "ƏDV depozit с портала": "ƏDV depozit portaldan",
+    "Загрузить операции с даты по сегодня:": "Əməliyyatları bu tarixdən bu günə qədər yüklə:",
+    "Остаток ƏDV depozit на портале…": "Portalda ƏDV depozit qalığı…",
+    "Загружено операций: {n}": "Yüklənən əməliyyatlar: {n}",
+    "С портала: проведено {posted}, не разнесено {drafts}": "Portaldan: keçirildi {posted}, bölüşdürülməyib {drafts}",
+    ", новых контрагентов {n}": ", yeni kontragentlər {n}",
+    # the company's VÖEN, checked against the portal (D113)
+    "VÖEN компании": "Şirkətin VÖEN-i",
+    "VÖEN компании…": "Şirkətin VÖEN-i…",
+    "VÖEN компании (10 цифр; можно оставить пустым — его предложит портал):": "Şirkətin VÖEN-i (10 rəqəm; boş saxlamaq olar — portal təklif edəcək):",
+    "Портал e-taxes": "e-taxes portalı",
+    "Войдите через ASAN İmza и выберите компанию с VÖEN {tin} — окно закроется само.": "ASAN İmza ilə daxil olun və VÖEN-i {tin} olan şirkəti seçin — pəncərə özü bağlanacaq.",
+    "Портал открыт для «{name}» · VÖEN {tin}, а это компания «{company}» · VÖEN {own}. Ничего не загружено: выберите на портале нужную фирму.": "Portal «{name}» · VÖEN {tin} üçün açıqdır, bu isə «{company}» · VÖEN {own} şirkətidir. Heç nə yüklənmədi: portalda lazımi şirkəti seçin.",
+    "Портал открыт для «{name}» · VÖEN {tin}.\n\nЭто компания «{company}»? VÖEN запомнится, и данные другой фирмы в неё уже не загрузятся.": "Portal «{name}» · VÖEN {tin} üçün açıqdır.\n\nBu «{company}» şirkətidir? VÖEN yadda saxlanacaq və başqa şirkətin məlumatları ona yüklənməyəcək.",
 }

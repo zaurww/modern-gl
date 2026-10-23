@@ -593,7 +593,7 @@ def test_osv_highlights_balance_on_wrong_side(window):
 def test_companies_are_files_and_can_be_switched(window, workspace, monkeypatch):
     monkeypatch.setattr(
         "modern_gl.desktop.main_window.company_files.QInputDialog.getText",
-        staticmethod(lambda *a, **k: ("Yeni MMC", True)),
+        staticmethod(lambda _w, _t, label, *a, **k: ("" if "VÖEN" in label else "Yeni MMC", True)),
     )
     monkeypatch.setattr(  # the whole program, not a warehouse only (D90)
         "modern_gl.desktop.main_window.company_files.QInputDialog.getItem",
