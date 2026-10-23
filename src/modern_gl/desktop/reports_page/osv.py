@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -47,7 +49,7 @@ class OsvPage(ReportPage):
         self.sections.toggled.connect(self.refresh)
         self.header.add_action(self.sections)
         self.expand = QCheckBox(tr("Развернуть по субконто"))
-        self.expand.setToolTip(tr("Показать остатки по первому субконто под каждым счётом"))
+        self.expand.setToolTip(tr("Показать под каждым счётом остатки по всем его субконто"))
         self.expand.toggled.connect(self.refresh)
         self.header.add_action(self.expand)
         self.in_currency = QCheckBox(tr("В валюте"))
@@ -66,14 +68,20 @@ class OsvPage(ReportPage):
 
     @staticmethod
     def _with_subconto(rows: list[OsvRow], subconto) -> list[OsvRow]:
-        """Insert a row per subconto value (bank, counterparty…) under each account."""
+        """Insert the rows of every subconto under each account, as in 1C: a counterparty,
+        its contracts under it (D110)."""
         result = []
         for r in rows:
             result.append(r)
             if r.is_group:
                 continue
             for s in subconto.get(r.account_id, []):
-                row = OsvRow(name="      " + s.name, depth=r.depth + 1)
+                row = OsvRow(
+                    account_id=r.account_id,
+                    name="      " * (s.depth + 1) + s.name,
+                    depth=r.depth + 1,
+                    subconto=s.path,
+                )
                 row.add(s)
                 result.append(row)
         return result
@@ -170,8 +178,10 @@ class OsvPage(ReportPage):
         self.footer.setStyleSheet(f"color: {P.red};" if wrong or not balanced else "")
 
     def drill(self, row: OsvRow) -> None:
+        """The card of the account — or of the counterparty (contract) of a subconto row."""
         if row and row.account_id:
-            self.open_report.emit("card", row.account_id, self.params)
+            params = replace(self.params, subconto=row.subconto)
+            self.open_report.emit("card", row.account_id, params)
 
     def _side_warning(self, row: OsvRow) -> str:
         acc = self.s.catalog.accounts.get(row.account_id)

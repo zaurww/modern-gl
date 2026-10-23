@@ -510,9 +510,11 @@ def test_osv_expanded_by_subconto(window):
     osv.expand.setChecked(True)
     rows = osv.model.rows
     i = next(i for i, r in enumerate(rows) if r.code == "60")
-    under = [r.name.strip() for r in rows[i + 1 : i + 3]]
-    assert under == ["Альфа Трейд", "Бета Сервис"]
-    assert sum(r.closing_ct for r in rows[i + 1 : i + 3]) == rows[i].closing_ct
+    under = [r for r in rows[i + 1 :] if r.account_id == rows[i].account_id and r.subconto]
+    parties = [r for r in under if len(r.subconto) == 1]  # their contracts under them (D110)
+    assert [r.name.strip() for r in parties] == ["Альфа Трейд", "Бета Сервис"]
+    assert any(len(r.subconto) == 2 for r in under)
+    assert sum(r.closing_ct for r in parties) == rows[i].closing_ct
     assert rows[-1].closing_dt == rows[-1].closing_ct  # totals unchanged
 
 

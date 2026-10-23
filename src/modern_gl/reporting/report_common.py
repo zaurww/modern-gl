@@ -74,6 +74,9 @@ class OsvRow(Turnovers):
     name: str = ""
     depth: int = 0
     is_group: bool = False
+    # a row of «Развернуть по субконто» under its account (D110): the values from the
+    # first subconto down to it; () — the account itself
+    subconto: tuple[int | None, ...] = ()
     # balance on the side this account should not have (see domain.accounts.wrong_side)
     opening_wrong: bool = False
     closing_wrong: bool = False
@@ -102,6 +105,9 @@ class SubcontoRow(Turnovers):
     depth: int = 0
     # the values from the first level down to this row: (counterparty, contract)
     path: tuple[int | None, ...] = ()
+    # a row of one e-qaimə under the last level (D110): its number, "" — the lines
+    # without one; None — not such a row
+    invoice: str | None = None
     # a currency account: net balance (Dt - Ct) at the end in each currency ("USD": …)
     currency_closing: dict[str, int] = field(default_factory=dict)
 
