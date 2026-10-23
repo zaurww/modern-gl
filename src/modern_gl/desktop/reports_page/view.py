@@ -52,6 +52,7 @@ from modern_gl.desktop.widgets import (
     type_choices,
     type_name,
 )
+from modern_gl.domain.dates import month_days
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
@@ -91,8 +92,7 @@ class ReportParams:
 
 
 def month_of(d: date) -> ReportParams:
-    nxt = date(d.year + d.month // 12, d.month % 12 + 1, 1)
-    return ReportParams(date(d.year, d.month, 1), date.fromordinal(nxt.toordinal() - 1))
+    return ReportParams(*month_days(d.year, d.month))
 
 
 def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:

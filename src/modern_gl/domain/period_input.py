@@ -17,11 +17,10 @@ Whatever is not understood is None: the field shows it is not, and keeps what it
 
 from __future__ import annotations
 
-import calendar
 import re
 from datetime import date, timedelta
 
-from modern_gl.domain.dates import month_name
+from modern_gl.domain.dates import month_days, month_name
 from modern_gl.i18n import fold, tr
 
 Period = tuple[date, date]
@@ -48,7 +47,7 @@ QUARTER_WORDS = ("кв", "квартал", "q", "r", "rub")
 
 
 def month_bounds(year: int, month: int) -> Period:
-    return date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
+    return month_days(year, month)
 
 
 def quarter_bounds(year: int, quarter: int) -> Period:

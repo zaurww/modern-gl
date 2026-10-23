@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 from datetime import date, datetime
 
 from modern_gl.i18n import tr
@@ -41,11 +42,15 @@ def month_name(month: str) -> str:
     return f"{tr(_MONTHS[int(month[5:7]) - 1])} {month[:4]}"
 
 
+def month_days(year: int, month: int) -> tuple[date, date]:
+    """The first and the last day of a month — the one place they are counted."""
+    return date(year, month, 1), date(year, month, calendar.monthrange(year, month)[1])
+
+
 def month_end(value: date | str) -> str:
     """The last day of the month of `value`: '2026-09-14' -> '2026-09-30'."""
     day = date.fromisoformat(iso_date(value))
-    first_of_next = date(day.year + day.month // 12, day.month % 12 + 1, 1)
-    return date.fromordinal(first_of_next.toordinal() - 1).isoformat()
+    return month_days(day.year, day.month)[1].isoformat()
 
 
 def earlier_months(value: date | str, count: int = 12) -> list[str]:

@@ -156,3 +156,5 @@
   баланс, ОПиУ, ДДС, сравнение книг, переоценка, e-qaimə (без `str.replace` по SQL).
 - «Долг» 13: разбор суммы / количества / курса — общий `domain/money.read_decimal`; курс
   теперь понимает неразрывный пробел из Excel (тест).
+- «Долг» 13: границы месяца — одна `domain/dates.month_days`; `month_end`, обе
+  `month_bounds` и `reports_page/view.month_of` — через неё.
