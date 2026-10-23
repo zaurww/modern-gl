@@ -53,7 +53,7 @@ GLYPHS: dict[str, str] = {
     "books": "git-compare",
     "statements": "chart-pie",
     "calendar": "calendar",
-    # the reports' page (D111)
+    # the reports' page (D114)
     "reports": "layout-grid",
     "profit": "trending-up",
     "cash": "banknote",

@@ -1,4 +1,4 @@
-"""What Ctrl+K offers (D86): commands, places of the sidebar, every report (D111), accounts,
+"""What Ctrl+K offers (D86): commands, places of the sidebar, every report (D114), accounts,
 counterparties and documents — each with what Enter does. The places come from the
 sidebar's sections, so a module's place is found as soon as it is in the sidebar."""
 
@@ -69,7 +69,7 @@ def _places(win: MainWindow) -> list[Entry]:
         group = tr("Отчёты") if heading == REPORT_SECTION else tr("Разделы")
         for key, text in places:
             entries.append(Entry(group, tr(text), lambda key=key: win.show_place(key), icon=key[0]))
-    entries.extend(  # every report of «Все отчёты» (D111), by its name in either language
+    entries.extend(  # every report of «Все отчёты» (D114), by its name in either language
         Entry(
             tr("Отчёты"),
             tr(report.title),

@@ -1,4 +1,4 @@
-"""«Отчёты» (D111): every report on one page, by group — a name and a line of what it
+"""«Отчёты» (D114): every report on one page, by group — a name and a line of what it
 shows; a search on top (ə = e: `fold`), Enter opens the first found; «Недавние» beside;
 a star pins a report to the sidebar. The page reads nothing from the company and writes
 nothing to it: what is pinned and opened lately is the user's (`QSettings`)."""

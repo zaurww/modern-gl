@@ -1,3 +1,5 @@
+> **Архив.** Первый черновик архитектуры (v0.1, 2026-10-19): SQLAlchemy, один файл на все компании и др. не приняты. Действуют `docs/ARCHITECTURE.md`, `docs/CONCEPT.md` и `docs/DECISIONS.md`.
+
 # Modern GL — Architecture Decision & Technical Design
 
 **Version:** 0.1 (draft)  

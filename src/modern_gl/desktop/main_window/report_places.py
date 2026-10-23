@@ -1,6 +1,6 @@
 """How the reports open: the places that are reports (ОСВ, the statements, the chart of
 accounts), the reports opened as pages of their own (a card, «Сравнение книг»…) and
-«Все отчёты» (D111) — the catalog of all of them, with the pinned ones in the sidebar."""
+«Все отчёты» (D114) — the catalog of all of them, with the pinned ones in the sidebar."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ class ReportPlaces(OpenPages):
         self._wire_report(chart)
         return chart
 
-    # ---- «Все отчёты» and the pinned reports (D111) ------------------------------------
+    # ---- «Все отчёты» and the pinned reports (D114) ------------------------------------
 
     def shown_reports(self) -> list[Report]:
         s = self.open_session

@@ -68,7 +68,7 @@ def segments(captions: list[tuple[str, str]], on_click) -> tuple[QWidget, dict[s
 
 class StatementsPage(ReportPage):
     key = ("statements",)
-    view_changed = Signal()  # the sidebar chooses the pinned view shown (D111)
+    view_changed = Signal()  # the sidebar chooses the pinned view shown (D114)
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Финансовая отчётность"), params)
@@ -101,7 +101,7 @@ class StatementsPage(ReportPage):
         return tr(names[self.view])
 
     def show_view(self, view: str) -> None:
-        """«Баланс», «Прибыли и убытки» or «Движение денег» chosen from «Отчёты» (D111)."""
+        """«Баланс», «Прибыли и убытки» or «Движение денег» chosen from «Отчёты» (D114)."""
         if view in self.view_buttons and view != self.view:
             self.view_buttons[view].setChecked(True)
             self.refresh()

@@ -95,7 +95,7 @@ class OpenPages(CompanyFiles):
                 self.sidebar.add_section(tr(heading))
             for key, text in places:
                 self.sidebar.add_item(key, tr(text), place_icon(key))
-        self.sidebar.add_section(tr("Открытые"))
+        self.sidebar.add_section(tr("Открытые")).setHidden(True)  # arrange_open shows it
         self.show_place(("home",))
 
     def _drop_pages(self) -> None:
@@ -181,7 +181,7 @@ class OpenPages(CompanyFiles):
 
     def _select_nav(self, key, page: QWidget) -> None:
         """The sidebar's item of the page shown: its own, a pinned view of it, or — a
-        report not pinned — «Все отчёты», where it was opened from (D111)."""
+        report not pinned — «Все отчёты», where it was opened from (D114)."""
         nav = self.sidebar
         item = nav.item_for(key)
         if item is None and isinstance(page, NavKeyed):

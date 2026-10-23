@@ -1,4 +1,4 @@
-"""«Отчёты» (D111): the catalog of every report, its page and the sidebar's pinned ones."""
+"""«Отчёты» (D114): the catalog of every report, its page and the sidebar's pinned ones."""
 
 from modern_gl.desktop.reports_hub.account_prompt import AccountPrompt, ask_account
 from modern_gl.desktop.reports_hub.catalog import (

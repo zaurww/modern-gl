@@ -1,4 +1,4 @@
-"""Every report of the program in one list (D111): its group, name, one line of what it
+"""Every report of the program in one list (D114): its group, name, one line of what it
 shows and its icon — the page «Отчёты», the sidebar's pinned reports and Ctrl+K read it.
 
 What is pinned and what was opened lately is the user's, kept in `QSettings` (like the

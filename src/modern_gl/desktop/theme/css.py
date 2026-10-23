@@ -12,7 +12,7 @@ def stylesheet() -> str:
 
 
 def _tiles_css() -> str:
-    """A report on «Все отчёты» (D111): no border, lit under the mouse or the cursor."""
+    """A report on «Все отчёты» (D114): no border, lit under the mouse or the cursor."""
     return f"""
 QFrame#reportTile {{ background: transparent; border: none; border-radius: 10px; }}
 QFrame#reportTile:hover {{ background: {P.subtle}; }}

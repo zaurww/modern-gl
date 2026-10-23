@@ -32,7 +32,7 @@ from modern_gl.desktop import icons
 from modern_gl.desktop.reports_hub.catalog import HUB, PIN_KEYS
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, trailing_icon
-from modern_gl.i18n import tr, upper
+from modern_gl.i18n import tr
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 # The sidebar's places by what they are for (D56): entry on top without a heading, then
@@ -43,7 +43,7 @@ PLACES = [
     (("journal",), "Журнал"),
     (("opening",), "Начальные остатки"),
 ]
-# «Все отчёты» (D111): one place for every report; the pinned ones are shown under it
+# «Все отчёты» (D114): one place for every report; the pinned ones are shown under it
 REPORTS_PLACES = [(HUB, "Все отчёты")]
 # the reports that are places (open once, not closed): opened from «Все отчёты», in the
 # sidebar only when pinned
@@ -96,13 +96,13 @@ def shown_places(stock_only: bool) -> set:
     return places if stock_only else places | set(REPORT_PAGES)
 
 
-# what the sidebar keeps whatever is open: the places and the pinned reports (D111)
+# what the sidebar keeps whatever is open: the places and the pinned reports (D114)
 FIXED_KEYS = set(PLACE_KEYS) | set(PIN_KEYS)
 
 
 # «Open»: only the last few pages, the rest — under «All (N)…», a menu (D86)
 ALL_OPEN = ("open_all",)
-OPEN_SHOWN = 4  # with every place, still no scrolling at 840 px of height
+OPEN_SHOWN = 3  # with every place and the headings' air, still no scrolling at 840 px
 # open pages: a quiet grey icon of what they are (a new document is the blue plus)
 OPEN_ICONS = {"doc": "document", "new": "new", "template": "templates", "import": "import"}
 OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
@@ -139,7 +139,7 @@ class FocusablePage(Protocol):
 
 @runtime_checkable
 class NavKeyed(Protocol):
-    """A place shown in the sidebar under another key (a view of the statements, D111)."""
+    """A place shown in the sidebar under another key (a view of the statements, D114)."""
 
     def nav_key(self) -> tuple: ...
 
@@ -222,14 +222,18 @@ class Sidebar(QWidget):
         new = tr("Ctrl+N  новый документ") + "\n" if journal else ""
         self.hint.setText(tr("Ctrl+K  поиск и команды") + "\n" + new + tr("Ctrl+W  закрыть"))
 
-    def add_section(self, title: str) -> None:
-        item = QListWidgetItem(upper(title))
+    def add_section(self, title: str) -> QListWidgetItem:
+        """A heading as in Things: in words, not capitals, of the items' size but bold, with
+        air above it and none below, so a group keeps to its heading."""
+        item = QListWidgetItem(title)
         item.setFlags(Qt.ItemFlag.NoItemFlags)
-        item.setFont(fonts().caption)
+        item.setFont(fonts().bold)
         item.setForeground(QColor(P.text))
-        item.setSizeHint(QSize(0, 32))
+        item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom)
+        item.setSizeHint(QSize(0, 40))
         item.setData(KEY_ROLE, None)
         self.nav.addItem(item)
+        return item
 
     def add_item(self, key, text: str, icon: QIcon) -> QListWidgetItem:
         item = QListWidgetItem(icon, text)
@@ -239,7 +243,7 @@ class Sidebar(QWidget):
         return item
 
     def set_pins(self, pins: list[tuple[tuple, str, QIcon]]) -> None:
-        """The pinned reports (key, title, icon) right under «Все отчёты» (D111). Quietly:
+        """The pinned reports (key, title, icon) right under «Все отчёты» (D114). Quietly:
         an item taken away moves the current one, and that would open a place."""
         self.nav.blockSignals(True)
         for i in reversed(range(self.nav.count())):
@@ -259,6 +263,9 @@ class Sidebar(QWidget):
         the item «All (N)…» at the end."""
         rows = [self.nav.item(i) for i in range(self.nav.count())]
         open_items = [item for item in rows if NavDelegate.closable(item.data(KEY_ROLE))]
+        headings = [item for item in rows if item.flags() == Qt.ItemFlag.NoItemFlags]
+        if headings:  # «Open» is the last heading; with nothing open it is not shown
+            headings[-1].setHidden(not open_items)
         shown = recent[:OPEN_SHOWN]
         for item in open_items:
             item.setHidden(item.data(KEY_ROLE) not in shown)

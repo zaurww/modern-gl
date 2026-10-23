@@ -1,4 +1,4 @@
-"""«Все отчёты» (D111): every report on one page by group, the search, the pinned ones
+"""«Все отчёты» (D114): every report on one page by group, the search, the pinned ones
 in the sidebar (kept in QSettings), Ctrl+K, a warehouse-only company and viewing."""
 
 from datetime import date
