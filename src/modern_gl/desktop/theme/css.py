@@ -8,7 +8,17 @@ from modern_gl.desktop.theme.palette import P
 
 def stylesheet() -> str:
     """The whole look of the program, in the current theme's colors."""
-    return _window_css() + _controls_css() + _tables_css() + _panels_css()
+    return _window_css() + _controls_css() + _tables_css() + _panels_css() + _tiles_css()
+
+
+def _tiles_css() -> str:
+    """A report on «Все отчёты» (D114): no border, lit under the mouse or the cursor."""
+    return f"""
+QFrame#reportTile {{ background: transparent; border: none; border-radius: 10px; }}
+QFrame#reportTile:hover {{ background: {P.subtle}; }}
+QFrame#reportTile:focus {{ background: {P.selection}; }}
+QFrame#reportTile QLabel {{ background: transparent; }}
+"""
 
 
 def _window_css() -> str:

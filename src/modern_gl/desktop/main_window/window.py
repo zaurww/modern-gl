@@ -39,18 +39,11 @@ from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.landed_cost_page import LandedCostPage
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
 from modern_gl.desktop.main_window.commands import palette_entries
-from modern_gl.desktop.main_window.open_pages import OpenPages
+from modern_gl.desktop.main_window.report_places import ReportPlaces
 from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.period_dialog import PeriodDialog
-from modern_gl.desktop.reports_page import (
-    REPORTS,
-    BooksPage,
-    ChartPage,
-    OsvPage,
-    ReportParams,
-    StatementsPage,
-)
+from modern_gl.desktop.reports_page import ChartPage, OsvPage
 from modern_gl.desktop.reports_page.table import zebra
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
@@ -62,7 +55,7 @@ from modern_gl.reporting.inventory import inventory_document_of
 from modern_gl.reporting.trade import PURCHASE, SALE
 
 
-class MainWindow(OpenPages):
+class MainWindow(ReportPlaces):
     def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
         super().__init__(workspace, settings)
         self.sidebar.company.clicked.connect(self._company_menu)
@@ -248,27 +241,6 @@ class MainWindow(OpenPages):
             return page
         return self._report_place(key)
 
-    def _report_place(self, key) -> QWidget:
-        """ОСВ, the statements or the chart of accounts: places that open reports."""
-        s = self.open_session
-        if key == ("osv",):
-            osv = OsvPage(s)
-            osv.compare_books.connect(self.open_books)
-            self._wire_report(osv)
-            return osv
-        other = StatementsPage(s) if key == ("statements",) else ChartPage(s)
-        self._wire_report(other)
-        return other
-
-    def open_books(self) -> None:
-        """«Сравнение книг» (D98): an open page of its own, like an account's card."""
-        key = BooksPage.key
-        if key not in self.pages:
-            page = BooksPage(self.open_session)
-            self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
-
     def show_import(self) -> None:
         if self._viewing():
             return
@@ -293,10 +265,6 @@ class MainWindow(OpenPages):
         journal = self._page(("journal",), JournalPage)
         if journal is not None:
             journal.focus_quick_entry()
-
-    def _wire_report(self, page) -> None:
-        page.open_document.connect(self.open_document)
-        page.open_report.connect(self.open_report)
 
     def open_document(self, doc_id: int) -> None:
         """From the journal or a report: the primary document, as in 1C. Postings made by
@@ -509,21 +477,3 @@ class MainWindow(OpenPages):
         journal = self._page(("journal",), JournalPage)
         if journal is not None:
             journal.refresh(select_id=page.doc_id)
-
-    def open_landed_report(self) -> None:
-        """«Əlavə xərclər» by declaration, from the warehouse."""
-        key = LandedCostReportPage.key
-        if key not in self.pages:
-            page = LandedCostReportPage(self.open_session)
-            page.open_inventory_document.connect(self.open_inventory_document)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
-
-    def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
-        page = REPORTS[kind](self.open_session, account_id, params)
-        key = page.key  # a card of one counterparty is a page of its own
-        if key in self.pages:
-            self.close_page(key, ask=False)
-        self._wire_report(page)
-        self._add_page(key, page, open_item=True)
-        self._activate(key)

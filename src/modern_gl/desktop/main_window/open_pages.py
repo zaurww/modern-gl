@@ -35,8 +35,10 @@ from modern_gl.desktop.main_window.sidebar import (
     ALL_OPEN,
     KEY_ROLE,
     PLACE_KEYS,
+    REPORT_PAGES,
     FocusablePage,
     NavDelegate,
+    NavKeyed,
     PageT,
     Sidebar,
     TitledPage,
@@ -46,6 +48,7 @@ from modern_gl.desktop.main_window.sidebar import (
     shown_places,
 )
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.reports_hub import HUB
 from modern_gl.desktop.toast import Toast
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import LedgerError
@@ -162,11 +165,7 @@ class OpenPages(CompanyFiles):
         if self.stack.currentWidget() is not page:
             self.stack.setCurrentWidget(page)
             self._fade_in(page)
-        item = self.sidebar.item_for(key)
-        if item is not None and self.sidebar.nav.currentItem() is not item:
-            self.sidebar.nav.blockSignals(True)
-            self.sidebar.nav.setCurrentItem(item)
-            self.sidebar.nav.blockSignals(False)
+        self._select_nav(key, page)
         if isinstance(page, JournalPage | HomePage):
             page.refresh()
         if isinstance(page, InventoryPage):
@@ -179,6 +178,20 @@ class OpenPages(CompanyFiles):
             page.refresh(keep_value=True)
         if isinstance(page, FocusablePage):
             page.focus_table()
+
+    def _select_nav(self, key, page: QWidget) -> None:
+        """The sidebar's item of the page shown: its own, a pinned view of it, or — a
+        report not pinned — «Все отчёты», where it was opened from (D114)."""
+        nav = self.sidebar
+        item = nav.item_for(key)
+        if item is None and isinstance(page, NavKeyed):
+            item = nav.item_for(page.nav_key())
+        if item is None and key in REPORT_PAGES:
+            item = nav.item_for(HUB)
+        if item is not None and nav.nav.currentItem() is not item:
+            nav.nav.blockSignals(True)
+            nav.nav.setCurrentItem(item)
+            nav.nav.blockSignals(False)
 
     def _fade_in(self, page: QWidget) -> None:
         effect = QGraphicsOpacityEffect(page)

@@ -1,4 +1,4 @@
-"""What Ctrl+K offers (D86): commands, places and reports of the sidebar, accounts,
+"""What Ctrl+K offers (D86): commands, places of the sidebar, every report (D114), accounts,
 counterparties and documents — each with what Enter does. The places come from the
 sidebar's sections, so a module's place is found as soon as it is in the sidebar."""
 
@@ -11,6 +11,7 @@ from modern_gl.application.queries import find_documents
 from modern_gl.desktop.command_palette import Entry, matches
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.main_window.sidebar import sections
+from modern_gl.desktop.reports_hub.catalog import names
 from modern_gl.desktop.reports_page import month_of
 from modern_gl.desktop.widgets import ru_date
 from modern_gl.i18n import tr
@@ -68,16 +69,16 @@ def _places(win: MainWindow) -> list[Entry]:
         group = tr("Отчёты") if heading == REPORT_SECTION else tr("Разделы")
         for key, text in places:
             entries.append(Entry(group, tr(text), lambda key=key: win.show_place(key), icon=key[0]))
-    entries.append(
+    entries.extend(  # every report of «Все отчёты» (D114), by its name in either language
         Entry(
             tr("Отчёты"),
-            tr("Доп. расходы по декларациям"),
-            win.open_landed_report,
-            icon="report",
+            tr(report.title),
+            lambda r=report.id: win.open_catalog_report(r),
+            icon=report.icon,
+            words=names(report),
         )
+        for report in win.shown_reports()
     )
-    if win.open_session.parallel_books:  # D98
-        entries.append(Entry(tr("Отчёты"), tr("Сравнение книг"), win.open_books, icon="books"))
     # the places first, then the reports: one heading for each
     return sorted(entries, key=lambda e: e.group == tr("Отчёты"))
 

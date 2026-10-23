@@ -92,6 +92,7 @@ def test_sidebar_shows_only_the_warehouse_and_its_lists(window):
         ("inventory",),
         ("purchases",),
         ("sales",),
+        ("reports",),  # «Все отчёты» with the warehouse's reports only (D114)
         ("directories",),
         ("currencies",),
     ]

@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop import icons
+from modern_gl.desktop.reports_hub.catalog import HUB, PIN_KEYS
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, trailing_icon
 from modern_gl.i18n import tr
@@ -42,11 +43,11 @@ PLACES = [
     (("journal",), "Журнал"),
     (("opening",), "Начальные остатки"),
 ]
-REPORTS_PLACES = [
-    (("osv",), "ОСВ"),
-    (("statements",), "Баланс и прибыль"),  # D99
-    (("invoices",), "E-qaimələr"),
-]
+# «Все отчёты» (D114): one place for every report; the pinned ones are shown under it
+REPORTS_PLACES = [(HUB, "Все отчёты")]
+# the reports that are places (open once, not closed): opened from «Все отчёты», in the
+# sidebar only when pinned
+REPORT_PAGES = [("osv",), ("statements",), ("invoices",)]
 LISTS = [
     (("chart",), "План счетов"),
     (("directories",), "Справочники"),
@@ -67,7 +68,8 @@ SECTIONS = [
     ("Списки", LISTS),
     ("Модули", MODULES),
 ]
-PLACE_KEYS = [key for _, places in SECTIONS for key, _ in places]
+SIDEBAR_KEYS = [key for _, places in SECTIONS for key, _ in places]
+PLACE_KEYS = SIDEBAR_KEYS + REPORT_PAGES  # every place: opened once, never closed
 # «Только склад» (D90): the warehouse first, then the lists it needs; the books are not shown
 STOCK_SECTIONS = [
     (
@@ -79,6 +81,7 @@ STOCK_SECTIONS = [
             (("sales",), "Продажи"),
         ],
     ),
+    ("Отчёты", REPORTS_PLACES),  # the warehouse's reports; those of the books are not there
     ("Списки", [(("directories",), "Справочники"), (("currencies",), "Валюты")]),
 ]
 
@@ -89,7 +92,12 @@ def sections(stock_only: bool) -> list:
 
 def shown_places(stock_only: bool) -> set:
     """The places a company of this mode shows; the others stay closed."""
-    return {key for _, places in sections(stock_only) for key, _ in places}
+    places = {key for _, places in sections(stock_only) for key, _ in places}
+    return places if stock_only else places | set(REPORT_PAGES)
+
+
+# what the sidebar keeps whatever is open: the places and the pinned reports (D114)
+FIXED_KEYS = set(PLACE_KEYS) | set(PIN_KEYS)
 
 
 # «Open»: only the last few pages, the rest — under «All (N)…», a menu (D86)
@@ -129,6 +137,13 @@ class FocusablePage(Protocol):
     def focus_table(self) -> None: ...
 
 
+@runtime_checkable
+class NavKeyed(Protocol):
+    """A place shown in the sidebar under another key (a view of the statements, D114)."""
+
+    def nav_key(self) -> tuple: ...
+
+
 class NavDelegate(QStyledItemDelegate):
     """Draws a small × on open items (on hover or when selected), like a tab's close button."""
 
@@ -137,7 +152,7 @@ class NavDelegate(QStyledItemDelegate):
 
     @staticmethod
     def closable(key) -> bool:
-        return key is not None and key not in PLACE_KEYS and key != ALL_OPEN
+        return key is not None and key not in FIXED_KEYS and key != ALL_OPEN
 
     @staticmethod
     def close_rect(rect: QRect) -> QRect:
@@ -226,6 +241,22 @@ class Sidebar(QWidget):
         item.setSizeHint(QSize(0, 32))
         self.nav.addItem(item)
         return item
+
+    def set_pins(self, pins: list[tuple[tuple, str, QIcon]]) -> None:
+        """The pinned reports (key, title, icon) right under «Все отчёты» (D114). Quietly:
+        an item taken away moves the current one, and that would open a place."""
+        self.nav.blockSignals(True)
+        for i in reversed(range(self.nav.count())):
+            if self.nav.item(i).data(KEY_ROLE) in PIN_KEYS:
+                self.nav.takeItem(i)
+        hub = self.item_for(HUB)
+        row = self.nav.row(hub) if hub is not None else -1
+        for offset, (key, text, icon) in enumerate(pins if hub else [], start=1):
+            item = QListWidgetItem(icon, text)
+            item.setData(KEY_ROLE, key)
+            item.setSizeHint(QSize(0, 32))
+            self.nav.insertItem(row + offset, item)
+        self.nav.blockSignals(False)
 
     def arrange_open(self, recent: list) -> None:
         """Show the open pages of `recent` (newest first) up to OPEN_SHOWN; with more —
