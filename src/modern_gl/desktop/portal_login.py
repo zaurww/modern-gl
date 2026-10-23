@@ -13,9 +13,10 @@ import time
 from collections.abc import Callable
 
 from PySide6.QtCore import QStandardPaths, QTimer, QUrl
-from PySide6.QtWidgets import QDialog, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from modern_gl.desktop.theme import fonts
+from modern_gl.desktop.widgets import button
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import BASE_URL, PORTAL_TOKEN_KEY
 
@@ -61,7 +62,15 @@ class PortalLoginDialog(QDialog):
         )
         hint.setObjectName("secondary")
         hint.setFont(fonts().small)
-        root.addWidget(hint)
+        top = QHBoxLayout()
+        top.addWidget(hint, 1)
+        reload = button(tr("Обновить страницу"), "flat")
+        reload.clicked.connect(lambda: self.view.reload())
+        top.addWidget(reload)
+        root.addLayout(top)
+        self.state = QLabel(waiting_for(None, company))  # what the window waits for now
+        self.state.setFont(fonts().small)
+        root.addWidget(self.state)
         self.view = QWebEngineView(self)
         self.view.setPage(_page_class()(_profile(), self.view))
         root.addWidget(self.view, 1)
@@ -80,12 +89,32 @@ class PortalLoginDialog(QDialog):
 
     def _found(self, token: object) -> None:
         # a token of the portal user is there before a company is chosen: wait for its VÖEN
-        if not (isinstance(token, str) and token_alive(token)):
-            return
-        if _company_of(token) and (not self.company or _company_of(token) == self.company):
+        found = token if isinstance(token, str) else None
+        waiting = waiting_for(found, self.company)
+        self.state.setText(waiting)
+        if not waiting and found:
             self.timer.stop()
-            self.token = token
+            self.token = found
             self.accept()
+
+
+def waiting_for(token: str | None, company: str = "") -> str:
+    """What the sign-in window still waits for, said to the user; '' — the token is taken.
+    A window that waits silently looks hung."""
+    if not token:
+        return tr("Ждём входа на портал…")
+    if not token_alive(token):
+        return tr("Вход на портал устарел — войдите ещё раз или обновите страницу")
+    tin = _company_of(token)
+    if not tin:
+        return tr("Вход выполнен — выберите на портале компанию")
+    if company and tin != company:
+        return tr(
+            "На портале выбрана фирма с VÖEN {tin}, а нужна VÖEN {own} — выберите её",
+            tin=tin,
+            own=company,
+        )
+    return ""
 
 
 LOGIN_URL = f"{BASE_URL}/eportal/login"

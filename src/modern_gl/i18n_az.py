@@ -1744,7 +1744,20 @@ AZ: dict[str, str] = {
     # ƏDV depozit hesabı from the portal (D112)
     "Загрузить с портала…": "Portaldan yüklə…",
     "ƏDV depozit с портала": "ƏDV depozit portaldan",
-    "Загрузить операции с даты по сегодня:": "Əməliyyatları bu tarixdən bu günə qədər yüklə:",
+    # the period of the deposit account and what was loaded already (D115)
+    "Выберите период и нажмите «Загрузить с портала»: если вход на портал не открыт, откроется его страница (ASAN İmza).": "Dövrü seçin və «Portaldan yüklə» düyməsini basın: portala giriş açıq deyilsə, onun səhifəsi açılacaq (ASAN İmza).",
+    "С портала в этот счёт ещё ничего не загружалось.": "Bu hesaba portaldan hələ heç nə yüklənməyib.",
+    "Уже загружено с портала: {periods}.": "Portaldan artıq yüklənib: {periods}.",
+    "Выбранный период уже загружен.": "Seçilmiş dövr artıq yüklənib.",
+    "Период {period} уже загружен с портала. Загрузить снова?\n\nДвойных операций не будет: добавятся только новые, появившиеся на портале после прошлой загрузки.": "{period} dövrü portaldan artıq yüklənib. Yenidən yükləmək?\n\nƏməliyyatlar təkrarlanmayacaq: yalnız əvvəlki yükləmədən sonra portalda yaranan yeniləri əlavə olunacaq.",
+    " — новых операций нет": " — yeni əməliyyat yoxdur",
+    "портал ответил непонятно: {error}": "portalın cavabı anlaşılmadı: {error}",
+    # the sign-in window says what it waits for
+    "Обновить страницу": "Səhifəni yenilə",
+    "Ждём входа на портал…": "Portala girişi gözləyirik…",
+    "Вход на портал устарел — войдите ещё раз или обновите страницу": "Portala giriş köhnəlib — yenidən daxil olun və ya səhifəni yeniləyin",
+    "Вход выполнен — выберите на портале компанию": "Giriş edildi — portalda şirkəti seçin",
+    "На портале выбрана фирма с VÖEN {tin}, а нужна VÖEN {own} — выберите её": "Portalda VÖEN {tin} olan firma seçilib, lazım olan isə VÖEN {own} — onu seçin",
     "Остаток ƏDV depozit на портале…": "Portalda ƏDV depozit qalığı…",
     "Загружено операций: {n}": "Yüklənən əməliyyatlar: {n}",
     "С портала: проведено {posted}, не разнесено {drafts}": "Portaldan: keçirildi {posted}, bölüşdürülməyib {drafts}",
