@@ -14,7 +14,7 @@ reporting                  отчёты — только чтение, агре�
 assistant                  MCP-сервер для AI — те же application/reporting
    │
 domain                     деньги, даты, периоды, формулы — без SQL и Qt
-infrastructure             SQLite (db.py — единственный import sqlite3), миграции,
+infrastructure             SQLite (sqlite3 — только здесь: db.py, копии, файлы), миграции,
                            файлы компаний, копии, CSV/Excel, порталы (cbar, e-taxes)
 ```
 
@@ -73,7 +73,7 @@ infrastructure             SQLite (db.py — единственный import sql
 
 ## 6. Интерфейс
 - **Окно:** `CompanyFiles` (файл компании) ← `OpenPages` (стек страниц, Esc — назад) ←
-  `MainWindow` (какие страницы есть); боковая панель вместо вкладок.
+  `ReportPlaces` (как открываются отчёты) ← `MainWindow` (какие страницы есть); боковая панель вместо вкладок.
 - **Страница читает в два шага:** `fetch(conn)` — только SQL, `present(data)` — заполнить;
   через `Session.read` — у большой компании в фоновом потоке (`desktop/background.py`).
   Страница при открытии ничего не пишет.

@@ -135,3 +135,19 @@
   таблица итогов портал / программа / разница, «Загрузить недостающие», «Отметить
   сверенным» (0042). Изменения после сверки: в программе — всегда, на портале — когда
   прочитан период. Чтение портала для обоих окон — `deposit_fetch.DepositFetch`.
+- PR #35 влит. Пакетная обработка платежей ƏDV DH снята с плана (черновиков почти нет).
+- Полный обзор кода и документов (по `CODE_QUALITY.md`, разделы 4–5): удалена неиспользуемая
+  `conversions.find_by_reference`; `plain_number` и заголовки колонок — один модуль
+  `application/table_text.py` (было 2–3 копии); действия страницы банка —
+  `bank_page/actions.py` (класс был 480/500); исправлены 13 расхождений документов с кодом
+  (склад давно проводит задним числом, `ReportPlaces` в цепочке окна, `theme/` — пакет).
+  Найденные, но не исправленные дубли — «Долг» 13 в `ENGINEERING.md`.
+- «Долг» 13 подробно: CTE «проведённые документы книги» + подписанные движения — `books._balances`,
+  `statements._moves`, `profit_loss._turnovers`, `cash_flow._read`, `revaluation._currency_balances`
+  (фильтры дат и слоёв различаются); дерево плана — `reports._osv_rows`, `books.compare_books`;
+  `to_minor` / `to_quantity` / `parse_rate` (курс не снимает неразрывный пробел); доп. расходы —
+  `inventory/costs.py` (`IS NOT ?`) и `landed_cost._require_charge_complete` (`<> ?`); `_create_value`
+  — `opening_balances_page`, `templates_page`, `document_page/clipboard`, `inventory_document_page/new_values`;
+  курсы — `bank_operation_page`, `document_page/rates`, `conversion_page`; месяц — `dates.month_end`,
+  `period_input.month_bounds`, `periods.month_bounds`, `reports_page/view.month_of`; период —
+  `documents._require_changeable`, `validation._require_open_period`, `inventory/base`, `accruals`.
