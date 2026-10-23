@@ -271,7 +271,8 @@ AZ: dict[str, str] = {
     "Показать": "Göstər",
     "Скрыть": "Gizlət",
     "Развернуть по субконто": "Subkonto üzrə aç",
-    "Показать остатки по первому субконто под каждым счётом": "Hər hesabın altında birinci subkonto üzrə qalıqları göstər",
+    "Показать под каждым счётом остатки по всем его субконто": "Hər hesabın altında bütün subkontoları üzrə qalıqları göstər",
+    "<без e-qaimə>": "<e-qaiməsiz>",
     "Сальдо не на своей стороне: {codes} — подсвечено красным": "Qalıq gözlənilən tərəfdə deyil: {codes} — qırmızı ilə göstərilib",
     "Сальдо не на своей стороне: для «{cls}» ожидается {side} сальдо": "Qalıq gözlənilən tərəfdə deyil: «{cls}» üçün {side} qalıq gözlənilir",
     "дебетовое": "debet",
@@ -1497,6 +1498,8 @@ AZ: dict[str, str] = {
     "этих контрагентов предложат то же.": "Boş qalsa — hər sətir əvvəlki kimi. Seçilən "
     "yadda qalır: bu kontragentlərin növbəti e-qaimələri eynisini təklif edəcək.",
     "Код или название": "Kod və ya ad",
+    "Счёт затрат (Дт)": "Xərc hesabı (Dt)",
+    "Счёт расчётов (Кт)": "Hesablaşma hesabı (Kt)",
     "Укажите «{kind}» — его требует счёт": "«{kind}» göstərin — hesab onu tələb edir",
     "выбранный счёт — строк: {n}": "seçilmiş hesab — sətir: {n}",
     "аналитика продажи указывается только в продаже": "satış analitikası yalnız satışda göstərilir",

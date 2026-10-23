@@ -25,11 +25,13 @@ from modern_gl.infrastructure.db import Connection, Row, transaction
 
 @dataclass(frozen=True)
 class Booking:
-    """Where the open lines of a batch go: a purchase's expense account and its subconto;
-    a sale's subconto only (`account_id` None: the revenue account is the company's one)."""
+    """Where the open lines of a batch go: a purchase's expense account and its subconto,
+    and the account it is owed on (60, 76…; None: the one the draft has, D110); a sale's
+    subconto only (`account_id` None: the revenue account is the company's one)."""
 
     account_id: int | None
     subconto: tuple[int | None, ...] = ()
+    offset_account_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -40,6 +42,8 @@ class OpenLines:
     doc_type: str  # 'receipt' or 'sale': the open lines of these drafts are counted
     count: int
     suggested: Booking | None
+    # the account the open purchase lines are owed on now, when it is one (60 of the import)
+    offset_account_id: int | None = None
 
 
 @dataclass
@@ -55,6 +59,7 @@ def open_lines(inventory: Inventory, company_id: int, document_ids: Sequence[int
     drafts = _drafts(inventory.conn, company_id, document_ids)
     doc_type = "sale" if drafts and all(d["doc_type"] == "sale" for d in drafts) else "receipt"
     places: set[Booking | None] = set()
+    offsets: set[int | None] = set()
     count = 0
     for doc in drafts:
         if doc["doc_type"] != doc_type:
@@ -62,8 +67,10 @@ def open_lines(inventory: Inventory, company_id: int, document_ids: Sequence[int
         for line in _open(inventory, company_id, doc):
             count += 1
             places.add(_remembered(inventory, company_id, doc, line))
+            offsets.add(line["offset_account_id"])
     suggested = next(iter(places)) if len(places) == 1 else None
-    return OpenLines(doc_type, count, suggested)
+    offset = next(iter(offsets)) if len(offsets) == 1 and doc_type == "receipt" else None
+    return OpenLines(doc_type, count, suggested, offset)
 
 
 def post_drafts(
@@ -111,7 +118,7 @@ def _open(inventory: Inventory, company_id: int, doc: Row) -> list[Row]:
     else:
         return []
     return inventory.conn.execute(
-        f"SELECT id, item_id, memo FROM inventory_lines "
+        f"SELECT id, item_id, memo, offset_account_id FROM inventory_lines "
         f"WHERE company_id = ? AND document_id = ? AND {where} ORDER BY line_no",
         (company_id, doc["id"]),
     ).fetchall()
@@ -139,7 +146,12 @@ def _fill(inventory: Inventory, company_id: int, doc: Row, booking: Booking | No
             continue
         if place.account_id is not None:
             inventory.fill_expense_account(
-                company_id, doc["id"], line["id"], place.account_id, place.subconto
+                company_id,
+                doc["id"],
+                line["id"],
+                place.account_id,
+                place.subconto,
+                place.offset_account_id,
             )
         else:
             inventory.fill_sale_subconto(company_id, doc["id"], line["id"], place.subconto)
