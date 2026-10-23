@@ -7,7 +7,10 @@ A line is goods or a service by its code, as etaxes-ext decides: codes «99…»
 and services (CPA), others goods (ƏMTN). What a line becomes is guessed, in this order:
 the same name from the same counterparty last time (its item, or its account and
 subconto), an item of the same name, else nothing — a purchase line without an item and
-without an account does not post until the user chooses."""
+without an account does not post until the user chooses.
+
+A purchase posted before its e-qaimə came (D119) is offered the e-qaimə of its supplier:
+the e-qaimə is written into it (with its VAT when the amounts agree), not made anew."""
 
 from __future__ import annotations
 
@@ -33,6 +36,7 @@ from modern_gl.application.eqaime_import.parsing import (
     parse_invoice,
 )
 from modern_gl.application.eqaime_import.planning import (
+    AwaitingPurchase,
     InvoicePlan,
     LinePlan,
     plan_import,
@@ -42,6 +46,7 @@ __all__ = [
     "PURCHASE",
     "RETURN_KINDS",
     "SALE",
+    "AwaitingPurchase",
     "EInvoice",
     "EInvoiceLine",
     "InvoicePlan",

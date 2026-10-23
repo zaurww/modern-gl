@@ -52,6 +52,8 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.i18n import tr
 
+AWAITING = "awaiting"  # the basis box: a purchase waiting for its e-qaimə (D119)
+
 
 class InventoryDocumentForm(QWidget):
     saved = Signal(int)
@@ -150,8 +152,14 @@ class InventoryDocumentForm(QWidget):
         self.basis.setFixedWidth(120)
         self.basis.addItem(tr("E-qaimə"), EQAIME)
         self.basis.addItem(tr("Декларация"), CUSTOMS)
+        self.basis.addItem(tr("Ждёт e-qaimə"), AWAITING)  # goods came first (D119)
         self.basis.setCurrentIndex(0)
-        self.basis.setToolTip(tr("Основание: e-qaimə или таможенная декларация (импорт)"))
+        self.basis.setToolTip(
+            tr(
+                "Основание: e-qaimə или таможенная декларация (импорт). «Ждёт e-qaimə» — "
+                "товар пришёл раньше документов: номер и ƏDV допишет загрузка с портала"
+            )
+        )
         meta.addWidget(self.basis)
         self.invoice_caption = QLabel(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
         self.invoice_caption.setObjectName("secondary")

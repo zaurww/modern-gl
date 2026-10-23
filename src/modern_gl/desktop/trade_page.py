@@ -120,14 +120,22 @@ class TradePage(ReportPage):
         needle = fold(self.search.text().strip())
         if needle:
             rows = [
-                r for r in rows if needle in fold(f"{r.counterparties} {r.tax_ids} {r.invoice}")
+                r
+                for r in rows
+                if needle in fold(f"{r.counterparties} {r.tax_ids} {self._invoice(r)}")
             ]
         self.model.set(
             [
                 Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100),
                 Column(tr("№"), lambda r: r.number, width=60),
                 Column(tr(self.kind.counterparty), lambda r: r.counterparties),
-                Column(tr("E-qaimə"), lambda r: r.invoice, width=150),
+                Column(
+                    tr("E-qaimə"),
+                    self._invoice,
+                    width=150,
+                    # goods came before their e-qaimə (D119): what is left to do, louder
+                    tone=lambda r: "amber" if r.awaits_invoice else None,
+                ),
                 Column(tr("Сумма"), lambda r: r.amount, money=True, width=120),
                 Column(tr("ƏDV"), lambda r: r.vat, money=True, width=100),
                 Column(tr("Итого"), lambda r: r.total, money=True, width=120),
@@ -195,17 +203,19 @@ class TradePage(ReportPage):
             )
 
     @staticmethod
+    def _invoice(r: TradeDocument) -> str:
+        return tr("ждёт e-qaimə") if r.awaits_invoice else r.invoice
+
+    @staticmethod
     def _status(r: TradeDocument) -> str:
         return tr("Проведён") if r.status == "posted" else tr("Черновик")
 
     def import_eqaime(self) -> None:
         dialog = EqaimeImportDialog(self.s, self, direction=self.kind.doc_type)
-        if dialog.exec() and dialog.created:
+        if dialog.exec() and (dialog.created or dialog.attached):
             self.refresh()
             self.imported.emit()
-            self.s.notify(
-                tr("Создано черновиков: {n} — проверьте и проведите", n=len(dialog.created))
-            )
+            self.s.notify(dialog.outcome())
 
     def reconcile(self) -> None:
         dialog = EqaimeReconciliationDialog(self.s, self, direction=self.kind.doc_type)
