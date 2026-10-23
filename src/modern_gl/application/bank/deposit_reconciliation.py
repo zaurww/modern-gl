@@ -102,12 +102,7 @@ def reconcile_deposit(
     An operation is the line with its reference, else a line of the same day, amount and
     direction (entered by hand: the same money, the reference not yet written)."""
     booked = statement(conn, company_id, place, date_from, date_to)
-    posted = [line for line in booked.lines if line.status == "posted"]
-    books = Figures(
-        booked.opening,
-        sum(line.money_in for line in posted),
-        sum(line.money_out for line in posted),
-    )  # as books_figures, the statement read once
+    books = Figures(booked.opening, booked.total_in, booked.total_out)
     result = DepositReconciliation(
         date_from, date_to, portal_figures(operations, balance, date_from, date_to), books
     )
@@ -199,12 +194,7 @@ def books_figures(
 ) -> Figures:
     """The period by the books: the posted lines of the statement."""
     booked = statement(conn, company_id, place, date_from, date_to)
-    posted = [line for line in booked.lines if line.status == "posted"]
-    return Figures(
-        booked.opening,
-        sum(line.money_in for line in posted),
-        sum(line.money_out for line in posted),
-    )
+    return Figures(booked.opening, booked.total_in, booked.total_out)
 
 
 def changed_since(

@@ -159,19 +159,6 @@ def conversion_of_document(conn: Connection, company_id: int, document_id: int) 
     return row[0] if row else None
 
 
-def find_by_reference(conn: Connection, company_id: int, reference: str) -> int | None:
-    """A conversion already entered for a bank statement line (future statement import)."""
-    reference = reference.strip()
-    if not reference:
-        return None
-    row = conn.execute(
-        "SELECT id FROM currency_conversions WHERE company_id = ? "
-        "AND (from_reference = ? OR to_reference = ?) ORDER BY id LIMIT 1",
-        (company_id, reference, reference),
-    ).fetchone()
-    return row[0] if row else None
-
-
 def load_conversion(conn: Connection, company_id: int, conversion_id: int) -> Conversion:
     r = conn.execute(
         "SELECT c.*, d.number, d.doc_date, d.memo, d.status FROM currency_conversions c "
