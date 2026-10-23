@@ -93,7 +93,8 @@ def test_every_report_goes_to_excel(qtbot, tmp_path, monkeypatch, window):
     page = window.stack.currentWidget()
     assert isinstance(page, StatementsPage)
     page.profit_button.click()
-    qtbot.waitUntil(lambda: any(r.kind == "account" for r in page.model.rows))
+    page.detail_buttons["items"].click()  # a line of one account opens into its items (D108)
+    qtbot.waitUntil(lambda: any(r.kind == "item" for r in page.model.rows))
     save = dict(i for i in page.more_items() if i is not None)
     save["В Excel…"]()
     sheet = openpyxl.load_workbook(target).worksheets[0]
@@ -101,6 +102,6 @@ def test_every_report_goes_to_excel(qtbot, tmp_path, monkeypatch, window):
     rows = list(sheet.iter_rows(min_row=2, values_only=True))
     assert rows[-1][0] == "Чистая прибыль (убыток)"
     assert isinstance(rows[-1][1], int | float | Decimal)
-    assert {r[2] for r in rows} >= {0, 1, 2}  # «Уровень»: lines and their accounts
+    assert {r[2] for r in rows} >= {0, 1, 2}  # «Уровень»: lines and what is under them
     export.copy_to_clipboard(page)
     assert QApplication.clipboard().text().splitlines()[-1].startswith("Чистая прибыль")

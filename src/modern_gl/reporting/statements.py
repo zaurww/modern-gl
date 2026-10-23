@@ -37,6 +37,8 @@ class Line:
     # it (its first subconto, None: not given); their titles are names, not for tr()
     account_id: int | None = None
     value_id: int | None = None
+    # an item right under its line: the line's only account is not shown (D108)
+    under_line: bool = False
 
 
 @dataclass

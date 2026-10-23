@@ -29,6 +29,11 @@ from modern_gl.reporting.statements import (
 
 __all__ = ["ACCOUNTS", "ITEMS", "TYPES", "profit_and_loss"]
 SALES_VAT = "sales_vat"  # Dt sales Kt the output VAT account: a line of its own
+# on a sales account only these are the buyer's side (a sale, a return); anything else
+# written there — goods, a carrier (Dt 46 Kt 60), wages — is the cost of the sales
+BUYER_TYPES = frozenset(
+    {"receivable", "advance_received", "other_receivable", "cash", "bank", "transit"}
+)
 PL_CLASSES = ("revenue", "expense")
 # (line, account, the account's first subconto) -> a figure per column
 Turnovers = dict[tuple[str, int, int | None], Amounts]
@@ -59,9 +64,10 @@ def profit_and_loss(
     def add(key: str) -> Amounts:
         amount = total(v for (k, _, _), v in t.items() if k == key)
         if amount:
-            lines.append(_pl_line(key, amount))
+            line = _pl_line(key, amount)
+            lines.append(line)
             if names is not None:
-                lines.extend(_detail(t, key, names, detail == ITEMS))
+                lines.extend(_detail(t, key, names, detail == ITEMS, line))
         return amount
 
     gross = add("sales") + add(SALES_VAT) + add("cost_of_sales")
@@ -86,23 +92,30 @@ def _pl_line(key: str, amount: Amounts) -> Line:
     return _type_line(key, amount)
 
 
-def _detail(t: Turnovers, key: str, names: Names, items: bool) -> list[Line]:
+def _detail(t: Turnovers, key: str, names: Names, items: bool, line: Line) -> list[Line]:
     """The accounts of a line in the order of the chart, each with its items by name
-    (the postings without one last)."""
+    (the postings without one last). The only account of a line is not repeated under
+    it (46 under the sales, the VAT and the cost): the line itself leads to it."""
     by_account: dict[int, dict[int | None, Amounts]] = defaultdict(lambda: defaultdict(Amounts))
     for (k, account_id, value_id), amount in t.items():
         if k == key:
             by_account[account_id][value_id] += amount
+    shown = [
+        a for a in sorted(by_account, key=names.order.__getitem__) if total(by_account[a].values())
+    ]
+    if len(shown) == 1:
+        line.account_id = shown[0]
     lines: list[Line] = []
-    for account_id in sorted(by_account, key=names.order.__getitem__):
+    for account_id in shown:
         values = by_account[account_id]
-        if whole := total(values.values()):
+        if len(shown) > 1:
+            whole = total(values.values())
             lines.append(Line(names.accounts[account_id], whole, "account", account_id=account_id))
-        if not whole or not items or set(values) == {None}:
+        if not items or set(values) == {None}:
             continue
         titles = {v: names.values.get(v, "") if v is not None else "" for v in values}
         lines.extend(
-            Line(titles[v], values[v], "item", None, account_id, v)
+            Line(titles[v], values[v], "item", None, account_id, v, len(shown) == 1)
             for v in sorted(values, key=lambda v: (v is None, titles[v]))
             if values[v]
         )
@@ -160,8 +173,9 @@ def _pl_key(a: Row, other: Row, net: int, output_vat: set[int]) -> str | None:
     - between two income / expense accounts (Dt 46 Kt 26) — a move: the expense counts
       where it was spent;
     - against «Financial result» or «Retained earnings» — the closing;
-    - on a sales account against inventory — the cost of sales (Dt 46 Kt 41), against
-      the output VAT account — the VAT of the sales (Dt 46 Kt 68.2);
+    - on a sales account against the output VAT account — the VAT of the sales (Dt 46
+      Kt 68.2); against anything but the buyer or money — the cost of sales (Dt 46 Kt 41,
+      a carrier Dt 46 Kt 60);
     - on «Financial result» itself against anything else (the short chart writes there
       directly: Dt 80 Kt 51 a bank fee, Dt 52 Kt 80 an exchange gain) — other income or
       expense; against a tax — the profit tax."""
@@ -176,6 +190,6 @@ def _pl_key(a: Row, other: Row, net: int, output_vat: set[int]) -> str | None:
         return None
     if a["account_type"] == "sales" and other["id"] in output_vat:
         return SALES_VAT
-    if a["account_type"] == "sales" and other["account_type"] == "inventory":
+    if a["account_type"] == "sales" and other["account_type"] not in (None, *BUYER_TYPES):
         return "cost_of_sales"
     return a["account_type"] or f"{UNTYPED}:{a['account_class']}"
