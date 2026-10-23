@@ -9,7 +9,7 @@ from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.domain.currency import to_base
-from modern_gl.domain.dates import iso_date
+from modern_gl.domain.dates import iso_date, ru_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
@@ -71,8 +71,7 @@ class RevaluationCommands(DocumentCommands):
                 )
             if not postings:
                 return None
-            shown = ".".join(reversed(day.split("-")))
-            text = memo or tr("Переоценка валютных остатков на {date}", date=shown)
+            text = memo or tr("Переоценка валютных остатков на {date}", date=ru_date(day))
             return self.post_new(company_id, day, postings, text)
 
     def _currency_balances(self, company_id: int, day: str) -> list[Row]:

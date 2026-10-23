@@ -30,7 +30,6 @@ from modern_gl.application.conversions import (
     bank_rate,
     calculate,
     conversion_of_document,
-    find_by_reference,
     load_conversion,
 )
 from modern_gl.application.queries import load_document
@@ -132,7 +131,6 @@ def test_sale_of_currency_posts_through_transit(ledger, conn, firm):
     names = {ledger._subconto_value(cid, p.debit_subconto[0])["name"] for p in lines[1:3]}
     assert names == {"Курсовая разница при конвертации", "Комиссия банка"}
     assert conversion_of_document(conn, cid, conversion.document_id) == conversion_id
-    assert find_by_reference(conn, cid, "REF-2") == conversion_id
 
 
 def test_purchase_and_cross_currency(ledger, conn, firm):

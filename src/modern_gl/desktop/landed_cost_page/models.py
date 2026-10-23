@@ -22,6 +22,7 @@ from modern_gl.application.inventory import (
     unit_price,
     vat_of,
 )
+from modern_gl.application.table_text import plain_number
 from modern_gl.desktop.cell_editing import resolve_choice
 from modern_gl.desktop.landed_cost_page.columns import (
     ACCOUNT,
@@ -46,9 +47,6 @@ from modern_gl.desktop.landed_cost_page.columns import (
     WAREHOUSE,
     ChargeRow,
     TargetRow,
-)
-from modern_gl.desktop.postings import (
-    plain_number,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts

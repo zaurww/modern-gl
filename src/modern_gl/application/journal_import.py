@@ -25,34 +25,30 @@ from fractions import Fraction
 from modern_gl.application.catalog import AccountInfo, Catalog
 from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.ledger import ImportedDocument, Ledger, PostingInput
+from modern_gl.application.table_text import header_names, plain_number
 from modern_gl.domain.currency import parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import from_minor, to_minor
 from modern_gl.i18n import fold, tr
-from modern_gl.i18n_az import AZ
 
 DT, CT = "debit", "credit"
 
 
-def _names(*sources: str) -> set[str]:
-    return {fold(name) for src in sources for name in (src, AZ.get(src, src))}
-
-
 FIELDS = {
-    "date": _names("Дата"),
-    "document": _names("Документ", "№", "Номер", "Номер документа", "Sənəd", "Nömrə"),
-    "layer": _names("Книга"),
-    DT: _names("Дебет", "Дт", "Счёт Дт"),
-    CT: _names("Кредит", "Кт", "Счёт Кт"),
-    "amount": _names("Сумма", "Сумма AZN"),
-    "currency": _names("Валюта"),
-    "currency_amount": _names("В валюте", "Сумма в валюте"),
-    "rate": _names("Курс"),
-    "memo": _names("Содержание", "Комментарий"),
-    "invoice": _names("E-qaimə", "E-qaime", "Qaimə", "Номер e-qaimə", "Счёт-фактура"),
+    "date": header_names("Дата"),
+    "document": header_names("Документ", "№", "Номер", "Номер документа", "Sənəd", "Nömrə"),
+    "layer": header_names("Книга"),
+    DT: header_names("Дебет", "Дт", "Счёт Дт"),
+    CT: header_names("Кредит", "Кт", "Счёт Кт"),
+    "amount": header_names("Сумма", "Сумма AZN"),
+    "currency": header_names("Валюта"),
+    "currency_amount": header_names("В валюте", "Сумма в валюте"),
+    "rate": header_names("Курс"),
+    "memo": header_names("Содержание", "Комментарий"),
+    "invoice": header_names("E-qaimə", "E-qaime", "Qaimə", "Номер e-qaimə", "Счёт-фактура"),
 }
-SUBCONTO = _names("Субконто")
+SUBCONTO = header_names("Субконто")
 REQUIRED = ("date", DT, CT, "amount")
 REQUIRED_NAMES = {"date": "Дата", DT: "Дебет", CT: "Кредит", "amount": "Сумма"}
 EXCEL_EPOCH = date(1899, 12, 30)
@@ -114,13 +110,6 @@ def header(cells: Sequence[str]) -> dict[int, tuple[str, int]]:
             if side is not None and 1 <= pos <= 3:
                 result[i] = (side, pos)
     return result
-
-
-def plain_number(text: str) -> str:
-    text = text.strip().replace(" ", "").replace(" ", "").replace("'", "")
-    if "," in text and "." in text:
-        text = text.replace("," if text.index(",") < text.index(".") else ".", "")
-    return text.replace(",", ".")
 
 
 def parse_date(text: str) -> date | None:

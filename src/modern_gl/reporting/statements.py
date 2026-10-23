@@ -1,5 +1,5 @@
-"""Финансовая отчётность (D99): the balance sheet on a day and the profit and loss for a
-period, read from the accounts' types (D35) — whatever the codes of the chart. Level 2 of
+"""Финансовая отчётность (D99): the balance sheet on a day (the profit and loss — in
+`profit_loss.py`), read from the accounts' types (D35) — whatever the codes of the chart. Level 2 of
 the classification: a line per type, current and long-term apart (D89).
 
 Amounts are minor units: assets and expenses as Dt − Ct, liabilities, equity and income

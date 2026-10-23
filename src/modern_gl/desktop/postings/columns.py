@@ -12,8 +12,8 @@ from PySide6.QtCore import (
 )
 
 from modern_gl.application.queries import PostingData
+from modern_gl.application.table_text import header_names
 from modern_gl.i18n import fold
-from modern_gl.i18n_az import AZ
 
 DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO, INVOICE = 0, 4, 8, 9, 10, 11, 12, 13
 CURRENCY_COLUMNS = (CURRENCY, CURRENCY_AMOUNT, RATE)
@@ -92,20 +92,6 @@ class PasteResult:
     rows: int = 0
     errors: list[str] = field(default_factory=list)
     unknown: list[tuple[int, int, int, str]] = field(default_factory=list)  # row, col, kind
-
-
-def plain_number(text: str) -> str:
-    """Excel numbers as they come: '1 234,50', '1,234.50', '1.234,50' -> '1234.50'."""
-    text = text.strip().replace("\u00a0", "").replace(" ", "").replace("'", "")
-    if "," in text and "." in text:  # the first one separates thousands
-        thousands = "," if text.index(",") < text.index(".") else "."
-        text = text.replace(thousands, "")
-    return text.replace(",", ".")
-
-
-def header_names(*sources: str) -> set[str]:
-    """A header in Russian and in Azerbaijani, folded for matching."""
-    return {fold(name) for src in sources for name in (src, AZ.get(src, src))}
 
 
 HEADER_FIELDS = [  # header names -> column (subconto headers are handled separately)
