@@ -13,7 +13,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 
 from modern_gl.application.bank.operations import (
@@ -117,11 +117,13 @@ def parse_operation(raw: dict, own_tin: str = "") -> DepositOperation:
 
 @dataclass(frozen=True)
 class DepositFetched:
-    """What the portal gave: the operations from a day up to now, the balance now."""
+    """What the portal gave: the operations from the period's first day up to now (the
+    balance of a day is counted back from the balance now), the balance now."""
 
     operations: list[DepositOperation]
     balance: int
     date_from: str
+    date_to: str  # the period loaded: the operations after it only count the balance
 
 
 def fetch_deposit(
@@ -130,9 +132,11 @@ def fetch_deposit(
     today: date,
     own_tin: str,
     progress: Callable[[str], None],
+    date_to: date | None = None,
 ) -> DepositFetched:
-    """The balance first, then the operations: one that comes in meanwhile is left for
-    the next time, so the balance of each day stays right."""
+    """The operations of the period `date_from`–`date_to` (else up to today). The balance
+    first, then the operations up to today: one that comes in meanwhile is left for the
+    next time, so the balance of each day stays right."""
     progress(tr("Остаток ƏDV depozit на портале…"))
     balance, read_at = client.vat_deposit_balance()
     cutoff = "".join(ch for ch in read_at if ch.isdigit())[:14]
@@ -142,7 +146,51 @@ def fetch_deposit(
         op = parse_operation(raw, own_tin)
         if not cutoff or op.moment <= cutoff:
             operations.append(op)
-    return DepositFetched(operations, _minor(balance), date_from.isoformat())
+    last = min(date_to or today, today)
+    return DepositFetched(operations, _minor(balance), date_from.isoformat(), last.isoformat())
+
+
+@dataclass(frozen=True)
+class PortalLoad:
+    """A period loaded from the portal into a bank account (D115)."""
+
+    date_from: str
+    date_to: str
+    loaded_at: str
+    operations: int
+
+
+def portal_loads(conn: Connection, company_id: int, place: BankPlace) -> list[PortalLoad]:
+    """The periods loaded into the account, the earliest first."""
+    return [
+        PortalLoad(r["date_from"], r["date_to"], r["loaded_at"], r["operations"])
+        for r in conn.execute(
+            "SELECT date_from, date_to, loaded_at, operations FROM bank_portal_loads "
+            "WHERE company_id = ? AND account_id = ? AND COALESCE(value_id, 0) = ? "
+            "ORDER BY date_from, date_to",
+            (company_id, place.account_id, place.value_id or 0),
+        )
+    ]
+
+
+def loaded_spans(loads: Sequence[PortalLoad]) -> list[tuple[str, str]]:
+    """The loaded periods joined: overlapping ones and ones that go on the next day."""
+    spans: list[tuple[str, str]] = []
+    for load in sorted(loads, key=lambda x: (x.date_from, x.date_to)):
+        if spans and load.date_from <= _next_day(spans[-1][1]):
+            spans[-1] = (spans[-1][0], max(spans[-1][1], load.date_to))
+        else:
+            spans.append((load.date_from, load.date_to))
+    return spans
+
+
+def loaded_already(loads: Sequence[PortalLoad], date_from: str, date_to: str) -> bool:
+    """Every day of the period was loaded before."""
+    return any(a <= date_from and date_to <= b for a, b in loaded_spans(loads))
+
+
+def _next_day(day: str) -> str:
+    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
 
 
 def invoices_in(text: str) -> list[str]:

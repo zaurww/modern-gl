@@ -85,3 +85,5 @@ class PortalLoader(QObject):
             self.loaded.emit(self.job(self.progress.emit))
         except PortalError as exc:
             self.failed.emit(str(exc))
+        except Exception as exc:  # an answer of an unexpected shape: said, not a silent stop
+            self.failed.emit(tr("портал ответил непонятно: {error}", error=exc))

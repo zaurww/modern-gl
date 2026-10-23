@@ -38,10 +38,14 @@ from modern_gl.application.bank import (
     load_bank_operation,
 )
 from modern_gl.application.bank.deposit_import import (
+    PortalLoad,
     day_closings,
     fetch_deposit,
     invoices_in,
+    loaded_already,
+    loaded_spans,
     parse_operation,
+    portal_loads,
 )
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.chart_csv import apply_chart_template
@@ -341,36 +345,170 @@ def test_an_operation_after_the_balance_waits_for_next_time():
     assert (fetched.balance, fetched.operations[1].amount) == (71000, 1244)
 
 
-def test_the_bank_page_loads_the_deposit_from_the_portal(qtbot, ledger, firm, monkeypatch):
+def test_only_the_period_is_loaded_and_remembered(ledger, firm):
+    """02.10 alone: Alfa's 12.44 and the budget's 940.00; the later operations only count
+    the balance back — the end of 02.10 is 710.00 (see the top)."""
+    cid, place = firm["cid"], firm["place"]
+    done = ledger.bank.import_vat_deposit(
+        cid, place, operations(), 100000, ("2026-10-02", "2026-10-02")
+    )
+    assert (done.posted, done.drafts, done.counterparties) == (2, [], 0)
+    assert set(by_reference(ledger, cid)) == {"2619000000000002", "2619000000000003"}
+    days = {s.date_from: s.bank_closing for s in bank_statements(ledger.conn, cid, place)}
+    assert days == {"2026-10-02": 71000}
+    [load] = portal_loads(ledger.conn, cid, place)
+    assert (load.date_from, load.date_to, load.operations) == ("2026-10-02", "2026-10-02", 2)
+
+    # then 01–03.10: the two of 02.10 are known, the rest is new
+    again = ledger.bank.import_vat_deposit(
+        cid, place, operations(), 100000, ("2026-10-01", "2026-10-03")
+    )
+    assert (again.known, again.posted, len(again.drafts)) == (2, 2, 1)
+    loads = portal_loads(ledger.conn, cid, place)
+    assert loaded_spans(loads) == [("2026-10-01", "2026-10-03")]
+
+
+def a_load(first: str, last: str) -> PortalLoad:
+    return PortalLoad(first, last, "2026-10-23T10:00:00", 0)
+
+
+def test_loaded_periods_are_joined():
+    loads = [
+        a_load("2026-10-05", "2026-10-09"),
+        a_load("2026-09-01", "2026-09-30"),
+        a_load("2026-10-01", "2026-10-03"),
+    ]
+    # 30.09 and 01.10 go on; between 03.10 and 05.10 the 4th is missing
+    assert loaded_spans(loads) == [("2026-09-01", "2026-10-03"), ("2026-10-05", "2026-10-09")]
+    assert loaded_already(loads, "2026-09-15", "2026-10-02")
+    assert not loaded_already(loads, "2026-10-01", "2026-10-05")  # 04.10 was not loaded
+    assert not loaded_already([], "2026-10-01", "2026-10-01")
+
+
+def test_the_sign_in_window_says_what_it_waits_for():
+    from modern_gl.desktop.portal_login import waiting_for
+    from tests.test_eqaime_import import fake_token
+
+    assert waiting_for(None) == tr("Ждём входа на портал…")
+    assert waiting_for(fake_token(lifetime=-10)) == tr(
+        "Вход на портал устарел — войдите ещё раз или обновите страницу"
+    )
+    assert waiting_for(fake_token(voen="")) == tr("Вход выполнен — выберите на портале компанию")
+    assert waiting_for(fake_token(OWN_TIN), "1500000000") == tr(
+        "На портале выбрана фирма с VÖEN {tin}, а нужна VÖEN {own} — выберите её",
+        tin=OWN_TIN,
+        own="1500000000",
+    )
+    assert waiting_for(fake_token(OWN_TIN), OWN_TIN) == ""
+    assert waiting_for(fake_token(OWN_TIN)) == ""  # the company's VÖEN not known yet
+
+
+@pytest.fixture
+def deposit_session(ledger, firm, monkeypatch):
     from modern_gl.application.catalog import Catalog
     from modern_gl.desktop import portal_login
-    from modern_gl.desktop.bank_page import BankPage
     from modern_gl.desktop.bank_page import portal as module
     from modern_gl.desktop.session import Session
     from tests.test_eqaime_import import fake_token
 
-    cid, place = firm["cid"], firm["place"]
+    cid = firm["cid"]
     messages: list[str] = []
     s = Session(
         ledger.conn, ledger, cid, "ООО Депозит", Catalog(ledger.conn, cid), notify=messages.append
     )
     s.working_date = date(2026, 10, 5)
-    asked: list[date] = []
-    monkeypatch.setattr(module, "ask_date", lambda _w, _t, _p, start: asked.append(start) or start)
     ledger.set_company_tax_id(cid, OWN_TIN)  # the portal's firm (D113)
     token = fake_token(OWN_TIN)
     portal = FakeDepositPortal(as_json(PORTAL), token=token)
     monkeypatch.setattr(module, "EtaxesClient", lambda token: EtaxesClient(token, send=portal))
     portal_login.forget_token()
+    return s, messages, token, portal
+
+
+def test_the_window_loads_the_period_chosen(qtbot, firm, deposit_session):
+    from modern_gl.desktop.bank_page.portal import DepositDialog
+
+    s, _messages, token, portal = deposit_session
+    dialog = DepositDialog(s, firm["place"], sign_in=lambda _parent: token, today=date(2026, 10, 3))
+    qtbot.addWidget(dialog)
+    assert dialog.period() == (date(2026, 10, 1), date(2026, 10, 3))  # this month to today
+    assert dialog.loaded.text() == tr("С портала в этот счёт ещё ничего не загружалось.")
+    dialog.period_bar.set_period(date(2026, 10, 2), date(2026, 10, 2))
+    with qtbot.waitSignal(dialog.accepted, timeout=5000):
+        dialog.load()
+    # the operations asked from the period's first day up to today: the balance of 02.10
+    # is counted back from now
+    asked = portal.calls[1][2]
+    assert (asked["creationDateFrom"], asked["creationDateTo"]) == ("2026-10-02", "2026-10-03")
+    assert dialog.imported is not None and dialog.imported.posted == 2
+    assert loaded_spans(portal_loads(s.conn, s.company_id, firm["place"])) == [
+        ("2026-10-02", "2026-10-02")
+    ]
+
+
+def test_a_period_loaded_already_is_asked_about(qtbot, ledger, firm, deposit_session, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from modern_gl.desktop.bank_page import portal as module
+
+    s, _messages, token, portal = deposit_session
+    cid, place = firm["cid"], firm["place"]
+    ledger.bank.import_vat_deposit(cid, place, operations(), 100000, ("2026-10-01", "2026-10-02"))
+    dialog = module.DepositDialog(s, place, sign_in=lambda _parent: token, today=date(2026, 10, 3))
+    qtbot.addWidget(dialog)
+    # the next period suggested: from the day after the last one loaded up to today
+    assert dialog.period() == (date(2026, 10, 3), date(2026, 10, 3))
+    assert dialog.loaded.text() == tr(
+        "Уже загружено с портала: {periods}.", periods="01.10–02.10.2026"
+    )
+    dialog.period_bar.set_period(date(2026, 10, 1), date(2026, 10, 2))
+    assert tr("Выбранный период уже загружен.") in dialog.loaded.text()
+    asked: list[str] = []
+
+    def no(*args):
+        asked.append(args[2])
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(module.QMessageBox, "question", no)
+    dialog.load()
+    assert len(asked) == 1 and portal.calls == []  # not loaded: the portal not asked
+
+
+def test_the_bank_page_has_one_menu_with_the_portal(qtbot, firm, deposit_session, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QDialog, QPushButton
+
+    from modern_gl.application.bank import BankAccount
+    from modern_gl.desktop.bank_page import BankPage
+    from modern_gl.desktop.bank_page import portal as module
+
+    s, messages, token, _portal = deposit_session
     page = BankPage(s)
     qtbot.addWidget(page)
-    page.portal.sign_in = lambda _parent: token
-    page.open_account(place.key)
-    assert tr("Загрузить с портала…") in [item[0] for item in page._more() if item]
-    with qtbot.waitSignal(page.portal.imported, timeout=5000):
-        page.load_from_portal()
-    assert asked == [date(2026, 1, 1)]  # nothing loaded yet: from the start of the year
+    more = [b for b in page.header.findChildren(QPushButton) if b.toolTip() == tr("Ещё")]
+    assert len(more) == 1  # D86: one «⋯» — the bank's actions and the report's together
+    model = page.table.model()
+    row = next(
+        model.index(r, 0)
+        for r in range(model.rowCount())
+        if isinstance(account := model.index(r, 0).data(Qt.ItemDataRole.UserRole), BankAccount)
+        and account.place.key == firm["place"].key
+    )
+    page.table.setCurrentIndex(row)  # at the list of accounts: the deposit under the cursor
+    titles = [item[0] for item in page.more_items() if item]
+    assert tr("Загрузить с портала…") in titles and tr("В Excel…") in titles
+
+    def run(dialog):
+        dialog.sign_in = lambda _parent: token
+        with qtbot.waitSignal(dialog.accepted, timeout=5000):
+            dialog.load()
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(module.DepositDialog, "exec", run)
+    monkeypatch.setattr(
+        module.DepositDialog, "period", lambda _self: (date(2026, 10, 1), date(2026, 10, 3))
+    )
+    page.load_from_portal()
     assert messages[-1] == tr(
         "С портала: проведено {posted}, не разнесено {drafts}", posted=4, drafts=1
     ) + tr(", новых контрагентов {n}", n=1)
-    assert [s.date_from for s in page.statements] == ["2026-10-01", "2026-10-02", "2026-10-03"]

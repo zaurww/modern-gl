@@ -26,11 +26,13 @@ from modern_gl.application.bank.deposit_import import (
     plan_deposit_import,
     previous_lines,
 )
+from modern_gl.application.common import now
 from modern_gl.application.counterparties import known_counterparty, short_name
 from modern_gl.application.ledger.bank import BankCommands
 from modern_gl.application.ledger.bank_statements import BankStatementCommands
 from modern_gl.domain.accounts import OUTPUT_VAT
-from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.errors import LedgerError, ValidationError
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 
@@ -53,11 +55,21 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
         place: BankPlace,
         operations: Sequence[DepositOperation],
         balance: int,
+        period: tuple[str, str] | None = None,
     ) -> DepositImported:
-        """Load the portal's operations of a period up to now into the deposit account;
-        `balance` — the account's balance by the portal now. Loading again adds nothing."""
+        """Load the portal's operations into the deposit account: `operations` — from a day
+        up to now, `balance` — the account's balance by the portal now; `period` — the
+        days to load (the later operations only count the balance back), remembered as
+        loaded (D115). Loading again adds nothing."""
         done = DepositImported()
+        closings = day_closings(operations, balance)
+        if period is not None:
+            first, last = period
+            operations = [op for op in operations if first <= op.day <= last]
+            closings = {day: n for day, n in closings.items() if first <= day <= last}
         with transaction(self.conn):
+            if period is not None:
+                self._remember_load(company_id, place, period, operations)
             plan = plan_deposit_import(self.conn, company_id, place, operations)
             done.known = len(plan.known)
             for op, operation_id in plan.linked:
@@ -79,9 +91,33 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
                     self.save_bank_operation(company_id, data, post=False)
                     done.drafts.append((op, str(e)))
                 self.conn.execute("RELEASE deposit_operation")
-            for day, amount in sorted(day_closings(operations, balance).items()):
+            for day, amount in sorted(closings.items()):
                 done.closings += self._deposit_closing(company_id, place, day, amount)
         return done
+
+    def _remember_load(
+        self,
+        company_id: int,
+        place: BankPlace,
+        period: tuple[str, str],
+        operations: Sequence[DepositOperation],
+    ) -> None:
+        first, last = period
+        if last < first:
+            raise ValidationError(tr("начало периода позже конца"))
+        self.conn.execute(
+            "INSERT INTO bank_portal_loads (company_id, account_id, value_id, date_from, "
+            "date_to, loaded_at, operations) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                company_id,
+                place.account_id,
+                place.value_id,
+                first,
+                last,
+                now(),
+                sum(1 for op in operations if op.done),
+            ),
+        )
 
     def _deposit_parties(
         self, company_id: int, operations: Sequence[DepositOperation], done: DepositImported
