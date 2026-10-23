@@ -1,3 +1,5 @@
+> **Архив.** Первый черновик требований (v0.1, 2026-10-19). Многое отменено решениями — действуют `docs/CONCEPT.md`, `docs/ARCHITECTURE.md` и `docs/DECISIONS.md`.
+
 # Modern GL — Functional & Non-functional Specification
 
 **Version:** 0.1 (draft)  
