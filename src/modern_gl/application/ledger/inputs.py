@@ -6,6 +6,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from typing import Protocol
+
+from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.money import from_minor
+from modern_gl.i18n import tr
 
 DEFAULT_LAYERS = (
     ("common", "Общий учёт"),
@@ -32,6 +37,56 @@ class PostingInput:
     currency_amount: str | int | Decimal | None = None
     invoice: str = ""  # number of the e-qaimə the posting belongs to ("" = none)
     invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a customs declaration
+
+
+class TypedLine(Protocol):
+    """A posting as a form or the quick line holds it: amounts in minor units."""
+
+    @property
+    def debit(self) -> int | None: ...
+    @property
+    def credit(self) -> int | None: ...
+    @property
+    def amount(self) -> int | None: ...
+    @property
+    def debit_sc(self) -> Sequence[int | None]: ...
+    @property
+    def credit_sc(self) -> Sequence[int | None]: ...
+    @property
+    def memo(self) -> str: ...
+    @property
+    def currency_id(self) -> int | None: ...
+    @property
+    def currency_amount(self) -> int | None: ...
+    @property
+    def invoice(self) -> str: ...
+
+
+def typed_posting(
+    n: int, line: TypedLine, *, currency: bool = True, invoice: bool = True, invoice_kind: str = ""
+) -> PostingInput:
+    """Line `n` of a form as the ledger's input; `currency` / `invoice` — whether its
+    accounts keep them (else what was typed there is not passed on)."""
+    if line.debit is None:
+        raise ValidationError(tr("строка {line}: не указан счёт дебета", line=n))
+    if line.credit is None:
+        raise ValidationError(tr("строка {line}: не указан счёт кредита", line=n))
+    if line.amount is None:
+        raise ValidationError(tr("строка {line}: не указана сумма", line=n))
+    in_currency = currency and line.currency_id is not None
+    number = line.invoice if invoice else ""
+    return PostingInput(
+        line.debit,
+        line.credit,
+        from_minor(line.amount),
+        tuple(line.debit_sc),
+        tuple(line.credit_sc),
+        line.memo.strip(),
+        line.currency_id if in_currency else None,
+        from_minor(line.currency_amount or 0) if in_currency else None,
+        number,
+        invoice_kind if number else "",
+    )
 
 
 @dataclass(frozen=True)
