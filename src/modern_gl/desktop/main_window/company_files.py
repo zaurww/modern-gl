@@ -43,7 +43,7 @@ from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import language, set_language, tr
 from modern_gl.infrastructure import backup
-from modern_gl.infrastructure.db import Connection, DatabaseError, Error
+from modern_gl.infrastructure.db import Connection, DatabaseError, Error, close
 from modern_gl.reporting.handover import handover_files, write_handover
 
 
@@ -252,7 +252,7 @@ class CompanyFiles(QMainWindow):
                 QMessageBox.warning(
                     self, tr("Резервная копия"), tr("Копия не сохранена: {error}", error=e)
                 )
-            self.conn.close()
+            close(self.conn)
         self.conn = self.ledger = self.session = self.company_path = None
 
     def shutdown(self) -> None:

@@ -102,6 +102,26 @@ class SaleLine:
 
 
 @dataclass(frozen=True)
+class UsualUnit:
+    """A unit offered before the company has it: made with the item that takes it."""
+
+    code: str
+    name: str
+    precision: int = 3
+
+
+# offered by the item dialog (in Russian, translated there): a first item needs no setup
+USUAL_UNITS = (
+    UsualUnit("шт", "Штука", 0),
+    UsualUnit("кг", "Килограмм"),
+    UsualUnit("л", "Литр"),
+    UsualUnit("м", "Метр"),
+    UsualUnit("м²", "Квадратный метр"),
+    UsualUnit("уп.", "Упаковка", 0),
+)
+
+
+@dataclass(frozen=True)
 class TransferLine:
     item_id: int
     from_warehouse_id: int | None

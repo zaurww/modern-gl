@@ -173,7 +173,7 @@ def test_windows_open_no_transaction():
 
 
 def test_ledger_is_the_core_and_modules_are_objects_of_their_own():
-    """Debt 2 (paid in session 38; D122): the bank, conversion and e-qaimə are not mixed
+    """Debt 2 (paid in session 38; D123): the bank, conversion and e-qaimə are not mixed
     into Ledger; each is an object of its own package over the same connection — the core
     knows none of them, and asks for a module only when its handle is used."""
     from modern_gl.application.bank import BankModule
@@ -215,7 +215,7 @@ def test_the_counterparty_of_a_line_has_one_rule():
     assert not bad, f"контрагент строки выбирается вручную: {bad} — inventory_line_counterparties"
 
 
-# The layers and their order (docs/ARCHITECTURE.md, § 1; D121): a layer imports only itself
+# The layers and their order (docs/ARCHITECTURE.md, § 1; D122): a layer imports only itself
 # and the layers below it. `i18n` is the bottom (texts), `domain` knows no SQL, `infrastructure`
 # is the engine and the files, `application` the scenarios and the shared reading,
 # `reporting` the reports over them; the top is everything that shows or serves.

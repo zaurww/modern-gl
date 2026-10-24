@@ -16,6 +16,9 @@ from modern_gl.domain.errors import ReadOnlyError
 from modern_gl.i18n import tr
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+# The mark of a company file in the SQLite header ('MGL1', set by migration 0046); 0 is an
+# empty or an older file of ours, anything else is another program's database.
+APPLICATION_ID = int.from_bytes(b"MGL1", "big")
 
 # A row is read both by name (row["code"]) and by position (row[0]) and has .keys()
 Connection = sqlite3.Connection
@@ -30,11 +33,31 @@ def connect(path: str | Path) -> sqlite3.Connection:
     # isolation_level=None: no implicit transactions, we open them explicitly.
     conn = sqlite3.connect(path, isolation_level=None)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA journal_mode = WAL")
-    conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
-    migrate(conn)
+    try:
+        _check_application_id(conn)  # before anything touches another program's file
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
+        migrate(conn)
+    except BaseException:
+        conn.close()
+        raise
     return conn
+
+
+def _check_application_id(conn: sqlite3.Connection) -> None:
+    found = conn.execute("PRAGMA application_id").fetchone()[0]
+    if found not in (0, APPLICATION_ID):
+        raise sqlite3.DatabaseError(tr("это не файл компании Modern GL"))
+
+
+def close(conn: sqlite3.Connection) -> None:
+    """Close a company's connection. A writable file first refreshes the statistics the
+    query planner chooses indexes by (PRAGMA optimize: cheap, only what the session's
+    queries showed to be stale); a snapshot (D80) is closed as it is."""
+    if not is_read_only(conn) and not conn.in_transaction:
+        conn.execute("PRAGMA optimize")
+    conn.close()
 
 
 def connect_reader(path: str | Path) -> sqlite3.Connection:

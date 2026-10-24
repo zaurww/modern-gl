@@ -71,6 +71,15 @@ class MovementsPart(InventoryForm):
         balance = self.chosen_balance()
         if balance is None:
             self.below_title.setText("")
+            if self.has_stock():
+                self.card_empty.say(
+                    tr("Выберите товар"), tr("Здесь будет видно, откуда он пришёл и куда ушёл.")
+                )
+            else:  # no stock yet: nothing to choose
+                self.card_empty.say(
+                    tr("Движений пока нет"),
+                    tr("Здесь будет видно, откуда пришёл и куда ушёл каждый товар."),
+                )
             self.card_stack.setCurrentWidget(self.card_empty)
             return
         self.below_title.setText(f"{balance.item_name} · {balance.warehouse_name}")

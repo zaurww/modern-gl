@@ -55,6 +55,9 @@ from modern_gl.i18n import tr
 AWAITING = "awaiting"  # the basis box: a purchase waiting for its e-qaimə (D119)
 
 
+GAP = 16  # between the groups of the header: a document fits a 1366 px screen
+
+
 class InventoryDocumentForm(QWidget):
     saved = Signal(int)
     close_requested = Signal()
@@ -116,20 +119,19 @@ class InventoryDocumentForm(QWidget):
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
+        meta.setSpacing(8)  # a caption by its field; the groups part by GAP
         date_caption = QLabel(tr("Дата"))
         date_caption.setObjectName("secondary")
         meta.addWidget(date_caption)
         self.date = date_edit(self.s.working_date)
         self.date.setFixedWidth(130)
         meta.addWidget(self.date)
-        meta.addSpacing(12)
-        type_caption = QLabel(tr("Операция"))
-        type_caption.setObjectName("secondary")
-        meta.addWidget(type_caption)
+        meta.addSpacing(GAP)
+        # what the document is, in a word: «Покупка» needs no caption
         self.type_label = QLabel(tr(DOCUMENT_TYPES.get(self.doc_type, self.doc_type)))
         self.type_label.setFont(fonts().heading)
         meta.addWidget(self.type_label)
-        meta.addSpacing(12)
+        meta.addSpacing(GAP)
         self.vat_caption = QLabel(tr("НДС"))
         self.vat_caption.setObjectName("secondary")
         meta.addWidget(self.vat_caption)
@@ -138,7 +140,7 @@ class InventoryDocumentForm(QWidget):
         for rate, label in VAT_RATES:
             self.vat_rate.addItem(tr(label), rate)
         meta.addWidget(self.vat_rate)
-        meta.addSpacing(12)
+        meta.addSpacing(GAP)
         self._build_reason(meta)
         self._build_basis(meta)
         self._build_expense_month(meta)
@@ -165,14 +167,14 @@ class InventoryDocumentForm(QWidget):
         self.invoice_caption.setObjectName("secondary")
         meta.addWidget(self.invoice_caption)
         self.invoice = QLineEdit()
-        self.invoice.setFixedWidth(170)
+        self.invoice.setFixedWidth(140)  # «MT2601001842» and room to spare
         self.invoice.setPlaceholderText(tr("номер"))
         meta.addWidget(self.invoice)
         # what the portal said of it when last read: awaiting approval, cancelled… (D53)
         self.portal_status = Chip()
         self.portal_status.hide()
         meta.addWidget(self.portal_status)
-        meta.addSpacing(12)
+        meta.addSpacing(GAP)
 
     def _build_reason(self, meta: QHBoxLayout) -> None:
         # why goods come in without a purchase (D91): it chooses the account credited
@@ -184,7 +186,7 @@ class InventoryDocumentForm(QWidget):
         for key, (name, _role) in INCOMING_REASONS.items():
             self.reason.addItem(tr(name), key)
         meta.addWidget(self.reason)
-        meta.addSpacing(12)
+        meta.addSpacing(GAP)
 
     def _build_expense_month(self, meta: QHBoxLayout) -> None:
         # services of an earlier month whose e-qaimə came later: accrued there (D65)
@@ -201,7 +203,7 @@ class InventoryDocumentForm(QWidget):
             )
         )
         meta.addWidget(self.expense_month)
-        meta.addSpacing(12)
+        meta.addSpacing(GAP)
 
     def _build_currency(self, meta: QHBoxLayout) -> None:
         self.currency_caption = QLabel(tr("Валюта"))
@@ -230,6 +232,7 @@ class InventoryDocumentForm(QWidget):
         self.hint = QLabel(tr(HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
+        self.hint.setWordWrap(True)  # never widens the window
         summary.addWidget(self.hint, 1)
         summary.addSpacing(24)
         self.currency_total = QLabel()
