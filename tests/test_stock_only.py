@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_mode
+from modern_gl.application.workspace import Workspace
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.home_page import HomePage
@@ -22,7 +23,6 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)

@@ -284,9 +284,9 @@ def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
 ):
     from PySide6.QtWidgets import QMessageBox
 
+    from modern_gl.application.workspace import Workspace
     from modern_gl.demo_data import create_demo_company
     from modern_gl.desktop.main_window import MainWindow
-    from modern_gl.infrastructure.workspace import Workspace
 
     monkeypatch.setattr(
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)

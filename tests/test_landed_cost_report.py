@@ -15,6 +15,7 @@ from modern_gl.application.inventory import (
     ReceiptLine,
 )
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.workspace import Workspace
 from modern_gl.demo_year import create_year_demo
 from modern_gl.desktop import theme, widgets
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
@@ -23,7 +24,6 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 from modern_gl.reporting.inventory import landed_cost_report
 
 

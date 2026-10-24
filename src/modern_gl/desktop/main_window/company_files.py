@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_name, company_tax_id, posting_count
+from modern_gl.application.workspace import SUFFIX, TRASH, Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.background import LARGE
 from modern_gl.desktop.portal_company import ask_tax_id
@@ -43,7 +44,6 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import language, set_language, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import Connection, DatabaseError, Error
-from modern_gl.infrastructure.workspace import SUFFIX, TRASH, Workspace
 from modern_gl.reporting.handover import handover_files, write_handover
 
 

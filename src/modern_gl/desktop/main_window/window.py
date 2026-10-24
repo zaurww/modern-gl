@@ -22,6 +22,7 @@ from modern_gl.application.queries import (
     load_document,
     load_template,
 )
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.backups_dialog import BackupsDialog
 from modern_gl.desktop.bank_operation_page import BankOperationPage
@@ -51,7 +52,6 @@ from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import LANGUAGES, language, tr
-from modern_gl.infrastructure.workspace import Workspace
 from modern_gl.reporting.trade import PURCHASE, SALE
 
 

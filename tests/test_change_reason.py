@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from modern_gl.application.history import document_history
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.period import closed_through
+from modern_gl.application.workspace import Workspace
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.history_dialog import HistoryDialog
@@ -20,7 +21,6 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.period_dialog import PeriodDialog
 from modern_gl.desktop.widgets import to_qdate
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 from tests.conftest import REASON
 
 

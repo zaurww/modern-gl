@@ -17,13 +17,13 @@ from PySide6.QtWidgets import QApplication
 
 from modern_gl import demo_year, i18n
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.workspace import Workspace
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import qt_texts, theme
 from modern_gl.desktop.backups_dialog import MIRROR_SETTING
 from modern_gl.desktop.cell_editing import select_whole_on_entry
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 
 
 def default_folder() -> Path:

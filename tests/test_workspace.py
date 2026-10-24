@@ -4,9 +4,10 @@ from pathlib import Path
 import pytest
 
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.workspace import TRASH, Workspace
 from modern_gl.demo_data import create_demo_company
+from modern_gl.infrastructure.company_file import open_company
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, latest_version
-from modern_gl.infrastructure.workspace import TRASH, Workspace, open_company
 from modern_gl.reporting.reports import trial_balance
 from tests.conftest import build_demo
 
@@ -162,7 +163,7 @@ def test_failed_split_leaves_no_file(tmp_path, monkeypatch):
     def broken(*_args):
         raise sqlite3.OperationalError("disk I/O error")
 
-    monkeypatch.setattr("modern_gl.infrastructure.workspace.connect", broken)
+    monkeypatch.setattr("modern_gl.application.workspace.connect", broken)
     with pytest.raises(sqlite3.OperationalError):
         ws.add_file(shared)
     assert sorted(p.name for p in ws.folder.iterdir()) == []

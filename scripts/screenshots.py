@@ -21,6 +21,7 @@ from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication, QLineEdit
 
 from modern_gl import i18n
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import qt_texts, theme
 from modern_gl.desktop.app import add_demo_company
 from modern_gl.desktop.directories_page import DirectoriesPage
@@ -31,7 +32,6 @@ from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.reports_page import OsvPage, StatementsPage, SubcontoPage
-from modern_gl.infrastructure.workspace import Workspace
 
 
 def main() -> None:

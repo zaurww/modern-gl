@@ -13,7 +13,7 @@ from datetime import date
 from pathlib import Path
 
 from modern_gl.i18n import set_language
-from modern_gl.infrastructure.workspace import open_company
+from modern_gl.infrastructure.company_file import open_company
 from modern_gl.reporting.plaintext import hledger_journal
 from modern_gl.reporting.report_common import COMMON, IFRS, TAX
 
