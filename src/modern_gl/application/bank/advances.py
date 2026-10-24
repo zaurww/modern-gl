@@ -8,6 +8,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from modern_gl.application.bank.balance import account_balance
 from modern_gl.application.bank.operations import IN, OUT, BankLine, allocate
 from modern_gl.application.common import pad_subconto
 from modern_gl.infrastructure.db import Connection
@@ -21,21 +22,7 @@ def counterparty_balance(
 ) -> int:
     """Dt − Kt of the counterparty on the account at the end of the day (posted, the
     common book): below zero, the company owes it."""
-    row = conn.execute(
-        """
-        SELECT COALESCE(SUM(CASE WHEN p.debit_account_id = :a
-                    AND :v IN (p.dt_sc1, p.dt_sc2, p.dt_sc3) THEN p.amount ELSE 0 END), 0)
-             - COALESCE(SUM(CASE WHEN p.credit_account_id = :a
-                    AND :v IN (p.ct_sc1, p.ct_sc2, p.ct_sc3) THEN p.amount ELSE 0 END), 0)
-        FROM postings p
-        JOIN documents d ON d.id = p.document_id AND d.status = 'posted'
-        JOIN layers l ON l.id = d.layer_id AND l.code = 'common'
-        WHERE p.company_id = :c AND d.doc_date <= :day
-          AND (p.debit_account_id = :a OR p.credit_account_id = :a)
-        """,
-        {"c": company_id, "a": account_id, "v": counterparty_id, "day": day},
-    ).fetchone()
-    return row[0]
+    return account_balance(conn, company_id, account_id, counterparty_id, day)
 
 
 def payment_lines(
