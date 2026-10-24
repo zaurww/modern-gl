@@ -13,6 +13,7 @@ from modern_gl.reporting.inventory.choices import (
     receipt_line_choices,
     stock_account_choices,
     unit_choices,
+    unit_codes,
     warehouse_choices,
 )
 from modern_gl.reporting.inventory.costs import (
@@ -78,5 +79,6 @@ __all__ = [
     "stock_balances",
     "stock_card",
     "unit_choices",
+    "unit_codes",
     "warehouse_choices",
 ]

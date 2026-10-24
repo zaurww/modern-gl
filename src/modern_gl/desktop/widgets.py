@@ -364,12 +364,20 @@ class PageHeader(QWidget):
 
 
 class EmptyState(QWidget):
-    """Centered, quiet message shown instead of an empty table."""
+    """Centered, quiet message shown instead of an empty table; `actions` — what to do
+    next, quiet buttons under it (the page's one blue button stays in its header, D86)."""
 
-    def __init__(self, glyph: str, title: str, hint: str) -> None:
+    def __init__(
+        self,
+        glyph: str,
+        title: str,
+        hint: str,
+        actions: tuple[tuple[str, Callable[[], object]], ...] = (),
+    ) -> None:
         super().__init__()
         lay = QVBoxLayout(self)
         lay.addStretch(2)
+        labels = []
         for text, font, color in (
             (glyph, fonts().glyph, P.hairline),
             (title, fonts().heading, P.secondary),
@@ -381,7 +389,25 @@ class EmptyState(QWidget):
             label.setStyleSheet(f"color: {color};")
             label.setFont(font)
             lay.addWidget(label)
+            labels.append(label)
+        self.title, self.hint = labels[1], labels[2]
+        self.buttons: list[QPushButton] = []
+        if actions:
+            row = QHBoxLayout()
+            row.addStretch(1)
+            for text, action in actions:
+                b = button(text, "flat")
+                b.clicked.connect(lambda _=False, action=action: action())
+                row.addWidget(b)
+                self.buttons.append(b)
+            row.addStretch(1)
+            lay.addSpacing(8)
+            lay.addLayout(row)
         lay.addStretch(3)
+
+    def say(self, title: str, hint: str) -> None:
+        self.title.setText(title)
+        self.hint.setText(hint)
 
 
 def ask_date(parent: QWidget, title: str, prompt: str, default: date) -> date | None:

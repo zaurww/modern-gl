@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QLabel, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
@@ -14,6 +14,7 @@ from modern_gl.application.inventory import (
     IssueLine,
     ReceiptLine,
     TransferLine,
+    UsualUnit,
     format_quantity,
     to_quantity,
     vat_of,
@@ -22,6 +23,7 @@ from modern_gl.desktop.inventory_document_page import (
     ACCOUNT,
     AMOUNT,
     ITEM,
+    ITEM_MIN,
     SC1,
     VAT,
     WAREHOUSE,
@@ -1589,3 +1591,137 @@ def test_a_recalculation_reads_the_catalog_once_and_forgets_it(inventory_demo):
         demo.company_id, "2026-01-15", [IssueLine(demo.item, demo.main, "1", demo.expense_account)]
     )
     assert len(reads) > 2  # read again: nothing is kept between scenarios
+
+
+@pytest.mark.parametrize("doc_type", ["receipt", "sale", "incoming", "issue", "transfer"])
+def test_a_warehouse_document_fits_a_laptop_screen(inventory_demo, conn, qtbot, doc_type):
+    """Was 1 591 px: the line of keys under the table did not wrap. With the sidebar
+    (250 px) a document fits a 1 280 px screen — a 1 920 px laptop at 150 %."""
+    demo = inventory_demo
+    session = Session(
+        conn, demo.inventory.ledger, demo.company_id, "Склад", Catalog(conn, demo.company_id)
+    )
+    page = InventoryDocumentPage(session, doc_type=doc_type)
+    qtbot.addWidget(page)
+    assert page.minimumSizeHint().width() <= 1030
+    page.resize(1030, 700)
+    page.show()
+    # the name is not crushed to «Тов»: the other columns scroll
+    assert page.table.columnWidth(page.model.columns.index(ITEM)) >= ITEM_MIN
+
+
+def test_the_landed_cost_page_fits_a_laptop_screen(inventory_demo, conn, qtbot):
+    from modern_gl.desktop.landed_cost_page import LandedCostPage
+
+    demo = inventory_demo
+    session = Session(
+        conn, demo.inventory.ledger, demo.company_id, "Склад", Catalog(conn, demo.company_id)
+    )
+    page = LandedCostPage(session)
+    qtbot.addWidget(page)
+    assert page.minimumSizeHint().width() <= 1030
+
+
+def test_a_first_item_needs_nothing_set_up_before_it(ledger, conn):
+    """A new company has no unit and no warehouse (was: «Сначала добавьте единицу
+    измерения»). The item dialog offers the usual units; saving the first item makes the
+    unit chosen and «Основной склад» in one go; the next item takes the same unit by its
+    code and no second warehouse is made."""
+    from modern_gl.application.inventory import UsualUnit
+    from modern_gl.reporting.inventory import unit_choices, warehouse_choices
+
+    cid = ledger.create_company("Новая")
+    kind = ledger.add_subconto_kind(cid, "item", "Товары")
+    place = ledger.add_subconto_kind(cid, "warehouse", "Склады")
+    stock = ledger.add_account(cid, "41", "Товары", subconto=[kind, place], account_class="asset")
+    inventory = Inventory(conn, actor="test")
+    pieces = UsualUnit("шт", "Штука", 0)
+    paper = inventory.add_new_item(cid, "Бумага", pieces, stock, first_warehouse="Основной склад")
+    pens = inventory.add_new_item(cid, "Ручка", pieces, stock, first_warehouse="Основной склад")
+    assert [c.label for c in unit_choices(conn, cid)] == ["шт  Штука"]
+    assert [c.label for c in warehouse_choices(conn, cid)] == ["Основной склад"]
+    units = {
+        r[0]
+        for r in conn.execute(
+            "SELECT unit_id FROM inventory_items WHERE company_id = ? AND id IN (?, ?)",
+            (cid, paper, pens),
+        )
+    }
+    assert len(units) == 1
+    # a name that is not valid makes nothing: no unit, no warehouse left behind
+    other = ledger.create_company("Другая")
+    k2 = ledger.add_subconto_kind(other, "item", "Товары")
+    w2 = ledger.add_subconto_kind(other, "warehouse", "Склады")
+    s2 = ledger.add_account(other, "41", "Товары", subconto=[k2, w2], account_class="asset")
+    with pytest.raises(ValidationError):
+        inventory.add_new_item(other, " ", pieces, s2, first_warehouse="Основной склад")
+    assert unit_choices(conn, other) == [] and warehouse_choices(conn, other) == []
+
+
+def test_the_item_dialog_of_a_new_company_offers_the_usual_units(ledger, conn, qtbot):
+    """No unit, no warehouse yet: the dialog lists the usual units («шт» first) and says
+    the warehouse it will make; saved, the item is there with «шт» and «Основной склад»."""
+    from modern_gl.desktop.inventory_page.dialogs import ItemDialog
+    from modern_gl.reporting.inventory import unit_choices, warehouse_choices
+
+    cid = ledger.create_company("Новая")
+    kind = ledger.add_subconto_kind(cid, "item", "Товары")
+    place = ledger.add_subconto_kind(cid, "warehouse", "Склады")
+    ledger.add_account(cid, "41", "Товары", subconto=[kind, place], account_class="asset")
+    session = Session(conn, ledger, cid, "Новая", Catalog(conn, cid))
+    dialog = ItemDialog(session, Inventory(conn, actor="test"), name="Бумага А4")
+    qtbot.addWidget(dialog)
+    units = [dialog.units.itemText(i) for i in range(dialog.units.count())]
+    assert units == [
+        "шт  Штука",
+        "кг  Килограмм",
+        "л  Литр",
+        "м  Метр",
+        "м²  Квадратный метр",
+        "уп.  Упаковка",
+    ]
+    notes = [label.text() for label in dialog.findChildren(QLabel)]
+    assert "Вместе с товаром появится склад «Основной склад»" in notes
+    dialog._save()
+    assert dialog.item_id is not None
+    assert [c.label for c in unit_choices(conn, cid)] == ["шт  Штука"]
+    assert [c.label for c in warehouse_choices(conn, cid)] == ["Основной склад"]
+
+
+def test_the_empty_warehouse_says_what_to_do_next(ledger, conn, qtbot):
+    """Was text only («Добавьте товар и склад…», the warehouse hidden in «⋯»). No item:
+    «+ Товар», «+ Покупка», «Начальные остатки» right there; items without stock: the
+    purchase and the opening stock; for viewing only — no buttons (D80)."""
+    cid = ledger.create_company("Новая")
+    kind = ledger.add_subconto_kind(cid, "item", "Товары")
+    place = ledger.add_subconto_kind(cid, "warehouse", "Склады")
+    stock = ledger.add_account(cid, "41", "Товары", subconto=[kind, place], account_class="asset")
+    session = Session(conn, ledger, cid, "Новая", Catalog(conn, cid))
+    page = InventoryPage(session)
+    qtbot.addWidget(page)
+    page.show()
+    asked: list[str] = []
+    page.new_inventory_document.connect(asked.append)
+    page.add_item = lambda: asked.append("item")  # the dialog itself: tested above
+
+    def shown() -> list[str]:
+        return [b.text() for b in page.empty.buttons if b.isVisibleTo(page)]
+
+    assert page.empty.title.text() == "На складе пока пусто"
+    assert shown() == ["+ Товар", "+ Покупка", "Начальные остатки"]
+    # nothing to choose yet: not «Выберите товар»
+    assert page.card_empty.title.text() == "Движений пока нет"
+    for b in page.empty.buttons:
+        b.click()
+    assert asked == ["item", "receipt", "opening"]
+
+    Inventory(conn, actor="test").add_new_item(cid, "Бумага", UsualUnit("шт", "Штука", 0), stock)
+    page.refresh()
+    assert page.empty.title.text() == "Остатков пока нет"
+    assert shown() == ["+ Покупка", "Начальные остатки"]
+
+    viewing = Session(conn, ledger, cid, "Новая", Catalog(conn, cid), read_only=True)
+    view = InventoryPage(viewing)
+    qtbot.addWidget(view)
+    view.show()
+    assert [b for b in view.empty.buttons if b.isVisibleTo(view)] == []
