@@ -300,8 +300,8 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, not model.has_vat())
             if key == CURRENCY_AMOUNT:
                 self.setColumnHidden(column, not model.has_currency)
-            if key == ITEM:
-                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+            if key == ITEM:  # its width is what is left (`_fit_columns`)
+                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
         self._fit_columns()
 
     def resizeEvent(self, event) -> None:
@@ -309,8 +309,9 @@ class InventoryLinesTable(QTableView):
         self._fit_columns()
 
     def _fit_columns(self) -> None:
-        """The name keeps ITEM_MIN px: in a narrow window the account, subconto and
-        warehouse columns give up width first (their text gets «…»), down to NARROW_MIN."""
+        """The name takes what is left and keeps ITEM_MIN px: in a narrow window the
+        account, subconto and warehouse columns give up width first (their text gets «…»),
+        down to NARROW_MIN; narrower still, the table scrolls — the name is not crushed."""
         model = self.model()
         widths = getattr(self, "_widths", None)
         if not widths:
@@ -327,6 +328,9 @@ class InventoryLinesTable(QTableView):
         scale = 1.0 if wanted <= 0 or room >= wanted else max(room, 0) / wanted
         for column, key in soft:
             self.setColumnWidth(column, max(NARROW_MIN, int(widths[key] * scale)))
+        others = sum(self.columnWidth(column) for column, _ in shown)
+        item = model.columns.index(ITEM)
+        self.setColumnWidth(item, max(ITEM_MIN, self.viewport().width() - others))
 
     def model(self) -> InventoryLinesModel:
         return cast(InventoryLinesModel, super().model())

@@ -135,6 +135,7 @@ class LandedCostForm(QWidget):
         self.hint = QLabel(tr(HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
+        self.hint.setWordWrap(True)  # never widens the window
         summary.addWidget(self.hint, 1)
         summary.addSpacing(24)
         self.totals: dict[str, QLabel] = {}

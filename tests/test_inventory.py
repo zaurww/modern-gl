@@ -22,6 +22,7 @@ from modern_gl.desktop.inventory_document_page import (
     ACCOUNT,
     AMOUNT,
     ITEM,
+    ITEM_MIN,
     SC1,
     VAT,
     WAREHOUSE,
@@ -1589,3 +1590,32 @@ def test_a_recalculation_reads_the_catalog_once_and_forgets_it(inventory_demo):
         demo.company_id, "2026-01-15", [IssueLine(demo.item, demo.main, "1", demo.expense_account)]
     )
     assert len(reads) > 2  # read again: nothing is kept between scenarios
+
+
+@pytest.mark.parametrize("doc_type", ["receipt", "sale", "incoming", "issue", "transfer"])
+def test_a_warehouse_document_fits_a_laptop_screen(inventory_demo, conn, qtbot, doc_type):
+    """Was 1 591 px: the line of keys under the table did not wrap. With the sidebar
+    (250 px) a document fits a 1 280 px screen — a 1 920 px laptop at 150 %."""
+    demo = inventory_demo
+    session = Session(
+        conn, demo.inventory.ledger, demo.company_id, "Склад", Catalog(conn, demo.company_id)
+    )
+    page = InventoryDocumentPage(session, doc_type=doc_type)
+    qtbot.addWidget(page)
+    assert page.minimumSizeHint().width() <= 1030
+    page.resize(1030, 700)
+    page.show()
+    # the name is not crushed to «Тов»: the other columns scroll
+    assert page.table.columnWidth(page.model.columns.index(ITEM)) >= ITEM_MIN
+
+
+def test_the_landed_cost_page_fits_a_laptop_screen(inventory_demo, conn, qtbot):
+    from modern_gl.desktop.landed_cost_page import LandedCostPage
+
+    demo = inventory_demo
+    session = Session(
+        conn, demo.inventory.ledger, demo.company_id, "Склад", Catalog(conn, demo.company_id)
+    )
+    page = LandedCostPage(session)
+    qtbot.addWidget(page)
+    assert page.minimumSizeHint().width() <= 1030
