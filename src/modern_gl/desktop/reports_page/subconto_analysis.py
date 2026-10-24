@@ -6,6 +6,7 @@ are chosen on the page itself; a double click on an account opens its card."""
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel
@@ -162,7 +163,8 @@ class SubcontoAnalysisPage(ReportPage):
         )
 
     def drill(self, row) -> None:
-        """The card of the account (the element's share of it — a card of one subconto —
-        is the next step, «Карточка субконто»)."""
-        if row is not None and row.account_id is not None:
-            self.open_report.emit("card", row.account_id, self.params)
+        """The card of the element (D123): across every account from its own row, on one
+        account from the account's row under it."""
+        if row is not None and row.value_id is not None:
+            params = replace(self.params, subconto=(row.value_id,))
+            self.open_report.emit("subconto_card", row.account_id or 0, params)

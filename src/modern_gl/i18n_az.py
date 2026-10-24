@@ -431,6 +431,7 @@ AZ: dict[str, str] = {
     "Карточка счёта": "Hesab kartı",
     "Анализ счёта": "Hesab təhlili",
     "Анализ субконто": "Subkonto təhlili",
+    "Карточка субконто": "Subkonto kartı",
     "Контрагент, заказ или проект по всем счетам сразу": "Kontragent, sifariş və ya layihə bütün hesablar üzrə bir yerdə",
     "Все элементы": "Bütün elementlər",
     "Только с остатком": "Yalnız qalığı olanlar",

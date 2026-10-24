@@ -190,6 +190,35 @@ class AccountCard:
 
 
 @dataclass
+class SubcontoCardLine:
+    """A posting carrying one element (D123): on its debit side, its credit side or both."""
+
+    doc_date: str
+    number: int
+    document_id: int
+    memo: str
+    debit_code: str  # the debit account's code, or its name without one
+    credit_code: str
+    debit: int  # the amount, when the element is on the debit side
+    credit: int  # … on the credit side (both: the balance does not move)
+    balance: int  # running net balance (Dt - Ct) after this line
+    debit_id: int = 0
+    credit_id: int = 0
+    invoice: str = ""
+    invoice_kind: str = ""
+
+
+@dataclass
+class SubcontoCard:
+    opening: int
+    lines: list[SubcontoCardLine] = field(default_factory=list)
+
+    @property
+    def closing(self) -> int:
+        return self.lines[-1].balance if self.lines else self.opening
+
+
+@dataclass
 class CorrRow:
     corr_code: str  # "" when the account has no code
     corr_name: str
