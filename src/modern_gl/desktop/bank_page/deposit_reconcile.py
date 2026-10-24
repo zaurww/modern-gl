@@ -18,11 +18,10 @@ from modern_gl.application.bank.deposit_reconciliation import (
     PORTAL_ONLY,
     SAME,
     DepositReconciliation,
-    changed_since,
     reconcile_deposit,
     reconciled_periods,
 )
-from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch
+from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch, reconciled_changes
 from modern_gl.desktop.bank_page.deposit_reconcile_rows import FiguresGrid, ReconciledRows
 from modern_gl.desktop.bank_page.portal import summary
 from modern_gl.desktop.period_field import portal_period
@@ -137,13 +136,7 @@ class DepositReconcileDialog(QDialog):
         if periods:
             names = (date_range(p.date_from, p.date_to, "–") for p in periods)
             texts.append(tr("Сверено с порталом: {periods}.", periods=", ".join(names)))
-        fetched = self.fetched
-        if fetched is None:
-            changes = changed_since(conn, cid, self.place)
-        else:
-            changes = changed_since(
-                conn, cid, self.place, fetched.operations, fetched.balance, fetched.date_from
-            )
+        changes = reconciled_changes(self.s, self.place, self.fetched)
         texts += [f"{text}." for text in changes]
         self.history.setText(" ".join(texts))
         self.history.setVisible(bool(texts))
