@@ -227,6 +227,27 @@ def journal_drafts(conn: Connection, company_id: int, day: date | str) -> list[i
     ]
 
 
+@dataclass(frozen=True)
+class DocumentOwner:
+    """The module document behind a GL document, from the document_owners view."""
+
+    module: str  # 'inventory', 'conversion', 'bank', 'landed_cost'
+    id: int  # the module's document: it opens there
+    number: int | None  # its number, when the module numbers its documents
+
+
+def document_owner(
+    conn: Connection, company_id: int, document_id: int, role: str = "made"
+) -> DocumentOwner | None:
+    """Who made a GL document ('made': it is corrected there) or takes it in ('uses')."""
+    row = conn.execute(
+        "SELECT module, owner_id, owner_number FROM document_owners "
+        "WHERE company_id = ? AND document_id = ? AND role = ? ORDER BY owner_id LIMIT 1",
+        (company_id, document_id, role),
+    ).fetchone()
+    return None if row is None else DocumentOwner(row[0], row[1], row[2])
+
+
 def document_by_number(conn: Connection, company_id: int, number: int) -> int:
     row = conn.execute(
         "SELECT id FROM documents WHERE company_id = ? AND number = ?", (company_id, number)

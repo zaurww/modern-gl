@@ -32,7 +32,7 @@ from modern_gl.application.conversions import (
     conversion_of_document,
     load_conversion,
 )
-from modern_gl.application.queries import load_document
+from modern_gl.application.queries import DocumentOwner, document_owner, load_document
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
@@ -178,6 +178,10 @@ def test_credit_on_a_later_day_waits_on_transit(ledger, conn, firm):
     assert postings(conn, cid, credit.id) == [(acc["51"], acc["57"], 169_500, None)]
     assert balances(conn, cid, "2026-03-02")["57"] == (169_500, 0)
     assert balances(conn, cid, "2026-03-03")["57"] == (0, 0)
+    # either GL document opens the conversion (the document_owners view, debt 12)
+    owner = DocumentOwner("conversion", conversion_id, None)
+    assert document_owner(conn, cid, conversion.document_id) == owner
+    assert document_owner(conn, cid, credit.id) == owner
 
     # back to one day: the second document goes, the first keeps its number
     ledger.conversion.save_conversion(

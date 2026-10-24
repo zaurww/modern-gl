@@ -44,7 +44,7 @@ from modern_gl.application.bank import (
     statement,
 )
 from modern_gl.application.ledger import PostingInput
-from modern_gl.application.queries import load_document
+from modern_gl.application.queries import DocumentOwner, document_owner, load_document
 from modern_gl.domain.accounts import ADVANCE_PAID
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
@@ -291,6 +291,8 @@ def test_the_journal_refuses_by_the_owners_view_alone(ledger, firm, monkeypatch)
         (cid, doc_id),
     ).fetchall()
     assert [tuple(r) for r in owners] == [("bank", "made")]
+    assert document_owner(ledger.conn, cid, doc_id) == DocumentOwner("bank", op_id, None)
+    assert document_owner(ledger.conn, cid, doc_id, "uses") is None
     monkeypatch.setattr("modern_gl.application.ledger.documents.OWNER_TEXTS", {})
     for action in (ledger.unpost, ledger.delete_document):
         with pytest.raises(ValidationError, match="исправьте их там"):

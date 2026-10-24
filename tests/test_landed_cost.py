@@ -256,9 +256,14 @@ def test_picker_and_posting_count_what_is_allocated_alike(batch):
     assert cost_sources(conn, b.company_id) == []
 
 
-def test_gl_document_taken_as_charge_is_protected(batch):
+def test_gl_document_taken_as_charge_is_protected(batch, conn):
     b = batch
-    post_batch(b, [broker_fee(b)])
+    assert queries.document_owner(conn, b.company_id, b.broker_doc, "uses") is None
+    doc = post_batch(b, [broker_fee(b)])
+    number = b.inventory.load_document(b.company_id, doc).number
+    owner = queries.DocumentOwner("landed_cost", doc, number)
+    assert queries.document_owner(conn, b.company_id, b.broker_doc, "uses") == owner
+    assert queries.document_owner(conn, b.company_id, b.broker_doc) is None  # made by hand
     with pytest.raises(ValidationError, match="расход партии"):
         b.ledger.delete_document(b.company_id, b.broker_doc)
     with pytest.raises(ValidationError, match="расход партии"):
