@@ -13,7 +13,7 @@ from modern_gl.application.inventory import (
 )
 from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, portal_invoice
 from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.domain.money import to_minor
+from modern_gl.domain.money import portal_minor
 
 PURCHASE, SALE = "receipt", "sale"
 
@@ -77,10 +77,6 @@ def _decimal(value: Any) -> Decimal:
         return Decimal(0)
 
 
-def _minor(value: Any) -> int:
-    return to_minor(_decimal(value).quantize(Decimal("0.01")))
-
-
 def parse_invoice(row: Mapping[str, Any], detail: Mapping[str, Any], outgoing: bool) -> EInvoice:
     """An e-qaimə from its list row and its details, as etaxes-ext reads them
     (`buildDetailRows`): the party is the receiver of a sent one, the sender of a received
@@ -98,7 +94,7 @@ def parse_invoice(row: Mapping[str, Any], detail: Mapping[str, Any], outgoing: b
     created = str(first("createdAt", "creationDate"))
     lines = []
     for item in detail.get("items") or []:
-        base = _minor(item.get("vat18"))
+        base = portal_minor(item.get("vat18"))
         quantity = item.get("quantity")
         lines.append(
             EInvoiceLine(
@@ -106,15 +102,17 @@ def parse_invoice(row: Mapping[str, Any], detail: Mapping[str, Any], outgoing: b
                 str((item.get("productGroup") or {}).get("code") or "").strip(),
                 str(item.get("unit") or "").strip(),
                 None if quantity in (None, "") else _decimal(quantity),
-                _minor(item.get("cost"))
-                + _minor(item.get("serviceCost"))
-                + _minor(item.get("excise")),
+                portal_minor(item.get("cost"))
+                + portal_minor(item.get("serviceCost"))
+                + portal_minor(item.get("excise")),
                 vat_of(base, STANDARD_VAT_RATE),
             )
         )
     if not lines:  # an e-qaimə without lines: its totals as one line
         lines.append(
-            EInvoiceLine("", "", "", None, _minor(first("costWithoutVat")), _minor(first("vat")))
+            EInvoiceLine(
+                "", "", "", None, portal_minor(first("costWithoutVat")), portal_minor(first("vat"))
+            )
         )
     return EInvoice(
         str(first("id")),

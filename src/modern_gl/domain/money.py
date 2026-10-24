@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from fractions import Fraction
 
 from modern_gl.i18n import tr
@@ -36,6 +36,16 @@ def to_minor(value: str | int | Decimal) -> int:
     if d != d.quantize(_QUANTUM):
         raise ValueError(tr("больше {n} знаков после запятой: {value}", n=SCALE, value=value))
     return int(d.scaleb(SCALE))
+
+
+def portal_minor(value: object) -> int:
+    """An amount the e-taxes portal sends (a JSON number, «12.4369», None or "") in minor
+    units, halves away from zero: 0.125 -> 0.13. Not a number — an error. A JSON float is
+    read by its text (str(12.43) is «12.43»), never computed with."""
+    if value is None or value == "":
+        return 0
+    number = read_decimal(str(value))
+    return to_minor(number.quantize(_QUANTUM, rounding=ROUND_HALF_UP))
 
 
 def round_half_away(value: Fraction) -> int:
