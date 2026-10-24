@@ -59,12 +59,10 @@ class SubcontoAnalysisPage(ReportPage):
         self.only_open.setToolTip(
             tr("Остаток на балансовых счетах; выручка и расходы остатком не считаются")
         )
-        at = self.bar.count() - 2  # before «Сформировать»
-        for w in (self._caption(tr("Справочник")), self.kind, self._caption(tr("Элемент"))):
-            self.bar.insertWidget(at, w)
-            at += 1
-        self.bar.insertWidget(at, self.element)
-        self.bar.insertSpacing(at + 1, 6)
+        self.add_to_bar(
+            self._caption(tr("Справочник")), self.kind, self._caption(tr("Элемент")), gap=0
+        )
+        self.add_to_bar(self.element)
         self.header.add_action(self.only_open)
         self._fill_elements()
         self.kind.activated.connect(self._choose_kind)

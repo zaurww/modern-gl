@@ -45,7 +45,6 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
     PageHeader,
-    button,
     class_name,
     ru_date,
     type_choices,
@@ -194,12 +193,15 @@ class ReportPage(QWidget):
                 if w is self.book and not (self.s.parallel_books and self.has_book):  # D63
                     label.hide()
                     w.hide()
-            run = button(tr("Сформировать"), "primary", "F5")
-            run.clicked.connect(self.refresh)
-            bar.addWidget(run)
-            bar.addStretch(1)
+            bar.addStretch(1)  # no «Сформировать»: a change shows at once, F5 reads again
             root.addLayout(bar)
             self.bar = bar
+
+    def add_to_bar(self, *widgets: QWidget, gap: int = 6) -> None:
+        """A page's own choices in the bar, after the period and the book (DESIGN.md 2)."""
+        for w in widgets:
+            self.bar.insertWidget(self.bar.count() - 1, w)
+            self.bar.insertSpacing(self.bar.count() - 1, gap)
 
     def _build_table(self) -> None:
         self.model = ReportModel()

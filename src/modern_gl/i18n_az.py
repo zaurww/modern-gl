@@ -248,6 +248,8 @@ AZ: dict[str, str] = {
     "Отложенные налоговые обязательства": "Təxirə salınmış vergi öhdəlikləri",
     "Финансовые доходы": "Maliyyə gəlirləri",
     "Финансовые расходы": "Maliyyə xərcləri",
+    "Основные счета": "Ana hesablar",
+    "Субсчета": "Subhesablar",
     "Курсовые разницы по денежным средствам": "Pul vəsaitləri üzrə məzənnə fərqləri",
     "Курсовые разницы по кредитам": "Kreditlər üzrə məzənnə fərqləri",
     "Отложенный налог на прибыль": "Təxirə salınmış mənfəət vergisi",

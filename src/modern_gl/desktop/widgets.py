@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QAbstractSpinBox,
     QApplication,
+    QButtonGroup,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -487,3 +488,21 @@ def class_icon(account_class: str | None) -> QIcon:
     if color not in _CLASS_ICONS:
         _CLASS_ICONS[color] = dot_icon(color, 10)
     return _CLASS_ICONS[color]
+
+
+def segments(captions: list[tuple[str, str]], on_click) -> tuple[QWidget, dict[str, QPushButton]]:
+    """A row of segment buttons, one of them checked."""
+    box = QWidget()
+    row = QHBoxLayout(box)
+    row.setContentsMargins(0, 0, 0, 0)
+    row.setSpacing(6)
+    group = QButtonGroup(box)
+    buttons: dict[str, QPushButton] = {}
+    for key, caption in captions:
+        b = button(tr(caption), "segment")
+        b.setCheckable(True)
+        b.clicked.connect(lambda _=False: on_click())
+        group.addButton(b)
+        row.addWidget(b)
+        buttons[key] = b
+    return box, buttons

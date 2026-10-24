@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import replace
 
 from PySide6.QtCore import QSettings, Signal
-from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
 
 from modern_gl.desktop.reports_page.statement_columns import (
     ColumnsChoice,
@@ -20,7 +19,7 @@ from modern_gl.desktop.reports_page.statement_columns import (
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import segments
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.cash_flow import cash_flow
@@ -47,24 +46,6 @@ SECTIONS = (
 INDENT = "      "
 
 
-def segments(captions: list[tuple[str, str]], on_click) -> tuple[QWidget, dict[str, QPushButton]]:
-    """A row of segment buttons, one of them checked."""
-    box = QWidget()
-    row = QHBoxLayout(box)
-    row.setContentsMargins(0, 0, 0, 0)
-    row.setSpacing(6)
-    group = QButtonGroup(box)
-    buttons: dict[str, QPushButton] = {}
-    for key, caption in captions:
-        b = button(tr(caption), "segment")
-        b.setCheckable(True)
-        b.clicked.connect(lambda _=False: on_click())
-        group.addButton(b)
-        row.addWidget(b)
-        buttons[key] = b
-    return box, buttons
-
-
 class StatementsPage(ReportPage):
     key = ("statements",)
     choosable_columns = False  # periods: «Колонки ▾» by the period chooses them
@@ -89,8 +70,7 @@ class StatementsPage(ReportPage):
         self.detail_buttons.get(detail, self.detail_buttons[ACCOUNTS]).setChecked(True)
         self.columns = ColumnsChoice(self.refresh)  # months side by side, a comparison (D107)
         self.header.add_action(views)
-        self.bar.insertWidget(self.bar.count() - 2, details)  # by the period: how much of it
-        self.bar.insertWidget(self.bar.count() - 2, self.columns.button)
+        self.add_to_bar(details, self.columns.button)  # by the period: how much of it
         self.refresh()
 
     def title(self) -> str:

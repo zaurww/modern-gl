@@ -212,13 +212,10 @@ class SubcontoPage(AccountReportPage):
         self.levels.setCurrentIndex(deepest if chosen < 0 else min(chosen, deepest))
         levels_label = QLabel(tr("Детализация"))
         levels_label.setObjectName("secondary")
-        at = self.bar.count() - 2  # before «Сформировать»
-        for w in (levels_label, self.levels, self.tag_label, self.tag):
-            self.bar.insertWidget(at, w)
-            at += 1
-            if w in (self.levels, self.tag):
-                self.bar.insertSpacing(at, 6)
-                at += 1
+        self.add_to_bar(levels_label, gap=0)
+        self.add_to_bar(self.levels)
+        self.add_to_bar(self.tag_label, gap=0)
+        self.add_to_bar(self.tag)
         for w in (levels_label, self.levels):
             w.setVisible(self.levels.count() > 1)
         self._fill_tags()
