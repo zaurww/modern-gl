@@ -7,3 +7,6 @@ __pycache__/
 *.db-wal
 *.db-shm
 /demo-2025-2026/
+
+# worktrees of parallel sessions (D131)
+.claude/worktrees/
