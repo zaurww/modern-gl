@@ -123,7 +123,8 @@ def test_rebuilt_tables_keep_every_row(tmp_path):
         after = rows_by_table(conn)
     finally:
         conn.close()
-    assert after == before
+    assert {t: rows for t, rows in after.items() if t in before} == before
+    assert all(not rows for t, rows in after.items() if t not in before)  # newer tables
 
 
 def test_company_scoped_references_replace_the_triggers():
