@@ -37,7 +37,6 @@ from modern_gl.application.workspace import SUFFIX, TRASH, Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.background import LARGE
 from modern_gl.desktop.portal_company import ask_tax_id
-from modern_gl.desktop.reports_page.table import set_zebra
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
@@ -505,9 +504,9 @@ class CompanyFiles(QMainWindow):
             self.settings.setValue("theme", name)
         self._repaint()
 
-    def set_zebra(self, on: bool) -> None:
-        """«Полосы в таблицах» (D103): every report and list, built again."""
-        set_zebra(on)
+    def set_table_look(self, change: Callable[[bool], None], on: bool) -> None:
+        """«Полосы в таблицах», «Сетка в отчётах» (D103, D127): the pages built again."""
+        change(on)
         self._repaint(reopen=not self._dirty_pages())
 
     def follow_system_theme(self) -> None:

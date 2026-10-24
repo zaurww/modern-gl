@@ -32,6 +32,7 @@ class Palette:
     red_soft: str = "#FCE9E9"
     violet: str = "#7C5CD6"
     teal: str = "#1F9BA6"
+    currency: str = "#0F6F78"  # amounts in a currency under their account: readable teal
     field: str = "#F1F3F5"  # input wells: visible on white, quiet
     field_hover: str = "#EBEDF0"
     header_text: str = "#8A919B"  # column captions: quiet but readable
@@ -95,6 +96,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "red_soft": "#F3DADF",
             "violet": "#8839EF",
             "teal": "#179299",
+            "currency": "#0F7A80",
             "scrollbar": "#CCD0DA",
             "scrollbar_hover": "#ACB0BE",
             "tooltip": "#4C4F69",
@@ -131,6 +133,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "red_soft": "#F2E1DF",
             "violet": "#907AA9",
             "teal": "#56949F",
+            "currency": "#3B7680",
             "scrollbar": "#DFDAD9",
             "scrollbar_hover": "#CECACD",
             "tooltip": "#575279",
@@ -167,6 +170,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "red_soft": "#F0DEE1",
             "violet": "#B48EAD",
             "teal": "#6FA3A2",
+            "currency": "#46807F",
             "scrollbar": "#D8DEE9",
             "scrollbar_hover": "#B9C2D0",
             "tooltip": "#3B4252",
@@ -204,6 +208,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
             "red_soft": "#43293A",
             "violet": "#CBA6F7",
             "teal": "#94E2D5",
+            "currency": "#94E2D5",
             "scrollbar": "#45475A",
             "scrollbar_hover": "#585B70",
             "tooltip": "#313244",

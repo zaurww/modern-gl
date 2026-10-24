@@ -1723,6 +1723,7 @@ AZ: dict[str, str] = {
     "Двойной щелчок по счёту — его карточка": "Hesaba iki dəfə klik — onun kartı",
     # ---- stripes in tables, optional (D103) ------------------------------------------------
     "Полосы в таблицах": "Cədvəllərdə zolaqlar",
+    "Сетка в отчётах": "Hesabatlarda şəbəkə",
     # ---- a report for Excel (D104) ---------------------------------------------------------
     "В Excel…": "Excel-ə…",
     "В Excel": "Excel-ə",

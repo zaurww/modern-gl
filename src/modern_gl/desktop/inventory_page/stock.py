@@ -23,6 +23,7 @@ from modern_gl.desktop.inventory_page.dialogs import (
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.inventory_page.movements import source_text
 from modern_gl.desktop.reports_page import Column, ReportModel
+from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate, fit_rows
 from modern_gl.desktop.widgets import EmptyState, hide_when_viewing, list_table, money, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -50,7 +51,8 @@ class StockGroup:
 class StockPart(InventoryForm):
     def _build_stock(self, root: QVBoxLayout) -> None:
         self.model = ReportModel()
-        self.table = list_table(self.model, 36)
+        self.table = list_table(self.model, ROW_HEIGHT, wrap=False)  # a report: as dense (D127)
+        self.table.setItemDelegate(ReportDelegate(self.table))  # drawn as every report
         self.table.doubleClicked.connect(  # the item: its name, group, unit, account
             lambda index: self.edit_item(index.data(Qt.ItemDataRole.UserRole))
         )
@@ -138,6 +140,7 @@ class StockPart(InventoryForm):
             emphasis=lambda row: isinstance(row, StockGroup),
             section=lambda row: isinstance(row, StockGroup),
         )
+        fit_rows(self.table, self.model)
         header = self.table.horizontalHeader()
         for index, column in enumerate(self.model.columns):
             header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)

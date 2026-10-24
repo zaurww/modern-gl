@@ -34,12 +34,11 @@ from modern_gl.desktop.reports_page.table import (
     GROUP_GAP,
     NAME_MAX,
     ROW_HEIGHT,
-    SECTION_HEIGHT,
-    TOTAL_HEIGHT,
     Column,
     GroupHeader,
     ReportDelegate,
     ReportModel,
+    fit_rows,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
@@ -344,13 +343,7 @@ class ReportPage(QWidget):
                 width += GROUP_GAP
             self._widths[i] = width if col.width or col.money or col.right else min(width, NAME_MAX)
         self._fit_groups()
-        for r, row in enumerate(self.model.rows):
-            if self.model.section(row):
-                self.table.setRowHeight(r, SECTION_HEIGHT)
-            elif self.model.total(row):
-                self.table.setRowHeight(r, TOTAL_HEIGHT)
-            else:  # a row where another view of the page had a header or a total
-                self.table.setRowHeight(r, ROW_HEIGHT)
+        fit_rows(self.table, self.model)
         self.table.horizontalHeader().updateGeometry()
         self._fit_columns()
 

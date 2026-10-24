@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
@@ -32,6 +32,11 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import OsvRow
+
+
+@dataclass
+class CurrencyLine(OsvRow):
+    """Amounts of a currency account in one of its currencies: in their own color (D127)."""
 
 
 class OsvPage(ReportPage):
@@ -93,7 +98,7 @@ class OsvPage(ReportPage):
         for r in rows:
             result.append(r)
             for c in currency.get(r.account_id, []) if r.account_id else []:
-                row = OsvRow(name=f"      {c.code}  ·  {tr('в валюте')}", depth=r.depth + 1)
+                row = CurrencyLine(name=f"      {c.code}  ·  {tr('в валюте')}", depth=r.depth + 1)
                 row.add(c)
                 result.append(row)
         return result
@@ -161,6 +166,7 @@ class OsvPage(ReportPage):
             muted=lambda r: r.depth > 0,
             total=lambda r: r.depth < 0,
             section=lambda r: isinstance(r, SectionRow),
+            tone=lambda r: "currency" if isinstance(r, CurrencyLine) else None,
         )
         balanced = osv.total.closing_dt == osv.total.closing_ct
         text = (
