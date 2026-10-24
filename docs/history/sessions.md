@@ -275,3 +275,13 @@
   number)`, `subconto_values_owner (company_id, owner_id)`, `PRAGMA application_id` «MGL1»;
   `connect` отказывает файлу другой программы («это не файл компании Modern GL»). Тесты:
   планы журнала и договоров, `application_id`. «Долг» 7–8 и замечания обзора — в ENGINEERING.
+- **Миграция 0047** («Продолжаем»): пересборка 14 таблиц с `legacy_alter_table` (как 0037):
+  долг 4 — составные FK `(company_id, x)` для `postings.currency_id`,
+  `subconto_kinds.owner_kind_id`, `subconto_values.parent_id / owner_id / currency_id`,
+  `inventory_documents.accrual_document_id`, 10 триггеров-заменителей убраны; долг 7 — FK у
+  `inventory_documents.currency_id`, `landed_cost_charges.currency_id`,
+  `inventory_lines.cost_sc1..3`; долг 8 — `CHECK (… GLOB …)` у 13 дат. Тесты:
+  `test_schema_rebuild.py` — демо-год, записанный в файл версии 46 (колонки те же), после
+  миграции совпадает построчно во всех таблицах, `foreign_key_check` и `integrity_check`
+  чисты; `test_database.py` — у каждой `*_id` / `*sc[1-3]` есть FK, у каждой даты — `GLOB`,
+  `SINGLE_COLUMN_ALLOWED` пуст. `benchmark.py`: «Карточка 60 по контрагенту» (долг 5).

@@ -3,6 +3,7 @@ stay inside the company, money is never REAL, migrations are frozen, new tables 
 references. Allowances are the debt listed there; a paid debt must leave the list."""
 
 import hashlib
+import re
 import sqlite3
 
 import pytest
@@ -58,6 +59,7 @@ FROZEN = {
     "0044_document_owner_ids.sql": "229ad0a9b7d6b115",
     "0045_line_counterparties.sql": "1aa158be48f2f26c",
     "0046_query_indexes.sql": "c9c524291c9fe367",
+    "0047_company_scoped_references.sql": "86041a67459f7242",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).
@@ -97,15 +99,13 @@ LEGACY_TABLES = {
     "tags",
     "warehouses",
 }
-# Debt 4: references between a company's tables that do not carry company_id.
-SINGLE_COLUMN_ALLOWED = {
-    "inventory_documents.accrual_document_id",
-    "postings.currency_id",
-    "subconto_kinds.owner_kind_id",
-    "subconto_values.parent_id",
-    "subconto_values.owner_id",
-    "subconto_values.currency_id",
-}
+# Debt 4: references between a company's tables that do not carry company_id (paid in 0047).
+SINGLE_COLUMN_ALLOWED: set[str] = set()
+# A column that names another row but is not a reference: the audit log outlives what it
+# records; the portal's own id of an e-qaimə is text; a VÖEN is a number of the state.
+NOT_REFERENCES = {"audit_events.entity_id", "eqaime_portal.portal_id"}
+DATE_COLUMNS = re.compile(r"(_date|^date_from|^date_to|^closed_through)$")
+DATE_CHECK = "GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'"
 # A row that belongs to a parent (a line to its document) is found by the parent: indexed.
 OWNER_COLUMNS = {"document_id", "operation_id", "conversion_id", "template_id", "line_id"}
 # Debt 5: owner references without an index (paid in 0038; keep empty).
@@ -189,6 +189,35 @@ def test_references_stay_inside_the_company(db):
     )
     paid = SINGLE_COLUMN_ALLOWED - single
     assert not paid, f"долг погашен: уберите {sorted(paid)} из SINGLE_COLUMN_ALLOWED"
+
+
+def test_every_reference_column_is_a_foreign_key(db):
+    """Debt 7 (paid in 0047): a column named like a reference (`*_id`, `sc1..3`, `*_sc1..3`)
+    without a FOREIGN KEY — ALTER TABLE ADD COLUMN cannot add one, so a rebuild must."""
+    missing = set()
+    for table in tables(db):
+        declared = {fk[3] for fk in db.execute(f"PRAGMA foreign_key_list({table})")}
+        for r in db.execute(f"PRAGMA table_info({table})"):
+            name = r[1]
+            looks = name.endswith("_id") and name != "company_id" and not name.endswith("tax_id")
+            looks = looks or re.fullmatch(r"(\w+_)?sc[1-3]", name) is not None
+            if looks and name not in declared and f"{table}.{name}" not in NOT_REFERENCES:
+                missing.add(f"{table}.{name}")
+    assert not missing, f"ссылка без FOREIGN KEY: {sorted(missing)}"
+
+
+def test_every_date_column_checks_its_format(db):
+    """Debt 8 (paid in 0047): dates are TEXT compared as strings — one row in another
+    format silently falls out of every period."""
+    missing = set()
+    for table in tables(db):
+        sql = db.execute("SELECT sql FROM sqlite_master WHERE name = ?", (table,)).fetchone()[0]
+        for r in db.execute(f"PRAGMA table_info({table})"):
+            if DATE_COLUMNS.search(r[1]) and not re.search(
+                re.escape(r[1]) + r"\s+TEXT[^,]*" + re.escape(DATE_CHECK), sql
+            ):
+                missing.add(f"{table}.{r[1]}")
+    assert not missing, f"дата без CHECK формата: {sorted(missing)}"
 
 
 def test_columns_are_typed_and_money_is_never_real(db):

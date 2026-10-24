@@ -83,6 +83,10 @@ def measure(path: Path) -> list[tuple[float, str]]:
     cid = conn.execute("SELECT id FROM companies").fetchone()["id"]
     a60 = conn.execute("SELECT id FROM accounts WHERE company_id = ? AND code = '60'", (cid,))
     a60 = a60.fetchone()["id"]
+    partner = conn.execute(  # a supplier of build(); the demo year has none: «не указано»
+        "SELECT id FROM subconto_values WHERE company_id = ? AND name = 'Firma 000'", (cid,)
+    ).fetchone()
+    partner = partner["id"] if partner else None
     year = ("2026-01-01", "2026-12-31")
     months = column_periods(MONTHS, (date(2026, 1, 1), date(2026, 12, 31)))
     ends = [last for _, last in months[:-1]]
@@ -100,6 +104,9 @@ def measure(path: Path) -> list[tuple[float, str]]:
             conn, cid, *year, detail=ACCOUNTS, periods=months
         ),
         "Карточка 60, год": lambda: reports.account_card(conn, cid, a60, *year),
+        "Карточка 60 по контрагенту, год (долг 5)": lambda: reports.account_card(
+            conn, cid, a60, *year, subconto=(partner,)
+        ),
         "ОСВ по субконто 60, год": lambda: reports.subconto_balance(conn, cid, a60, *year),
         "Журнал: все документы": lambda: list_documents(conn, cid),
         "Журнал: год": lambda: list_documents(conn, cid, *year),
