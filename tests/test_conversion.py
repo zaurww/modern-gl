@@ -23,6 +23,7 @@ from dataclasses import replace
 
 import pytest
 
+from modern_gl.application.bank import bank_places, statement
 from modern_gl.application.conversions import (
     ConversionFee,
     ConversionInput,
@@ -359,3 +360,20 @@ def test_migration_keeps_the_fee_of_older_files(tmp_path, monkeypatch):
     assert loaded.fees == (ConversionFee(azn, 340, (None, None, None)),)
     assert loaded.source is not None and loaded.source.amount == 100_000
     conn.close()
+
+
+def test_the_bank_statement_marks_both_days_of_a_conversion(ledger, conn, firm):
+    """The bank statement learns that a conversion made the postings from document_owners,
+    not from the conversion's table (debt 12): the debit day on the USD account, the
+    credit day on the manat one."""
+    cid = firm["cid"]
+    ledger.conversion.save_conversion(cid, sale(firm, target_date="2026-03-03"), post=True)
+    places = {p.value_id: p for p in bank_places(conn, cid)}
+    usd = statement(conn, cid, places[firm["usd_bank"]], "2026-03-01", "2026-03-31")
+    azn = statement(conn, cid, places[firm["azn_bank"]], "2026-03-01", "2026-03-31")
+    assert [(line.doc_date, line.money_out, line.kind) for line in usd.lines] == [
+        ("2026-03-02", 100_200, "conversion")
+    ]
+    assert [(line.doc_date, line.money_in, line.kind) for line in azn.lines] == [
+        ("2026-03-03", 169_500, "conversion")
+    ]

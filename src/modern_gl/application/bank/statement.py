@@ -138,8 +138,9 @@ def _statement_rows(conn: Connection, place: BankPlace, params: dict) -> list[Ro
                     JOIN accounts a ON a.id = m.corr_id
                     WHERE m.document_id = docs.id)) AS corr,
                o.kind, o.direction,
-               (SELECT 1 FROM currency_conversions x
-                WHERE x.document_id = docs.id OR x.credit_document_id = docs.id) AS conversion
+               EXISTS (SELECT 1 FROM document_owners x
+                       WHERE x.company_id = :c AND x.document_id = docs.id
+                         AND x.module = 'conversion') AS conversion
         FROM docs
         LEFT JOIN bank_operations o ON o.document_id = docs.id
         ORDER BY docs.doc_date, docs.number
