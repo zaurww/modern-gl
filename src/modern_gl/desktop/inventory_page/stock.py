@@ -23,12 +23,13 @@ from modern_gl.desktop.inventory_page.dialogs import (
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.inventory_page.movements import source_text
 from modern_gl.desktop.reports_page import Column, ReportModel
-from modern_gl.desktop.widgets import EmptyState, list_table, money, ru_date
+from modern_gl.desktop.widgets import EmptyState, hide_when_viewing, list_table, money, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     StockBalance,
     code_label,
+    item_choices,
     last_receipts,
     stock_balances,
 )
@@ -53,11 +54,17 @@ class StockPart(InventoryForm):
         self.table.doubleClicked.connect(  # the item: its name, group, unit, account
             lambda index: self.edit_item(index.data(Qt.ItemDataRole.UserRole))
         )
-        self.empty = EmptyState(
+        self.empty = EmptyState(  # what a beginner does first, right there (D88)
             "□",
-            tr("На складе пока пусто"),
-            tr("Добавьте товар и склад, затем введите покупку кнопкой «+ Покупка»."),
+            "",
+            "",
+            (
+                (tr("+ Товар"), lambda: self.add_item()),
+                (tr("+ Покупка"), lambda: self.operation("receipt")),
+                (tr("Начальные остатки"), lambda: self.operation("opening")),
+            ),
         )
+        hide_when_viewing(self.s.read_only, *self.empty.buttons)
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
@@ -135,6 +142,8 @@ class StockPart(InventoryForm):
                 self.table.setColumnWidth(index, column.width)
         header.setStretchLastSection(True)
         self.stack.setCurrentWidget(self.table if rows else self.empty)
+        if not rows:
+            self._say_what_next()
         self._choose(chosen)
         self.header.subtitle.setText(
             tr(
@@ -145,6 +154,25 @@ class StockPart(InventoryForm):
         )
         self._show_movements()
         self._show_documents()
+
+    def _say_what_next(self) -> None:
+        """No stock: with no item yet — start with one; with items — bring stock in."""
+        no_items = not item_choices(self.s.conn, self.s.company_id)
+        if no_items:
+            self.empty.say(
+                tr("На складе пока пусто"),
+                tr(
+                    "Начните с товара: название и единица — склад появится сам. Или сразу "
+                    "покупка: новый товар можно написать прямо в строке."
+                ),
+            )
+        else:
+            self.empty.say(
+                tr("Остатков пока нет"),
+                tr("Введите покупку или начальные остатки — остатки появятся здесь."),
+            )
+        if not self.s.read_only:
+            self.empty.buttons[0].setVisible(no_items)
 
     def _choose(self, balance: StockBalance | None) -> None:
         """The row chosen before a refresh, chosen again (its quantities may differ now)."""

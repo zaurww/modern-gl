@@ -14,6 +14,7 @@ from modern_gl.application.inventory import (
     IssueLine,
     ReceiptLine,
     TransferLine,
+    UsualUnit,
     format_quantity,
     to_quantity,
     vat_of,
@@ -1685,3 +1686,40 @@ def test_the_item_dialog_of_a_new_company_offers_the_usual_units(ledger, conn, q
     assert dialog.item_id is not None
     assert [c.label for c in unit_choices(conn, cid)] == ["шт  Штука"]
     assert [c.label for c in warehouse_choices(conn, cid)] == ["Основной склад"]
+
+
+def test_the_empty_warehouse_says_what_to_do_next(ledger, conn, qtbot):
+    """Was text only («Добавьте товар и склад…», the warehouse hidden in «⋯»). No item:
+    «+ Товар», «+ Покупка», «Начальные остатки» right there; items without stock: the
+    purchase and the opening stock; for viewing only — no buttons (D80)."""
+    cid = ledger.create_company("Новая")
+    kind = ledger.add_subconto_kind(cid, "item", "Товары")
+    place = ledger.add_subconto_kind(cid, "warehouse", "Склады")
+    stock = ledger.add_account(cid, "41", "Товары", subconto=[kind, place], account_class="asset")
+    session = Session(conn, ledger, cid, "Новая", Catalog(conn, cid))
+    page = InventoryPage(session)
+    qtbot.addWidget(page)
+    page.show()
+    asked: list[str] = []
+    page.new_inventory_document.connect(asked.append)
+    page.add_item = lambda: asked.append("item")  # the dialog itself: tested above
+
+    def shown() -> list[str]:
+        return [b.text() for b in page.empty.buttons if b.isVisibleTo(page)]
+
+    assert page.empty.title.text() == "На складе пока пусто"
+    assert shown() == ["+ Товар", "+ Покупка", "Начальные остатки"]
+    for b in page.empty.buttons:
+        b.click()
+    assert asked == ["item", "receipt", "opening"]
+
+    Inventory(conn, actor="test").add_new_item(cid, "Бумага", UsualUnit("шт", "Штука", 0), stock)
+    page.refresh()
+    assert page.empty.title.text() == "Остатков пока нет"
+    assert shown() == ["+ Покупка", "Начальные остатки"]
+
+    viewing = Session(conn, ledger, cid, "Новая", Catalog(conn, cid), read_only=True)
+    view = InventoryPage(viewing)
+    qtbot.addWidget(view)
+    view.show()
+    assert [b for b in view.empty.buttons if b.isVisibleTo(view)] == []
