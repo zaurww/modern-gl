@@ -36,8 +36,7 @@ LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
 # Reports follow Jon Moon (Clarity & Impact) and docs/DESIGN.md: a table as wide as its
 # content, so the amounts stand next to the names; nothing is an empty cell; negatives in
-# brackets that hang right; every second group of columns lies on a light band (D127);
-# a pale grid and zebra rows — as the user sets them (D103, D127).
+# brackets that hang right; a pale grid and zebra rows — as the user sets them (D103, D127).
 
 NAME_MAX = 380  # px: a longer name is cut with "…" (the whole of it shows under the mouse)
 
@@ -121,7 +120,6 @@ class ReportModel(QAbstractTableModel):
         self.section: Callable[[Any], bool] = lambda r: False
         self.tone: Callable[[Any], str | None] = lambda r: None
         self.banded: list[bool] = []
-        self.tinted: list[bool] = []  # per column: on the band of every second group
         self.bands = True  # a list (the chart of accounts) goes without
         self.all_columns: list[Column] = []  # with the ones the user hid
         self.shown: Callable[[Column], bool] = lambda c: not c.optional
@@ -132,7 +130,6 @@ class ReportModel(QAbstractTableModel):
         self.beginResetModel()
         self.all_columns, self.rows = columns, rows
         self.columns = columns[:1] + [c for c in columns[1:] if self.shown(c)]
-        self.tinted = _tinted(self.columns)
         self.emphasis = emphasis or (lambda r: False)
         self.muted = muted or (lambda r: False)
         self.total = total or (lambda r: False)  # a rule above it
@@ -217,17 +214,6 @@ def fit_rows(table: QTableView, model: ReportModel) -> None:
             table.setRowHeight(r, ROW_HEIGHT)
 
 
-def _tinted(columns: list[Column]) -> list[bool]:
-    """Every second group of columns (the turnovers between the balances) on a band."""
-    result, groups, last = [], 0, ""
-    for c in columns:
-        if c.group and c.group != last:
-            groups += 1
-        last = c.group
-        result.append(bool(c.group) and groups % 2 == 0)
-    return result
-
-
 def _grid_lines(painter: QPainter, rect: QRect, first: bool) -> None:
     """The pale grid around a cell: its right and bottom edges, and the left of the first."""
     painter.save()
@@ -247,8 +233,6 @@ class GroupHeader(QHeaderView):
         super().__init__(Qt.Orientation.Horizontal, parent)
         self.setHighlightSections(False)
         self.setSectionsClickable(False)
-        # the band of a group shows through its captions (paintSection lays it first)
-        self.setStyleSheet("QHeaderView::section { background: transparent; }")
 
     def _columns(self) -> list[Column]:
         model = self.model()
@@ -270,10 +254,6 @@ class GroupHeader(QHeaderView):
             columns[logicalIndex].money or columns[logicalIndex].right
         )
         hang = self.fontMetrics().horizontalAdvance(")") if number else 0  # as the digits
-        model = self.model()
-        tinted = isinstance(model, ReportModel) and model.tinted[logicalIndex : logicalIndex + 1]
-        if tinted and tinted[0]:
-            painter.fillRect(rect, QColor(P.subtle))
         super().paintSection(painter, rect.adjusted(0, self._band(), -hang, 0), logicalIndex)
         if grid():
             # the rule between two groups goes up through their captions, the one
@@ -340,9 +320,9 @@ class ReportDelegate(QStyledItemDelegate):
         if model.section(row):  # a class header: the air above it, the caption below
             option = QStyleOptionViewItem(option)
             option.rect.adjust(0, SECTION_HEIGHT - ROW_HEIGHT, 0, 0)
-        # the bands under the style's hover and selection (a stylesheet item hides
+        # the zebra under the style's hover and selection (a stylesheet item hides
         # the model's background)
-        if model.banded[index.row()] or model.tinted[index.column()]:
+        if model.banded[index.row()]:
             painter.fillRect(option.rect, QColor(P.subtle))
         if col.money or col.right:
             opt = QStyleOptionViewItem(option)

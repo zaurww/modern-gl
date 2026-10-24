@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QHeaderView, QMessageBox, QTableView
 
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.reports_page import Column, ReportModel
+from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate
 from modern_gl.desktop.widgets import list_table, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -16,7 +17,8 @@ from modern_gl.reporting.inventory import InventoryDocumentSummary, list_invento
 class DocumentsPart(InventoryForm):
     def _build_documents(self) -> QTableView:
         self.documents_model = ReportModel()
-        self.documents = list_table(self.documents_model, 32)
+        self.documents = list_table(self.documents_model, ROW_HEIGHT, wrap=False)
+        self.documents.setItemDelegate(ReportDelegate(self.documents))  # as the stock above
         self.documents.doubleClicked.connect(
             lambda index: self._open_document(index.data(Qt.ItemDataRole.UserRole))
         )
