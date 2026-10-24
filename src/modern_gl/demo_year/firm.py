@@ -229,8 +229,10 @@ class Accounts(dict[str, int]):
 class Firm:
     """The company, its directories and catalogue; `p` builds a posting by account codes."""
 
-    def __init__(self, ledger: Ledger, name: str) -> None:
+    def __init__(self, ledger: Ledger, name: str, years: tuple[int, ...] = (YEAR,)) -> None:
         self.ledger = ledger
+        self.years = years
+        self.first, self.last = years[0], years[-1]
         self.rng = random.Random(YEAR)
         self.cid = cid = ledger.create_company(name)
         apply_chart_template(ledger, cid, "classic", "az")
@@ -271,8 +273,8 @@ class Firm:
     def _rates(self) -> None:
         """Rates of every working day: the dollar is pegged, the euro wanders."""
         rate = Decimal("1.9850")
-        day = date(YEAR - 1, 12, 31)
-        while day.year <= YEAR:
+        day = date(self.first - 1, 12, 31)
+        while day.year <= self.last:
             if day.weekday() < 5:
                 step = Decimal(self.rng.randint(-60, 62)) / 10_000
                 rate = min(max(rate + step, Decimal("1.9000")), Decimal("2.0800"))

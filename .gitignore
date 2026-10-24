@@ -6,3 +6,4 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+/demo-2025-2026/

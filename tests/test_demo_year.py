@@ -7,7 +7,7 @@ from datetime import date, timedelta
 import pytest
 
 from modern_gl.application.ledger import Ledger
-from modern_gl.demo_year import create_year_demo
+from modern_gl.demo_year import TWO_YEARS, TWO_YEARS_NAME, create_year_demo
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.inventory import landed_cost_report
 from modern_gl.reporting.reports import trial_balance
@@ -129,3 +129,35 @@ def test_imports_on_declarations_carry_their_expenses(year):
         "AND l.expense_amount > 0",
         cid,
     )
+
+
+def test_two_years_follow_one_another():
+    """2025 and 2026: the second year starts from where the first ended — one opening on
+    01.01.2025, the loan repaid across the years, both years closed into 88."""
+    conn = connect(":memory:")
+    cid = create_year_demo(Ledger(conn), TWO_YEARS_NAME, TWO_YEARS)
+    days = {
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT doc_date FROM documents WHERE company_id = ? AND status = 'posted'",
+            (cid,),
+        )
+    }
+    day, missing = date(2025, 1, 1), []
+    while day.year <= 2026:
+        if day.isoformat() not in days:
+            missing.append(day)
+        day += timedelta(days=1)
+    assert missing == []
+    assert (
+        count(conn, "SELECT COUNT(*) FROM opening_balance_documents WHERE company_id = ?", cid) == 1
+    )
+    for year, loan in ((2025, 2_500_000), (2026, 0)):
+        osv = trial_balance(conn, cid, f"{year}-01-01", f"{year}-12-31")
+        assert osv.total.closing_dt == osv.total.closing_ct
+        rows = {r.code: r for r in osv.rows if not r.is_group}
+        balance = {code: r.closing_dt - r.closing_ct for code, r in rows.items()}
+        assert all(balance[money] >= 0 for money in ("50", "51", "54"))
+        assert balance["80"] == 0 and rows["88"].turnover_ct > 0
+        assert -balance["90"] == loan  # 50 000 AZN, 2 500 a month from March 2025
+    conn.close()

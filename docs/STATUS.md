@@ -1,4 +1,4 @@
-# Состояние проекта — 2026-10-24 (после сессии 52)
+# Состояние проекта — 2026-10-24 (после сессии 53)
 
 Короткая сводка «что есть сейчас и что дальше». Читается в начале каждой сессии.
 Летопись сессий 1–40 — `docs/history/sessions-01-40.md`, новые сессии —
@@ -17,9 +17,9 @@
 ## Как запустить
 - Новому человеку — `README.md`: запуск, карта слоёв, порядок чтения документов.
 - `uv run modern-gl` (компании — `*.gl` в «Документы\Modern GL»); `--demo` — демо-компания;
-  `--demo-year` — «Xəzər Ofis MMC (demo 2026)», целый год во всех модулях. Программа
-  открыта — `uv run --no-sync …`.
-- Тесты `uv run pytest -q` (~1130, ~9 мин; в Linux — `QT_QPA_PLATFORM=offscreen` и
+  `--demo-year` — «Xəzər Ofis MMC (demo 2026)», целый год во всех модулях; `--demo-years` —
+  она же за 2025 и 2026. Программа открыта — `uv run --no-sync …`.
+- Тесты `uv run pytest -q` (~1270, ~13 мин; в Linux — `QT_QPA_PLATFORM=offscreen` и
   библиотеки как в CI), `uv run ruff check . && uv run ruff format --check .`,
   `uv run pyright` (0 ошибок). Скриншоты: `uv run python scripts/screenshots.py <папка> az`.
 - Замеры: `uv run python scripts/benchmark.py <папка> --postings 100000` (`--stock` — склад).

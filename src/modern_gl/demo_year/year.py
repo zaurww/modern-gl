@@ -13,14 +13,13 @@ from modern_gl.application.bank import OTHER, OUT, SALARY, BankLine, BankOperati
 from modern_gl.application.inventory import STANDARD_VAT_RATE, ReceiptLine, SaleLine
 from modern_gl.application.trade_batch import post_drafts
 from modern_gl.demo_year.firm import (
-    YEAR,
     last_day,
     last_workday,
     money,
     vat18,
     workday,
 )
-from modern_gl.demo_year.imports import CERTIFICATE_DAYS, IMPORT_DAYS, Imports
+from modern_gl.demo_year.imports import CERTIFICATE_DAYS, SHIPMENTS, Imports
 from modern_gl.demo_year.money import Money
 from modern_gl.domain.eqaime import PortalInvoice
 
@@ -38,8 +37,8 @@ class Year(Imports, Money):
         self.opening_balances()
         self.opening_stock()
         plan = self.plan()
-        day = date(YEAR, 1, 1)
-        while day.year == YEAR:
+        day = date(self.first, 1, 1)
+        while day.year <= self.last:
             for event in plan.get(day, ()):
                 event(day)
             self.day(day)
@@ -47,29 +46,34 @@ class Year(Imports, Money):
         self.after_the_year()
 
     def plan(self) -> dict[date, list[Callable[[date], None]]]:
-        """What happens on a date of the year besides the everyday trade, in that order."""
+        """What happens on a date of the years besides the everyday trade, in that order.
+        The loan and the van are taken once; the loan is repaid until it is paid off."""
         plan: dict[date, list[Callable[[date], None]]] = defaultdict(list)
-        plan[date(YEAR, 2, 3)].append(self.take_loan)
-        for d in sorted(IMPORT_DAYS):
+        plan[date(self.first, 2, 3)].append(self.take_loan)
+        plan[date(self.first, 4, 14)].append(self.buy_van)
+        plan[date(self.first, 4, 20)].append(self.van_in_use)
+        for y in self.years:
+            self.plan_year(plan, y)
+        return plan
+
+    def plan_year(self, plan: dict[date, list[Callable[[date], None]]], y: int) -> None:
+        for d in (date(y, m, n) for m, n in SHIPMENTS):
             plan[d] += [self.import_goods, self.pay_customs]
             plan[d + timedelta(days=CERTIFICATE_DAYS)].append(self.certify)
-        plan[date(YEAR, 4, 14)].append(self.buy_van)
-        plan[date(YEAR, 4, 20)].append(self.van_in_use)
-        plan[date(YEAR, 7, 15)].append(self.mistake)
+        plan[date(y, 7, 15)].append(self.mistake)
         for m in range(1, 13):
-            plan[workday(YEAR, m, 2)].append(self.services)
+            plan[workday(y, m, 2)].append(self.services)
             if m == 1 or m % 3 == 0:
-                plan[workday(YEAR, m, 2)].append(self.buy_materials)
-            if m > 2:
-                plan[workday(YEAR, m, 3)].append(self.repay_loan)
-            plan[workday(YEAR, m, 5)].append(self.pay_salaries)
-            plan[workday(YEAR, m, 10)].append(self.use_materials)
-            plan[workday(YEAR, m, 15)].append(self.advance)
+                plan[workday(y, m, 2)].append(self.buy_materials)
+            if m > 2 or y > self.first:
+                plan[workday(y, m, 3)].append(self.repay_loan)
+            plan[workday(y, m, 5)].append(self.pay_salaries)
+            plan[workday(y, m, 10)].append(self.use_materials)
+            plan[workday(y, m, 15)].append(self.advance)
             if m in (4, 7, 10):
-                plan[workday(YEAR, m, 15)].append(self.pay_profit_tax)
-            plan[workday(YEAR, m, 18)].append(self.advance_report)
-            plan[workday(YEAR, m, 20)].append(self.pay_taxes)
-        return plan
+                plan[workday(y, m, 15)].append(self.pay_profit_tax)
+            plan[workday(y, m, 18)].append(self.advance_report)
+            plan[workday(y, m, 20)].append(self.pay_taxes)
 
     def day(self, d: date) -> None:
         """Every day: the shop; on working days also the warehouse, wholesale and the bank."""
@@ -106,15 +110,16 @@ class Year(Imports, Money):
 
     def services(self, d: date) -> None:
         """Rent, internet and the electricity of the month before: drafts from the
-        e-qaimə, posted at once; after January the expense account is filled like last
+        e-qaimə, posted at once; after the first January the expense account is filled like last
         time. The electricity is the previous month's expense (D65)."""
         drafts = []
         for supplier, what, amount, account, item in SERVICES:
+            first = (d.year, d.month) == (self.first, 1)
             if supplier == "power":
-                if d.month == 1:
+                if first:
                     continue
                 amount = 30_000 + self.rng.randrange(0, 30_000)
-            known = d.month == 1 or (supplier == "power" and d.month == 2)
+            known = first or (supplier == "power" and (d.year, d.month) == (self.first, 2))
             line = ReceiptLine(
                 None,
                 None,
@@ -171,7 +176,7 @@ class Year(Imports, Money):
 
     def depreciation(self, d: date) -> None:
         monthly = {"Ofis kompüterləri": 33_333, "Anbar rəfləri": 13_333}
-        if d.month > 4:
+        if d.month > 4 or d.year > self.first:
             monthly["Ford Transit furqon"] = VAN // 60
         cost = [self.cost["Amortizasiya"]]
         self.ledger.post_new(
@@ -205,7 +210,7 @@ class Year(Imports, Money):
             "MHBS: kompüterlərin faydalı istifadə müddətinin dəyişməsi",
             layer="ifrs_adj",
         )
-        months = min(3, d.month - 4)
+        months = min(3, d.month - 4 + 12 * (d.year - self.first))
         if months > 0:
             self.ledger.post_new(
                 self.cid,
@@ -237,11 +242,11 @@ class Year(Imports, Money):
     def after_the_year(self) -> None:
         self.drafts()
         self.portal()
-        self.ledger.set_closed_through(self.cid, date(YEAR, 6, 30))
+        self.ledger.set_closed_through(self.cid, date(self.last, 6, 30))
 
     def drafts(self) -> None:
         """What the accountant has started but not posted on 31.12."""
-        d = date(YEAR, 12, 31)
+        d = date(self.last, 12, 31)
         founder = self.partner["founder"]
         self.ledger.create_draft(
             self.cid,
@@ -282,10 +287,11 @@ class Year(Imports, Money):
         )
 
     def portal(self) -> None:
-        """What the portal showed of the e-qaimə of January to September; two differ:
-        a purchase whose amount the supplier corrected, a sale cancelled on the portal.
-        January to August are reconciled."""
-        invoices = [x for x in self.state.invoices if x[2] < f"{YEAR}-10-01"]
+        """What the portal showed of the e-qaimə up to September of the last year; two
+        differ: a purchase whose amount the supplier corrected, a sale cancelled on the
+        portal. The months up to August of the last year are reconciled."""
+        last = self.last
+        invoices = [x for x in self.state.invoices if x[2] < f"{last}-10-01"]
         shown = []
         for outgoing, number, day, partner, total, vat in invoices:
             data = self.partner[partner].data
@@ -293,18 +299,25 @@ class Year(Imports, Money):
             shown.append(
                 PortalInvoice(number, outgoing, day, status, data.tin or "", data.name, total, vat)
             )
-        purchase = next(i for i, x in enumerate(shown) if not x.outgoing and "-08-" in x.doc_date)
-        sale = next(i for i, x in enumerate(shown) if x.outgoing and "-09-" in x.doc_date)
+        august, september = f"{last}-08-", f"{last}-09-"
+        purchase = next(
+            i for i, x in enumerate(shown) if not x.outgoing and x.doc_date.startswith(august)
+        )
+        sale = next(
+            i for i, x in enumerate(shown) if x.outgoing and x.doc_date.startswith(september)
+        )
         x = shown[purchase]
         shown[purchase] = replace(x, total=x.total + 1_180, vat=x.vat + 180)
         shown[sale] = replace(shown[sale], status="canceled")
-        self.ledger.eqaime.remember_portal(self.cid, shown, f"{YEAR}-10-05T09:30:00")
-        for month in range(1, 9):
-            for outgoing in (False, True):
-                self.ledger.eqaime.mark_reconciled(
-                    self.cid,
-                    outgoing,
-                    date(YEAR, month, 1),
-                    last_day(YEAR, month),
-                    f"{YEAR}-{month + 1:02d}-16T11:00:00",
-                )
+        self.ledger.eqaime.remember_portal(self.cid, shown, f"{last}-10-05T09:30:00")
+        for y in self.years:
+            for month in range(1, 9 if y == last else 13):
+                reconciled = f"{last_day(y, month) + timedelta(days=16)}T11:00:00"
+                for outgoing in (False, True):
+                    self.ledger.eqaime.mark_reconciled(
+                        self.cid,
+                        outgoing,
+                        date(y, month, 1),
+                        last_day(y, month),
+                        reconciled,
+                    )

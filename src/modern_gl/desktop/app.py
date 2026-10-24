@@ -1,9 +1,10 @@
-"""Entry point:  uv run modern-gl [--data FOLDER] [--demo] [--demo-year]
+"""Entry point:  uv run modern-gl [--data FOLDER] [--demo] [--demo-year] [--demo-years]
 
 Each company is one file in the data folder (default: Documents\\Modern GL).
 --data       use another folder (remembered for next time)
 --demo       add a demo company when the folder has none
 --demo-year  add the company with the whole year 2026 of work, unless it is there
+--demo-years the same company with two years of work, 2025 and 2026
 """
 
 from __future__ import annotations
@@ -31,18 +32,23 @@ def default_folder() -> Path:
     return Path(documents or Path.home()) / "Modern GL"
 
 
-def add_demo_company(workspace: Workspace, year: bool = False) -> Path:
-    """The small demo company, or with `year` the one with the whole year 2026."""
-    path = workspace.new_path(demo_year.NAME if year else i18n.tr("ДЕМО ООО"))
+def add_demo_company(workspace: Workspace, years: tuple[int, ...] = ()) -> Path:
+    """The small demo company, or with `years` the one with those whole years of work."""
+    name = year_demo_name(years) if years else i18n.tr("ДЕМО ООО")
+    path = workspace.new_path(name)
     conn = connect(path)
     try:
-        if year:
-            demo_year.create_year_demo(Ledger(conn))
+        if years:
+            demo_year.create_year_demo(Ledger(conn), name, years)
         else:
             create_demo_company(Ledger(conn))
     finally:
         conn.close()
     return path
+
+
+def year_demo_name(years: tuple[int, ...]) -> str:
+    return demo_year.TWO_YEARS_NAME if years == demo_year.TWO_YEARS else demo_year.NAME
 
 
 def main() -> int:
@@ -66,8 +72,10 @@ def main() -> int:
     workspace = Workspace(folder, files, mirror or None)
     if "--demo" in args and not workspace.companies():
         add_demo_company(workspace)
-    if "--demo-year" in args and all(c.name != demo_year.NAME for c in workspace.companies()):
-        add_demo_company(workspace, year=True)
+    for flag, years in (("--demo-year", (demo_year.YEAR,)), ("--demo-years", demo_year.TWO_YEARS)):
+        name = year_demo_name(years)
+        if flag in args and all(c.name != name for c in workspace.companies()):
+            add_demo_company(workspace, years)
 
     window = MainWindow(workspace, settings)
     if not window.start():
