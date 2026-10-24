@@ -26,9 +26,11 @@ i18n                       тексты: tr(), переводы
   шаблоны, документы и проводки, проверки при проведении, импорт, переоценка, начальные
   остатки. Собран из групп-классов над одним соединением (`ledger.documents`, …), снаружи —
   один объект.
-- **Модули — отдельные объекты над тем же соединением:** `ledger.bank`,
-  `ledger.conversion`, `ledger.eqaime`; склад — `Inventory` (`application/inventory/`, тоже
-  из групп). Общее модулей — `ledger/module.py` (запись GL-документа модуля).
+- **Модуль — свой пакет целиком, чтение и запись (D122):** `application/bank/`,
+  `conversion/`, `eqaime/`, `inventory/`. Запись модуля — `*Module` (`commands.py`, …),
+  объект над тем же соединением; `ledger.bank`, `ledger.conversion`, `ledger.eqaime` —
+  ручки, импорт при первом обращении: ядро модулей не загружает. Склад — `Inventory`.
+  Общее модулей — `ledger/module.py` (запись GL-документа модуля).
 - **Сценарий = один метод = одна транзакция** (`db.transaction`). Ошибка — `LedgerError`
   с текстом для пользователя; половины документа не остаётся.
 - **Входы — dataclass** (`ledger/inputs.py`), не словари; строка формы → `typed_posting`.
@@ -62,16 +64,15 @@ i18n                       тексты: tr(), переводы
   ссылку, `CHECK` на перечисления и даты (исключения — «Долг» в `ENGINEERING.md`).
 - **Проводки** (`documents` + `postings`): пара Дт/Кт, сумма в копейках, до 3 субконто на
   сторону, валюта и сумма в ней, слой. Остатки не хранятся — считаются запросом.
-- **Хранимое производное** — себестоимость и движения склада: пересчитываются одной
-  процедурой задним числом (`inventory/rebuild`), сверка «пересчёт = хранимое» в тестах.
+- **Хранимое производное** — себестоимость и движения склада: одна процедура пересчёта
+  (`inventory/rebuild`), тест «пересчёт = хранимое».
 - **SQL общий для SQLite и PostgreSQL** (D77).
 
 ## 5. Чтение и отчёты
-- `application/queries.py`, `catalog.py` — то, что нужно формам (списки, «как в прошлый
-  раз»); `reporting/` — отчёты: ОСВ, карточка, анализ (`reports/`), баланс, ОПиУ, ДДС,
-  сравнение книг, колонки (`statements`, `profit_loss`, `cash_flow`, `books`, `columns`),
-  склад (`inventory/`), e-qaimə (`invoices`, `eqaime_reconciliation`),
-  «Bu gün» (`overview`), hledger, «Передача дел».
+- `application/queries.py`, `catalog.py` — для форм; `reporting/` — ОСВ, карточка, анализ
+  (`reports/`), баланс, ОПиУ, ДДС, сравнение книг (`statements`, `profit_loss`, `cash_flow`,
+  `books`, `columns`), склад (`inventory/`), e-qaimə, «Bu gün» (`overview`), hledger,
+  «Передача дел».
 - Агрегация — в SQL с индексом; без «прочитать всё в Python» и без запроса на строку.
 - Книга = набор слоёв, «в книге» = `docs_cte` — `application/books.py`; проводки по номеру
   e-qaimə и неоплаченные — `application/invoices.py` (правило — `invoice_rules`, D120).
@@ -92,8 +93,8 @@ i18n                       тексты: tr(), переводы
 - **Только просмотр** — `session.read_only`, кнопки записи через `hide_when_viewing`.
 
 ## 7. AI-помощник
-`modern-gl-mcp` (`assistant/`): JSON-RPC по stdio, каждая компания — снимком только для
-чтения; с `--allow-drafts` — черновики через тот же `Ledger`, автор «AI · Claude» (D83, D84).
+`modern-gl-mcp` (`assistant/`): JSON-RPC по stdio, компании — снимками; `--allow-drafts` —
+черновики через тот же `Ledger` (D83, D84).
 
 ## 8. Проверки
 | Что | Чем |
