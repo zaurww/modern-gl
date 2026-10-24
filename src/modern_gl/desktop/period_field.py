@@ -13,6 +13,7 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
+    QSizePolicy,
     QWidget,
 )
 
@@ -61,6 +62,8 @@ class PeriodField(QWidget):
         self.menu_button.clicked.connect(self.show_presets)
         for w in (self.edit, self.menu_button, self.back, self.forward):
             row.addWidget(w)
+        # its own width: in a window's wide column the buttons stay by the field
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._show()
 
     def period(self) -> Period:

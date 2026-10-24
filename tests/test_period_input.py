@@ -226,3 +226,18 @@ def test_the_period_with_the_mouse(qtbot):
     window.last.setDate(QDate(2026, 1, 20))
     QTest.keyClick(window, Qt.Key.Key_Return)
     assert field.period() == (d("2026-01-10"), d("2026-01-20"))
+
+
+def test_the_period_field_keeps_together_in_a_wide_window(qtbot):
+    """In a window's column (ƏDV DH) the field was stretched: ▾ ‹ › ran apart across it."""
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    from modern_gl.desktop.period_field import PeriodField
+
+    window = QWidget()
+    qtbot.addWidget(window)
+    field = PeriodField((d("2026-10-01"), d("2026-10-31")), TODAY)
+    QVBoxLayout(window).addWidget(field)
+    window.resize(1000, 200)
+    window.show()
+    assert field.forward.geometry().right() < field.edit.geometry().right() + 120
