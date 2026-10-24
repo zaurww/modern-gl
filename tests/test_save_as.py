@@ -8,9 +8,10 @@ import sqlite3
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.workspace import TRASH, Workspace
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure import backup
-from modern_gl.infrastructure.workspace import TRASH, Workspace, company_name
+from modern_gl.infrastructure.company_file import company_name
 
 
 def company(ws: Workspace, name: str = "Firma"):

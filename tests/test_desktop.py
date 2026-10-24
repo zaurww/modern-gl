@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import load_document
+from modern_gl.application.workspace import TRASH, Workspace
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.directories_page import DirectoriesPage
@@ -24,7 +25,6 @@ from modern_gl.desktop.opening_balances_page import CREDIT_AMOUNT, OpeningBalanc
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
 from modern_gl.desktop.reports_page import NAME_MAX, NAME_MIN, OsvPage, SectionRow, figure
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import TRASH, Workspace
 from modern_gl.reporting.reports import trial_balance
 
 

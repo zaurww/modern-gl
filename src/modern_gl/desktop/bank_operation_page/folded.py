@@ -12,6 +12,7 @@ from modern_gl.application.bank import (
     split_by_deposit,
     vat_deposit_part,
 )
+from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.bank_operation_page.common import (
     SEVERAL,
 )
@@ -24,7 +25,6 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import OpenInvoice
 
 
 class FoldedPart(BankOperationForm):

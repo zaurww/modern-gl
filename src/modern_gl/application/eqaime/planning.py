@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from modern_gl.application.counterparties import known_counterparty
-from modern_gl.application.eqaime_import.parsing import RETURN_KINDS, EInvoice, EInvoiceLine
+from modern_gl.application.eqaime.parsing import RETURN_KINDS, EInvoice, EInvoiceLine
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection, Row
 

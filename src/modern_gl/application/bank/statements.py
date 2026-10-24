@@ -9,11 +9,11 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from itertools import accumulate
 
+from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.bank.places import BankPlace, bank_places
 from modern_gl.application.bank.statement import statement
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
-from modern_gl.reporting.overview import Attention, attention_source
 
 OPEN, OK, DIFF = "open", "ok", "diff"  # not checked against the bank; agrees; does not
 EVER = ("1900-01-01", "9999-12-31")

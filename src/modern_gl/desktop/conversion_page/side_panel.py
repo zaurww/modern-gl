@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.catalog import AccountInfo
-from modern_gl.application.conversions import ConversionSide
+from modern_gl.application.conversion import ConversionSide
 from modern_gl.desktop.conversion_page.common import (
     NONE,
     amount_text,

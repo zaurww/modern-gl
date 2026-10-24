@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QCheckBox, QLineEdit
 
+from modern_gl.application.invoices import InvoiceRow
 from modern_gl.desktop.reports_page import Column, MenuAction, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import EmptyState, balance_text
@@ -21,7 +22,7 @@ from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection
-from modern_gl.reporting.invoices import InvoiceRow, invoice_report
+from modern_gl.reporting.invoices import invoice_report
 
 
 def kind_name(r: InvoiceRow) -> str:

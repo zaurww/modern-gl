@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from modern_gl.application.inventory.landed_cost import allocated_sql
 from modern_gl.infrastructure.db import Connection
 
 
@@ -29,18 +30,6 @@ class CostSource:
     @property
     def left(self) -> int:
         return self.amount - self.used
-
-
-def allocated_sql(company: str, document: str, line: str) -> str:
-    """A subquery: how much of the GL posting `document`, `line` (SQL expressions) posted
-    «Расходы по партии» documents took, all but the one of the next parameter (NULL — none
-    left out). The picker and the check on posting count it alike."""
-    return (
-        "(SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c "
-        "JOIN inventory_documents i ON i.id = c.document_id AND i.status = 'posted' "
-        f"WHERE c.company_id = {company} AND c.source_document_id = {document} "
-        f"AND c.source_line_no = {line} AND c.document_id IS DISTINCT FROM ?)"
-    )
 
 
 def cost_sources(

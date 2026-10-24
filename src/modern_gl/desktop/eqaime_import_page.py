@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.eqaime_import import (
+from modern_gl.application.eqaime import (
     AwaitingPurchase,
     EInvoice,
     InvoicePlan,
@@ -26,7 +26,7 @@ from modern_gl.application.eqaime_import import (
     plan_import,
     renamed_counterparties,
 )
-from modern_gl.application.eqaime_portal import read_again, rechecks
+from modern_gl.application.eqaime.portal import read_again, rechecks
 from modern_gl.application.inventory import format_quantity, to_quantity
 from modern_gl.desktop.eqaime_import_form import BECOMES, COLUMNS, EXPENSE_MONTH, EqaimeImportForm
 from modern_gl.desktop.eqaime_portal_loader import (

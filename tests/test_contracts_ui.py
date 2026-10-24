@@ -10,6 +10,7 @@ from PySide6.QtCore import QPersistentModelIndex
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger
 from modern_gl.desktop import theme
 from modern_gl.desktop.directories_page import DirectoriesPage, ValueDialog
@@ -19,7 +20,6 @@ from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage
 from modern_gl.domain.currency import parse_rate
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 
 

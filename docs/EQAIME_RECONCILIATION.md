@@ -114,7 +114,8 @@ eqaime_portal (
 - покупка: кредитовый оборот по счёту поставщика (тип payable / авансы) = сумма с ƏDV;
   оборот по счёту входящего ƏDV (роль `input_vat`) = ƏDV; без ƏDV = разность;
 - продажа: дебетовый оборот по счёту покупателя = сумма с ƏDV; оборот `output_vat` = ƏDV.
-- База — уже существующий `reporting/invoices.py` (`invoice_report`, `open_invoices`):
+- База — `application/invoices.py` (`gathered_invoices`, `open_invoices`) и
+  `reporting/invoices.py` (`invoice_report`):
   он считает по номеру; добавить обороты за период по ролям счетов. Платежи по банку
   (D51) с тем же номером в сумму e-qaimə не входят — брать только начисление.
 

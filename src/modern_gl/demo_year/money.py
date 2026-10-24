@@ -19,7 +19,7 @@ from modern_gl.application.bank import (
     BankLine,
     BankOperationInput,
 )
-from modern_gl.application.conversions import ConversionFee, ConversionInput, ConversionSide
+from modern_gl.application.conversion import ConversionFee, ConversionInput, ConversionSide
 from modern_gl.application.ledger import ImportedDocument, PostingInput
 from modern_gl.demo_year.firm import EMPLOYEES, YEAR, Firm, Open, money
 from modern_gl.reporting.reports import subconto_balance, trial_balance

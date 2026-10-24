@@ -6,10 +6,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from modern_gl.application.workspace import CompanyFile, Workspace
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection
-from modern_gl.infrastructure.workspace import CompanyFile, Workspace
 
 Stamp = tuple[tuple[int, int], ...]
 

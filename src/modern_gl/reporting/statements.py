@@ -12,11 +12,12 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 
+from modern_gl.application.books import AFTER, COMMON, book_params, docs_cte
 from modern_gl.domain.accounts import ACCOUNT_TYPES, NONCURRENT_TYPES, TYPE_CLASS
 from modern_gl.domain.dates import iso_date
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.columns import Amounts, total
-from modern_gl.reporting.report_common import AFTER, COMMON, _accounts, _params, docs_cte
+from modern_gl.reporting.report_common import _accounts
 
 UNTYPED = ""  # an account without a type: its own line, so it is seen and given one
 # a debit balance of a counterparty on a liability account is an advance paid, a credit
@@ -214,7 +215,7 @@ def _balances(
 def _moves(conn: Connection, company_id: int, after: str, day: str, layers):
     """Dt − Ct by account and its first subconto of the documents after `after` (""
     from the start) up to the day."""
-    params = _params(conn, company_id, day, day, layers)
+    params = book_params(conn, company_id, day, day, layers)
     params["after"] = after
     return conn.execute(
         f"""

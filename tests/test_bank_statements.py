@@ -23,9 +23,9 @@ from modern_gl.application.bank import (
     bank_places,
     bank_statements,
 )
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.errors import ValidationError
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 
 
 @pytest.fixture

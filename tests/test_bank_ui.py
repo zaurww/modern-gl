@@ -18,8 +18,10 @@ from modern_gl.application.bank import (
     load_bank_operation,
 )
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import load_document
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.bank_page import BankPage, BankSettingsDialog
@@ -28,9 +30,7 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)
@@ -647,8 +647,8 @@ def test_the_unpaid_e_qaime_of_the_counterparty_are_offered(qtbot, session):
 def test_one_payment_over_several_e_qaime(qtbot, session, monkeypatch):
     """2 000.00 typed, then «several»: MT1 1 000.00 in full, MT2 the other 1 000.00
     (of 1 239.00); posted, MT1 is closed and MT2 has 239.00 left."""
+    from modern_gl.application.invoices import open_invoices
     from modern_gl.desktop.invoice_picker import InvoicePicker
-    from modern_gl.reporting.invoices import open_invoices
 
     owe_alfa(session)
     monkeypatch.setattr(
@@ -680,7 +680,7 @@ def test_the_vat_part_goes_from_the_deposit_account(qtbot, session):
     """D69. MT7 of 02.03 to ALFA: 1 000.00 + ƏDV 180.00. Paying on 05.03: the e-qaimə
     from the list puts 1 000.00 from the bank and 180.00 from the ƏDV deposit (55,
     500.00 on it since 01.03); «Провести» makes two operations, MT7 is paid in full."""
-    from modern_gl.reporting.invoices import open_invoices
+    from modern_gl.application.invoices import open_invoices
 
     ledger, cid = session.ledger, session.company_id
     ledger.set_account_type(cid, acc(session, "55"), "vat_deposit")

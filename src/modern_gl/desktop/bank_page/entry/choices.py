@@ -15,6 +15,7 @@ from modern_gl.application.bank import (
     transfer_targets,
 )
 from modern_gl.application.catalog import AccountInfo
+from modern_gl.application.invoices import open_invoices
 from modern_gl.desktop.bank_operation_page.common import (
     SEVERAL,
     counterparty_kind,
@@ -26,7 +27,6 @@ from modern_gl.desktop.invoice_picker import InvoicePicker
 from modern_gl.desktop.widgets import edited_date
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import open_invoices
 
 ADVANCE_OF = {"advance_paid": "payable", "advance_received": "receivable"}
 

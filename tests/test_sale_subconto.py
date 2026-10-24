@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import Qt
 
-from modern_gl.application.eqaime_import import import_drafts, parse_invoice, plan_import
+from modern_gl.application.eqaime import import_drafts, parse_invoice, plan_import
 from modern_gl.application.inventory import QUANTITY_FACTOR, ReceiptLine, SaleLine
 from modern_gl.application.queries import remembered_sale_subconto
 from modern_gl.desktop.account_dialog import AccountDialog

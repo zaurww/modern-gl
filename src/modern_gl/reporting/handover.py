@@ -13,13 +13,14 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
+from modern_gl.application.books import BOOKS, COMMON
 from modern_gl.domain.currency import format_rate
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.plaintext import BASE, hledger_journal
-from modern_gl.reporting.report_common import BOOKS, COMMON, Turnovers
+from modern_gl.reporting.report_common import Turnovers
 from modern_gl.reporting.reports import trial_balance
 
 

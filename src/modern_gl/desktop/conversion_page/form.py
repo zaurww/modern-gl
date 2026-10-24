@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.conversions import Conversion
+from modern_gl.application.conversion import Conversion
 from modern_gl.desktop import icons
 from modern_gl.desktop.conversion_page.common import BASE
 from modern_gl.desktop.conversion_page.fee_row import FeeRow

@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.conversions import ConversionFee
+from modern_gl.application.conversion import ConversionFee
 from modern_gl.desktop.conversion_page.common import (
     amount_text,
     fit_currency,

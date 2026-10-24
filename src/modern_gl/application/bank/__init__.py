@@ -1,6 +1,9 @@
-"""Bank operations (D47): what was entered, the bank accounts of the company, and the
-statement of one of them. Amounts are minor units of the operation's currency (None =
-manat); the statement is read from postings, so every document on the account is in it."""
+"""The bank (D47, D78): bank accounts and their statements, operations in and out, advances,
+the ƏDV deposit account from the portal (D112). Reading — `accounts`, `operations`,
+`statement(s)`, `places`, `advances`, `deposit_*`; writing — `BankModule`, one object over
+the ledger's connection (`ledger.bank`), assembled from `commands`, `account_commands`,
+`deposit_commands`. Amounts are minor units of the operation's currency (None = manat);
+the statement is read from postings, so every document on the account is in it."""
 
 from __future__ import annotations
 
@@ -20,6 +23,7 @@ from modern_gl.application.bank.advances import (
     counterparty_balance,
     payment_lines,
 )
+from modern_gl.application.bank.deposit_commands import VatDepositCommands
 from modern_gl.application.bank.operations import (
     BANK_TYPES,
     CUSTOMER,
@@ -68,6 +72,11 @@ from modern_gl.application.bank.statements import (
     bank_statements,
 )
 
+
+class BankModule(VatDepositCommands):
+    """The bank's write scenarios (D47, D78, D112): one object per ledger, `ledger.bank`."""
+
+
 __all__ = [
     "ACCOUNT_KINDS",
     "BANK_TYPES",
@@ -96,6 +105,7 @@ __all__ = [
     "AdvanceOffset",
     "BankAccount",
     "BankLine",
+    "BankModule",
     "BankOperation",
     "BankOperationInput",
     "BankPlace",

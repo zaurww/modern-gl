@@ -139,10 +139,10 @@ def test_tags_of_another_company_are_refused(tagged):
 def session(qtbot, monkeypatch):
     from PySide6.QtWidgets import QApplication, QMessageBox
 
+    from modern_gl.application.chart_csv import apply_chart_template
     from modern_gl.application.ledger import Ledger
     from modern_gl.desktop import theme
     from modern_gl.desktop.session import Session
-    from modern_gl.infrastructure.chart_csv import apply_chart_template
     from modern_gl.infrastructure.db import connect
 
     monkeypatch.setattr(

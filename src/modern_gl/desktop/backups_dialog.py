@@ -10,12 +10,12 @@ from PySide6.QtCore import QSettings, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
 from modern_gl.i18n import tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import Connection, Error
-from modern_gl.infrastructure.workspace import Workspace
 
 MIRROR_SETTING = "backup_mirror"
 

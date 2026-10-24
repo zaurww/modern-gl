@@ -8,18 +8,9 @@ from __future__ import annotations
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field, replace
 
-from modern_gl.application.bank import (
-    CUSTOMER,
-    KIND_TYPES,
-    SUPPLIER,
-    TAX,
-    TRANSFER,
-    BankLine,
-    BankOperationInput,
-    BankPlace,
-    default_memo,
-    payment_lines,
-)
+from modern_gl.application.bank.account_commands import BankStatementCommands
+from modern_gl.application.bank.advances import payment_lines
+from modern_gl.application.bank.commands import BankCommands
 from modern_gl.application.bank.deposit_import import (
     DepositOperation,
     day_closings,
@@ -30,10 +21,19 @@ from modern_gl.application.bank.deposit_reconciliation import (
     DepositReconciliation,
     books_figures,
 )
+from modern_gl.application.bank.operations import (
+    CUSTOMER,
+    KIND_TYPES,
+    SUPPLIER,
+    TAX,
+    TRANSFER,
+    BankLine,
+    BankOperationInput,
+    default_memo,
+)
+from modern_gl.application.bank.places import BankPlace
 from modern_gl.application.common import now
 from modern_gl.application.counterparties import known_counterparty, short_name
-from modern_gl.application.ledger.bank import BankCommands
-from modern_gl.application.ledger.bank_statements import BankStatementCommands
 from modern_gl.domain.accounts import OUTPUT_VAT
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import tr
