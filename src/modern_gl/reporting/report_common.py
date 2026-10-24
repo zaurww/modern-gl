@@ -136,6 +136,20 @@ class SubcontoRow(Turnovers):
 
 
 @dataclass
+class SubcontoAnalysisRow(Turnovers):
+    """Анализ субконто (D122): an element of a directory (depth 0) and, under it, each
+    account that carries the element (depth 1)."""
+
+    value_id: int | None = None  # None — the postings where the position was left empty
+    name: str = ""
+    depth: int = 0
+    account_id: int | None = None  # the account of a depth-1 row
+    code: str = ""
+    # a currency account: net balance (Dt - Ct) at the end in each currency ("USD": …)
+    currency_closing: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
 class CurrencyRow(Turnovers):
     """Amounts in the currency itself (minor units), not in manat."""
 

@@ -34,6 +34,13 @@ JUNE = ("2026-06-01", "2026-06-30")
 
 @pytest.fixture
 def agency(ledger):
+    return make_agency(ledger)
+
+
+def make_agency(ledger):
+    """The agency on the 1C 7.7 chart with «Sifarişlər» as the third subconto of 60.1,
+    62.1 and 90.1: (company, accounts by code, elements by name, kinds by code, the order
+    kind)."""
     cid = ledger.create_company("Səyahət MMC")
     apply_chart_template(ledger, cid, "1c77", "az")
     kind = {

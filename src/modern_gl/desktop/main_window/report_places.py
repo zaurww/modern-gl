@@ -34,6 +34,7 @@ from modern_gl.desktop.reports_page import (
     OsvPage,
     ReportParams,
     StatementsPage,
+    SubcontoAnalysisPage,
     month_of,
 )
 from modern_gl.desktop.reports_page.statements import VIEW_SETTING
@@ -117,6 +118,7 @@ class ReportPlaces(OpenPages):
             "profit": lambda: self.open_statements("profit"),
             "cash": lambda: self.open_statements("cash"),
             "books": self.open_books,
+            "subconto_analysis": self.open_subconto_analysis,
             "handover": self.hand_over,
             "invoices": lambda: self.show_place(("invoices",)),
             "reconcile_purchases": lambda: self.open_reconciliation(PURCHASE),
@@ -191,6 +193,15 @@ class ReportPlaces(OpenPages):
         key = BooksPage.key
         if key not in self.pages:
             page = BooksPage(self.open_session)
+            self._wire_report(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def open_subconto_analysis(self) -> None:
+        """«Анализ субконто» (D122): one page, the directory is chosen on it."""
+        key = SubcontoAnalysisPage.key
+        if key not in self.pages:
+            page = SubcontoAnalysisPage(self.open_session)
             self._wire_report(page)
             self._add_page(key, page, open_item=True)
         self._activate(key)

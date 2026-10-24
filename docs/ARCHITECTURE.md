@@ -68,7 +68,7 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 
 ## 5. Чтение и отчёты
 - `application/queries.py`, `catalog.py` — то, что нужно формам (списки, «как в прошлый
-  раз»); `reporting/` — отчёты: ОСВ, карточка, анализ (`reports/`), баланс, ОПиУ, ДДС,
+  раз»); `reporting/` — отчёты: ОСВ, карточка, анализ, анализ субконто (`reports/`), баланс, ОПиУ, ДДС,
   сравнение книг, колонки (`statements`, `profit_loss`, `cash_flow`, `books`, `columns`),
   склад (`inventory/`), e-qaimə (`invoices`, `invoice_rules`, `eqaime_reconciliation`),
   «Bu gün» (`overview`), hledger, «Передача дел».

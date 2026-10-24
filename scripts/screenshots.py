@@ -185,6 +185,8 @@ def main() -> None:
     subconto = cast(SubcontoPage, win.stack.currentWidget())
     subconto.drill(subconto.model.rows[2])  # the card of one counterparty, with its lines
     shot("6b_subconto_card")
+    win.open_subconto_analysis()  # «Анализ субконто» (D122): the demo's counterparties
+    shot("6c_subconto_analysis")
     win.open_report("card", session.catalog.by_code["51"].id, osv.params)
     shot("7_card")
     win.show_place(("chart",))
