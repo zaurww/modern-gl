@@ -51,8 +51,7 @@ class ReconcileBar(QWidget):
             grid.addWidget(label, 0, column)
             grid.addWidget(figure, 1, column)
             self.figures[key] = figure
-        caption = QLabel(tr("На конец · выписка банка"))
-        caption.setObjectName("tertiary")
+        caption = QLabel(tr("На конец · выписка банка"))  # the one to type: plain text
         caption.setFont(fonts().small)
         self.bank = QLineEdit()
         self.bank.setPlaceholderText(tr("из выписки банка"))
@@ -99,7 +98,7 @@ class ReconcileBar(QWidget):
                 )
             )
         else:
-            self.verdict.setObjectName("secondary")
+            self.verdict.setObjectName("warning")  # waiting: louder than what is done
             self.verdict.setText(
                 tr("Впишите остаток из выписки банка: сойдётся — выписка сверена.")
             )

@@ -13,6 +13,7 @@ from modern_gl.application.bank import (
     OK,
     BankAccount,
     BankStatement,
+    Statement,
     StatementLine,
 )
 from modern_gl.desktop.reports_page import Column
@@ -29,6 +30,16 @@ class GroupRow:
     """A group's caption in the list of accounts: «Бизнес-карты»."""
 
     title: str
+
+
+def opens() -> Column:
+    """A «›» at the end of a row a click opens: a level down."""
+    return Column(
+        "",
+        lambda r: "" if isinstance(r, GroupRow) else "›",
+        right=True,
+        tone=lambda r: "tertiary",
+    )
 
 
 def where(account: BankAccount) -> str:
@@ -66,7 +77,7 @@ def checks_text(a: BankAccount) -> str:
     if a.differences:
         parts.append(tr("расхождение: {n}", n=a.differences))
     if a.unchecked:
-        parts.append(tr("не сверено: {n}", n=a.unchecked))
+        parts.append(tr("без остатка банка: {n}", n=a.unchecked))
     if not parts and a.last_statement:
         return tr("всё сверено")
     return "  ·  ".join(parts)
@@ -86,7 +97,7 @@ def account_columns() -> list[Column]:
 
     return [
         Column(tr("Счёт"), lambda r: r.title),
-        Column("", on_account(where), width=110, fill=True),  # "AZN · 51" by the name
+        Column("", on_account(where), width=110),  # "AZN · 51" by the name
         Column(
             tr("Последняя выписка"),
             on_account(lambda a: ru_date(a.last_statement) if a.last_statement else ""),
@@ -104,6 +115,7 @@ def account_columns() -> list[Column]:
             money=True,
             width=130,
         ),
+        opens(),
     ]
 
 
@@ -115,7 +127,7 @@ def status_text(s: BankStatement) -> str:
         return tr("сверена")
     if s.status == DIFF:
         return tr("расхождение {amount}", amount=format_minor(s.difference or 0))
-    return tr("не сверена")
+    return tr("остаток банка не введён")
 
 
 def status_tone(s: BankStatement) -> str:
@@ -124,13 +136,14 @@ def status_tone(s: BankStatement) -> str:
 
 def statement_columns() -> list[Column]:
     return [
-        Column(tr("Выписка"), period_text, width=200, fill=True),
+        Column(tr("Выписка"), period_text, width=200),
         Column(tr("На начало"), lambda s: s.opening, money=True, width=120),
         Column(tr("Приход"), lambda s: s.money_in, money=True, width=120),
         Column(tr("Расход"), lambda s: s.money_out, money=True, width=120),
         Column(tr("На конец"), lambda s: s.closing, money=True, width=130),
         Column(tr("Строк"), lambda s: s.lines + s.drafts, right=True, width=70),
         Column(tr("С банком"), status_text, tone=status_tone, width=170),
+        opens(),
     ]
 
 
@@ -155,8 +168,20 @@ def line_columns(period: bool) -> list[Column]:
         Column(tr("№"), lambda r: r.number, width=60),
         Column(tr("Операция"), line_kind, width=190),
         Column(tr("Контрагент"), lambda r: r.counterparty or r.corr, width=200),
-        Column(tr("Назначение"), lambda r: r.memo, fill=True),
+        Column(tr("Назначение"), lambda r: r.memo),
         Column(tr("Приход"), lambda r: r.money_in, money=True, width=120),
         Column(tr("Расход"), lambda r: r.money_out, money=True, width=120),
         Column(tr("Остаток"), lambda r: r.balance, money=True, width=130),
     ]
+
+
+def period_summary(s: Statement) -> str:
+    """Under the account's statements: the period's money at a glance."""
+    return tr(
+        "На начало {opening}   ·   приход {money_in}   ·   расход {money_out}   ·   "
+        "на конец {closing}",
+        opening=format_minor(s.opening),
+        money_in=format_minor(s.total_in),
+        money_out=format_minor(s.total_out),
+        closing=format_minor(s.closing),
+    )

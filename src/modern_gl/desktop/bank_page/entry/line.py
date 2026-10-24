@@ -1,7 +1,8 @@
 """The entry line under a statement (D78): a bank statement's line typed as it is read —
 Enter goes on through what is left to type and posts at the amount, as in the journal
 (D55); the account "as last time" is passed by; F6 — a bank fee; F2 — the full form
-(the ƏDV deposit, several accounts); Esc — empty again."""
+(the ƏDV deposit, several accounts); Esc — empty again, and on an empty line — back to
+the statements."""
 
 from __future__ import annotations
 
@@ -118,6 +119,8 @@ class EntryLine(EntrySaving):
         key = event.key()
         if key in ENTER and not event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
             self.go(forward=True)  # a field took what was typed and passed the key on
+        elif key == Qt.Key.Key_Escape and self.is_empty():
+            event.ignore()  # nothing to clear: the page goes back
         elif key == Qt.Key.Key_Escape:
             self.clear()
             self.start()
@@ -129,6 +132,11 @@ class EntryLine(EntrySaving):
             self.expand.emit(data)
         else:
             super().keyPressEvent(event)
+
+    def is_empty(self) -> bool:
+        fields = (self.counterparty_box, self.account, self.analytics, self.invoice)
+        fields += (self.money_in, self.money_out, self.amount, self.memo)
+        return not any(f.text().strip() for f in fields)
 
     # ---- choices -----------------------------------------------------------------------
 

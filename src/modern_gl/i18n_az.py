@@ -83,12 +83,12 @@ AZ: dict[str, str] = {
     "Последние 4 цифры": "Son 4 rəqəm",
     "Держатель": "Kart sahibi",
     "Создать": "Yarat",
-    "не сверена": "üzləşdirilməyib",
+    "остаток банка не введён": "bankın qalığı yazılmayıb",
     "всё сверено": "hamısı üzləşdirilib",
     "сверена": "üzləşdirilib",
     "расхождение {amount}": "fərq {amount}",
     "расхождение: {n}": "fərq: {n}",
-    "не сверено: {n}": "üzləşdirilməyib: {n}",
+    "без остатка банка: {n}": "bankın qalığı yoxdur: {n}",
     "Последняя выписка": "Son çıxarış",
     "Сверка с банком": "Bankla üzləşdirmə",
     "Выписка": "Çıxarış",
@@ -104,7 +104,22 @@ AZ: dict[str, str] = {
     "«+ Новый счёт» — расчётный, валютный счёт или бизнес-карта.": (
         "«+ Yeni hesab» — hesablaşma, valyuta hesabı və ya biznes kart."
     ),
-    "Выписок пока нет": "Hələ çıxarış yoxdur",
+    "За этот период выписок нет": "Bu dövr üçün çıxarış yoxdur",
+    "Другой период — ‹ › у поля периода; «+ Выписка» — следующий рабочий день.": (
+        "Başqa dövr — dövr sahəsindəki ‹ ›; «+ Çıxarış» — növbəti iş günü."
+    ),
+    "По дням": "Günlər üzrə",
+    "Все операции": "Bütün əməliyyatlar",
+    "Щёлкните счёт — откроются его выписки по дням.": (
+        "Hesaba klikləyin — onun günlər üzrə çıxarışları açılacaq."
+    ),
+    "Щёлкните выписку — её строки; внизу выписки впишите остаток из банка.": (
+        "Çıxarışa klikləyin — onun sətirləri; çıxarışın altında bankdakı qalığı yazın."
+    ),
+    "Двойной щелчок — документ.": "İki dəfə klik — sənəd.",
+    "На начало {opening}   ·   приход {money_in}   ·   расход {money_out}   ·   на конец {closing}": (
+        "Əvvələ {opening}   ·   mədaxil {money_in}   ·   məxaric {money_out}   ·   sona {closing}"
+    ),
     "«+ Выписка» — на следующий рабочий день.": "«+ Çıxarış» — növbəti iş günü üçün.",
     "В выписке нет строк": "Çıxarışda sətir yoxdur",
     "«+ Приход денег» или «+ Расход денег».": "«+ Pul mədaxili» və ya «+ Pul məxarici».",

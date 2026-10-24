@@ -1,11 +1,13 @@
-"""«Банк / Bank» (D47, D78) on three levels, Enter going down and Backspace up: the bank
-accounts and cards by group with what is left to check; the statements of one account,
-a day or a period each; one statement — its lines and its balance against the bank's."""
+"""«Банк / Bank» (D47, D78) on three levels, a click or Enter going down and Esc (or
+Backspace) up: the bank accounts and cards by group with what is left to check; the
+statements of one account for a period, a day or a period each — or all its lines of the
+period; one statement — its lines and its balance against the bank's."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import date
 
 from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -14,6 +16,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QVBoxLayout,
+    QWidget,
 )
 
 from modern_gl.application.bank import (
@@ -36,20 +39,26 @@ from modern_gl.desktop.bank_page.levels import (
     account_columns,
     account_rows,
     line_columns,
+    period_summary,
     period_text,
     statement_columns,
     where,
 )
 from modern_gl.desktop.bank_page.reconcile import ReconcileBar
+from modern_gl.desktop.period_field import PeriodField
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     EmptyState,
     button,
     icon_button,
     ru_date,
+    segments,
 )
+from modern_gl.domain.periods import MONTH, span_period
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
+
+DAYS, LINES = "days", "lines"  # an account's statements by day, or all its lines
 
 
 @dataclass(frozen=True)
@@ -60,6 +69,7 @@ class BankData:
     accounts: list[BankAccount]
     statements: list[BankStatement]  # of the account open
     lines: Statement | None  # of the statement open, if it is still there
+    period: Statement | None  # the account's lines of the period chosen
 
 
 class BankPage(BankActions):
@@ -75,8 +85,10 @@ class BankPage(BankActions):
         self.statements: list[BankStatement] = []
         self._amount_mode: str | None = None
         self._start_entry = False  # the cursor to the entry line once the statement is shown
+        self.view = DAYS
         self._build_actions()
         self._build_crumbs()
+        self._build_bar()
         self.entry = EntryLine(session)
         self.entry.saved.connect(self.refresh)
         self.entry.expand.connect(self.new_bank_operation.emit)
@@ -94,7 +106,9 @@ class BankPage(BankActions):
                 tr("«+ Новый счёт» — расчётный, валютный счёт или бизнес-карта."),
             ),
             JOURNAL: EmptyState(
-                "○", tr("Выписок пока нет"), tr("«+ Выписка» — на следующий рабочий день.")
+                "○",
+                tr("За этот период выписок нет"),
+                tr("Другой период — ‹ › у поля периода; «+ Выписка» — следующий рабочий день."),
             ),
             STATEMENT: EmptyState(
                 "○", tr("В выписке нет строк"), tr("«+ Приход денег» или «+ Расход денег».")
@@ -110,6 +124,8 @@ class BankPage(BankActions):
             shortcut = QShortcut(QKeySequence(keys), self.table)
             shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
             shortcut.activated.connect(self._drill_current)
+        # an account or a statement opens with one click: the lists are the way in
+        self.table.clicked.connect(self._clicked)
         for keys, fn in (
             ("Backspace", self.up),
             ("Alt+Up", self.up),
@@ -145,6 +161,36 @@ class BankPage(BankActions):
             self.money_out,
         ):
             self.header.add_action(control)
+
+    def _build_bar(self) -> None:
+        """An account's period and how to see it: statements by day or all the lines."""
+        today = self.s.working_date
+        self.period_field = PeriodField(span_period(MONTH, today), today)
+        self.period_field.changed.connect(self.refresh)
+        box, self.view_buttons = segments(
+            [(DAYS, "По дням"), (LINES, "Все операции")], self._view_chosen
+        )
+        self.view_buttons[DAYS].setChecked(True)
+        self.bar_box = QWidget()
+        bar = QHBoxLayout(self.bar_box)
+        bar.setContentsMargins(0, 0, 0, 0)
+        bar.setSpacing(8)
+        caption = QLabel(tr("Период"))
+        caption.setObjectName("secondary")
+        for widget in (caption, self.period_field, box):
+            bar.addWidget(widget)
+        bar.addStretch(1)
+        root = self.layout()
+        assert isinstance(root, QVBoxLayout)
+        root.insertWidget(root.indexOf(self.header) + 1, self.bar_box)
+
+    def _view_chosen(self) -> None:
+        self.view = next(k for k, b in self.view_buttons.items() if b.isChecked())
+        self.refresh()
+
+    def period_dates(self) -> tuple[str, str]:
+        first, last = self.period_field.period()
+        return first.isoformat(), last.isoformat()
 
     def _build_crumbs(self) -> None:
         """Where the page is: «Банк › ABB · AZN › 22.10.2026», each step back a click."""
@@ -203,6 +249,12 @@ class BankPage(BankActions):
 
     def go(self, level: str) -> None:
         self.level = level
+        first, last = self.period_dates()
+        if level == JOURNAL and self.period and not first <= self.period[0] <= last:
+            # the statement left stays in the list: its month (a new one may be past it)
+            self.period_field.blockSignals(True)
+            self.period_field.set_period(*span_period(MONTH, date.fromisoformat(self.period[0])))
+            self.period_field.blockSignals(False)
         self.refresh()
 
     def open_account(self, key: tuple[int, int | None]) -> None:
@@ -214,11 +266,24 @@ class BankPage(BankActions):
         self._start_entry = True
         self.go(STATEMENT)
 
-    def up(self) -> None:
-        if self.level == STATEMENT:
-            self.go(JOURNAL)
-        elif self.level == JOURNAL:
-            self.go(ACCOUNTS)
+    def up(self) -> bool:
+        """A level up; False at the top (Esc goes on to the window)."""
+        if self.level == ACCOUNTS:
+            return False
+        self.go(JOURNAL if self.level == STATEMENT else ACCOUNTS)
+        self.table.setFocus()  # the entry line is hidden: the cursor stays on the page
+        return True
+
+    def keyPressEvent(self, event) -> None:
+        # Esc nobody inside wanted (an empty entry line, the table): a level up
+        if event.key() == Qt.Key.Key_Escape and not event.modifiers() and self.up():
+            return
+        super().keyPressEvent(event)
+
+    def _clicked(self, index: QModelIndex) -> None:
+        row = index.data(Qt.ItemDataRole.UserRole)
+        if isinstance(row, (BankAccount, BankStatement)):
+            self.drill(row)
 
     def step(self, delta: int) -> None:
         """The statement before or after this one."""
@@ -239,6 +304,7 @@ class BankPage(BankActions):
     def job(self) -> Callable[[Connection], BankData]:
         cid, day = self.s.company_id, self.s.working_date.isoformat()
         level, key, period = self.level, self.account_key, self.period
+        chosen = self.period_dates()
 
         def read(conn: Connection) -> BankData:
             accounts = bank_accounts(conn, cid, day)
@@ -248,7 +314,10 @@ class BankPage(BankActions):
             lines = None
             if account and period and level == STATEMENT and here:
                 lines = statement(conn, cid, account.place, *period)
-            return BankData(level, accounts, statements, lines)
+            of_period = None
+            if account and level == JOURNAL:
+                of_period = statement(conn, cid, account.place, *chosen)
+            return BankData(level, accounts, statements, lines, of_period)
 
         return read
 
@@ -261,7 +330,8 @@ class BankPage(BankActions):
         if self.level == ACCOUNTS:
             self._build_accounts()
         elif self.level == JOURNAL:
-            self._build_journal()
+            assert data.period is not None
+            self._build_journal(data.period)
         else:
             assert data.lines is not None
             self._build_statement(data.lines)
@@ -287,15 +357,29 @@ class BankPage(BankActions):
         self.header.subtitle.setText(
             tr("Счета и карты · остаток на {day}", day=ru_date(self.s.working_date.isoformat()))
         )
+        self.footer.setText(
+            tr("Щёлкните счёт — откроются его выписки по дням.") if self.accounts else ""
+        )
 
-    def _build_journal(self) -> None:
+    def _build_journal(self, lines: Statement) -> None:
         account = self.account
         assert account is not None
         self.model.bands = True
-        self.model.set(statement_columns(), list(reversed(self.statements)))
+        if self.view == LINES:
+            self.model.set(line_columns(True), lines.lines, muted=lambda r: r.status == "draft")
+        else:
+            first, last = self.period_dates()
+            shown = [s for s in self.statements if s.date_from <= last and s.date_to >= first]
+            self.model.set(statement_columns(), list(reversed(shown)))
         kind = dict(ACCOUNT_KINDS)[account.kind]
         self.header.title.setText(account.title)
         self.header.subtitle.setText(f"{where(account)}  ·  {tr(kind)}")
+        hint = (
+            tr("Двойной щелчок — документ.")
+            if self.view == LINES
+            else tr("Щёлкните выписку — её строки; внизу выписки впишите остаток из банка.")
+        )
+        self.footer.setText(f"{period_summary(lines)}\n{hint}")
 
     def _build_statement(self, lines: Statement) -> None:
         account, s = self.account, self.current
@@ -327,7 +411,8 @@ class BankPage(BankActions):
             if level == STATEMENT
             else QAbstractItemView.SelectionMode.SingleSelection
         )
-        self.footer.hide()
+        self.bar_box.setVisible(level == JOURNAL)
+        self.footer.setVisible(level != STATEMENT and bool(self.footer.text()))
         if level == JOURNAL:
             day = ru_date(self._next_day())[:5]
             self.new_statement_button.setText(tr("+ Выписка · {day}", day=day))
