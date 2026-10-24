@@ -8,7 +8,7 @@ from datetime import date
 from modern_gl.application.common import insert, now, pad_subconto, with_reason
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.validation import PostingChecks
-from modern_gl.application.queries import journal_drafts
+from modern_gl.application.queries import DocumentOwner, document_owner, journal_drafts
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import (
     LedgerError,
@@ -32,10 +32,10 @@ def explain_owner(module: str, text: OwnerText) -> None:
     OWNER_TEXTS[module] = text
 
 
-def _owner_text(module: str, role: str, number: int, owner: Row) -> str:
-    text = OWNER_TEXTS.get(module)
+def _owner_text(role: str, number: int, owner: DocumentOwner) -> str:
+    text = OWNER_TEXTS.get(owner.module)
     if text is not None:
-        return text(role, number, owner["owner_number"])
+        return text(role, number, owner.number)
     if role == "uses":
         return tr(
             "документ №{n} используется в другом разделе: сначала уберите его оттуда", n=number
@@ -242,9 +242,9 @@ class DocumentCommands(PostingChecks):
         self._require_open_period(
             company_id, doc, ". " + tr("Исправьте его сторно в открытом периоде.")
         )
-        user = self._owner(company_id, doc["id"], "uses")
+        user = document_owner(self.conn, company_id, doc["id"], "uses")
         if user is not None:
-            raise ValidationError(_owner_text(user["module"], "uses", doc["number"], user))
+            raise ValidationError(_owner_text("uses", doc["number"], user))
         storno = self.conn.execute(
             "SELECT number FROM documents WHERE reversal_of = ?", (doc["id"],)
         ).fetchone()
@@ -259,18 +259,9 @@ class DocumentCommands(PostingChecks):
 
     def _require_not_module_document(self, company_id: int, doc: Row) -> None:
         """Postings a module made (warehouse, currency conversion, bank) are corrected there."""
-        owner = self._owner(company_id, doc["id"], "made")
+        owner = document_owner(self.conn, company_id, doc["id"])
         if owner is not None:
-            raise ValidationError(_owner_text(owner["module"], "made", doc["number"], owner))
-
-    def _owner(self, company_id: int, doc_id: int, role: str) -> Row | None:
-        """The module that made (or takes in) a GL document, from the document_owners view."""
-        return self.conn.execute(
-            "SELECT module, owner_number FROM document_owners "
-            "WHERE company_id = ? AND document_id = ? AND role = ? "
-            "ORDER BY owner_number LIMIT 1",
-            (company_id, doc_id, role),
-        ).fetchone()
+            raise ValidationError(_owner_text("made", doc["number"], owner))
 
     def _snapshot(self, doc: Row) -> dict:
         """Everything needed to see later what a removed / unposted document contained."""

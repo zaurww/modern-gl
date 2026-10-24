@@ -37,7 +37,6 @@ from modern_gl.infrastructure.etaxes import EtaxesClient
 DONE = "SUCCESS"  # «Əməliyyat icra olundu»; another status did not move the money
 TAXPAYER, BANK = "TAXPAYER", "BANK"  # where the money came from or went: anything else
 # (BUDGET, the customs) is a tax
-NO_RECEIPT = "nb"  # a payment from a bank current account has no receipt number
 # an e-qaimə number in a purpose of payment (the bank breaks the purpose into lines of 35
 # characters anywhere, a person types a space after the month: read without spaces)
 INVOICE_IN_TEXT = re.compile(r"MT\d{12}", re.IGNORECASE)

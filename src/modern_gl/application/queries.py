@@ -242,7 +242,8 @@ def document_owner(
     """Who made a GL document ('made': it is corrected there) or takes it in ('uses')."""
     row = conn.execute(
         "SELECT module, owner_id, owner_number FROM document_owners "
-        "WHERE company_id = ? AND document_id = ? AND role = ? ORDER BY owner_id LIMIT 1",
+        "WHERE company_id = ? AND document_id = ? AND role = ? "
+        "ORDER BY owner_number, owner_id LIMIT 1",
         (company_id, document_id, role),
     ).fetchone()
     return None if row is None else DocumentOwner(row[0], row[1], row[2])

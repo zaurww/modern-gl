@@ -8,7 +8,6 @@ from datetime import date, timedelta
 from modern_gl.domain.dates import month_days
 
 DAY, WEEK, LAST_WEEK, MONTH, LAST_MONTH = "day", "week", "last_week", "month", "last_month"
-SPANS = (DAY, WEEK, LAST_WEEK, MONTH, LAST_MONTH)
 
 
 def month_bounds(month: str) -> tuple[date, date]:
