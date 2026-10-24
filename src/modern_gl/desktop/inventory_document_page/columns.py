@@ -8,7 +8,7 @@ from modern_gl.application.inventory import (
     STANDARD_VAT_RATE,
 )
 from modern_gl.application.inventory import VAT_DOCUMENTS as INVENTORY_VAT_DOCUMENTS
-from modern_gl.application.table_text import header_names
+from modern_gl.application.table_text import header_names, subconto_header
 from modern_gl.i18n import fold
 
 ITEM = "item"
@@ -118,7 +118,6 @@ PASTE_HEADERS = [
     (header_names("Корр. счёт", "Счёт", "Hesab"), ACCOUNT),
     (header_names("Комментарий", "Содержание", "Şərh", "Məzmun"), MEMO),
 ]
-SUBCONTO_HEADERS = header_names("Субконто", "Subkonto")
 # accounts before their subconto, the quantity before a price, a pasted amount over a price
 PASTE_ORDER = [
     ITEM,
@@ -158,12 +157,10 @@ def paste_columns(cells: list[str], columns: list[str]) -> list[str | None] | No
     result: list[str | None] = []
     position = 0
     for cell in cells:
-        words = fold(cell.strip()).split()
-        name = " ".join(words)
+        name = " ".join(fold(cell.strip()).split())
         key = next((k for names, k in PASTE_HEADERS if name in names), None)
-        if key is None and words and words[0] in SUBCONTO_HEADERS:
-            digits = [int(w) for w in words if w.isdigit()]
-            position = digits[0] if digits else position + 1
+        if key is None and (sub := subconto_header(name, position)) is not None:
+            _side, position = sub  # a warehouse line has one side of subconto
             key = f"sc{position}" if 1 <= position <= 3 else None
         result.append(key if key in columns else None)
     return result if sum(k is not None for k in result) >= 2 else None
