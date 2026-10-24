@@ -48,6 +48,18 @@ def require_open(company: Row, day: str, explain: Callable[[str], str]) -> None:
         raise PeriodClosedError(explain(ru_date(company["closed_through"])))
 
 
+def group_path(parent_id: int | None, node: Callable[[int], tuple[str, int | None] | None]) -> str:
+    """The groups above a directory element, outermost first: «Avadanlıq / Kabellər».
+    `node(id)` gives a group's (name, parent); a chain of parents that loops stops."""
+    names: list[str] = []
+    seen: set[int] = set()
+    while parent_id is not None and parent_id not in seen and (found := node(parent_id)):
+        seen.add(parent_id)
+        names.append(found[0])
+        parent_id = found[1]
+    return " / ".join(reversed(names))
+
+
 def with_reason(details: dict, reason: str) -> dict:
     """An audit event's details with why the change was made, when it was told."""
     reason = reason.strip()

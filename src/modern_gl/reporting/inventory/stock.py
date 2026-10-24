@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from modern_gl.application.common import group_path
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import Connection, Row
@@ -134,17 +135,9 @@ def group_paths(conn: Connection, company_id: int) -> dict[int, str]:
         "SELECT id, name, parent_id, is_group FROM subconto_values WHERE company_id = ?",
         (company_id,),
     ).fetchall()
-    by_id = {r["id"]: r for r in rows}
-    paths: dict[int, str] = {}
-    for row in rows:
-        names, parent, seen = [], row["parent_id"], set()
-        while parent is not None and parent in by_id and parent not in seen:
-            seen.add(parent)
-            names.append(by_id[parent]["name"])
-            parent = by_id[parent]["parent_id"]
-        if names:
-            paths[row["id"]] = " / ".join(reversed(names))
-    return paths
+    nodes = {r["id"]: (r["name"], r["parent_id"]) for r in rows}
+    paths = {r["id"]: group_path(r["parent_id"], nodes.get) for r in rows}
+    return {value_id: path for value_id, path in paths.items() if path}
 
 
 def item_details(conn: Connection, company_id: int, value_id: int) -> ItemDetails | None:

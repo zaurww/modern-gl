@@ -9,6 +9,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 
+from modern_gl.application.common import group_path
 from modern_gl.application.currencies import CurrencyInfo, list_currencies
 from modern_gl.domain.accounts import OPENING_BALANCE, SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
@@ -284,12 +285,12 @@ class Catalog:
 
     def group_path(self, value_id: int) -> str:
         """The groups an element is in, outermost first: «Avadanlıq / Kabellər»."""
-        names = []
-        parent = self._values[value_id].parent_id
-        while parent is not None and parent in self._values:
-            names.append(self._values[parent].name)
-            parent = self._values[parent].parent_id
-        return " / ".join(reversed(names))
+
+        def node(group_id: int) -> tuple[str, int | None] | None:
+            group = self._values.get(group_id)
+            return None if group is None else (group.name, group.parent_id)
+
+        return group_path(self._values[value_id].parent_id, node)
 
     def owner_title(self, kind_id: int) -> str:
         """What one owner is called: "Контрагент" (a directory is named in plural)."""
