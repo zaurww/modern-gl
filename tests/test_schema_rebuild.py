@@ -10,7 +10,7 @@ from pathlib import Path
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.demo_year import create_year_demo
-from modern_gl.infrastructure.db import connect, latest_version
+from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, latest_version
 from tests.test_workspace import file_at_version
 
 REBUILT = 47
@@ -43,10 +43,13 @@ def rows_by_table(conn: sqlite3.Connection) -> dict[str, list[tuple]]:
 
 def company_of_version(path: Path, version: int) -> None:
     """The demo year written into a file of an older schema: the columns of 0046 and 0047
-    are the same, so the program of today can fill a file of yesterday."""
+    are the same, so the program of today can fill a file of yesterday — once its accounts
+    take the account types of today (0048: the same columns, a longer CHECK)."""
     file_at_version(path, version, [])
     conn = sqlite3.connect(path, isolation_level=None)
     conn.row_factory = sqlite3.Row
+    sql = (MIGRATIONS_DIR / "0048_ifrs_types.sql").read_text(encoding="utf-8")
+    conn.executescript(sql[sql.index("CREATE TABLE") : sql.index("-- 09 and 77")])
     conn.execute("PRAGMA foreign_keys = ON")
     try:
         create_year_demo(Ledger(conn))

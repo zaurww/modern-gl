@@ -22,7 +22,7 @@ def kinds(conn, cid):
 
 
 def test_every_type_has_a_class_and_a_translation():
-    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 34
+    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 38
     assert {cls for _, cls, _ in ACCOUNT_TYPES} == {
         "asset",
         "liability",
@@ -158,9 +158,12 @@ def test_migration_types_old_companies_like_the_template(ledger, conn, template)
     # 0035: the long-term types (D89) — 0012 typed 09 and 77 as other assets and liabilities
     sql = (MIGRATIONS_DIR / "0035_long_term_types.sql").read_text(encoding="utf-8")
     conn.executescript(sql[sql.index("UPDATE accounts") :])
-    # 76H came with D65 (0031), the ƏDV deposit 54 with the templates later: files typed by
-    # 0012 had no such accounts
-    later = {"76H", "54"}
+    # 0048: deferred taxes (D128)
+    sql = (MIGRATIONS_DIR / "0048_ifrs_types.sql").read_text(encoding="utf-8")
+    conn.executescript(sql[sql.index("UPDATE accounts") :])
+    # 76H came with D65 (0031), the ƏDV deposit 54 with the templates later, 09 and 77 of
+    # the classic chart and 91.3, 91.4 of 1C 7.7 with D128: files typed by 0012 had none
+    later = {"76H", "54", "91.3", "91.4"} | ({"09", "77"} if template == "classic" else set())
     assert {code: k for code, k in kinds(conn, cid).items() if code not in later} == {
         code: k for code, k in expected.items() if code not in later
     }
@@ -186,16 +189,17 @@ def test_1c77_template_long_term_accounts(ledger, conn):
     cid = ledger.create_company("1С")
     apply_chart_template(ledger, cid, "1c77")
     k = kinds(conn, cid)
-    assert k["09"] == ("other_noncurrent_asset", "asset")  # deferred tax assets
-    assert k["77"] == ("other_long_term_liability", "liability")  # deferred tax liabilities
+    assert k["09"] == ("deferred_tax_asset", "asset")  # long-term, a line of its own (D128)
+    assert k["77"] == ("deferred_tax_liability", "liability")
     assert k["97"] == ("other_asset", "asset")  # deferred expenses: current
     assert k["58"] == ("investment", "asset")  # short-term unless the user says otherwise
     assert k["76"] == ("other_liability", "liability")
 
 
 def test_migration_moves_deferred_taxes_to_long_term(tmp_path):
-    """A file of version 34: 09 and 77 (and their subaccounts) become long-term; another
-    other asset stays current, and so does 090: only 09 and its subaccounts move."""
+    """A file of version 34: 09 and 77 (and their subaccounts) become long-term — deferred
+    taxes since 0048 (D128); another other asset stays current, and so does 090: only 09
+    and its subaccounts move."""
     path = tmp_path / "old.gl"
     old = sqlite3.connect(path)
     for script in sorted(MIGRATIONS_DIR.glob("*.sql"))[:34]:
@@ -222,9 +226,9 @@ def test_migration_moves_deferred_taxes_to_long_term(tmp_path):
     types = dict(conn.execute("SELECT code, account_type FROM accounts").fetchall())
     conn.close()
     assert types == {
-        "09": "other_noncurrent_asset",
-        "09.1": "other_noncurrent_asset",
-        "77": "other_long_term_liability",
+        "09": "deferred_tax_asset",
+        "09.1": "deferred_tax_asset",
+        "77": "deferred_tax_liability",
         "97": "other_asset",
         "76": "other_liability",
         "090": "other_asset",

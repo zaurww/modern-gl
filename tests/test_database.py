@@ -60,6 +60,7 @@ FROZEN = {
     "0045_line_counterparties.sql": "1aa158be48f2f26c",
     "0046_query_indexes.sql": "c9c524291c9fe367",
     "0047_company_scoped_references.sql": "86041a67459f7242",
+    "0048_ifrs_types.sql": "6cfdde82474f65bf",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

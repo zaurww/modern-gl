@@ -4,6 +4,7 @@ code;type
 04;intangible
 05;intangible
 08;fixed_asset
+09;deferred_tax_asset
 10;inventory
 19;input_vat
 20;inventory
@@ -35,6 +36,7 @@ code;type
 75;other_liability
 76;other_liability
 76H;accrued_expenses
+77;deferred_tax_liability
 80;profit_loss
 85;share_capital
 88;retained_earnings
