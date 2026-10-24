@@ -14,8 +14,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from modern_gl.application.authorship import document_authors
-from modern_gl.application.catalog import AccountInfo, Catalog
-from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.catalog import Catalog
+from modern_gl.application.exchange.lines import posting_lines
+from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import document_by_number, load_document
 from modern_gl.assistant import answers
 from modern_gl.assistant.companies import Companies
@@ -23,17 +24,6 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 
 AI = "AI · "  # an actor starting so is the assistant
-LINE_KEYS = {
-    "debit",
-    "debit_subconto",
-    "credit",
-    "credit_subconto",
-    "amount",
-    "memo",
-    "e_qaime",
-    "currency",
-    "currency_amount",
-}
 
 
 @dataclass
@@ -47,7 +37,7 @@ class Drafts:
 
     def create(self, date: str, memo: str, postings: list[dict], company: str = "") -> dict:
         with self._writing(company) as (ledger, company_id):
-            lines = _lines(Catalog(ledger.conn, company_id), postings)
+            lines = posting_lines(Catalog(ledger.conn, company_id), postings)
             doc_id = ledger.create_draft(company_id, date, lines, memo)
             return _answer(ledger, company_id, doc_id)
 
@@ -56,7 +46,7 @@ class Drafts:
     ) -> dict:
         with self._writing(company) as (ledger, company_id):
             doc_id = self._own_draft(ledger.conn, company_id, number)
-            lines = _lines(Catalog(ledger.conn, company_id), postings)
+            lines = posting_lines(Catalog(ledger.conn, company_id), postings)
             ledger.update_draft(company_id, doc_id, date, lines, memo)
             return _answer(ledger, company_id, doc_id)
 
@@ -92,69 +82,3 @@ def _answer(ledger: Ledger, company_id: int, doc_id: int) -> dict:
         **({"problem": problem} if problem else {}),
         "note": "a draft: the user checks and posts it in the program",
     }
-
-
-def _lines(cat: Catalog, postings: list[dict]) -> list[PostingInput]:
-    if not postings:
-        raise ValueError(tr("нет проводок"))
-    return [_line(cat, i, p) for i, p in enumerate(postings, start=1)]
-
-
-def _line(cat: Catalog, i: int, p: dict) -> PostingInput:
-    unknown = set(p) - LINE_KEYS
-    if unknown:
-        raise ValueError(tr("строка {line}: лишние поля {keys}", line=i, keys=sorted(unknown)))
-    debit = cat.resolve_account(str(p.get("debit", "")))
-    credit = cat.resolve_account(str(p.get("credit", "")))
-    currency = cat.resolve_currency(p["currency"]).id if p.get("currency") else None
-    return PostingInput(
-        debit.id,
-        credit.id,
-        _amount(i, p.get("amount")),
-        _subconto(cat, debit, p.get("debit_subconto") or []),
-        _subconto(cat, credit, p.get("credit_subconto") or []),
-        str(p.get("memo") or ""),
-        currency,
-        _amount(i, p["currency_amount"]) if p.get("currency_amount") is not None else None,
-        str(p.get("e_qaime") or ""),
-    )
-
-
-def _amount(line: int, value: object) -> str:
-    """An amount as text ("261.13"): a JSON number would arrive as a float."""
-    if isinstance(value, bool) or not isinstance(value, (str, int)):
-        raise ValueError(tr('строка {line}: сумма — строкой, например "261.13"', line=line))
-    return str(value)
-
-
-def _subconto(cat: Catalog, account: AccountInfo, names: list[str]) -> list[int | None]:
-    """The elements by name (or VÖEN) in the order of the account's subconto; a contract is
-    looked for among its counterparty's."""
-    kinds = [k for k in account.sc_kinds if k is not None]
-    if len(names) > len(kinds):
-        raise ValueError(
-            tr(
-                "у счёта {code} субконто: {kinds}",
-                code=account.short,
-                kinds=", ".join(cat.kinds[k] for k in kinds) or "—",
-            )
-        )
-    values: list[int | None] = []
-    for pos, name in enumerate(names):
-        kind = account.sc_kinds[pos]
-        if not name or kind is None:
-            values.append(None)
-            continue
-        slot = cat.owner_slot(account, pos)
-        owner = values[slot] if slot is not None and slot < len(values) else None
-        found = cat.resolve_value(kind, str(name), owner)
-        if found is None:
-            raise LookupError(
-                tr(
-                    "«{name}» нет в справочнике «{kind}» — его добавляет человек в программе",
-                    name=name,
-                    kind=cat.kinds[kind],
-                )
-            )
-        values.append(found)
-    return values

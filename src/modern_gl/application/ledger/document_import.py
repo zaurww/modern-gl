@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
+from functools import partial
 
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import ImportedDocument, ImportOutcome
 from modern_gl.domain.errors import LedgerError
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 
@@ -23,6 +25,7 @@ class DocumentImportCommands(DocumentCommands):
         new_values: Sequence[tuple[int, str, int | None]] = (),
         post: bool = True,
         check_only: bool = False,
+        source: str = "",
     ) -> ImportOutcome:
         """Create many documents at once (import from Excel): all or nothing.
 
@@ -31,6 +34,10 @@ class DocumentImportCommands(DocumentCommands):
         contract of a new counterparty). Every document is checked on its
         own (a savepoint each), so all problems are reported, not only the first. With any
         problem, or with `check_only`, nothing is kept.
+
+        With a `source` (the program the file came from, D130) a document is marked with
+        its `external_id`; one imported before from the same source is left as it is and
+        named in `existing` — the same file twice makes no duplicates.
         """
         outcome = ImportOutcome()
         try:
@@ -46,7 +53,13 @@ class DocumentImportCommands(DocumentCommands):
                 def real(values: Sequence[int | None]) -> tuple[int | None, ...]:
                     return tuple(created[-v - 1] if v is not None and v < 0 else v for v in values)
 
+                seen: set[str] = set()
                 for index, doc in enumerate(documents):
+                    sourced = bool(source and doc.external_id)
+                    if sourced and not self._first_of(
+                        company_id, source, doc, index, seen, outcome
+                    ):
+                        continue
                     postings = [
                         replace(
                             p,
@@ -55,18 +68,62 @@ class DocumentImportCommands(DocumentCommands):
                         )
                         for p in doc.postings
                     ]
-                    self.conn.execute("SAVEPOINT import_document")
-                    try:
-                        create = self.post_new if post else self.create_draft
-                        outcome.ids.append(
-                            create(company_id, doc.doc_date, postings, doc.memo, doc.layer)
-                        )
-                    except LedgerError as e:
-                        self.conn.execute("ROLLBACK TO import_document")
-                        outcome.errors.append((index, str(e)))
-                    self.conn.execute("RELEASE import_document")
+                    create = self.post_new if post else self.create_draft
+                    doc_id = self._import_one(
+                        index,
+                        outcome,
+                        partial(create, company_id, doc.doc_date, postings, doc.memo, doc.layer),
+                    )
+                    if doc_id is not None and sourced:
+                        self._mark_source(company_id, doc_id, source, doc.external_id)
                 if outcome.errors or check_only:
                     raise _Discard
         except _Discard:
             outcome.ids = []
         return outcome
+
+    def _first_of(
+        self,
+        company_id: int,
+        source: str,
+        doc: ImportedDocument,
+        index: int,
+        seen: set[str],
+        outcome: ImportOutcome,
+    ) -> bool:
+        """Whether the document is to be made: not twice in the file, not imported before."""
+        if doc.external_id in seen:
+            outcome.errors.append((index, tr("документ «{id}» в файле дважды", id=doc.external_id)))
+            return False
+        seen.add(doc.external_id)
+        row = self.conn.execute(
+            "SELECT document_id FROM document_sources "
+            "WHERE company_id = ? AND source = ? AND external_id = ?",
+            (company_id, source, doc.external_id),
+        ).fetchone()
+        if row is not None:
+            outcome.existing.append((index, row["document_id"]))
+            return False
+        return True
+
+    def _import_one(
+        self, index: int, outcome: ImportOutcome, create: Callable[[], int]
+    ) -> int | None:
+        """One document under its own savepoint: its problem is noted and undone."""
+        self.conn.execute("SAVEPOINT import_document")
+        doc_id = None
+        try:
+            doc_id = create()
+            outcome.ids.append(doc_id)
+        except LedgerError as e:
+            self.conn.execute("ROLLBACK TO import_document")
+            outcome.errors.append((index, str(e)))
+        self.conn.execute("RELEASE import_document")
+        return doc_id
+
+    def _mark_source(self, company_id: int, doc_id: int, source: str, external_id: str) -> None:
+        self.conn.execute(
+            "INSERT INTO document_sources (company_id, document_id, source, external_id) "
+            "VALUES (?, ?, ?, ?)",
+            (company_id, doc_id, source, external_id),
+        )

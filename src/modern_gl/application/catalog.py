@@ -396,12 +396,15 @@ class Catalog:
         """Subconto positions (1..3) used by at least one account."""
         return {i + 1 for a in self.accounts.values() for i, k in enumerate(a.sc_kinds) if k}
 
-    def resolve_account(self, text: str) -> AccountInfo:
-        """'60.1', '60.1  Расчёты…' or a unique fragment of a name -> postable account."""
+    def resolve_account(self, text: str, exact_only: bool = False) -> AccountInfo:
+        """'60.1', '60.1  Расчёты…' or a unique fragment of a name -> postable account;
+        `exact_only` — only the code itself (a file another program wrote, D130)."""
         text = text.strip()
         if not text:
             raise LookupError(tr("счёт не указан"))
-        found = self.by_code.get(text.split()[0])
+        found = self.by_code.get(text if exact_only else text.split()[0])
+        if found is None and exact_only:
+            raise LookupError(tr("счёт «{text}» не найден", text=text))
         if found is None:
             needle = fold(text)
             matches = [a for a in self.leaf_accounts if needle in fold(a.label)]
@@ -426,10 +429,12 @@ class Catalog:
             )
         return found
 
-    def resolve_value(self, kind_id: int, text: str, owner: int | None = None) -> int | None:
-        """Exact or unique partial name match; None if nothing matches. With an `owner`
-        only its elements and the common ones are looked at (each counterparty may have
-        its own "Фактура 15")."""
+    def resolve_value(
+        self, kind_id: int, text: str, owner: int | None = None, exact_only: bool = False
+    ) -> int | None:
+        """Exact or unique partial name match (`exact_only` — no partial); None if nothing
+        matches. With an `owner` only its elements and the common ones are looked at (each
+        counterparty may have its own "Фактура 15")."""
         needle = fold(text.strip())
         values = self.values(kind_id, owner)
         exact = [
@@ -445,6 +450,8 @@ class Catalog:
             )
         if exact:
             return exact[0].id
+        if exact_only:
+            return None
         partial = [v for v in values if needle in fold(v.label)]
         if len(partial) > 1:
             starts = [v for v in partial if fold(v.name).startswith(needle)]

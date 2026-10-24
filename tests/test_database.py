@@ -61,6 +61,7 @@ FROZEN = {
     "0046_query_indexes.sql": "c9c524291c9fe367",
     "0047_company_scoped_references.sql": "86041a67459f7242",
     "0048_ifrs_types.sql": "6cfdde82474f65bf",
+    "0049_document_sources.sql": "16358f1735946b2c",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).
@@ -103,8 +104,13 @@ LEGACY_TABLES = {
 # Debt 4: references between a company's tables that do not carry company_id (paid in 0047).
 SINGLE_COLUMN_ALLOWED: set[str] = set()
 # A column that names another row but is not a reference: the audit log outlives what it
-# records; the portal's own id of an e-qaimə is text; a VÖEN is a number of the state.
-NOT_REFERENCES = {"audit_events.entity_id", "eqaime_portal.portal_id"}
+# records; the portal's own id of an e-qaimə and another program's id of an imported
+# document are text; a VÖEN is a number of the state.
+NOT_REFERENCES = {
+    "audit_events.entity_id",
+    "eqaime_portal.portal_id",
+    "document_sources.external_id",
+}
 DATE_COLUMNS = re.compile(r"(_date|^date_from|^date_to|^closed_through)$")
 DATE_CHECK = "GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]'"
 # A row that belongs to a parent (a line to its document) is found by the parent: indexed.

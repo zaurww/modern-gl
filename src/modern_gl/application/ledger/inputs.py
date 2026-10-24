@@ -107,9 +107,12 @@ class ImportedDocument:
     postings: Sequence[PostingInput]
     memo: str = ""
     layer: str = "common"
+    external_id: str = ""  # its id in the program it came from (with `source`, D130)
 
 
 @dataclass
 class ImportOutcome:
     ids: list[int] = field(default_factory=list)  # created documents (empty if discarded)
     errors: list[tuple[int, str]] = field(default_factory=list)  # (document index, message)
+    # (document index, its id): imported before from the same source, left as it is
+    existing: list[tuple[int, int]] = field(default_factory=list)
