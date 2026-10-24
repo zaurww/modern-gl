@@ -59,10 +59,30 @@ class StockCommands(DraftCommands):
                 amount,
             ),
         )
+        kept = self._kept_now(("balance", company_id, item_id, warehouse_id))
+        if kept is not None:
+            kept[0] += quantity
+            kept[1] += amount
+
+    def _kept_now(self, key: tuple) -> list | None:
+        """What is kept for the recalculation under `key`, if it was read already."""
+        return None if self._kept is None else self._kept.get(key)  # type: ignore[return-value]
 
     def _balance(
         self, company_id: int, item_id: int, warehouse_id: int, current_document_id: int | None
     ) -> tuple[int, int]:
+        """Quantity and value on the warehouse: posted movements and the current
+        document's. While documents are recalculated it is read once and then kept in step
+        with every movement written (debt 6)."""
+        quantity, amount = self._kept_row(
+            ("balance", company_id, item_id, warehouse_id),
+            lambda: self._read_balance(company_id, item_id, warehouse_id, current_document_id),
+        )
+        return quantity, amount
+
+    def _read_balance(
+        self, company_id: int, item_id: int, warehouse_id: int, current_document_id: int | None
+    ) -> list[int]:
         row = self.conn.execute(
             """
             SELECT COALESCE(SUM(m.quantity), 0) AS quantity,
@@ -74,7 +94,7 @@ class StockCommands(DraftCommands):
             """,
             (company_id, item_id, warehouse_id, current_document_id),
         ).fetchone()
-        return row["quantity"], row["amount"]
+        return [row["quantity"], row["amount"]]
 
     def _cost(
         self,
@@ -102,6 +122,37 @@ class StockCommands(DraftCommands):
         item_id: int,
         quantity: int,
     ) -> None:
+        """Take `quantity` from the oldest receipts of the item that still have some."""
+        receipts = self._kept_row(
+            ("receipts", company_id, item_id), lambda: self._read_receipts(company_id, item_id)
+        )
+        remaining = quantity
+        for receipt in receipts:
+            used = min(remaining, receipt[1])
+            if used:
+                self.conn.execute(
+                    "INSERT INTO stock_consumptions "
+                    "(company_id, document_id, issue_line_id, receipt_line_id, quantity) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (company_id, document_id, issue_line_id, receipt[0], used),
+                )
+                receipt[1] -= used
+                remaining -= used
+            if remaining == 0:
+                break
+        receipts[:] = [receipt for receipt in receipts if receipt[1] > 0]
+        if remaining:
+            raise ValidationError(tr("не удалось определить поступления для списания"))
+
+    def _forget_receipts(self, company_id: int, lines: Sequence[Row]) -> None:
+        """A receipt posted during a recalculation: its items' queues are read again."""
+        if self._kept is not None:
+            for line in lines:
+                self._kept.pop(("receipts", company_id, line["item_id"]), None)
+
+    def _read_receipts(self, company_id: int, item_id: int) -> list[list[int]]:
+        """[receipt line, what is left of it], oldest first; while documents are
+        recalculated it is read once and then kept in step (debt 6)."""
         rows = self.conn.execute(
             """
             SELECT l.id, l.quantity - COALESCE(SUM(c.quantity), 0) AS available
@@ -116,20 +167,7 @@ class StockCommands(DraftCommands):
             """,
             (company_id, item_id),
         ).fetchall()
-        remaining = quantity
-        for row in rows:
-            used = min(remaining, row["available"])
-            if used:
-                self.conn.execute(
-                    "INSERT INTO stock_consumptions "
-                    "(company_id, document_id, issue_line_id, receipt_line_id, quantity) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (company_id, document_id, issue_line_id, row["id"], used),
-                )
-                remaining -= used
-            if remaining == 0:
-                return
-        raise ValidationError(tr("не удалось определить поступления для списания"))
+        return [[row["id"], row["available"]] for row in rows]
 
     def _item_warehouse_quantities(self, company_id: int, item_id: int) -> list[tuple[int, int]]:
         return [

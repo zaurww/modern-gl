@@ -12,6 +12,7 @@ from modern_gl.application.common import now
 from modern_gl.application.inventory.accruals import AccrualCommands
 from modern_gl.application.inventory.landed_cost import LandedCostCommands
 from modern_gl.application.inventory.model import (
+    INCOMING_TYPES,
     IssueLine,
     LandedCostCharge,
     LandedCostTarget,
@@ -373,6 +374,8 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             postings = self._apply_sale(company_id, doc, lines)
         else:
             postings = [self._apply_line(company_id, doc, line) for line in lines]
+            if doc["doc_type"] in INCOMING_TYPES:
+                self._forget_receipts(company_id, lines)
             if doc["doc_type"] == "receipt" and doc["expense_date"] is not None:
                 accrual = self._accrue(company_id, doc, lines, postings)
             if doc["doc_type"] == "receipt":
