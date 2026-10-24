@@ -240,4 +240,4 @@ def test_the_period_field_keeps_together_in_a_wide_window(qtbot):
     QVBoxLayout(window).addWidget(field)
     window.resize(1000, 200)
     window.show()
-    assert field.forward.geometry().right() < field.edit.geometry().right() + 120
+    assert field.width() == field.sizeHint().width() < 500  # its own width, not the window's
