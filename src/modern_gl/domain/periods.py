@@ -48,11 +48,6 @@ def up_to(period: tuple[date, date], last: date) -> tuple[date, date]:
     return first, max(first, min(end, last))
 
 
-def quick_period(span: str, today: date, through_today: bool = False) -> tuple[date, date]:
-    yesterday = today - timedelta(days=1)
-    return up_to(span_period(span, today), today if through_today else yesterday)
-
-
 def span_of(date_from: date, date_to: date, today: date) -> str | None:
     """The quick period a period was chosen as, judged by its shape: a mark made on
     another day still tells how the company is usually reconciled. None: by hand."""

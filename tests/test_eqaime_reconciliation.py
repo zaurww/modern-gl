@@ -13,6 +13,7 @@ from modern_gl.application.eqaime_portal import fetch_list, rechecks, usual_span
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.eqaime import ALL, ON_APPROVAL, PortalInvoice, portal_invoice
+from modern_gl.domain.period_input import describe
 from modern_gl.domain.periods import (
     DAY,
     LAST_MONTH,
@@ -438,11 +439,14 @@ def test_reconciliation_dialog(firm, qtbot, monkeypatch):
         session, sign_in=lambda parent: fake_token(), today=date(2026, 4, 1)
     )
     qtbot.addWidget(dialog)
-    bar = dialog.period_bar
-    assert bar.span_buttons[MONTH].isChecked()  # nothing marked yet: this month
-    bar.span_buttons[LAST_MONTH].click()
-    assert bar.period() == (date(2026, 3, 1), date(2026, 3, 31))
-    assert bar.dates.text() == "01.03–31.03.2026" and not bar.date_from.isVisibleTo(bar)
+    field = dialog.period_field
+    # nothing marked yet: this month, up to yesterday — on the 1st, today alone
+    assert field.period() == (date(2026, 4, 1), date(2026, 4, 1))
+    field.show_presets()
+    assert field.window_shown.preset_buttons[MONTH].isChecked()
+    field.window_shown.preset_buttons[LAST_MONTH].click()
+    assert field.period() == (date(2026, 3, 1), date(2026, 3, 31))
+    assert field.edit.text() == describe(field.period())
     dialog.load()
     qtbot.waitUntil(lambda: dialog.outcome is not None, timeout=5000)
     heads = [dialog.tree.topLevelItem(i) for i in range(dialog.tree.topLevelItemCount())]
@@ -668,18 +672,34 @@ def test_period_text():
     assert period_text("2025-12-29", "2026-01-04") == "29.12.2025–04.01.2026"
 
 
-def test_period_bar_quick_and_custom(qtbot):
-    """A quick period shows its dates as text; «Произвольный» opens the dates with the
-    period chosen so far; dates from another window choose the quick period they are."""
-    from modern_gl.desktop.period_bar import CUSTOM, PeriodBar
+def test_the_portal_period_field(qtbot):
+    """The portal's windows have the reports' field (D105) with their own usual periods;
+    a period ends today at the latest, ‹ › step from the whole month. Today: Wednesday
+    21 October 2026."""
+    from modern_gl.desktop.period_field import portal_period
 
-    bar = PeriodBar(date(2026, 10, 21), LAST_WEEK, through_today=True)
-    qtbot.addWidget(bar)
-    assert bar.dates.text() == "12.10–18.10.2026"
-    bar.span_buttons[CUSTOM].click()
-    assert bar.date_from.isVisibleTo(bar) and not bar.dates.isVisibleTo(bar)
-    assert bar.period() == (date(2026, 10, 12), date(2026, 10, 18))
-    bar.set_period(date(2026, 10, 19), date(2026, 10, 21))
-    assert bar.span() == WEEK and not bar.date_from.isVisibleTo(bar)
-    bar.set_period(date(2026, 10, 5), date(2026, 10, 9))
-    assert bar.span() == CUSTOM and bar.period() == (date(2026, 10, 5), date(2026, 10, 9))
+    today = date(2026, 10, 21)
+    field = portal_period(today, LAST_WEEK)
+    qtbot.addWidget(field)
+    assert field.period() == (date(2026, 10, 12), date(2026, 10, 18))
+    assert field.edit.text() == "12.10 — 18.10.2026"
+    field.edit.setText("м")
+    field.edit.setModified(True)
+    field.edit.editingFinished.emit()
+    assert field.period() == (date(2026, 10, 1), today)  # not to the 31st
+    assert field.edit.text() == "01.10 — 21.10.2026"
+    field.step(-1)
+    assert field.period() == (date(2026, 9, 1), date(2026, 9, 30))  # the whole September
+    field.step(1)
+    field.show_presets()
+    window = field.window_shown
+    assert list(window.preset_buttons) == [DAY, WEEK, LAST_WEEK, MONTH, LAST_MONTH]
+    assert window.preset_buttons[MONTH].isChecked()
+    assert (window.first.date().toPython(), window.last.date().toPython()) == (
+        date(2026, 10, 1),
+        today,
+    )
+    window.preset_buttons[WEEK].click()
+    assert field.period() == (date(2026, 10, 19), today)
+    field.set_period(date(2026, 10, 5), date(2026, 10, 30))
+    assert field.period() == (date(2026, 10, 5), today)

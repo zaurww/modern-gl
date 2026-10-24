@@ -26,11 +26,10 @@ from modern_gl.application.eqaime_import import (
     RenamedCounterparty,
 )
 from modern_gl.application.inventory import Inventory
-from modern_gl.desktop.period_bar import PeriodBar
+from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
-from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
 
 COLUMNS = [
@@ -106,8 +105,8 @@ class EqaimeImportForm(QDialog):
     def _build_bar(self, root: QVBoxLayout, today: date | None) -> None:
         bar = QHBoxLayout()
         bar.setSpacing(8)
-        self.period_bar = PeriodBar(today or date.today(), MONTH, through_today=True)
-        bar.addWidget(self.period_bar)
+        self.period_field = portal_period(today or date.today())
+        bar.addWidget(self.period_field)
         bar.addStretch(1)
         self.load_button = button(tr("Загрузить с портала"), "primary")
         bar.addWidget(self.load_button)

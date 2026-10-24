@@ -25,14 +25,13 @@ from modern_gl.application.bank.deposit_reconciliation import (
 from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch
 from modern_gl.desktop.bank_page.deposit_reconcile_rows import FiguresGrid, ReconciledRows
 from modern_gl.desktop.bank_page.portal import summary
-from modern_gl.desktop.period_bar import PeriodBar, period_dates
+from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
-from modern_gl.domain.dates import next_day
+from modern_gl.domain.dates import date_range, next_day
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
 
 TITLE = "Сверка ƏDV depozit с порталом"
@@ -74,9 +73,9 @@ class DepositReconcileDialog(QDialog):
         account = QLabel(place.name)
         account.setObjectName("secondary")
         root.addWidget(account)
-        self.period_bar = PeriodBar(self.today, MONTH, through_today=True)
-        self.period_bar.changed.connect(self._period_changed)
-        root.addWidget(self.period_bar)
+        self.period_field = portal_period(self.today)
+        self.period_field.changed.connect(self._period_changed)
+        root.addWidget(self.period_field)
         self.history = QLabel()
         self.history.setWordWrap(True)
         root.addWidget(self.history)
@@ -124,11 +123,10 @@ class DepositReconcileDialog(QDialog):
         if periods:
             following = date.fromisoformat(next_day(periods[-1].date_to))
             if following <= self.today:
-                self.period_bar.set_period(following, self.today)
+                self.period_field.set_period(following, self.today)
 
     def period(self) -> tuple[date, date]:
-        first, last = self.period_bar.period()
-        return first, min(last, self.today)
+        return self.period_field.period()
 
     def _show_history(self) -> None:
         """The periods reconciled, and what changed in the books (on the portal — once it
@@ -137,10 +135,7 @@ class DepositReconcileDialog(QDialog):
         periods = reconciled_periods(conn, cid, self.place)
         texts = []
         if periods:
-            names = (
-                period_dates(date.fromisoformat(p.date_from), date.fromisoformat(p.date_to))
-                for p in periods
-            )
+            names = (date_range(p.date_from, p.date_to, "–") for p in periods)
             texts.append(tr("Сверено с порталом: {periods}.", periods=", ".join(names)))
         fetched = self.fetched
         if fetched is None:
@@ -257,7 +252,7 @@ class DepositReconcileDialog(QDialog):
             tr(
                 "Период {period} отмечен сверенным: если потом на портале или в программе он "
                 "изменится, здесь будет предупреждение.",
-                period=period_dates(*self.period()),
+                period=date_range(*self.period(), "–"),
             )
         )
 
