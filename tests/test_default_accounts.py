@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import pytest
 
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.default_accounts import (
     CARD_ACCOUNT,
     COST_OF_GOODS,
@@ -18,7 +19,6 @@ from modern_gl.application.default_accounts import (
     VAT_DEPOSIT_ACCOUNT,
     default_account,
 )
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 
 PURPOSES = [
     SUPPLIER,

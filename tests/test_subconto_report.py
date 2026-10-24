@@ -28,11 +28,11 @@ import pytest
 from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.desktop import theme
 from modern_gl.desktop.reports_page import CardPage, ReportParams, SubcontoPage
 from modern_gl.desktop.session import Session
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.reports import account_card, subconto_balance
 

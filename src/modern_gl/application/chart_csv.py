@@ -28,12 +28,12 @@ from modern_gl.application.ledger import Ledger, TemplateLine
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import language, tr
 from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.templates import TEMPLATES_DIR
 
 COLUMNS = ("code", "name", "parent", "group", "subconto")
 SUBCONTO_COLUMNS = ("code", "name")
 ENTRY_COLUMNS = ("template", "debit", "credit", "formula", "memo")
 TYPE_COLUMNS = ("code", "type")
-TEMPLATES_DIR = Path(__file__).parent / "templates"
 LEGACY_CLASS = {"A": "asset", "P": "liability"}
 # Each template exists per language: chart_<name>_<lang>.csv, chart_<name>_subconto_<lang>.csv
 # and, optionally, ready entry templates (типовые операции): entries_<name>_<lang>.csv.

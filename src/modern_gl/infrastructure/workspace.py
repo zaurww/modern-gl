@@ -15,11 +15,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from modern_gl.application.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.company import FULL
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure import backup
-from modern_gl.infrastructure.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
 from modern_gl.infrastructure.db import connect, latest_version, open_snapshot
 
 SUFFIX = ".gl"

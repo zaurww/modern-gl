@@ -7,13 +7,13 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.quick_entry import suggest
 from modern_gl.desktop import theme
 from modern_gl.desktop.directories_page import DirectoriesPage, ValueDialog
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 
 

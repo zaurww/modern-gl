@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from modern_gl.application.chart_csv import import_chart_csv
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.errors import ValidationError
-from modern_gl.infrastructure.chart_csv import import_chart_csv
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
 from modern_gl.reporting.reports import trial_balance
 from tests.conftest import build_demo

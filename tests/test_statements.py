@@ -214,7 +214,7 @@ def test_every_title_of_the_statements_has_azerbaijani_translation(books):
 
 @pytest.fixture
 def classic(ledger: Ledger):
-    from modern_gl.infrastructure.chart_csv import apply_chart_template
+    from modern_gl.application.chart_csv import apply_chart_template
 
     cid = ledger.create_company("Классика")
     apply_chart_template(ledger, cid, "classic", "ru")

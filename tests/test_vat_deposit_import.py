@@ -47,9 +47,9 @@ from modern_gl.application.bank.deposit_import import (
     parse_operation,
     portal_loads,
 )
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.etaxes import EtaxesClient, Response, TokenExpired
 
 OWN_TIN = "1400000001"

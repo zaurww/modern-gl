@@ -9,6 +9,7 @@ from datetime import date, timedelta
 import pytest
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.eqaime_portal import fetch_list, rechecks, usual_span
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
@@ -26,7 +27,6 @@ from modern_gl.domain.periods import (
     span_period,
     up_to,
 )
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 from modern_gl.infrastructure.etaxes import EtaxesClient, PortalError, Response
 from modern_gl.reporting.eqaime_reconciliation import (

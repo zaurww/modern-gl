@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QMessageBox
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.inventory import (
     QUANTITY_FACTOR,
     STANDARD_VAT_RATE,
@@ -36,7 +37,6 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.errors import PeriodClosedError, ValidationError
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, schema_version
 from modern_gl.reporting.inventory import (
     has_units,

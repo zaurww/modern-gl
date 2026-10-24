@@ -7,9 +7,9 @@ from pathlib import Path
 import pytest
 
 from modern_gl.application.catalog import search
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.i18n import fold, set_language, tr, upper
 from modern_gl.i18n_az import AZ
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
 CYRILLIC = set("абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")

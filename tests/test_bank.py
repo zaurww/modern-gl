@@ -42,13 +42,13 @@ from modern_gl.application.bank import (
     place_balance,
     statement,
 )
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import DocumentOwner, document_owner, load_document
 from modern_gl.domain.accounts import ADVANCE_PAID
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import to_minor
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.reporting.invoices import invoice_report, open_invoices
 from modern_gl.reporting.reports import trial_balance
 

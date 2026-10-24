@@ -8,13 +8,13 @@ from datetime import date
 import pytest
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import load_document
 from modern_gl.application.quick_entry import parse
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.invoices import invoice_report
 from modern_gl.reporting.reports import account_card, subconto_balance
