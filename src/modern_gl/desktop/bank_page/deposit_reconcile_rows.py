@@ -8,7 +8,6 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QGridLayout,
-    QHeaderView,
     QLabel,
     QTreeWidget,
     QTreeWidgetItem,
@@ -23,6 +22,7 @@ from modern_gl.application.bank.deposit_reconciliation import (
     Figures,
     ReconciledRow,
 )
+from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
@@ -58,12 +58,7 @@ class ReconciledRows(QTreeWidget):
         self.setHeaderLabels([tr(c) for c in COLUMNS])
         self.setRootIsDecorated(False)
         self.setUniformRowHeights(True)
-        header = self.header()
-        for column, width in enumerate((96, 0, 110, 150, 0)):
-            if width:
-                self.setColumnWidth(column, width)
-            else:
-                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+        fit_tree(self, 1, STATE)  # the counterparty / the memo, the state
         for column in (2, 3):
             self.headerItem().setTextAlignment(column, Qt.AlignmentFlag.AlignRight)
         self.itemDoubleClicked.connect(self._open)

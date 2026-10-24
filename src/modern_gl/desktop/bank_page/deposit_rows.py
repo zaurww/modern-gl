@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QHeaderView, QTreeWidget, QTreeWidgetItem, QWidget
+from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
 
 from modern_gl.application.bank import IN
 from modern_gl.application.bank.deposit_commands import DRAFT, KNOWN, LINKED, POSTED, DepositRow
+from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.dates import ru_date
@@ -55,12 +56,7 @@ class DepositRows(QTreeWidget):
         self.setHeaderLabels([tr(c) for c in COLUMNS])
         self.setRootIsDecorated(False)
         self.setUniformRowHeights(True)
-        header = self.header()
-        for column, width in enumerate((96, 0, 104, 90, 90, 0, 0)):
-            if width:
-                self.setColumnWidth(column, width)
-            else:
-                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+        fit_tree(self, COLUMNS.index("Контрагент"), BECOMES, STATE)
         for column in (3, 4):
             self.headerItem().setTextAlignment(column, Qt.AlignmentFlag.AlignRight)
         self.itemDoubleClicked.connect(self._open)

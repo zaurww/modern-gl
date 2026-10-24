@@ -26,6 +26,10 @@ KINDS = {
 }
 
 OWN_TABLE = re.compile(r"\bQTable(View|Widget)\(|\(QTable(View|Widget)\)")
+OWN_TREE = re.compile(r"\bQTreeWidget\(|\(QTreeWidget\)")
+# a list with ticks or groups stays a QTreeWidget, its widths — fit_tree; the e-qaimə
+# reconciliation narrows its own way: no sideways scrolling, the long text cut
+TREES = {"eqaime_reconciliation_page.py"}
 
 
 def test_no_page_builds_a_table_of_its_own():
@@ -36,6 +40,17 @@ def test_no_page_builds_a_table_of_its_own():
         and path.relative_to(DESKTOP).as_posix() not in KINDS
     ]
     assert own == [], "таблица — ListTable, ReportTable или таблица ввода (DESIGN.md §4)"
+
+
+def test_a_tree_list_is_as_wide_as_a_list():
+    loose = [
+        path.relative_to(DESKTOP).as_posix()
+        for path in DESKTOP.rglob("*.py")
+        if OWN_TREE.search(text := path.read_text(encoding="utf-8"))
+        and "fit_tree(" not in text
+        and path.relative_to(DESKTOP).as_posix() not in TREES
+    ]
+    assert loose == [], "дерево-список — ширины через list_table.fit_tree (D-new1)"
 
 
 def test_a_list_table(qtbot):

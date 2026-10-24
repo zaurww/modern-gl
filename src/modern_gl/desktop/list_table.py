@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QAbstractItemModel, QSortFilterProxyModel, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableView
+from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableView, QTreeWidget
 
 from modern_gl.desktop.reports_page.table import ReportModel
 
@@ -81,3 +81,16 @@ class ListTable(QTableView):
             self.doubleClicked.emit(self.currentIndex())
             return
         super().keyPressEvent(event)
+
+
+def fit_tree(tree: QTreeWidget, *fill: int) -> None:
+    """A list with ticks or groups (a QTreeWidget) is as wide as a ListTable: the `fill`
+    columns (the names, the long explanations) share the free room, the others follow
+    their text."""
+    header = tree.header()
+    header.setStretchLastSection(False)
+    for column in range(tree.columnCount()):
+        mode = QHeaderView.ResizeMode
+        header.setSectionResizeMode(
+            column, mode.Stretch if column in fill else mode.ResizeToContents
+        )

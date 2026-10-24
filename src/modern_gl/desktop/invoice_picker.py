@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QFrame,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QTreeWidget,
     QTreeWidgetItem,
@@ -20,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.bank import allocate
 from modern_gl.application.invoices import OpenInvoice
+from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, ru_date, tick_icon
 from modern_gl.domain.money import format_minor
@@ -53,12 +53,7 @@ class InvoicePicker(QDialog):
         self.list.setHeaderHidden(True)
         self.list.setRootIsDecorated(False)
         self.list.setFrameShape(QFrame.Shape.NoFrame)
-        header = self.list.header()
-        header.setStretchLastSection(False)
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column, width in ((1, 110), (2, 120)):
-            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
-            header.resizeSection(column, width)
+        fit_tree(self.list, 0)
         lay.addWidget(self.list, 1)
         self.items: list[QTreeWidgetItem] = []
         covered = 0

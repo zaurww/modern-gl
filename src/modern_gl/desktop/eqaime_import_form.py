@@ -26,6 +26,7 @@ from modern_gl.application.eqaime import (
     RenamedCounterparty,
 )
 from modern_gl.application.inventory import Inventory
+from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
@@ -137,12 +138,7 @@ class EqaimeImportForm(QDialog):
         self.tree.setRootIsDecorated(True)
         self.tree.setUniformRowHeights(True)
         self.tree.setAlternatingRowColors(False)
-        header = self.tree.header()
-        for column, width in enumerate((118, 140, 0, 104, 64, 90, 76, 130, 0)):
-            if width:
-                self.tree.setColumnWidth(column, width)
-            else:
-                header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
+        fit_tree(self.tree, 2, len(COLUMNS) - 1)  # the counterparty, what it becomes
         for column in (5, 6):
             self.tree.headerItem().setTextAlignment(
                 column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
