@@ -188,3 +188,15 @@ def test_ledger_is_the_core_and_modules_are_objects_of_their_own():
     ledger = Ledger(connect(":memory:"), actor="Aynur")
     assert ledger.bank.conn is ledger.conn and ledger.bank.actor == "Aynur"
     assert ledger.bank is ledger.bank  # one object per ledger
+
+
+def test_the_counterparty_of_a_line_has_one_rule():
+    """Who the counterparty of a purchase or sale line is — the view
+    inventory_line_counterparties (migration 0045, debt 12): no query picks it out of
+    offset_sc1..3 by itself, with its own rule."""
+    bad = [
+        rel(path)
+        for path in files()
+        if "offset_sc" in (text := path.read_text(encoding="utf-8")) and "'counterparty'" in text
+    ]
+    assert not bad, f"контрагент строки выбирается вручную: {bad} — inventory_line_counterparties"

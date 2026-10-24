@@ -28,23 +28,27 @@ class LedgerBase:
 
     def _account(self, company_id: int, account: int | str) -> Row:
         """An account by id (int) or by code (str)."""
-        column = "id" if isinstance(account, int) else "code"
+        by_id = isinstance(account, int)
         row = self.conn.execute(
-            f"SELECT * FROM accounts WHERE company_id = ? AND {column} = ?",
+            f"SELECT * FROM accounts WHERE company_id = ? AND {'id' if by_id else 'code'} = ?",
             (company_id, account),
         ).fetchone()
-        if row is None:
-            raise NotFoundError(tr("счёт {code} не найден", code=account))
+        if row is None:  # an id means nothing to the user
+            raise NotFoundError(
+                tr("счёт не найден") if by_id else tr("счёт {code} не найден", code=account)
+            )
         return row
 
     def _currency(self, company_id: int, currency: int | str) -> Row:
-        column = "id" if isinstance(currency, int) else "code"
+        by_id = isinstance(currency, int)
         row = self.conn.execute(
-            f"SELECT * FROM currencies WHERE company_id = ? AND {column} = ?",
-            (company_id, currency.upper() if isinstance(currency, str) else currency),
+            f"SELECT * FROM currencies WHERE company_id = ? AND {'id' if by_id else 'code'} = ?",
+            (company_id, currency if by_id else currency.upper()),
         ).fetchone()
         if row is None:
-            raise NotFoundError(tr("валюта {code} не найдена", code=currency))
+            raise NotFoundError(
+                tr("валюта не найдена") if by_id else tr("валюта {code} не найдена", code=currency)
+            )
         return row
 
     def _subconto_value(self, company_id: int, value_id: int) -> Row:
@@ -54,6 +58,15 @@ class LedgerBase:
         if row is None:
             raise NotFoundError(tr("элемент справочника не найден"))
         return row
+
+    def _kind_id(self, company_id: int, code: str) -> int:
+        """A kind of directory by its code (counterparty, item, warehouse…)."""
+        row = self.conn.execute(
+            "SELECT id FROM subconto_kinds WHERE company_id = ? AND code = ?", (company_id, code)
+        ).fetchone()
+        if row is None:
+            raise NotFoundError(tr("вид субконто {code} не найден", code=code))
+        return row["id"]
 
     def _audit(
         self, company_id: int | None, entity: str, entity_id: int, action: str, details: dict

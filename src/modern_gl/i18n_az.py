@@ -525,7 +525,6 @@ AZ: dict[str, str] = {
     "склад скрыт": "anbar gizlədilib",
     "вид дополнительных расходов не найден": "əlavə xərc növü tapılmadı",
     "счёт не найден": "hesab tapılmadı",
-    "не найден справочник {code}": "{code} soraqçası tapılmadı",
     "складской документ не найден": "anbar sənədi tapılmadı",
     "строка поступления не найдена или не проведена": "daxilolma sətri tapılmadı və ya keçirilməyib",
     "бухгалтерский документ создан складским документом №{n}; исправьте его через склад": "mühasibat sənədi {n} №-li anbar sənədi ilə yaradılıb; onu anbar bölməsində düzəldin",

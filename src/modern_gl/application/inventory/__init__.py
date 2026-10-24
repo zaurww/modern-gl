@@ -7,6 +7,7 @@ document creates an ordinary GL document in the same SQLite transaction.
 from __future__ import annotations
 
 from modern_gl.application.inventory.amounts import (
+    allocate_charges,
     allocate_minor,
     format_quantity,
     line_amount,
@@ -62,6 +63,7 @@ __all__ = [
     "ReceiptLine",
     "SaleLine",
     "TransferLine",
+    "allocate_charges",
     "allocate_minor",
     "default_vat_rate",
     "format_quantity",

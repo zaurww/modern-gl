@@ -6,9 +6,9 @@ from __future__ import annotations
 from datetime import date
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.ledger.inputs import typed_posting
 from modern_gl.application.quick_entry.parser import NewValue, QuickEntry, QuickLine
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
@@ -38,16 +38,4 @@ def posting_input(n: int, ln: QuickLine) -> PostingInput:
         raise ValidationError(
             tr("строка {n}: в шаблоне не указан счёт — Ctrl+Enter откроет форму", n=n)
         )
-    if ln.amount is None:
-        raise ValidationError(tr("строка {n}: не указана сумма", n=n))
-    return PostingInput(
-        ln.debit,
-        ln.credit,
-        from_minor(ln.amount),
-        tuple(ln.debit_sc),
-        tuple(ln.credit_sc),
-        ln.memo,
-        ln.currency_id,
-        None if ln.currency_amount is None else from_minor(ln.currency_amount),
-        ln.invoice,
-    )
+    return typed_posting(n, ln)

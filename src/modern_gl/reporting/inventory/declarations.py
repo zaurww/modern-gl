@@ -101,7 +101,10 @@ def landed_cost_report(
     for r in conn.execute(
         """
         SELECT d.id AS receipt_id, d.number, d.doc_date, d.invoice, d.invoice_kind,
-               d.currency_rate, cur.code AS currency, sv.name AS supplier,
+               d.currency_rate, cur.code AS currency,
+               (SELECT c.name FROM inventory_line_counterparties c
+                WHERE c.company_id = d.company_id AND c.document_id = d.id
+                ORDER BY c.line_no, c.counterparty_id LIMIT 1) AS supplier,
                l.id, v.name AS item_name, u.code AS unit, u.precision, l.quantity,
                l.amount, l.currency_amount
         FROM inventory_documents d
@@ -109,7 +112,6 @@ def landed_cost_report(
         JOIN inventory_items i ON i.id = l.item_id
         JOIN subconto_values v ON v.id = i.subconto_value_id
         JOIN inventory_units u ON u.id = i.unit_id
-        LEFT JOIN subconto_values sv ON sv.id = l.offset_sc1
         LEFT JOIN currencies cur ON cur.id = d.currency_id
         WHERE d.company_id = ? AND d.doc_type = 'receipt' AND d.status = 'posted'
           AND d.doc_date BETWEEN ? AND ?

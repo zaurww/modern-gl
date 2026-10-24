@@ -113,17 +113,16 @@ def _awaiting(conn: Connection, company_id: int) -> dict[int, list[AwaitingPurch
     result: dict[int, list[AwaitingPurchase]] = {}
     for row in conn.execute(
         """
-        SELECT d.id, d.number, d.doc_date, v.id AS counterparty_id,
+        SELECT d.id, d.number, d.doc_date, v.counterparty_id,
                SUM(l.amount) AS amount, SUM(l.vat_amount) AS vat
         FROM inventory_documents d
         JOIN companies c ON c.id = d.company_id
         JOIN inventory_lines l ON l.company_id = d.company_id AND l.document_id = d.id
-        JOIN subconto_values v
-          ON v.company_id = l.company_id AND v.id IN (l.offset_sc1, l.offset_sc2, l.offset_sc3)
-        JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'counterparty'
+        JOIN inventory_line_counterparties v
+          ON v.company_id = l.company_id AND v.line_id = l.id
         WHERE d.company_id = ? AND d.awaits_invoice = 1 AND d.currency_id IS NULL
           AND (c.closed_through IS NULL OR d.doc_date > c.closed_through)
-        GROUP BY d.id, d.number, d.doc_date, v.id
+        GROUP BY d.id, d.number, d.doc_date, v.counterparty_id
         ORDER BY d.doc_date, d.id
         """,
         (company_id,),

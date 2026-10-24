@@ -40,12 +40,7 @@ class SubcontoCommands(LedgerBase):
         return kind_id
 
     def subconto_kind_id(self, company_id: int, code: str) -> int:
-        row = self.conn.execute(
-            "SELECT id FROM subconto_kinds WHERE company_id = ? AND code = ?", (company_id, code)
-        ).fetchone()
-        if row is None:
-            raise NotFoundError(tr("вид субконто {code} не найден", code=code))
-        return row["id"]
+        return self._kind_id(company_id, code)
 
     def add_subconto_value(
         self,

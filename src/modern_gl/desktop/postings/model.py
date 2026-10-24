@@ -10,6 +10,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 
 from modern_gl.application.ledger import PostingInput
+from modern_gl.application.ledger.inputs import typed_posting
 from modern_gl.desktop.postings.clipboard import PostingsClipboard
 from modern_gl.desktop.postings.columns import (
     ALIGN_LEFT,
@@ -28,7 +29,7 @@ from modern_gl.domain.currency import (
     to_base,
 )
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import format_minor, from_minor
+from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 
 
@@ -359,25 +360,14 @@ class PostingsModel(PostingsClipboard):
         for n, r in enumerate(self.rows, start=1):
             if r.is_empty():
                 continue
-            if r.debit is None:
-                raise ValidationError(tr("строка {line}: не указан счёт дебета", line=n))
-            if r.credit is None:
-                raise ValidationError(tr("строка {line}: не указан счёт кредита", line=n))
-            if r.amount is None:
-                raise ValidationError(tr("строка {line}: не указана сумма", line=n))
-            currency = self.is_currency(n - 1) and r.currency_id is not None
+            invoice = self.takes_invoice(n - 1)
             result.append(
-                PostingInput(
-                    r.debit,
-                    r.credit,
-                    from_minor(r.amount),
-                    tuple(r.debit_sc),
-                    tuple(r.credit_sc),
-                    r.memo.strip(),
-                    r.currency_id if currency else None,
-                    from_minor(r.currency_amount or 0) if currency else None,
-                    r.invoice if self.takes_invoice(n - 1) else "",
-                    r.invoice_kind if self.takes_invoice(n - 1) and r.invoice else "",
+                typed_posting(
+                    n,
+                    r,
+                    currency=self.is_currency(n - 1),
+                    invoice=invoice,
+                    invoice_kind=r.invoice_kind if invoice else "",
                 )
             )
         if not result:
