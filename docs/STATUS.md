@@ -135,7 +135,8 @@
 Обсуждалось, не начато — `docs/BACKLOG.md`.
 
 ## У предела размера (D70, `uv run python tests/test_code_size.py`)
-`OVER_LIMIT` пуст. Ближе всего (сессия 47): `_Demo.february` (79/80), `add_account` (76/80),
+`OVER_LIMIT` пуст. Ближе всего (сессия 48): `_Demo.february` (79/80), `add_account` (76/80),
+`StockPart.refresh` (74/80, новое),
 `CompanyFiles` (470/500), `update_account`, `ImportPage.__init__`, `theme/css.py::_controls_css`
 и `_panels_css` (75/80), `landed_cost.py` и `company_files.py` (554/600).
 Полный обзор — сессия 47 (2026-10-24): `reports.py` → пакет, `JournalPage.__init__` —
