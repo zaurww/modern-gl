@@ -21,7 +21,7 @@ VERSION = 1  # a newer file is refused: it may mean what this program does not k
 LAYERS = tuple(code for code, _ in DEFAULT_LAYERS)
 
 BATCH_KEYS = {"format", "version", "source", "documents"}
-DOCUMENT_KEYS = {"id", "date", "memo", "layer", "postings"}
+DOCUMENT_KEYS = {"id", "date", "memo", "layer", "postings", "reverses"}
 
 
 class FormatError(ValueError):
@@ -35,6 +35,7 @@ class ExchangeDocument:
     memo: str
     layer: str
     postings: list  # lines as in `lines.posting_lines`, resolved against the company
+    reverses: str = ""  # a red storno of the document of this id, instead of postings
 
 
 @dataclass(frozen=True)
@@ -84,8 +85,16 @@ def _document(n: int, d: object) -> ExchangeDocument:
     memo = d.get("memo", "")
     if not isinstance(memo, str):
         raise FormatError(tr('{where}: "memo" — строка', where=where))
+    reverses = d.get("reverses", "")
+    if not isinstance(reverses, str) or (reverses and d.get("postings")):
+        raise FormatError(tr('{where}: "reverses" — id документа, без своих проводок', where=where))
     return ExchangeDocument(
-        external_id.strip(), _date(where, d.get("date")), memo, layer, d.get("postings") or []
+        external_id.strip(),
+        _date(where, d.get("date")),
+        memo,
+        layer,
+        d.get("postings") or [],
+        reverses.strip(),
     )
 
 

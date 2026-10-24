@@ -90,8 +90,9 @@ EXPECTED = {
 def test_posted_documents_make_the_hand_counted_balance(demo):
     outcome = import_batch(demo.ledger, demo.company_id, parse_batch(FILE), post=True)
     assert outcome.ok and outcome.new == ["S-1", "S-2"] and not outcome.existing
+    assert [d.number for d in outcome.created] == [7, 8]  # after the six of the example
     assert march(demo) == EXPECTED
-    doc = load_document(demo.ledger.conn, demo.company_id, outcome.created[0][1])
+    doc = load_document(demo.ledger.conn, demo.company_id, outcome.created[0].document_id)
     assert doc.status == "posted" and doc.memo == "materials from supplier A"
 
 
@@ -115,16 +116,16 @@ def test_drafts_by_default_and_a_check_writes_nothing(demo):
     assert check.ok and check.new == ["S-1", "S-2"] and check.created == []
     assert march(demo)["201"][2] == 0
     drafts = import_batch(demo.ledger, demo.company_id, parse_batch(FILE))
-    doc = load_document(demo.ledger.conn, demo.company_id, drafts.created[1][1])
+    doc = load_document(demo.ledger.conn, demo.company_id, drafts.created[1].document_id)
     assert doc.status == "draft"
     assert march(demo)["201"][2] == 0  # a draft is not in the books
 
 
 def test_a_deleted_document_is_imported_anew(demo):
     first = import_batch(demo.ledger, demo.company_id, parse_batch(FILE))
-    demo.ledger.delete_document(demo.company_id, first.created[0][1])
+    demo.ledger.delete_document(demo.company_id, first.created[0].document_id)
     again = import_batch(demo.ledger, demo.company_id, parse_batch(FILE))
-    assert again.new == ["S-1"] and [e for e, _ in again.existing] == ["S-2"]
+    assert again.new == ["S-1"] and [d.external_id for d in again.existing] == ["S-2"]
 
 
 def test_names_are_exact_and_one_problem_stops_the_file(demo):
@@ -182,6 +183,8 @@ def test_an_amount_is_text_not_a_float(demo):
 def test_posted_documents_go_out_in_the_same_format(demo):
     data = documents_file(demo.ledger.conn, demo.company_id, "2026-01-01", "2026-02-28")
     assert data["source"] == "modern-gl/ООО Тест" and len(data["documents"]) == 6
+    february = documents_file(demo.ledger.conn, demo.company_id, "2026-02-01", "2026-02-28")
+    assert [d["id"] for d in february["documents"]] == ["4", "5", "6"]
     assert data["documents"][1] == {
         "id": "2",
         "date": "2026-01-10",
@@ -210,3 +213,21 @@ def test_a_period_goes_into_another_company_and_adds_up(demo):
     osv = trial_balance(other.ledger.conn, other.company_id, "2026-02-01", "2026-02-28")
     row = next(r for r in osv.rows if r.code == "201")
     assert (row.opening_dt, row.turnover_dt, row.turnover_ct) == (240_000, 100_000, 60_000)
+
+
+def test_a_storno_reverses_a_document_of_the_same_source(demo):
+    """S-3 is the red storno of S-1: March's 201 turnover is 150 − 150 = 0."""
+    data = file()
+    data["documents"].append({"id": "S-3", "date": "2026-03-10", "reverses": "S-1"})
+    outcome = import_batch(demo.ledger, demo.company_id, parse_batch(data), post=True)
+    assert outcome.ok, outcome.errors
+    assert march(demo)["201"] == (140_000, 0, 0, 0, 140_000, 0)
+    out = documents_file(demo.ledger.conn, demo.company_id, "2026-03-01", "2026-03-31")
+    assert out["documents"][-1]["reverses"] == str(outcome.created[0].number)
+    assert "postings" not in out["documents"][-1]
+
+
+def test_a_storno_of_an_unknown_document_is_an_error(demo):
+    data = file(documents=[{"id": "S-3", "date": "2026-03-10", "reverses": "S-9"}])
+    outcome = import_batch(demo.ledger, demo.company_id, parse_batch(data), post=True)
+    assert outcome.errors == [("S-3", "сторно: документа «S-9» нет среди загруженных")]

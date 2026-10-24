@@ -1911,4 +1911,6 @@ AZ: dict[str, str] = {
     "{where}: лишние поля {keys}": "{where}: artıq sahələr {keys}",
     '{where}: дата — "ГГГГ-ММ-ДД", например "2026-03-05"': '{where}: tarix — "İİİİ-AA-GG", məsələn "2026-03-05"',
     "строка {line}: e-qaimə или декларация — одно из двух": "sətir {line}: e-qaimə və ya bəyannamə — ikisindən biri",
+    "сторно: документа «{id}» нет среди загруженных": "storno: «{id}» sənədi yüklənənlər arasında yoxdur",
+    '{where}: "reverses" — id документа, без своих проводок': '{where}: "reverses" — sənədin id-si, öz yazılışları olmadan',
 }

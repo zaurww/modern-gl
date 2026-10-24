@@ -10,7 +10,7 @@ from modern_gl.application.exchange.format import (
     FormatError,
     parse_batch,
 )
-from modern_gl.application.exchange.importer import ExchangeOutcome, import_batch
+from modern_gl.application.exchange.importer import ExchangeOutcome, Imported, import_batch
 
 __all__ = [
     "FORMAT",
@@ -19,6 +19,7 @@ __all__ = [
     "ExchangeDocument",
     "ExchangeOutcome",
     "FormatError",
+    "Imported",
     "import_batch",
     "parse_batch",
 ]

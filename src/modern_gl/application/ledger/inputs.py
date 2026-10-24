@@ -108,6 +108,7 @@ class ImportedDocument:
     memo: str = ""
     layer: str = "common"
     external_id: str = ""  # its id in the program it came from (with `source`, D130)
+    reverses: str = ""  # a red storno of the document of this external id (no postings)
 
 
 @dataclass

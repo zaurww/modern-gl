@@ -44,7 +44,11 @@ def documents_file(
                 "date": doc["doc_date"],
                 "memo": doc["memo"],
                 "layer": doc["layer"],
-                "postings": [_line(p, accounts, names) for p in postings],
+                **(
+                    {"reverses": str(doc["reversal_of"])}
+                    if doc["reversal_of"] is not None
+                    else {"postings": [_line(p, accounts, names) for p in postings]}
+                ),
             }
             for doc, postings in posted_documents(conn, params)
         ],

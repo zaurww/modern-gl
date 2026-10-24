@@ -13,15 +13,16 @@ import re
 from collections.abc import Sequence
 from datetime import date
 
-from modern_gl.application.books import COMMON, book_params
+from modern_gl.application.books import COMMON, FROM, book_params, docs_cte
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.report_common import _DOCS_CTE, _accounts
+from modern_gl.reporting.report_common import _accounts
 
 BASE = "AZN"
 _TYPES = {"asset": "A", "liability": "L", "equity": "E", "revenue": "R", "expense": "X"}
 _EARLIEST = "0001-01-01"
+_PERIOD_DOCS = docs_cte("d.id, d.doc_date, d.number, d.memo", start=FROM)
 
 
 def hledger_journal(
@@ -126,11 +127,11 @@ def _subconto_names(conn: Connection, company_id: int) -> dict[int, tuple[str, s
 
 
 def posted_documents(conn: Connection, params: dict) -> list[tuple[Row, list[Row]]]:
-    """Posted documents of the book (`book_params`) with their postings, in date order;
-    the exchange file reads them too (`reporting/exchange.py`)."""
+    """Posted documents of the book in the period (`book_params`) with their postings,
+    in date order; the exchange file reads them too (`reporting/exchange.py`)."""
     rows = conn.execute(
         f"""
-        WITH {_DOCS_CTE}
+        WITH {_PERIOD_DOCS}
         SELECT docs.id AS doc_id, docs.doc_date, docs.number, docs.memo,
                orig.number AS reversal_of, l.code AS layer, l.name AS layer_name,
                p.debit_account_id, p.credit_account_id, p.amount,

@@ -8,7 +8,7 @@ from functools import partial
 
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import ImportedDocument, ImportOutcome
-from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.errors import LedgerError, NotFoundError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
@@ -69,11 +69,10 @@ class DocumentImportCommands(DocumentCommands):
                         for p in doc.postings
                     ]
                     create = self.post_new if post else self.create_draft
-                    doc_id = self._import_one(
-                        index,
-                        outcome,
-                        partial(create, company_id, doc.doc_date, postings, doc.memo, doc.layer),
-                    )
+                    make = partial(create, company_id, doc.doc_date, postings, doc.memo, doc.layer)
+                    if doc.reverses:
+                        make = self._storno(company_id, source, doc)
+                    doc_id = self._import_one(index, outcome, make)
                     if doc_id is not None and sourced:
                         self._mark_source(company_id, doc_id, source, doc.external_id)
                 if outcome.errors or check_only:
@@ -96,15 +95,32 @@ class DocumentImportCommands(DocumentCommands):
             outcome.errors.append((index, tr("документ «{id}» в файле дважды", id=doc.external_id)))
             return False
         seen.add(doc.external_id)
+        existing = self._sourced(company_id, source, doc.external_id)
+        if existing is not None:
+            outcome.existing.append((index, existing))
+            return False
+        return True
+
+    def _storno(self, company_id: int, source: str, doc: ImportedDocument) -> Callable[[], int]:
+        """The red storno of a document imported before from the same source (D5)."""
+        original = self._sourced(company_id, source, doc.reverses)
+
+        def reverse() -> int:
+            if original is None:
+                raise NotFoundError(
+                    tr("сторно: документа «{id}» нет среди загруженных", id=doc.reverses)
+                )
+            return self.reverse(company_id, original, doc.doc_date, doc.memo or None)
+
+        return reverse
+
+    def _sourced(self, company_id: int, source: str, external_id: str) -> int | None:
         row = self.conn.execute(
             "SELECT document_id FROM document_sources "
             "WHERE company_id = ? AND source = ? AND external_id = ?",
-            (company_id, source, doc.external_id),
+            (company_id, source, external_id),
         ).fetchone()
-        if row is not None:
-            outcome.existing.append((index, row["document_id"]))
-            return False
-        return True
+        return None if row is None else row["document_id"]
 
     def _import_one(
         self, index: int, outcome: ImportOutcome, create: Callable[[], int]

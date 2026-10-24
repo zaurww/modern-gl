@@ -225,7 +225,7 @@ LAYERS: list[tuple[str, ...]] = [
     ("infrastructure",),
     ("application",),
     ("reporting",),
-    ("desktop", "assistant", "demo_data", "demo_year"),
+    ("desktop", "assistant", "api", "demo_data", "demo_year"),
 ]
 
 
