@@ -15,9 +15,9 @@ from modern_gl.application.bank import (
     BankOperationInput,
     BankPlace,
     BankStatement,
-    bank_operation_of_document,
     transfer_targets,
 )
+from modern_gl.application.queries import document_owner
 from modern_gl.desktop.bank_page.deposit_reconcile import DepositReconcileDialog
 from modern_gl.desktop.bank_page.dialogs import BankAccountDialog, PeriodDialog
 from modern_gl.desktop.bank_page.entry import ONE, TWO
@@ -219,7 +219,8 @@ class BankActions(ReportPage):
         rows = {i.row() for i in self.table.selectionModel().selectedRows()}
         docs = [self.model.rows[r].document_id for r in sorted(rows)]
         conn, cid = self.s.conn, self.s.company_id
-        operations = [o for d in docs if (o := bank_operation_of_document(conn, cid, d))]
+        owners = [document_owner(conn, cid, d) for d in docs]
+        operations = [o.id for o in owners if o is not None and o.module == "bank"]
         if place is None or not operations:
             self.s.notify(tr("Отметьте строки банковских операций (Ctrl или Shift + щелчок)"))
             return

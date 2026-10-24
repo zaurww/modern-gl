@@ -149,16 +149,6 @@ def official_rate(data: ConversionInput, rates: Mapping[int, Rate]) -> Fraction 
     return per_unit[src] / per_unit[tgt] if tgt in per_unit else None
 
 
-def conversion_of_document(conn: Connection, company_id: int, document_id: int) -> int | None:
-    """The conversion whose postings these are (either of its GL documents)."""
-    row = conn.execute(
-        "SELECT id FROM currency_conversions WHERE company_id = ? "
-        "AND (document_id = ? OR credit_document_id = ?)",
-        (company_id, document_id, document_id),
-    ).fetchone()
-    return row[0] if row else None
-
-
 def load_conversion(conn: Connection, company_id: int, conversion_id: int) -> Conversion:
     r = conn.execute(
         "SELECT c.*, d.number, d.doc_date, d.memo, d.status FROM currency_conversions c "

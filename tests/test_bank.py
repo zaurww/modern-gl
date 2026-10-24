@@ -32,7 +32,6 @@ from modern_gl.application.bank import (
     TRANSFER,
     BankLine,
     BankOperationInput,
-    bank_operation_of_document,
     bank_places,
     counterparty_balance,
     find_bank_operation,
@@ -181,7 +180,9 @@ def test_payment_to_supplier_posts_and_closes_the_e_qaime(ledger, firm):
     op = load_bank_operation(ledger.conn, f["cid"], op_id)
     assert op.status == "posted"
     assert op.lines[0].subconto == (v["alfa"], v["contract"], None)
-    assert bank_operation_of_document(ledger.conn, f["cid"], op.document_id) == op_id
+    assert document_owner(ledger.conn, f["cid"], op.document_id) == DocumentOwner(
+        "bank", op_id, None
+    )
 
 
 def test_receipt_split_into_two_e_qaime(ledger, firm):
@@ -261,7 +262,7 @@ def test_unpost_and_delete(ledger, firm):
     assert load_bank_operation(ledger.conn, cid, op_id).status == "draft"
     ledger.bank.save_bank_operation(cid, pay_alfa(f), op_id, post=True)
     ledger.bank.delete_bank_operation(cid, op_id)
-    assert bank_operation_of_document(ledger.conn, cid, doc_id) is None
+    assert document_owner(ledger.conn, cid, doc_id) is None
     count = ledger.conn.execute("SELECT COUNT(*) FROM documents WHERE id = ?", (doc_id,))
     assert count.fetchone()[0] == 0
 
