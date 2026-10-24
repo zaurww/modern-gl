@@ -9,20 +9,16 @@ from datetime import date
 from typing import Any
 
 from PySide6.QtCore import (
-    QEvent,
     Qt,
     Signal,
 )
-from PySide6.QtGui import QAction, QCursor, QFontMetrics, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCursor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QComboBox,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QMenu,
     QStackedLayout,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -30,15 +26,10 @@ from PySide6.QtWidgets import (
 from modern_gl.desktop.period_field import PeriodField
 from modern_gl.desktop.reports_page.column_choice import ColumnChoice
 from modern_gl.desktop.reports_page.export import copy_to_clipboard, save_to_excel
+from modern_gl.desktop.reports_page.report_table import ReportTable
 from modern_gl.desktop.reports_page.table import (
-    GROUP_GAP,
-    NAME_MAX,
-    ROW_HEIGHT,
     Column,
-    GroupHeader,
-    ReportDelegate,
     ReportModel,
-    fit_rows,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
@@ -110,8 +101,6 @@ def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:
 # A context menu entry: text and what it does, or text and a submenu; None is a separator.
 type MenuAction = tuple[str, Callable[[], None] | list[MenuAction | None]]
 
-NAME_MIN = 180  # px an account name keeps before it is cut in a narrow window
-
 
 class ReportPage(QWidget):
     """Base: header, parameters, table/empty state, footer."""
@@ -124,6 +113,7 @@ class ReportPage(QWidget):
     choosable_columns = True  # «Колонки…»: a page with a choice of its own says no
     has_book = True  # the book choice, when the company keeps parallel books
     summary_on_top = True
+    table_class = ReportTable  # the plan of accounts narrows its columns its own way
 
     def __init__(self, session: Session, title: str, params: ReportParams | None = None) -> None:
         super().__init__()
@@ -205,34 +195,18 @@ class ReportPage(QWidget):
 
     def _build_table(self) -> None:
         self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setObjectName("report")
-        captions = GroupHeader(self.table)
-        self.table.setHorizontalHeader(captions)
-        self.table.setModel(self.model)
+        self.table = self.table_class(self.model)
         # a right click on the captions: which columns to show
+        captions = self.table.horizontalHeader()
         captions.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         captions.customContextMenuRequested.connect(
             lambda pos: self.choose_columns(captions.mapToGlobal(pos))
         )
         if self.choosable_columns:
             self.model.shown = lambda col: self.columns_choice().shown(col)
-        self.table.setItemDelegate(ReportDelegate(self.table))
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        # several rows: Ctrl+C copies them (D104); one: the whole report
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.setWordWrap(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
         self.table.doubleClicked.connect(lambda idx: self.drill(idx.data(Qt.ItemDataRole.UserRole)))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._context_menu)
-        # a narrow window: amounts give up some width
-        self._viewport = self.table.viewport()
-        self._viewport.installEventFilter(self)
-        self._widths: dict[int, int] = {}
 
     # ---- to implement ----------------------------------------------------------------
 
@@ -325,76 +299,8 @@ class ReportPage(QWidget):
 
     def _shown(self) -> None:
         self.stack.setCurrentWidget(self.table if self.model.rows else self.empty)
-        self._layout_columns()
+        self.table.layout_columns()
         self.footer.setVisible(bool(self.footer.text()))
-
-    def _layout_columns(self) -> None:
-        """Every column as wide as its widest text, so the amounts stand right after the
-        names and the free room stays empty on the right (Jon Moon: the eye must not
-        travel across a blank to find the number). A name keeps at most NAME_MAX."""
-        hh = self.table.horizontalHeader()
-        hh.setStretchLastSection(False)
-        columns = self.model.columns
-        self._widths: dict[int, int] = {}
-        for i, col in enumerate(columns):
-            hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
-            width = self._content_width(i)
-            if col.money or col.right:
-                width += QFontMetrics(self.table.font()).horizontalAdvance(")")
-            if col.group and (i == 0 or columns[i - 1].group != col.group):
-                width += GROUP_GAP
-            self._widths[i] = width if col.width or col.money or col.right else min(width, NAME_MAX)
-        self._fit_groups()
-        fit_rows(self.table, self.model)
-        self.table.horizontalHeader().updateGeometry()
-        self._fit_columns()
-
-    def _fit_groups(self) -> None:
-        """A group caption wider than its columns widens them."""
-        columns, metrics = self.model.columns, self.table.horizontalHeader().fontMetrics()
-        for group in {c.group for c in columns if c.group}:
-            members = [i for i, c in enumerate(columns) if c.group == group]
-            need = metrics.horizontalAdvance(group) + GROUP_GAP + 22
-            short = need - sum(self._widths[i] for i in members)
-            for i in members:
-                self._widths[i] += max(0, short) // len(members) + 1
-
-    def _content_width(self, column: int) -> int:
-        """The widest text of a column (bold totals included) or its caption."""
-        bold = self.table.font()
-        bold.setBold(True)
-        metrics = QFontMetrics(bold)
-        widest = (
-            self.table.horizontalHeader().fontMetrics().horizontalAdvance(self.model.title(column))
-        )
-        icon = self.model.columns[column].icon is not None
-        for r in range(min(self.model.rowCount(), 2000)):
-            text = self.model.data(self.model.index(r, column), Qt.ItemDataRole.DisplayRole)
-            widest = max(widest, metrics.horizontalAdvance(str(text or "")))
-        return widest + 28 + (24 if icon else 0)  # the cell padding of the theme
-
-    def _fit_columns(self) -> None:
-        """In a narrow window the names give up width first (cut with "…"), down to
-        NAME_MIN; then the table scrolls sideways. In a wide one the free room stays on
-        the right."""
-        widths = self._widths
-        if not widths:
-            return
-        columns = self.model.columns
-        names = [i for i, c in enumerate(columns) if not (c.width or c.money or c.right)]
-        others = sum(w for i, w in widths.items() if i not in names)
-        room = (self.table.viewport().width() - others) // max(1, len(names))
-        fitted = {
-            i: max(min(width, NAME_MIN), min(width, room)) if i in names else width
-            for i, width in widths.items()
-        }
-        for i, width in fitted.items():
-            self.table.setColumnWidth(i, width)
-
-    def eventFilter(self, watched, event) -> bool:
-        if watched is self._viewport and event.type() == QEvent.Type.Resize:
-            self._fit_columns()
-        return super().eventFilter(watched, event)
 
     def _drill_current(self) -> None:
         idx = self.table.currentIndex()

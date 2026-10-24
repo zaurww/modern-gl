@@ -10,16 +10,16 @@ from modern_gl.desktop.reports_page.account import REPORTS, CardPage, SubcontoPa
 from modern_gl.desktop.reports_page.books import BooksPage
 from modern_gl.desktop.reports_page.chart import ChartPage
 from modern_gl.desktop.reports_page.osv import OsvPage
+from modern_gl.desktop.reports_page.report_table import NAME_MIN, ReportTable
 from modern_gl.desktop.reports_page.statements import StatementsPage
 from modern_gl.desktop.reports_page.subconto_analysis import SubcontoAnalysisPage
 from modern_gl.desktop.reports_page.subconto_card import SubcontoCardPage
 from modern_gl.desktop.reports_page.table import (
+    NAME_MAX,
     SectionRow,
     figure,
 )
 from modern_gl.desktop.reports_page.view import (
-    NAME_MAX,
-    NAME_MIN,
     Column,
     MenuAction,
     ReportModel,
@@ -43,6 +43,7 @@ __all__ = [
     "ReportModel",
     "ReportPage",
     "ReportParams",
+    "ReportTable",
     "SectionRow",
     "StatementsPage",
     "SubcontoAnalysisPage",
