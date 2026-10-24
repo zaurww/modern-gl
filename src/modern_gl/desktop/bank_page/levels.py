@@ -17,6 +17,7 @@ from modern_gl.application.bank import (
 )
 from modern_gl.desktop.reports_page import Column
 from modern_gl.desktop.widgets import ru_date
+from modern_gl.domain.dates import date_range
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 
@@ -40,7 +41,7 @@ def period_text(s: BankStatement) -> str:
     if s.date_from == s.date_to:
         weekday = WEEKDAYS[date.fromisoformat(s.date_from).weekday()]
         return f"{ru_date(s.date_from)}, {tr(weekday)}"
-    return f"{ru_date(s.date_from)[:5]} — {ru_date(s.date_to)}"
+    return date_range(s.date_from, s.date_to)
 
 
 # ---- the accounts ---------------------------------------------------------------------

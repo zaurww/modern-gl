@@ -29,7 +29,7 @@ from modern_gl.desktop.period_bar import PeriodBar
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import button, money
-from modern_gl.domain.dates import month_name, ru_date
+from modern_gl.domain.dates import date_range, month_name, ru_date
 from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, status_label
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
@@ -511,7 +511,4 @@ def period_text(date_from: str, date_to: str) -> str:
     month = full_month(date.fromisoformat(date_from), date.fromisoformat(date_to))
     if month:
         return month_name(month)
-    if date_from == date_to:
-        return ru_date(date_from)
-    start = ru_date(date_from)
-    return f"{start[:5] if date_from[:4] == date_to[:4] else start}–{ru_date(date_to)}"
+    return date_range(date_from, date_to, "–")

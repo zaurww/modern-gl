@@ -21,6 +21,15 @@ def ru_date(iso: str) -> str:
     return f"{d}.{m}.{y}"
 
 
+def date_range(first: date | str, last: date | str, sep: str = " — ") -> str:
+    """'01.10 — 15.10.2026'; across a new year both years: '29.12.2025 — 04.01.2026';
+    a single day: '20.10.2026'."""
+    start, end = ru_date(iso_date(first)), ru_date(iso_date(last))
+    if start == end:
+        return end
+    return f"{start[:5] if start[-4:] == end[-4:] else start}{sep}{end}"
+
+
 _MONTHS = (
     "январь",
     "февраль",
