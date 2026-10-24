@@ -31,3 +31,17 @@ def test_the_day_after():
 
     assert next_day("2026-12-31") == "2027-01-01"
     assert next_day(date(2028, 2, 28)) == "2028-02-29"
+
+
+def test_a_month_with_a_capital_letter_in_both_languages():
+    """Azerbaijani capitals: «iyun» is «İyun», not «Iyun» (D56)."""
+    from modern_gl.domain.dates import month_title
+    from modern_gl.i18n import set_language
+
+    set_language("az")
+    try:
+        assert month_title("2026-06") == "İyun 2026"
+        assert month_title("2026-03") == "Mart 2026"
+    finally:
+        set_language("ru")
+    assert month_title("2026-06") == "Июнь 2026"
