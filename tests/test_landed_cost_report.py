@@ -223,3 +223,36 @@ def test_the_warehouse_opens_the_report_and_a_row_opens_its_receipt(year_window,
     assert isinstance(opened, InventoryDocumentPage)
     assert opened.doc is not None and opened.doc.invoice.startswith("AZ2604")
     assert "\t".join([tr("Декларация / товар"), tr("Количество")]) in page.text()
+
+
+def test_the_supplier_is_the_counterparty_not_the_first_subconto(ledger: Ledger, conn):
+    """A settlement account whose first subconto is not a counterparty (here 60 by
+    contract, then counterparty): the declaration names the supplier, not the contract —
+    the same rule as the purchase list (debt 12)."""
+    cid = ledger.create_company("Импорт по договорам")
+    item_kind = ledger.add_subconto_kind(cid, "item", "Товары")
+    warehouse_kind = ledger.add_subconto_kind(cid, "warehouse", "Склады")
+    contract_kind = ledger.add_subconto_kind(cid, "other", "Договоры поставки")
+    counterparty = ledger.add_subconto_kind(cid, "counterparty", "Контрагенты")
+    stock = ledger.add_account(
+        cid, "41", "Товары", subconto=[item_kind, warehouse_kind], account_class="asset"
+    )
+    suppliers = ledger.add_account(
+        cid, "60", "Поставщики", subconto=[contract_kind, counterparty], account_class="liability"
+    )
+    contract = ledger.add_subconto_value(cid, contract_kind, "Договор №7")
+    supplier = ledger.add_subconto_value(cid, counterparty, "Supplier Ltd")
+    inv = Inventory(conn, actor="test")
+    a = inv.add_item(cid, "Товар A", inv.add_unit(cid, "шт", "Штука"), stock)
+    main = inv.add_warehouse(cid, "Основной")
+    inv.post_receipt(
+        cid,
+        "2026-04-01",
+        [ReceiptLine(a, main, "1", "20")],
+        suppliers,
+        [contract, supplier],
+        invoice="AZ7",
+        invoice_kind="customs",
+    )
+    _kinds, (d,) = landed_cost_report(conn, cid, "2026-04-01", "2026-04-30")
+    assert (d.invoice, d.supplier) == ("AZ7", "Supplier Ltd")
