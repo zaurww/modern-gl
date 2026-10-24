@@ -38,11 +38,12 @@ def payment_lines(
     day: str,
     invoices: Sequence[tuple[str, int | None]] = (),
     advance_account: int | None = None,
-    advance_subconto: Sequence[int | None] = (),
 ) -> list[BankLine]:
     """The lines of one payment. `invoices`: (number, what it still owes; None — not
     known, it takes the whole amount). Only a payment that settles (out on 60, in on 62)
-    is spread; any other line is the amount as typed, on its one e-qaimə if any."""
+    is spread; any other line is the amount as typed, on its one e-qaimə if any. The
+    advance line takes the line's subconto in their places on the advance account — the
+    contract, an order (D124) — by kind; the counterparty is put in by the operation."""
     sc = tuple(pad_subconto(subconto))
     settles = SETTLES.get(account_type or "") == direction and counterparty_id is not None
     if not settles:
@@ -66,8 +67,30 @@ def payment_lines(
     if cover:
         lines.append(BankLine(account_id, cover, sc))
     if left - cover:
-        lines.append(BankLine(advance_account, left - cover, tuple(pad_subconto(advance_subconto))))
+        advance_sc = carried_over(conn, company_id, sc, advance_account)
+        lines.append(BankLine(advance_account, left - cover, advance_sc))
     return lines
+
+
+def carried_over(
+    conn: Connection, company_id: int, subconto: Sequence[int | None], account_id: int
+) -> tuple[int | None, int | None, int | None]:
+    """The values of `subconto` in their places on another account, by their directory:
+    a contract and an order typed on 62.1 go with the advance to 62.2."""
+    kinds = {
+        r["id"]: r["kind_id"]
+        for r in conn.execute(
+            "SELECT id, kind_id FROM subconto_values WHERE company_id = ? AND id IN (?, ?, ?)",
+            (company_id, *pad_subconto(subconto)),
+        )
+    }
+    by_kind = {kinds[v]: v for v in subconto if v is not None and v in kinds}
+    account = conn.execute(
+        "SELECT sc1_kind_id, sc2_kind_id, sc3_kind_id FROM accounts "
+        "WHERE company_id = ? AND id = ?",
+        (company_id, account_id),
+    ).fetchone()
+    return tuple(by_kind.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3))  # type: ignore[return-value]
 
 
 @dataclass(frozen=True)

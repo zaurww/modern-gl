@@ -78,6 +78,13 @@ REPORTS = (
         "analysis",
     ),
     Report(
+        "subconto_analysis",
+        GROUPS[1],
+        "Анализ субконто",
+        "Контрагент, заказ или проект по всем счетам сразу",
+        "directories",
+    ),
+    Report(
         "books",
         GROUPS[1],
         "Сравнение книг",
