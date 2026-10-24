@@ -182,6 +182,7 @@ def test_credit_on_a_later_day_waits_on_transit(ledger, conn, firm):
     owner = DocumentOwner("conversion", conversion_id, None)
     assert document_owner(conn, cid, conversion.document_id) == owner
     assert document_owner(conn, cid, credit.id) == owner
+    assert credit.conversion_id == conversion_id and not credit.editable
 
     # back to one day: the second document goes, the first keeps its number
     ledger.conversion.save_conversion(

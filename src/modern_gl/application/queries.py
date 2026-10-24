@@ -263,19 +263,18 @@ def load_document(conn: Connection, company_id: int, doc_id: int) -> DocumentDat
         SELECT d.id, d.number, d.doc_date, d.memo, l.code AS layer, d.status, d.reversal_of,
                (SELECT r.id FROM documents r WHERE r.reversal_of = d.id) AS reversed_by,
                COALESCE(c.closed_through >= d.doc_date, 0) AS closed,
-               i.id AS inventory_document_id, i.number AS inventory_number,
-               (SELECT v.id FROM currency_conversions v
-                WHERE v.document_id = d.id OR v.credit_document_id = d.id) AS conversion_id,
-               (SELECT b.id FROM bank_operations b WHERE b.document_id = d.id)
-                   AS bank_operation_id,
+               CASE WHEN m.module = 'inventory' THEN m.owner_id END AS inventory_document_id,
+               CASE WHEN m.module = 'inventory' THEN m.owner_number END AS inventory_number,
+               CASE WHEN m.module = 'conversion' THEN m.owner_id END AS conversion_id,
+               CASE WHEN m.module = 'bank' THEN m.owner_id END AS bank_operation_id,
                EXISTS (SELECT 1 FROM document_owners o
                        WHERE o.company_id = d.company_id AND o.document_id = d.id
                          AND o.role = 'uses') AS used
         FROM documents d
         JOIN layers l ON l.id = d.layer_id
         JOIN companies c ON c.id = d.company_id
-        LEFT JOIN inventory_documents i
-            ON i.gl_document_id = d.id OR i.accrual_document_id = d.id
+        LEFT JOIN document_owners m
+            ON m.company_id = d.company_id AND m.document_id = d.id AND m.role = 'made'
         WHERE d.company_id = ? AND d.id = ?
         """,
         (company_id, doc_id),
