@@ -636,3 +636,57 @@ def test_the_bank_page_has_one_menu_with_the_portal(qtbot, firm, deposit_session
     beta = by_reference(s.ledger, s.company_id)["2619000000000001"]
     document = s.conn.execute("SELECT document_id FROM bank_operations WHERE id = ?", (beta,))
     assert opened == [document.fetchone()[0]]
+
+
+def test_the_window_warns_of_a_reconciled_period_changed(qtbot, ledger, firm, deposit_session):
+    """01–03.10 marked reconciled when the portal had no 90.00 of 03.10 (in 794.00, now
+    910.00); then a fee of 5.00 on 02.10 typed by hand. Opened: the change in the books is
+    said at once (out 952.44 → 957.44, closing −268.44 → −273.44); loaded from 01.10: the
+    portal's too (in 794.00 → 884.00, closing 910.00 → 1 000.00) — D118."""
+    from modern_gl.application.bank.deposit_reconciliation import reconcile_deposit
+    from modern_gl.desktop.bank_page.portal import PREVIEW, DepositDialog
+    from tests.test_deposit_reconciliation import fee
+
+    s, _messages, token, _portal = deposit_session
+    cid, place = firm["cid"], firm["place"]
+    ledger.bank.import_vat_deposit(cid, place, operations(), 100000)
+    fewer = [op for op in operations() if op.amount != 9000]
+    seen = reconcile_deposit(ledger.conn, cid, place, fewer, 91000, "2026-10-01", "2026-10-03")
+    ledger.bank.mark_deposit_reconciled(cid, place, seen)
+    dialog = DepositDialog(s, place, sign_in=lambda _parent: token, today=date(2026, 10, 3))
+    qtbot.addWidget(dialog)
+    assert dialog.changes.isHidden()  # nothing changed since
+
+    fee(ledger, firm, "2026-10-02")
+    dialog = DepositDialog(s, place, sign_in=lambda _parent: token, today=date(2026, 10, 3))
+    qtbot.addWidget(dialog)
+    changed = tr(
+        "{period} сверен, но {side} изменилось: приход {was_in} → {now_in}, расход "
+        "{was_out} → {now_out}, на конец {was_end} → {now_end}",
+        period="01.10.2026–03.10.2026",
+        side=tr("в программе"),
+        was_in="684.00",
+        now_in="684.00",
+        was_out="952.44",
+        now_out="957.44",
+        was_end="-268.44",
+        now_end="-273.44",
+    )
+    assert not dialog.changes.isHidden() and dialog.changes.text() == changed + "."
+
+    dialog.period_field.set_period(date(2026, 10, 1), date(2026, 10, 3))
+    dialog.load()
+    qtbot.waitUntil(lambda: dialog.step == PREVIEW, timeout=5000)
+    on_portal = tr(
+        "{period} сверен, но {side} изменилось: приход {was_in} → {now_in}, расход "
+        "{was_out} → {now_out}, на конец {was_end} → {now_end}",
+        period="01.10.2026–03.10.2026",
+        side=tr("на портале"),
+        was_in="794.00",
+        now_in="884.00",
+        was_out="952.44",
+        now_out="952.44",
+        was_end="910.00",
+        now_end="1 000.00",
+    )
+    assert dialog.changes.text() == f"{changed}. {on_portal}."
