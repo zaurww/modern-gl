@@ -108,3 +108,36 @@ def test_the_range_of_days(form):
     assert edited_date(edit) == date(2026, 3, 5)
     edit.setDate(QDate(2026, 4, 1))
     assert edited_date(edit) == date(2026, 3, 10)  # set from outside: to the nearest end
+
+
+def test_the_calendar_of_a_date(form):
+    """The calendar icon (D129): the month of the date, the date blue; a click on a day — the
+    date and the calendar closes; the keys walk the days, Enter takes one; days outside
+    the field's range are not taken."""
+    edit, _after, seen = form
+    edit.show_calendar()
+    window = edit.calendar_shown
+    days = window.days.days
+    assert window.days.title.text() == "Март 2026"
+    assert days.span == (date(2026, 3, 5), date(2026, 3, 5))
+    assert days.first_shown() == date(2026, 2, 23)  # the Monday before the 1st
+    QTest.mouseClick(
+        days, Qt.MouseButton.LeftButton, pos=days.cell(date(2026, 3, 18)).center().toPoint()
+    )
+    assert edited_date(edit) == date(2026, 3, 18) and len(seen) == 1
+    assert not window.isVisible()
+
+    edit.show_calendar()
+    days = edit.calendar_shown.days.days
+    for key in (Qt.Key.Key_Right, Qt.Key.Key_Down, Qt.Key.Key_PageDown):
+        QTest.keyClick(days, key)
+    assert edit.calendar_shown.days.title.text() == "Апрель 2026"  # 18.03 +1 +7 → 26.04
+    QTest.keyClick(days, Qt.Key.Key_Return)
+    assert edited_date(edit) == date(2026, 4, 26)
+
+    edit.setDateRange(QDate(2026, 4, 1), QDate(2026, 4, 30))
+    edit.show_calendar()
+    days = edit.calendar_shown.days.days
+    assert days.day_at(days.cell(date(2026, 5, 1)).center().toPoint()) is None
+    assert days.day_at(days.cell(date(2026, 4, 30)).center().toPoint()) == date(2026, 4, 30)
+    edit.calendar_shown.close()

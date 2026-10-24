@@ -8,7 +8,50 @@ from modern_gl.desktop.theme.palette import P
 
 def stylesheet() -> str:
     """The whole look of the program, in the current theme's colors."""
-    return _window_css() + _controls_css() + _tables_css() + _panels_css() + _tiles_css()
+    return (
+        _window_css()
+        + _controls_css()
+        + _tables_css()
+        + _panels_css()
+        + _period_css()
+        + _tiles_css()
+    )
+
+
+def _period_css() -> str:
+    """The period field, its panel and the calendar of days (D105, D129)."""
+    return f"""
+/* the period of a report: one capsule «‹ Октябрь 2026 › 📅» (D129) */
+QFrame#periodField {{
+    background: {P.field}; border: 1px solid transparent; border-radius: 8px;
+}}
+QFrame#periodField:hover {{ background: {P.field_hover}; }}
+QFrame#periodField[focused="true"] {{ background: {P.surface}; border: 1px solid {P.accent}; }}
+QFrame#periodField[invalid="true"] {{ border: 1px solid {P.red}; }}
+QFrame#periodField QLineEdit#period, QFrame#periodField QLineEdit#period:focus {{
+    background: transparent; border: none; padding: 4px 2px; font-weight: 500;
+}}
+QFrame#periodField QLineEdit#period[invalid="true"] {{ border: none; color: {P.red}; }}
+QFrame#periodDivider {{ background: {P.scrollbar}; }}
+QPushButton#capsule {{ background: transparent; border: none; border-radius: 6px; padding: 0; }}
+QPushButton#capsule:hover {{ background: {P.surface}; }}
+QFrame#periodField[focused="true"] QPushButton#capsule:hover {{ background: {P.field}; }}
+/* the period with the mouse (D105): quiet cells, the chosen ones blue; one calendar of days */
+QFrame#periodLine {{ background: {P.hairline}; }}
+QFrame#periodWindow, QFrame#calendarWindow {{
+    background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 12px;
+}}
+QLabel#periodYear {{ color: {P.text}; font-weight: 600; }}
+QPushButton#periodPreset, QPushButton#periodCell {{
+    background: transparent; border: none; border-radius: 7px; color: {P.text};
+    padding: 6px 12px;
+}}
+QPushButton#periodPreset {{ text-align: left; }}
+QPushButton#periodPreset:hover, QPushButton#periodCell:hover {{ background: {P.field_hover}; }}
+QPushButton#periodPreset:checked, QPushButton#periodCell:checked {{
+    background: {P.accent_soft}; color: {P.accent}; font-weight: 600;
+}}
+"""
 
 
 def _tiles_css() -> str:
@@ -248,18 +291,4 @@ QFrame#card {{
 QFrame#card QLabel {{ background: transparent; border: none; }}
 QFrame#note QLabel {{ color: {P.text}; background: transparent; }}
 QFrame#note QPushButton#flat:hover {{ background: {P.selection}; }}
-/* the period with the mouse (D105): quiet cells, the chosen ones blue */
-QFrame#periodWindow {{
-    background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 12px;
-}}
-QLabel#periodYear {{ color: {P.text}; font-weight: 600; }}
-QPushButton#periodPreset, QPushButton#periodCell {{
-    background: transparent; border: none; border-radius: 7px; color: {P.text};
-    padding: 6px 12px;
-}}
-QPushButton#periodPreset {{ text-align: left; }}
-QPushButton#periodPreset:hover, QPushButton#periodCell:hover {{ background: {P.field_hover}; }}
-QPushButton#periodPreset:checked, QPushButton#periodCell:checked {{
-    background: {P.accent_soft}; color: {P.accent}; font-weight: 600;
-}}
 """
