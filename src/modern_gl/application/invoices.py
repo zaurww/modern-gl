@@ -15,7 +15,7 @@ from datetime import date
 from modern_gl.application.books import COMMON, book_params, docs_cte
 from modern_gl.application.invoice_rules import invoice_accounts, turnover_sides
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER
-from modern_gl.infrastructure.db import Connection, Row
+from modern_gl.infrastructure.db import Connection
 
 # documents of a status: drafts too, for the e-qaimə a payment may name
 _STATUS_DOCS_CTE = docs_cte("d.id, d.doc_date, d.number, d.memo", status=":status")
@@ -46,64 +46,120 @@ class InvoiceRow:
 
 
 def gathered_invoices(
-    conn: Connection, company_id: int, params: dict, status: str = "posted"
+    conn: Connection,
+    company_id: int,
+    params: dict,
+    status: str = "posted",
+    only: str = "",
 ) -> dict[tuple[str, str], InvoiceRow]:
-    """The invoices of the documents of a status up to `date_to`, by (kind, number).
-    Postings with an invoice come first (CROSS JOIN keeps SQLite to that order): with
-    the documents first it read every invoice posting again for each document."""
-    chart = _Chart(conn, company_id)
+    """The invoices of the documents of a status up to `date_to`, by (kind, number), in
+    the order of their first posting; `only` — IN_PERIOD (a posting from `date_from`) or
+    UNPAID (a balance), chosen in SQL. What each posting counts as is worked out in SQL
+    too, by its pair of accounts (`_pairs`); here the postings are only added up."""
+    pairs = _pairs(conn, company_id)
+    if not pairs:
+        return {}
+    sql = _gathered_sql(pairs, only)
     rows: dict[tuple[str, str], InvoiceRow] = {}
-    for p in conn.execute(
-        f"""
-        WITH {_STATUS_DOCS_CTE}
-        SELECT p.*, docs.doc_date, docs.number
-        FROM postings p CROSS JOIN docs
-        WHERE docs.id = p.document_id AND p.company_id = :company_id
-          AND p.invoice IS NOT NULL
-        ORDER BY docs.doc_date, docs.number, p.line_no
-        """,
-        {**params, "status": status},
-    ):
-        kind = p["invoice_kind"] or ""
-        row = rows.setdefault((kind, p["invoice"]), InvoiceRow(p["invoice"], p["doc_date"], kind))
+    for p in conn.execute(sql, {**params, "status": status}):
+        row = rows.get((p["kind"], p["invoice"]))
+        if row is None:
+            row = rows[(p["kind"], p["invoice"])] = InvoiceRow(
+                p["invoice"], p["doc_date"], p["kind"]
+            )
         row.in_period |= p["doc_date"] >= params["date_from"]
         if (p["document_id"], p["number"]) not in row.documents:
             row.documents.append((p["document_id"], p["number"]))
-        chart.add(row, p)
+        row.debit += p["debit"]
+        row.credit += p["credit"]
+        row.vat += p["vat"]
+        row.deposit += p["deposit"]
+        for who in (p["dt_who"], p["ct_who"]):
+            if who is not None and who not in row.counterparties:
+                row.counterparties.append(who)
+        if row.contract_id is None:
+            row.contract_id = p["dt_contract"] if p["dt_contract"] is not None else p["ct_contract"]
     return rows
 
 
-class _Chart:
-    """What each account of the company is to an invoice (`invoice_rules`, D120)."""
+def _pairs(conn: Connection, company_id: int) -> str:
+    """`VALUES` of every (debit, credit) pair of accounts posted with an invoice: whether
+    each side is a settlement turnover, the position of its counterparty and contract (0:
+    none, or no turnover), whether the posting is ƏDV, a deposit payment (D41, D120)."""
+    accounts = invoice_accounts(conn, company_id)
+    found = []
+    for p in conn.execute(
+        "SELECT DISTINCT debit_account_id, credit_account_id FROM postings "
+        "WHERE company_id = ? AND invoice IS NOT NULL",
+        (company_id,),
+    ):
+        debit, credit = accounts[p[0]], accounts[p[1]]
+        turns = turnover_sides(debit, credit)
+        sides = [
+            (int(turn), (a.partner_at or 0) * turn, (a.contract_at or 0) * turn)
+            for a, turn in zip((debit, credit), turns, strict=True)
+        ]
+        vat = int(debit.vat or credit.vat)
+        deposit = int("vat_deposit" in (debit.account_type, credit.account_type))
+        values = (int(p[0]), int(p[1]), *sides[0], *sides[1], vat, deposit)
+        found.append(f"({', '.join(str(v) for v in values)})")
+    return ",\n        ".join(found)
 
-    def __init__(self, conn: Connection, company_id: int) -> None:
-        self.accounts = invoice_accounts(conn, company_id)
 
-    def add(self, row: InvoiceRow, p: Row) -> None:
-        """One posting of the invoice: settlement turnovers, partner, contract, ƏDV."""
-        debit = self.accounts[p["debit_account_id"]]
-        credit = self.accounts[p["credit_account_id"]]
-        counts = turnover_sides(debit, credit)
-        for side, prefix, account, turnover in (
-            ("debit", "dt", debit, counts[0]),
-            ("credit", "ct", credit, counts[1]),
-        ):
-            if not turnover:
-                continue
-            if side == "debit":
-                row.debit += p["amount"]
-            else:
-                row.credit += p["amount"]
-            at = account.partner_at
-            who = p[f"{prefix}_sc{at}"] if at else None
-            if who is not None and who not in row.counterparties:
-                row.counterparties.append(who)
-            if account.contract_at and row.contract_id is None:
-                row.contract_id = p[f"{prefix}_sc{account.contract_at}"]
-        if debit.vat or credit.vat:
-            row.vat += p["amount"]
-        if "vat_deposit" in (debit.account_type, credit.account_type):
-            row.deposit += p["amount"]
+def _side(column: str, prefix: str) -> str:
+    """The subconto of a side of a posting at its position in `pairs.<column>` (0: none)."""
+    cases = " ".join(f"WHEN {i} THEN p.{prefix}_sc{i}" for i in (1, 2, 3))
+    return f"CASE r.{column} {cases} END"
+
+
+IN_PERIOD, UNPAID = "in_period", "unpaid"  # which invoices `gathered_invoices` returns
+
+# what each posting with an invoice counts as, by its pair of accounts. The postings come
+# before the documents (CROSS JOIN keeps SQLite to that order): with the documents first
+# it read every invoice posting again for each document
+_LINES = f"""
+    SELECT COALESCE(p.invoice_kind, '') AS kind, p.invoice, p.document_id, p.line_no,
+           docs.doc_date, docs.number,
+           r.dt_turn * p.amount AS debit, r.ct_turn * p.amount AS credit,
+           r.vat * p.amount AS vat, r.deposit * p.amount AS deposit,
+           {_side("dt_partner", "dt")} AS dt_who, {_side("ct_partner", "ct")} AS ct_who,
+           {_side("dt_contract", "dt")} AS dt_contract,
+           {_side("ct_contract", "ct")} AS ct_contract
+    FROM {{source}} CROSS JOIN docs
+    JOIN pairs r ON r.debit_id = p.debit_account_id AND r.credit_id = p.credit_account_id
+    WHERE docs.id = p.document_id AND p.company_id = :company_id
+      AND p.invoice IS NOT NULL{{chosen}}"""
+
+# the invoices asked for, then their postings by the index on the number
+_CHOSEN = {
+    IN_PERIOD: """
+    SELECT DISTINCT COALESCE(p.invoice_kind, '') AS kind, p.invoice
+    FROM postings p CROSS JOIN docs
+    WHERE docs.id = p.document_id AND p.company_id = :company_id
+      AND p.invoice IS NOT NULL AND docs.doc_date >= :date_from""",
+    UNPAID: f"""
+    SELECT kind, invoice FROM ({_LINES.format(source="postings p", chosen="")}) a
+    GROUP BY kind, invoice HAVING SUM(debit) <> SUM(credit)""",
+}
+
+
+def _gathered_sql(pairs: str, only: str) -> str:
+    """The postings of the invoices asked for, in order (`gathered_invoices`)."""
+    head = f"""
+WITH {_STATUS_DOCS_CTE},
+pairs (debit_id, credit_id, dt_turn, dt_partner, dt_contract,
+       ct_turn, ct_partner, ct_contract, vat, deposit) AS (
+    VALUES {pairs}
+)"""
+    if only:
+        head += f",\nchosen AS ({_CHOSEN[only]}\n)"
+        lines = _LINES.format(
+            source="chosen c CROSS JOIN postings p",
+            chosen="\n      AND p.invoice = c.invoice AND COALESCE(p.invoice_kind, '') = c.kind",
+        )
+    else:
+        lines = _LINES.format(source="postings p", chosen="")
+    return f"{head}\n{lines}\nORDER BY docs.doc_date, docs.number, p.line_no"
 
 
 DRAFT, PORTAL = "draft", "portal"  # where an open e-qaimə is known from, but the books

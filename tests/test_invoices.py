@@ -123,6 +123,39 @@ def test_open_only_shows_unpaid_of_any_date(firm):
     }
 
 
+def test_sql_chooses_the_invoices_and_sums_all_their_postings(firm):
+    """The choice is made in SQL (D120 rule by pairs of accounts): a February invoice
+    paid in March is in March with its February accrual; a paid one is not open."""
+    conn, ledger, cid, acc, v = firm
+    assert invoice_report(conn, cid, "2026-03-01", "2026-03-31") == []  # no invoices yet
+    purchase_sale_payment(ledger, cid, acc, v)
+    ledger.post_new(  # March 25: Alfa's February 400 paid in full
+        cid,
+        "2026-03-25",
+        [
+            PostingInput(
+                acc["60"],
+                acc["51"],
+                "400",
+                (v["Альфа"], v["Д-1"]),
+                (v["Kapital"],),
+                invoice="MT2402005",
+            )
+        ],
+    )
+    rows = invoice_report(conn, cid, "2026-03-01", "2026-03-31")
+    # in the order of the first posting: Feb 10, Mar 5, Mar 10
+    assert [r.invoice for r in rows] == ["MT2402005", "MT2410001", "MT2410777"]
+    feb = rows[0]
+    # Kt 60 400 on Feb 10, Dt 60 400 on Mar 25: paid, dated by the accrual
+    assert (feb.credit, feb.debit, feb.balance, feb.doc_date) == (40_000, 40_000, 0, "2026-02-10")
+    unpaid = invoice_report(conn, cid, "2026-03-01", "2026-03-31", open_only=True)
+    assert {r.invoice: r.balance for r in unpaid} == {"MT2410001": -68_000, "MT2410777": 118_000}
+    # in February only the February invoice, nothing paid yet
+    (only,) = invoice_report(conn, cid, "2026-02-01", "2026-02-28")
+    assert (only.invoice, only.balance) == ("MT2402005", -40_000)
+
+
 def test_storno_keeps_the_number_and_cancels_it_out(firm):
     conn, ledger, cid, acc, v = firm
     docs = purchase_sale_payment(ledger, cid, acc, v)
