@@ -212,7 +212,7 @@ class LandedCostCommands(StockCommands):
                 raise ValidationError(
                     tr("расход {n}: в расходе в валюте НДС не указывается", n=line_no)
                 )
-            currency_id = self._currency_id(company_id, charge.currency_id)
+            currency_id = self._currency(company_id, charge.currency_id)["id"]
             rate = typed_rate(charge.currency_rate)
             value = charge.currency_amount
             currency_amount = (

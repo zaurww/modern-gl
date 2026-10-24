@@ -5,18 +5,21 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
-from modern_gl.application.common import closed_on, company_row, require_open, write_audit
+from modern_gl.application.common import closed_on, require_open
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 
 
-class InventoryBase:
+class InventoryBase(LedgerBase):
+    """The ledger's lookups (`LedgerBase`), the warehouse's own, and the catalog kept while
+    documents are recalculated."""
+
     def __init__(self, conn: Connection, actor: str = "local") -> None:
-        self.conn = conn
-        self.actor = actor
+        super().__init__(conn, actor)
         self.ledger = Ledger(conn, actor=actor)
         # rows of the catalog (items, warehouses, accounts, subconto) kept while documents
         # are recalculated: nothing there changes meanwhile (debt 6, ~100 000 lookups a year)
@@ -39,9 +42,6 @@ class InventoryBase:
         if key not in self._kept:
             self._kept[key] = read()
         return self._kept[key]  # type: ignore[return-value]
-
-    def _company(self, company_id: int) -> Row:
-        return company_row(self.conn, company_id)
 
     def _unit(self, company_id: int, unit_id: int) -> Row:
         row = self.conn.execute(
@@ -105,42 +105,17 @@ class InventoryBase:
             raise NotFoundError(tr("вид дополнительных расходов не найден"))
         return row
 
-    def _account(self, company_id: int, account_id: int) -> Row:
+    def _account(self, company_id: int, account: int | str) -> Row:
         return self._kept_row(
-            ("account", company_id, account_id), lambda: self._read_account(company_id, account_id)
+            ("account", company_id, account),
+            lambda: super(InventoryBase, self)._account(company_id, account),
         )
-
-    def _read_account(self, company_id: int, account_id: int) -> Row:
-        row = self.conn.execute(
-            "SELECT * FROM accounts WHERE company_id = ? AND id = ?",
-            (company_id, account_id),
-        ).fetchone()
-        if row is None:
-            raise NotFoundError(tr("счёт не найден"))
-        return row
 
     def _subconto_value(self, company_id: int, value_id: int) -> Row:
         return self._kept_row(
-            ("value", company_id, value_id), lambda: self._read_subconto_value(company_id, value_id)
+            ("value", company_id, value_id),
+            lambda: super(InventoryBase, self)._subconto_value(company_id, value_id),
         )
-
-    def _read_subconto_value(self, company_id: int, value_id: int) -> Row:
-        row = self.conn.execute(
-            "SELECT * FROM subconto_values WHERE company_id = ? AND id = ?",
-            (company_id, value_id),
-        ).fetchone()
-        if row is None:
-            raise NotFoundError(tr("элемент справочника не найден"))
-        return row
-
-    def _kind_id(self, company_id: int, code: str) -> int:
-        row = self.conn.execute(
-            "SELECT id FROM subconto_kinds WHERE company_id = ? AND code = ?",
-            (company_id, code),
-        ).fetchone()
-        if row is None:
-            raise ValidationError(tr("не найден справочник {code}", code=code))
-        return row["id"]
 
     def _document(self, company_id: int, document_id: int) -> Row:
         row = self.conn.execute(
@@ -170,14 +145,6 @@ class InventoryBase:
             "SELECT * FROM landed_cost_charges WHERE document_id = ? ORDER BY line_no",
             (document_id,),
         ).fetchall()
-
-    def _currency_id(self, company_id: int, currency_id: int) -> int:
-        row = self.conn.execute(
-            "SELECT id FROM currencies WHERE company_id = ? AND id = ?", (company_id, currency_id)
-        ).fetchone()
-        if row is None:
-            raise NotFoundError(tr("валюта не найдена"))
-        return row["id"]
 
     def _closed(self, doc: Row) -> bool:
         return closed_on(self._company(doc["company_id"]), doc["doc_date"])
@@ -316,8 +283,3 @@ class InventoryBase:
                 for row in self._charges(doc["id"])
             ],
         }
-
-    def _audit(
-        self, company_id: int, entity: str, entity_id: int, action: str, details: dict
-    ) -> None:
-        write_audit(self.conn, company_id, self.actor, entity, entity_id, action, details)

@@ -187,7 +187,7 @@ class DraftCommands(InventoryBase):
             raise ValidationError(tr("в валюте может быть только поступление"))
         self.conn.execute(
             "UPDATE inventory_documents SET currency_id = ?, currency_rate = ? WHERE id = ?",
-            (self._currency_id(company_id, currency_id), typed_rate(rate), document_id),
+            (self._currency(company_id, currency_id)["id"], typed_rate(rate), document_id),
         )
 
     def _set_invoice(
