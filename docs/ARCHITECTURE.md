@@ -40,7 +40,7 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 
 | Точка | Что даёт | Где |
 |---|---|---|
-| `document_owners` (представление) | Чей GL-документ: модуль создал (`made`) или взял (`uses`); журнал не даёт его править | миграция 0032 + миграция модуля, `explain_owner` |
+| `document_owners` (представление) | Чей GL-документ: модуль создал (`made`) или взял (`uses`), его документ (`owner_id`); журнал не даёт его править, окно открывает документ модуля | миграции 0032, 0044 + миграция модуля, `explain_owner`; читать — `queries.document_owner` |
 | `rebuild_postings(company_id, since)` | Модуль строит свои проводки заново с даты | `application/rebuild.py`, `tests/test_rebuild.py` |
 | `attention_source` | Строки «Diqqət tələb edir» на «Bu gün» | `reporting/overview.py` |
 | Команды и места Ctrl+K | Что предлагает палитра | `desktop/main_window/commands.py` |
