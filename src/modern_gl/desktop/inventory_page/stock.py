@@ -74,6 +74,9 @@ class StockPart(InventoryForm):
     def focus_table(self) -> None:
         self.table.setFocus()
 
+    def has_stock(self) -> bool:
+        return self.model.rowCount() > 0
+
     def chosen_balance(self) -> StockBalance | None:
         """The stock row the movements are of; a group header or nothing — none."""
         index = self.table.currentIndex()

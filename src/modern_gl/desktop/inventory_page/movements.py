@@ -71,7 +71,7 @@ class MovementsPart(InventoryForm):
         balance = self.chosen_balance()
         if balance is None:
             self.below_title.setText("")
-            if self.model.rowCount():
+            if self.has_stock():
                 self.card_empty.say(
                     tr("Выберите товар"), tr("Здесь будет видно, откуда он пришёл и куда ушёл.")
                 )
