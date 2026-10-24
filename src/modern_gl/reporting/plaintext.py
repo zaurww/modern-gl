@@ -38,7 +38,7 @@ def hledger_journal(
     values = _subconto_names(conn, company_id)
     out = _header(conn, company_id, params["date_to"], layers, generated)
     out += _declarations(accounts, names)
-    for doc, postings in _documents(conn, params):
+    for doc, postings in posted_documents(conn, params):
         out.append("")
         out.append(_transaction_line(doc))
         for p in postings:
@@ -125,7 +125,9 @@ def _subconto_names(conn: Connection, company_id: int) -> dict[int, tuple[str, s
     }
 
 
-def _documents(conn: Connection, params: dict) -> list[tuple[Row, list[Row]]]:
+def posted_documents(conn: Connection, params: dict) -> list[tuple[Row, list[Row]]]:
+    """Posted documents of the book (`book_params`) with their postings, in date order;
+    the exchange file reads them too (`reporting/exchange.py`)."""
     rows = conn.execute(
         f"""
         WITH {_DOCS_CTE}

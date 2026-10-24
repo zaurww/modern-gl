@@ -14,12 +14,15 @@ Expected ОСВ for March 2026 (hand-calculated; February closing is the opening
 from __future__ import annotations
 
 import copy
+import json
 
 import pytest
 
 from modern_gl.application.exchange import FormatError, import_batch, parse_batch
 from modern_gl.application.queries import load_document
+from modern_gl.reporting.exchange import documents_file
 from modern_gl.reporting.reports import trial_balance
+from tests.conftest import build_demo
 
 FILE = {
     "format": "modern-gl/documents",
@@ -174,3 +177,36 @@ def test_an_amount_is_text_not_a_float(demo):
     data["documents"][0]["postings"][0]["amount"] = 150.0
     outcome = import_batch(demo.ledger, demo.company_id, parse_batch(data))
     assert "сумма — строкой" in outcome.errors[0][1]
+
+
+def test_posted_documents_go_out_in_the_same_format(demo):
+    data = documents_file(demo.ledger.conn, demo.company_id, "2026-01-01", "2026-02-28")
+    assert data["source"] == "modern-gl/ООО Тест" and len(data["documents"]) == 6
+    assert data["documents"][1] == {
+        "id": "2",
+        "date": "2026-01-10",
+        "memo": "",
+        "layer": "common",
+        "postings": [
+            {
+                "debit": "201",
+                "credit": "531",
+                "amount": "1200.00",
+                "credit_subconto": ["Поставщик A"],
+            }
+        ],
+    }
+
+
+def test_a_period_goes_into_another_company_and_adds_up(demo):
+    """The second company has the same chart and the same six documents: February's
+    turnovers double — 201 Dt 500 → 1 000, Ct 300 → 600."""
+    data = json.loads(
+        json.dumps(documents_file(demo.ledger.conn, demo.company_id, "2026-01-01", "2026-02-28"))
+    )
+    other = build_demo(demo.ledger, "ООО Другая")
+    outcome = import_batch(other.ledger, other.company_id, parse_batch(data), post=True)
+    assert outcome.ok and len(outcome.created) == 6
+    osv = trial_balance(other.ledger.conn, other.company_id, "2026-02-01", "2026-02-28")
+    row = next(r for r in osv.rows if r.code == "201")
+    assert (row.opening_dt, row.turnover_dt, row.turnover_ct) == (240_000, 100_000, 60_000)

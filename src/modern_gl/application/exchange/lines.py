@@ -17,6 +17,7 @@ LINE_KEYS = {
     "amount",
     "memo",
     "e_qaime",
+    "customs",  # the number of a customs declaration instead of an e-qaimə
     "currency",
     "currency_amount",
 }
@@ -38,6 +39,8 @@ def _line(cat: Catalog, i: int, p: object, exact: bool) -> PostingInput:
     debit = cat.resolve_account(str(p.get("debit", "")), exact)
     credit = cat.resolve_account(str(p.get("credit", "")), exact)
     currency = cat.resolve_currency(p["currency"]).id if p.get("currency") else None
+    if p.get("e_qaime") and p.get("customs"):
+        raise ValueError(tr("строка {line}: e-qaimə или декларация — одно из двух", line=i))
     return PostingInput(
         debit.id,
         credit.id,
@@ -47,7 +50,8 @@ def _line(cat: Catalog, i: int, p: object, exact: bool) -> PostingInput:
         str(p.get("memo") or ""),
         currency,
         _amount(i, p["currency_amount"]) if p.get("currency_amount") is not None else None,
-        str(p.get("e_qaime") or ""),
+        str(p.get("e_qaime") or p.get("customs") or ""),
+        "customs" if p.get("customs") else "",
     )
 
 

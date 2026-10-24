@@ -1910,4 +1910,5 @@ AZ: dict[str, str] = {
     '{where}: "memo" — строка': '{where}: "memo" — sətir olmalıdır',
     "{where}: лишние поля {keys}": "{where}: artıq sahələr {keys}",
     '{where}: дата — "ГГГГ-ММ-ДД", например "2026-03-05"': '{where}: tarix — "İİİİ-AA-GG", məsələn "2026-03-05"',
+    "строка {line}: e-qaimə или декларация — одно из двух": "sətir {line}: e-qaimə və ya bəyannamə — ikisindən biri",
 }
