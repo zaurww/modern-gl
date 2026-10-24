@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QHeaderView, QMessageBox, QTableView
+from PySide6.QtWidgets import QMessageBox, QTableView
 
 from modern_gl.desktop.inventory_page.form import InventoryForm
+from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate
-from modern_gl.desktop.widgets import list_table, ru_date
+from modern_gl.desktop.widgets import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import InventoryDocumentSummary, list_inventory_documents
@@ -17,7 +18,7 @@ from modern_gl.reporting.inventory import InventoryDocumentSummary, list_invento
 class DocumentsPart(InventoryForm):
     def _build_documents(self) -> QTableView:
         self.documents_model = ReportModel()
-        self.documents = list_table(self.documents_model, ROW_HEIGHT, wrap=False)
+        self.documents = ListTable(self.documents_model, ROW_HEIGHT, wrap=False)
         self.documents.setItemDelegate(ReportDelegate(self.documents))  # as the stock above
         self.documents.doubleClicked.connect(
             lambda index: self._open_document(index.data(Qt.ItemDataRole.UserRole))
@@ -46,17 +47,11 @@ class DocumentsPart(InventoryForm):
                     width=105,
                 ),
                 Column(tr("Статья расходов"), lambda row: row.cost_type_name, width=160),
-                Column(tr("Комментарий"), lambda row: row.memo, width=260),
+                Column(tr("Комментарий"), lambda row: row.memo),
                 Column(tr("Сумма"), lambda row: row.amount, money=True, width=130),
             ],
             documents,
         )
-        docs_header = self.documents.horizontalHeader()
-        for index, column in enumerate(self.documents_model.columns):
-            docs_header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)
-            if column.width:
-                self.documents.setColumnWidth(index, column.width)
-        docs_header.setStretchLastSection(True)
 
     @staticmethod
     def _document_type(doc_type: str) -> str:

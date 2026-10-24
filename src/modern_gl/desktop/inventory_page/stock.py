@@ -8,7 +8,6 @@ from itertools import groupby
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
-    QHeaderView,
     QInputDialog,
     QStackedLayout,
     QVBoxLayout,
@@ -23,8 +22,8 @@ from modern_gl.desktop.inventory_page.dialogs import (
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.inventory_page.movements import source_text
 from modern_gl.desktop.reports_page import Column, ReportModel
-from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate, fit_rows
-from modern_gl.desktop.widgets import EmptyState, hide_when_viewing, list_table, money, ru_date
+from modern_gl.desktop.reports_page.report_table import ReportTable, SelectionMode
+from modern_gl.desktop.widgets import EmptyState, hide_when_viewing, money, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -51,8 +50,7 @@ class StockGroup:
 class StockPart(InventoryForm):
     def _build_stock(self, root: QVBoxLayout) -> None:
         self.model = ReportModel()
-        self.table = list_table(self.model, ROW_HEIGHT, wrap=False)  # a report: as dense (D127)
-        self.table.setItemDelegate(ReportDelegate(self.table))  # drawn as every report
+        self.table = ReportTable(self.model, SelectionMode.SingleSelection)  # a report (D127)
         self.table.doubleClicked.connect(  # the item: its name, group, unit, account
             lambda index: self.edit_item(index.data(Qt.ItemDataRole.UserRole))
         )
@@ -131,6 +129,7 @@ class StockPart(InventoryForm):
                         else format_quantity(row.quantity, row.precision)
                     ),
                     width=130,
+                    right=True,
                 ),
                 Column(tr("Ед."), lambda row: getattr(row, "unit_code", ""), width=80),
                 Column(tr("Средняя цена"), average, money=True, width=130),
@@ -140,13 +139,7 @@ class StockPart(InventoryForm):
             emphasis=lambda row: isinstance(row, StockGroup),
             section=lambda row: isinstance(row, StockGroup),
         )
-        fit_rows(self.table, self.model)
-        header = self.table.horizontalHeader()
-        for index, column in enumerate(self.model.columns):
-            header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)
-            if column.width:
-                self.table.setColumnWidth(index, column.width)
-        header.setStretchLastSection(True)
+        self.table.layout_columns()
         self.stack.setCurrentWidget(self.table if rows else self.empty)
         if not rows:
             self._say_what_next()

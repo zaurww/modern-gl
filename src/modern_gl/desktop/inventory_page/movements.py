@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QHeaderView,
     QStackedWidget,
     QWidget,
 )
@@ -13,8 +12,8 @@ from PySide6.QtWidgets import (
 from modern_gl.application.inventory import INCOMING_REASONS, format_quantity
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.reports_page import Column, ReportModel
-from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate
-from modern_gl.desktop.widgets import EmptyState, list_table, ru_date
+from modern_gl.desktop.reports_page.report_table import ReportTable, SelectionMode
+from modern_gl.desktop.widgets import EmptyState, ru_date
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     MovementSource,
@@ -52,8 +51,7 @@ def source_text(source: MovementSource, counterparty: bool = True) -> str:
 class MovementsPart(InventoryForm):
     def _build_movements(self) -> QWidget:
         self.card_model = ReportModel()
-        self.card = list_table(self.card_model, ROW_HEIGHT, wrap=False)  # as the stock above
-        self.card.setItemDelegate(ReportDelegate(self.card))
+        self.card = ReportTable(self.card_model, SelectionMode.SingleSelection)  # as the stock
         self.card.doubleClicked.connect(self._open_movement)
         for keys in ("Return", "Enter"):  # only on the list
             shortcut = QShortcut(QKeySequence(keys), self.card)
@@ -95,9 +93,18 @@ class MovementsPart(InventoryForm):
                 Column(tr("Дата"), lambda line: ru_date(line.doc_date), width=110),
                 Column(tr("№"), lambda line: line.number, width=65),
                 Column(tr("Откуда / куда"), lambda line: source_text(line.source), width=380),
-                Column(tr("Приход"), lambda line: quantity(line.quantity_in), width=110),
-                Column(tr("Расход"), lambda line: quantity(line.quantity_out), width=110),
-                Column(tr("Остаток"), lambda line: quantity(line.quantity_balance), width=110),
+                Column(
+                    tr("Приход"), lambda line: quantity(line.quantity_in), width=110, right=True
+                ),
+                Column(
+                    tr("Расход"), lambda line: quantity(line.quantity_out), width=110, right=True
+                ),
+                Column(
+                    tr("Остаток"),
+                    lambda line: quantity(line.quantity_balance),
+                    width=110,
+                    right=True,
+                ),
                 Column(
                     tr("Стоимость остатка"),
                     lambda line: line.amount_balance,
@@ -107,12 +114,7 @@ class MovementsPart(InventoryForm):
             ],
             lines,
         )
-        header = self.card.horizontalHeader()
-        for index, column in enumerate(self.card_model.columns):
-            header.setSectionResizeMode(index, QHeaderView.ResizeMode.Interactive)
-            if column.width:
-                self.card.setColumnWidth(index, column.width)
-        header.setStretchLastSection(True)
+        self.card.layout_columns()
         self.card_stack.setCurrentWidget(self.card)
         self.card.scrollToBottom()  # the latest movements, nearest the balance above
 

@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import date
 from typing import ClassVar, cast
 
-from PySide6.QtCore import QAbstractItemModel, QEvent, QObject, QPoint, QRect, QSize, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, QSize, Qt
 from PySide6.QtGui import QFontMetrics, QHelpEvent, QIcon, QPainter
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMenu,
     QPushButton,
-    QTableView,
     QToolTip,
     QVBoxLayout,
     QWidget,
@@ -91,29 +90,6 @@ def button(text: str, kind: str = "", tooltip: str = "") -> QPushButton:
         b.setToolTip(tooltip)
     b.setCursor(Qt.CursorShape.PointingHandCursor)
     return b
-
-
-def list_table(
-    model: QAbstractItemModel | None,
-    row_height: int = 34,
-    *,
-    wrap: bool = True,
-    selection: QAbstractItemView.SelectionMode = QAbstractItemView.SelectionMode.SingleSelection,
-) -> QTableView:
-    """A read-only list (D86): rows chosen whole, no grid, no row numbers, not edited."""
-    table = QTableView()
-    table.setObjectName("list")
-    if model is not None:  # else set once it is made
-        table.setModel(model)
-    table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-    table.setSelectionMode(selection)
-    table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-    table.setShowGrid(False)
-    table.setWordWrap(wrap)
-    table.verticalHeader().hide()
-    table.verticalHeader().setDefaultSectionSize(row_height)
-    table.horizontalHeader().setHighlightSections(False)
-    return table
 
 
 def hide_when_viewing(read_only: bool, *widgets: QWidget) -> None:

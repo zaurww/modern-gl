@@ -13,7 +13,6 @@ from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.ledger import TemplateLine
 from modern_gl.application.queries import TemplateData, list_templates, load_template
+from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.postings import PostingRow, PostingsDelegate, PostingsModel, PostingsTable
 from modern_gl.desktop.reports_page import Column, ReportModel
@@ -35,7 +35,6 @@ from modern_gl.desktop.widgets import (
     button,
     enter_goes_on,
     hide_when_viewing,
-    list_table,
     money,
 )
 from modern_gl.domain import formula
@@ -66,8 +65,7 @@ class TemplatesPage(QWidget):
         root.addWidget(self.header)
 
         self.model = ReportModel()
-        self.table = list_table(self.model, 36, wrap=False)
-        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table = ListTable(self.model, 36, wrap=False)
         self.table.doubleClicked.connect(lambda idx: self._use(self._at(idx)))
         self.empty = EmptyState(
             "○",
@@ -128,17 +126,12 @@ class TemplatesPage(QWidget):
 
         self.model.set(
             [
-                Column(tr("Название"), lambda t: t.name, width=340),
+                Column(tr("Название"), lambda t: t.name),
                 Column(tr("Дт → Кт"), entries, width=360),
                 Column(tr("Суммы"), amounts),
             ],
             templates,
         )
-        hh = self.table.horizontalHeader()
-        for i, col in enumerate(self.model.columns):
-            if col.width:
-                hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
-                self.table.setColumnWidth(i, col.width)
         self.stack.setCurrentWidget(self.table if templates else self.empty)
         row = next((i for i, t in enumerate(templates) if t.id == select_id), 0)
         if templates:

@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.currencies import CurrencyInfo, Rate, latest_rates, list_rates
 from modern_gl.application.default_accounts import EXCHANGE_GAIN, EXCHANGE_LOSS, default_account
+from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -43,7 +44,6 @@ from modern_gl.desktop.widgets import (
     date_edit,
     edited_date,
     hide_when_viewing,
-    list_table,
     ru_date,
 )
 from modern_gl.domain.currency import KNOWN, currency_name, format_rate, parse_rate
@@ -161,7 +161,7 @@ class CurrenciesPage(QWidget):
 
     def _build_table(self) -> None:
         self.model = ReportModel()
-        self.table = list_table(self.model, 34)
+        self.table = ListTable(self.model, 34)
         self.table.doubleClicked.connect(lambda idx: self.edit_rate(self._rate_at(idx)))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._rate_menu)

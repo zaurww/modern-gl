@@ -10,7 +10,6 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QApplication,
     QCheckBox,
     QComboBox,
@@ -19,7 +18,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QStackedLayout,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +25,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application import journal_import
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.journal_import import ImportPlan, Row
+from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -81,16 +80,7 @@ class ImportPage(QWidget):
         self.add_new.toggled.connect(lambda _: self.rebuild())
 
         self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setModel(self.model)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.setWordWrap(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(32)
-        self.table.horizontalHeader().setHighlightSections(False)
+        self.table = ListTable(self.model, 32, wrap=False)
         self.empty = EmptyState(
             "⇩",
             tr("Вставьте таблицу из Excel"),

@@ -7,7 +7,6 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QHeaderView,
     QInputDialog,
     QLabel,
     QListWidget,
@@ -19,10 +18,11 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.desktop.icons import icon
+from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, hide_when_viewing, list_table
+from modern_gl.desktop.widgets import EmptyState, PageHeader, button, hide_when_viewing
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 
@@ -102,7 +102,7 @@ class DirectoriesForm(QWidget):
     def _build_table(self) -> None:
         """The elements: rows to pick, no grid, F2 or a double click to edit."""
         self.model = ReportModel()
-        self.table = list_table(self.model, 34)
+        self.table = ListTable(self.model, 34)
         self.table.doubleClicked.connect(lambda idx: self.rename_value(self._value_at(idx)))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._context_menu)
@@ -164,28 +164,20 @@ class DirectoriesForm(QWidget):
                 icon=(lambda v: icon("folder", P.tertiary) if v.is_group else None),
             ),
         ]
-        widths = []
         owner_kind = cat.owner_kinds.get(kind_id)
         if owner_kind is not None:  # contracts: whose each one is, grouped by counterparty
             columns.append(Column(cat.owner_title(kind_id), self._owner_name, width=260))
-            widths.append(260)
             if not grouped:
                 values.sort(key=lambda v: (v.owner_id is not None, sort_key(self._owner_name(v))))
         if cat.has_tax_id(kind_id):
             columns.append(Column(tr("VÖEN"), self._tax_text, width=260))
-            widths.append(260)
         if any(a.currency for a in accounts):
             columns.append(Column(tr("Валюта"), self._currency_code, width=120))
-            widths.append(120)
         if any(v.tags for v in values):
             columns.append(Column(tr("Метки"), cat.tag_text, width=260))
-            widths.append(260)
         if grouped:  # each group followed by what it holds
             values = [value for _, value in tree]
         self.model.set(columns, values, emphasis=lambda v: v.is_group, muted=lambda v: not v.active)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for col, width in enumerate(widths, start=1):
-            self.table.setColumnWidth(col, width)
         self.stack.setCurrentWidget(self.table if values else self.empty)
         if select_value is not None:
             row = next((i for i, v in enumerate(values) if v.id == select_value), None)

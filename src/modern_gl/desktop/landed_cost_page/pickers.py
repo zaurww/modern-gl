@@ -28,12 +28,12 @@ from modern_gl.application.inventory import (
     format_quantity,
     unit_price,
 )
+from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     button,
-    list_table,
     money,
 )
 from modern_gl.domain.currency import format_unit_rate, unit_rate
@@ -51,7 +51,7 @@ from modern_gl.reporting.inventory.costs import BatchCharge
 
 
 def _list(selection: QAbstractItemView.SelectionMode) -> QTableView:
-    return list_table(None, 32, selection=selection)
+    return ListTable(None, 32, selection=selection)
 
 
 class PickerDialog(QDialog):

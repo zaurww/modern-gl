@@ -14,7 +14,6 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QHeaderView,
     QLineEdit,
     QMessageBox,
     QStackedLayout,
@@ -29,6 +28,7 @@ from modern_gl.application.queries import (
     document_years,
     list_documents,
 )
+from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.reason_dialog import confirm_delete
 from modern_gl.desktop.session import Session
@@ -39,7 +39,6 @@ from modern_gl.desktop.widgets import (
     PageHeader,
     button,
     hide_when_viewing,
-    list_table,
     menu_button,
     money,
     ru_date,
@@ -209,19 +208,7 @@ class JournalPage(QWidget):
         return self.header
 
     def _build_table(self, session: Session) -> None:
-        self.table = list_table(self.proxy, 36, wrap=False)
-        hh = self.table.horizontalHeader()
-        hh.setHighlightSections(False)
-        for col, width in (
-            (DATE, 110),
-            (NUMBER, 60),
-            (BOOK, 190),
-            (AUTHOR, 130),
-            (TOTAL, 140),
-            (STATUS, 160),
-        ):
-            self.table.setColumnWidth(col, width)
-        hh.setSectionResizeMode(MEMO, QHeaderView.ResizeMode.Stretch)
+        self.table = ListTable(self.proxy, 36, fill=MEMO, wrap=False)
         self.table.setColumnHidden(BOOK, not session.parallel_books)  # one book (D63)
         self.table.doubleClicked.connect(self._open_current)
 
