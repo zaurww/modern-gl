@@ -200,3 +200,54 @@ def test_the_counterparty_of_a_line_has_one_rule():
         if "offset_sc" in (text := path.read_text(encoding="utf-8")) and "'counterparty'" in text
     ]
     assert not bad, f"контрагент строки выбирается вручную: {bad} — inventory_line_counterparties"
+
+
+# The layers and their order (docs/ARCHITECTURE.md, § 1; D121): a layer imports only itself
+# and the layers below it. `i18n` is the bottom (texts), `domain` knows no SQL, `infrastructure`
+# is the engine and the files, `application` the scenarios and the shared reading,
+# `reporting` the reports over them; the top is everything that shows or serves.
+LAYERS: list[tuple[str, ...]] = [
+    ("i18n", "i18n_az"),
+    ("domain",),
+    ("infrastructure",),
+    ("application",),
+    ("reporting",),
+    ("desktop", "assistant", "demo_data", "demo_year"),
+]
+
+
+def _layer_of(module: str) -> int | None:
+    name = module.removeprefix("modern_gl.").split(".")[0]
+    for level, names in enumerate(LAYERS):
+        if name in names:
+            return level
+    return None
+
+
+def _layer_files(names: tuple[str, ...]) -> list[Path]:
+    found = []
+    for name in names:
+        found += files(name) if (SRC / name).is_dir() else [SRC / f"{name}.py"]
+    return sorted(found)
+
+
+@pytest.mark.parametrize("level", range(len(LAYERS)), ids=lambda i: "+".join(LAYERS[i]))
+def test_layers_depend_downwards_only(level):
+    bad = {}
+    for path in _layer_files(LAYERS[level]):
+        above = sorted(
+            m for m in imports(path) if m.startswith("modern_gl") and (_layer_of(m) or 0) > level
+        )
+        if above:
+            bad[rel(path)] = above
+    assert not bad, (
+        f"слой {'+'.join(LAYERS[level])} импортирует слои выше себя: {bad} — "
+        "зависимости только сверху вниз (docs/ARCHITECTURE.md, § 1)"
+    )
+
+
+def test_every_package_has_a_layer():
+    """A new top-level package or module takes its place in LAYERS first."""
+    names = {p.stem if p.is_file() else p.name for p in SRC.iterdir() if not p.name.startswith("_")}
+    known = {name for names in LAYERS for name in names}
+    assert names - known == set(), f"не в LAYERS: {sorted(names - known)}"

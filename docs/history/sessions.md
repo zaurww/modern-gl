@@ -264,3 +264,25 @@
   сверенного периода — в программе сразу, на портале после загрузки; общий
   `deposit_fetch.reconciled_changes`. **Ошибка из PR #48:** в окнах ƏDV DH поле периода
   растягивалось на всю ширину (▾ ‹ › врозь) — теперь своей ширины (тест).
+
+## Сессия 49 — 2026-10-24, ветка `claude/session-49` (D121)
+- Пользователь: «не могу оценить, насколько структурно и логично выстроена программа…
+  чтобы другие специалисты не пугались и не путались» → аудит, затем «всё это нужно
+  исправлять… best practice… при добавлении нового всё подчинено принципам».
+- **Аудит** нашёл: ARCHITECTURE обещал «зависимости сверху вниз», код нарушал —
+  `infrastructure/workspace.py` и `chart_csv.py` импортировали `Ledger`; `application` ↔
+  `reporting` — цикл (по 4 импорта в каждую сторону); тест архитектуры направление слоёв не
+  проверял. В корне не было README — человек видел только `CLAUDE.md`. Три языка (код —
+  английский, документы — русский, интерфейс — az/ru) нигде не были закреплены.
+- **Переносы без изменения логики**, по коммиту на каждый: `chart_csv` → `application`
+  (CSV-файлы остались в `infrastructure/templates`); `Workspace` → `application`, операции
+  движка с файлом (имя, версия, копия, одна компания из общего файла) —
+  `infrastructure/company_file.py`; книги (`COMMON`, `docs_cte`, `book_params` ← `_params`) →
+  `application/books.py`; реестр `attention_source` → `application/attention.py`;
+  `allocated_sql` → `inventory/landed_cost.py`; сбор проводок по номеру e-qaimə
+  (`gathered_invoices` ← `_gathered`), `open_invoices`, `invoice_rules` → `application`.
+- **Тест** `test_layers_depend_downwards_only` + `LAYERS` (новый пакет — сначала туда);
+  `README.md` для человека (в `test_docs_size`); ENGINEERING 1.4 и 4.9 (языки); CLAUDE.md
+  «Структура» и правило слоёв; ARCHITECTURE § 1, 3–5.
+- Не трогали (сознательно): `Ledger` из классов-команд (документированный приём, D71);
+  «Долг» 4–5 (индексы и `company_id` в старых таблицах — по замерам, отдельная миграция).
