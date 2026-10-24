@@ -289,6 +289,7 @@ AZ: dict[str, str] = {
     "Файлы компаний (*.gl *.db);;Все файлы (*)": "Şirkət faylları (*.gl *.db);;Bütün fayllar (*)",
     "Добавить из файла": "Fayldan əlavə et",
     "Это не файл компании: {file}": "Bu, şirkət faylı deyil: {file}",
+    "это не файл компании Modern GL": "bu, Modern GL şirkət faylı deyil",
     "Добавлено компаний: {n}": "Əlavə edilən şirkətlər: {n}",
     "Компания «{name}» удалена (файл в папке «{trash}»)": "«{name}» şirkəti silindi (fayl «{trash}» qovluğundadır)",
     "Нет компании": "Şirkət yoxdur",

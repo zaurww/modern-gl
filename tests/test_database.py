@@ -8,7 +8,7 @@ import sqlite3
 import pytest
 
 from modern_gl.demo_data import create_demo_company
-from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
+from modern_gl.infrastructure.db import APPLICATION_ID, MIGRATIONS_DIR, close, connect
 
 # A migration is never edited once written (CLAUDE.md); a new one is added here with its hash.
 FROZEN = {
@@ -57,6 +57,7 @@ FROZEN = {
     "0043_awaits_invoice.sql": "2297aebcf3e8dbb3",
     "0044_document_owner_ids.sql": "229ad0a9b7d6b115",
     "0045_line_counterparties.sql": "1aa158be48f2f26c",
+    "0046_query_indexes.sql": "c9c524291c9fe367",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).
@@ -226,6 +227,43 @@ def test_the_receipts_of_an_item_are_found_by_its_index(db):
         )
     )
     assert "inventory_lines_by_item" in plan
+
+
+def plan(db: sqlite3.Connection, sql: str) -> str:
+    return " ".join(r[3] for r in db.execute("EXPLAIN QUERY PLAN " + sql))
+
+
+def test_the_journal_reads_a_period_by_the_date_index(db):
+    """Session 49: the index of 0001 starts with the status, so a period of the journal
+    (every status) read all the company's documents and sorted them in a temporary tree."""
+    found = plan(
+        db,
+        "SELECT id FROM documents WHERE company_id = 1 AND doc_date >= '2026-01-01' "
+        "AND doc_date <= '2026-01-31' ORDER BY doc_date, number",
+    )
+    assert "documents_by_date" in found
+    assert "TEMP B-TREE" not in found
+
+
+def test_the_contracts_of_a_counterparty_are_found_by_index(db):
+    found = plan(db, "SELECT id FROM subconto_values WHERE company_id = 1 AND owner_id = 2")
+    assert "subconto_values_owner" in found
+
+
+def test_a_company_file_declares_itself(tmp_path):
+    """A file of another program is refused before its tables are read (0046)."""
+    path = tmp_path / "own.gl"
+    close(connect(path))
+    with sqlite3.connect(path) as own:
+        assert own.execute("PRAGMA application_id").fetchone()[0] == APPLICATION_ID
+    own.close()
+    foreign = tmp_path / "other.gl"
+    with sqlite3.connect(foreign) as other:
+        other.execute("PRAGMA application_id = 12345")
+    other.close()
+    with pytest.raises(sqlite3.DatabaseError):
+        connect(foreign)
+    assert foreign.with_name("other.gl-wal").exists() is False  # the file was not touched
 
 
 def test_demo_company_is_consistent(ledger):
