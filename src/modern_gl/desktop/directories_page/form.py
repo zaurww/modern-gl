@@ -6,7 +6,6 @@ from __future__ import annotations
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
     QInputDialog,
@@ -14,7 +13,6 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QStackedLayout,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -24,7 +22,7 @@ from modern_gl.desktop.icons import icon
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, hide_when_viewing
+from modern_gl.desktop.widgets import EmptyState, PageHeader, button, hide_when_viewing, list_table
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 
@@ -104,16 +102,7 @@ class DirectoriesForm(QWidget):
     def _build_table(self) -> None:
         """The elements: rows to pick, no grid, F2 or a double click to edit."""
         self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setObjectName("list")
-        self.table.setModel(self.model)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(34)
-        self.table.horizontalHeader().setHighlightSections(False)
+        self.table = list_table(self.model, 34)
         self.table.doubleClicked.connect(lambda idx: self.rename_value(self._value_at(idx)))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._context_menu)

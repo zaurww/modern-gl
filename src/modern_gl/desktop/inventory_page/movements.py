@@ -5,17 +5,15 @@ from __future__ import annotations
 from PySide6.QtCore import QModelIndex, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QHeaderView,
     QStackedWidget,
-    QTableView,
     QWidget,
 )
 
 from modern_gl.application.inventory import INCOMING_REASONS, format_quantity
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.reports_page import Column, ReportModel
-from modern_gl.desktop.widgets import EmptyState, ru_date
+from modern_gl.desktop.widgets import EmptyState, list_table, ru_date
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     MovementSource,
@@ -53,15 +51,7 @@ def source_text(source: MovementSource, counterparty: bool = True) -> str:
 class MovementsPart(InventoryForm):
     def _build_movements(self) -> QWidget:
         self.card_model = ReportModel()
-        self.card = QTableView()
-        self.card.setObjectName("list")
-        self.card.setModel(self.card_model)
-        self.card.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.card.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.card.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.card.setShowGrid(False)
-        self.card.verticalHeader().hide()
-        self.card.verticalHeader().setDefaultSectionSize(32)
+        self.card = list_table(self.card_model, 32)
         self.card.doubleClicked.connect(self._open_movement)
         for keys in ("Return", "Enter"):  # only on the list
             shortcut = QShortcut(QKeySequence(keys), self.card)

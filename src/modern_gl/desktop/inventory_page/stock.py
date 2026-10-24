@@ -7,12 +7,10 @@ from itertools import groupby
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QDialog,
     QHeaderView,
     QInputDialog,
     QStackedLayout,
-    QTableView,
     QVBoxLayout,
 )
 
@@ -25,7 +23,7 @@ from modern_gl.desktop.inventory_page.dialogs import (
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.inventory_page.movements import source_text
 from modern_gl.desktop.reports_page import Column, ReportModel
-from modern_gl.desktop.widgets import EmptyState, money, ru_date
+from modern_gl.desktop.widgets import EmptyState, list_table, money, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -52,14 +50,7 @@ class StockGroup:
 class StockPart(InventoryForm):
     def _build_stock(self, root: QVBoxLayout) -> None:
         self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setObjectName("list")
-        self.table.setModel(self.model)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table = list_table(self.model, 36)
         self.table.doubleClicked.connect(  # the item: its name, group, unit, account
             lambda index: self.edit_item(index.data(Qt.ItemDataRole.UserRole))
         )
