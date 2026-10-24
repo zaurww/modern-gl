@@ -31,7 +31,12 @@ from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
-from modern_gl.desktop.reports_page import OsvPage, StatementsPage, SubcontoPage
+from modern_gl.desktop.reports_page import (
+    OsvPage,
+    StatementsPage,
+    SubcontoAnalysisPage,
+    SubcontoPage,
+)
 
 
 def main() -> None:
@@ -185,6 +190,11 @@ def main() -> None:
     subconto = cast(SubcontoPage, win.stack.currentWidget())
     subconto.drill(subconto.model.rows[2])  # the card of one counterparty, with its lines
     shot("6b_subconto_card")
+    win.open_subconto_analysis()  # «Анализ субконто» (D122): the demo's counterparties
+    shot("6c_subconto_analysis")
+    analysis = cast(SubcontoAnalysisPage, win.stack.currentWidget())
+    analysis.drill(analysis.model.rows[3])  # «Карточка субконто» (D123) of Beta Servis
+    shot("6d_subconto_card")
     win.open_report("card", session.catalog.by_code["51"].id, osv.params)
     shot("7_card")
     win.show_place(("chart",))

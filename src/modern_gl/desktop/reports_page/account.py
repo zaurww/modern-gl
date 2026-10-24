@@ -373,7 +373,8 @@ class AnalysisPage(AccountReportPage):
             self.open_report.emit("card", row.corr_id, self.params)
 
 
-REPORTS: dict[str, type[AccountReportPage]] = {
+# a report opened with an account and the parameters (kind, account id, ReportParams)
+REPORTS: dict[str, Callable[[Session, int, ReportParams], ReportPage]] = {
     "card": CardPage,
     "subconto": SubcontoPage,
     "analysis": AnalysisPage,

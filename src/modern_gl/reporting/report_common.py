@@ -99,6 +99,20 @@ class SubcontoRow(Turnovers):
 
 
 @dataclass
+class SubcontoAnalysisRow(Turnovers):
+    """Анализ субконто (D125): an element of a directory (depth 0) and, under it, each
+    account that carries the element (depth 1)."""
+
+    value_id: int | None = None  # None — the postings where the position was left empty
+    name: str = ""
+    depth: int = 0
+    account_id: int | None = None  # the account of a depth-1 row
+    code: str = ""
+    # a currency account: net balance (Dt - Ct) at the end in each currency ("USD": …)
+    currency_closing: dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
 class CurrencyRow(Turnovers):
     """Amounts in the currency itself (minor units), not in manat."""
 
@@ -132,6 +146,35 @@ class AccountCard:
     # currency accounts: net balance (Dt - Ct) in each currency, at start and at end
     currency_opening: dict[str, int] = field(default_factory=dict)
     currency_closing: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def closing(self) -> int:
+        return self.lines[-1].balance if self.lines else self.opening
+
+
+@dataclass
+class SubcontoCardLine:
+    """A posting carrying one element (D126): on its debit side, its credit side or both."""
+
+    doc_date: str
+    number: int
+    document_id: int
+    memo: str
+    debit_code: str  # the debit account's code, or its name without one
+    credit_code: str
+    debit: int  # the amount, when the element is on the debit side
+    credit: int  # … on the credit side (both: the balance does not move)
+    balance: int  # running net balance (Dt - Ct) after this line
+    debit_id: int = 0
+    credit_id: int = 0
+    invoice: str = ""
+    invoice_kind: str = ""
+
+
+@dataclass
+class SubcontoCard:
+    opening: int
+    lines: list[SubcontoCardLine] = field(default_factory=list)
 
     @property
     def closing(self) -> int:

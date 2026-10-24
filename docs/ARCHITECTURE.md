@@ -71,8 +71,8 @@ i18n                       тексты: tr(), переводы
 - **SQL общий для SQLite и PostgreSQL** (D77).
 
 ## 5. Чтение и отчёты
-- `application/queries.py`, `catalog.py` — для форм; `reporting/` — ОСВ, карточка, анализ
-  (`reports/`), баланс, ОПиУ, ДДС, сравнение книг (`statements`, `profit_loss`, `cash_flow`,
+- `application/queries.py`, `catalog.py` — для форм; `reporting/` — ОСВ, карточка, анализ, анализ и карточка
+  субконто (`reports/`), баланс, ОПиУ, ДДС, сравнение книг (`statements`, `profit_loss`, `cash_flow`,
   `books`, `columns`), склад (`inventory/`), e-qaimə, «Bu gün» (`overview`), hledger,
   «Передача дел».
 - Агрегация — в SQL с индексом; без «прочитать всё в Python» и без запроса на строку.

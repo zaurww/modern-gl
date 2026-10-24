@@ -68,9 +68,16 @@ def test_the_page_shows_every_group(window):
     shown = {t.report.group for t in page.tiles}
     assert shown == set(catalog.GROUPS)
     assert [t.report.id for t in page.tiles[:3]] == ["balance", "profit", "cash"]
-    assert {"osv", "subconto", "card", "analysis", "invoices", "landed", "stock"} <= {
-        t.report.id for t in page.tiles
-    }
+    assert {
+        "osv",
+        "subconto",
+        "card",
+        "analysis",
+        "subconto_analysis",
+        "invoices",
+        "landed",
+        "stock",
+    } <= {t.report.id for t in page.tiles}
     assert page.title() == "Отчёты"
 
 
@@ -164,6 +171,20 @@ def test_a_report_of_an_account_asks_the_account(window, monkeypatch):
     window.open_catalog_report("analysis")
     assert len(window.pages) == pages
     assert "analysis" not in catalog.recent()
+
+
+def test_the_subconto_analysis_opens_as_one_page(window):
+    """«Анализ субконто» asks nothing first: the directory is chosen on the page (D125);
+    opened again, the same page comes back."""
+    from modern_gl.desktop.reports_page import SubcontoAnalysisPage
+
+    window.open_catalog_report("subconto_analysis")
+    page = window.stack.currentWidget()
+    assert isinstance(page, SubcontoAnalysisPage) and page.kind_id is not None
+    assert catalog.recent()[0] == "subconto_analysis"
+    pages = len(window.pages)
+    window.open_catalog_report("subconto_analysis")
+    assert len(window.pages) == pages and window.stack.currentWidget() is page
 
 
 def test_the_account_is_typed_and_remembered(window, qtbot):
