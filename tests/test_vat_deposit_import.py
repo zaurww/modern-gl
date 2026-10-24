@@ -501,7 +501,7 @@ def test_the_window_loads_the_period_chosen(qtbot, firm, deposit_session):
     qtbot.addWidget(dialog)
     assert dialog.period() == (date(2026, 10, 1), date(2026, 10, 3))  # this month to today
     assert dialog.loaded.text() == tr("С портала в этот счёт ещё ничего не загружалось.")
-    dialog.period_bar.set_period(date(2026, 10, 2), date(2026, 10, 2))
+    dialog.period_field.set_period(date(2026, 10, 2), date(2026, 10, 2))
     dialog.load()
     qtbot.waitUntil(lambda: dialog.step == PREVIEW, timeout=5000)
     # the operations asked from the period's first day up to today: the balance of 02.10
@@ -552,7 +552,7 @@ def test_a_period_loaded_already_is_asked_about(qtbot, ledger, firm, deposit_ses
     assert dialog.loaded.text() == tr(
         "Уже загружено с портала: {periods}.", periods="01.10–02.10.2026"
     )
-    dialog.period_bar.set_period(date(2026, 10, 1), date(2026, 10, 2))
+    dialog.period_field.set_period(date(2026, 10, 1), date(2026, 10, 2))
     assert tr("Выбранный период уже загружен.") in dialog.loaded.text()
     asked: list[str] = []
 

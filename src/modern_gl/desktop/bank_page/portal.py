@@ -25,13 +25,13 @@ from modern_gl.application.bank.statement import place_balance
 from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED, DepositImported
 from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch
 from modern_gl.desktop.bank_page.deposit_rows import DepositRows
-from modern_gl.desktop.period_bar import PeriodBar, period_dates
+from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
+from modern_gl.domain.dates import date_range
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.domain.periods import MONTH
 from modern_gl.i18n import tr
 
 TITLE = "ƏDV depozit с портала"
@@ -75,9 +75,9 @@ class DepositDialog(QDialog):
         account = QLabel(place.name)
         account.setObjectName("secondary")
         root.addWidget(account)
-        self.period_bar = PeriodBar(self.today, MONTH, through_today=True)
-        self.period_bar.changed.connect(self._period_changed)
-        root.addWidget(self.period_bar)
+        self.period_field = portal_period(self.today)
+        self.period_field.changed.connect(self._period_changed)
+        root.addWidget(self.period_field)
         self.loaded = QLabel()
         self.loaded.setWordWrap(True)
         root.addWidget(self.loaded)
@@ -133,7 +133,7 @@ class DepositDialog(QDialog):
         self.rows.setVisible(step != PERIOD)
         self.balances.setVisible(step != PERIOD)
         self.spacer.setVisible(step == PERIOD)
-        self.period_bar.setEnabled(step != DONE)
+        self.period_field.setEnabled(step != DONE)
         self.close_button.setText(tr("Готово") if step == DONE else tr("Закрыть"))
         if step != PERIOD:
             self.resize(max(self.width(), 1040), max(self.height(), 560))
@@ -146,12 +146,11 @@ class DepositDialog(QDialog):
             return
         following = date.fromisoformat(start)
         if following <= self.today:
-            self.period_bar.set_period(following, self.today)
+            self.period_field.set_period(following, self.today)
 
     def period(self) -> tuple[date, date]:
         """The period chosen, up to today: the portal has no operations of tomorrow."""
-        first, last = self.period_bar.period()
-        return first, min(last, self.today)
+        return self.period_field.period()
 
     def _period_changed(self) -> None:
         self._show_loaded()
@@ -181,7 +180,7 @@ class DepositDialog(QDialog):
     def _loaded_texts(self, spans: list[tuple[str, str]]) -> list[str]:
         texts = []
         if spans:
-            periods = (period_dates(date.fromisoformat(a), date.fromisoformat(b)) for a, b in spans)
+            periods = (date_range(a, b, "–") for a, b in spans)
             texts.append(tr("Уже загружено с портала: {periods}.", periods=", ".join(periods)))
         unfinished = [
             date.fromisoformat(d).strftime("%d.%m.%Y") for d in unfinished_days(self.loads)
@@ -217,7 +216,7 @@ class DepositDialog(QDialog):
         question = tr(
             "Период {period} уже загружен с портала. Загрузить снова?\n\nДвойных операций "
             "не будет: добавятся только новые, появившиеся на портале после прошлой загрузки.",
-            period=period_dates(first, last),
+            period=date_range(first, last, "–"),
         )
         answer = QMessageBox.question(self, tr(TITLE), question)
         return answer == QMessageBox.StandardButton.Yes

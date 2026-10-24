@@ -1,5 +1,6 @@
 """Periods chosen at a click: «Вчера», «Эта неделя», «Прошлая неделя», «Этот месяц»,
-«Прошлый месяц» — for the portal import and the morning reconciliation (D53)."""
+«Прошлый месяц» — for the portal import and the morning reconciliation (D53); in the
+period field's window of those pages (D105)."""
 
 from __future__ import annotations
 
@@ -21,24 +22,30 @@ def full_month(date_from: date, date_to: date) -> str | None:
     return month if (date_from, date_to) == month_bounds(month) else None
 
 
-def quick_period(span: str, today: date, through_today: bool = False) -> tuple[date, date]:
-    """«Вчера»: yesterday, on a Monday Friday to Sunday. «Эта неделя», «Этот месяц»: from
-    Monday / the 1st to yesterday — a morning check looks at finished days — or to today
-    (`through_today`, the import); on a Monday / the 1st it is today alone. «Прошлая
-    неделя», «Прошлый месяц»: the whole calendar week / month before this one."""
+def span_period(span: str, today: date) -> tuple[date, date]:
+    """The calendar period of a quick one. «Вчера»: yesterday, on a Monday Friday to
+    Sunday; «Эта неделя», «Этот месяц»: the whole week / month (the window ends it at
+    today or yesterday, `up_to`); «Прошлая неделя», «Прошлый месяц»: the one before."""
     yesterday = today - timedelta(days=1)
-    last = today if through_today else yesterday
     monday = today - timedelta(days=today.weekday())
     if span == DAY:
         return (today - timedelta(days=3) if today.weekday() == 0 else yesterday), yesterday
     if span == WEEK:
-        return monday, max(last, monday)
+        return monday, monday + timedelta(days=6)
     if span == LAST_WEEK:
         return monday - timedelta(days=7), monday - timedelta(days=1)
     first = today.replace(day=1)
     if span == MONTH:
-        return first, max(last, first)
+        return month_bounds(f"{first:%Y-%m}")
     return month_bounds(f"{first - timedelta(days=1):%Y-%m}")
+
+
+def up_to(period: tuple[date, date], last: date) -> tuple[date, date]:
+    """A period ended no later than `last` — the portal has nothing of tomorrow, a
+    morning check looks at finished days; a period that starts after it is its first
+    day alone (on a Monday «this week» up to yesterday is Monday)."""
+    first, end = period
+    return first, max(first, min(end, last))
 
 
 def span_of(date_from: date, date_to: date, today: date) -> str | None:

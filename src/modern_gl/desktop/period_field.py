@@ -1,7 +1,8 @@
 """The period of a report in one field (D105): it reads «Октябрь 2026»; type «пм», «кв3»,
 «сг», «окт 25» or «1.10-15.10» and Enter (or Tab) — the period is that; ‹ › and the
 arrow keys ↑ ↓ move to the period before or after; ▾ opens the period with the mouse
-(`period_window`). One Tab stop for the whole period, the same on every report."""
+(`period_window`). One Tab stop for the whole period, the same on every report and in
+the portal's windows — there with their own usual periods and ended at today (`last`)."""
 
 from __future__ import annotations
 
@@ -15,9 +16,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.desktop.period_window import PeriodWindow
+from modern_gl.desktop.period_window import PeriodWindow, Preset, portal_presets
 from modern_gl.desktop.widgets import icon_button
 from modern_gl.domain.period_input import Period, describe, parse_period, shift
+from modern_gl.domain.periods import MONTH, span_period, up_to
 from modern_gl.i18n import tr
 
 HINT = "пм · кв3 · сг · окт · 2026 · 1.10-15.10"
@@ -26,10 +28,18 @@ HINT = "пм · кв3 · сг · окт · 2026 · 1.10-15.10"
 class PeriodField(QWidget):
     changed = Signal()
 
-    def __init__(self, period: Period, today: date, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        period: Period,
+        today: date,
+        parent: QWidget | None = None,
+        presets: list[Preset] | None = None,  # the window's usual periods; None: a report's
+        last: date | None = None,  # no period goes past it: «this month» is to `last`
+    ) -> None:
         super().__init__(parent)
         self.today = today
-        self._period = period
+        self.presets, self.last = presets, last
+        self._period = period  # as chosen: ‹ › step from a whole month, not from its days
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(2)
@@ -54,7 +64,7 @@ class PeriodField(QWidget):
         self._show()
 
     def period(self) -> Period:
-        return self._period
+        return self._period if self.last is None else up_to(self._period, self.last)
 
     def set_period(self, first: date, last: date) -> None:
         self._set((first, last))
@@ -64,7 +74,7 @@ class PeriodField(QWidget):
 
     def show_presets(self) -> None:
         """▾: the period with the mouse — the usual ones, months, quarters, dates."""
-        window = PeriodWindow(self._period, self.today, self)
+        window = PeriodWindow(self._period, self.today, self, self.presets, self.period())
         window.chosen.connect(self._set)
         window.open_under(self.edit)
         self.window_shown = window  # tests reach the open panel
@@ -111,10 +121,10 @@ class PeriodField(QWidget):
             self.changed.emit()
 
     def _show(self) -> None:
-        self.edit.setText(describe(self._period))
+        self.edit.setText(describe(self.period()))
         self.edit.setModified(False)
         self._mark(False)
-        first, last = self._period
+        first, last = self.period()
         self.edit.setToolTip(
             f"{first:%d.%m.%Y} — {last:%d.%m.%Y}\n" + tr("Период: {hint}", hint=HINT)
         )
@@ -123,3 +133,11 @@ class PeriodField(QWidget):
         self.edit.setProperty("invalid", wrong)
         self.edit.style().unpolish(self.edit)
         self.edit.style().polish(self.edit)
+
+
+def portal_period(today: date, span: str = MONTH, last: date | None = None) -> PeriodField:
+    """The period of a portal's window (e-qaimə, ƏDV DH): «Вчера», the weeks and months
+    at a click, ended at today — the portal has nothing of tomorrow — or at `last`."""
+    return PeriodField(
+        span_period(span, today), today, presets=portal_presets(today), last=last or today
+    )

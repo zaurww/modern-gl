@@ -911,7 +911,7 @@ def shoot_reconciliation(session, win, out: Path) -> None:
     ]
     dialog = EqaimeReconciliationDialog(session, win)
     dialog.company.setText("Portal: DEMO MMC · VÖEN 1402375141")
-    dialog.period_bar.set_period(first, last)
+    dialog.period_field.set_period(first, last)
     dialog.show_result(reconcile(session.conn, session.company_id, False, first, last, portal))
     dialog.resize(1180, 760)
     dialog.show()
@@ -919,8 +919,8 @@ def shoot_reconciliation(session, win, out: Path) -> None:
     QTimer.singleShot(300, loop.quit)
     loop.exec()
     dialog.grab().save(str(out / "8c11_eqaime_reconciliation.png"))
-    dialog.period_bar.choose("custom")
-    dialog.grab().save(str(out / "8c12_eqaime_reconciliation_custom.png"))
+    dialog.period_field.show_presets()  # ▾: the portal's usual periods (D105)
+    dialog.period_field.window_shown.grab().save(str(out / "8c12_eqaime_period_window.png"))
     dialog.close()
 
 

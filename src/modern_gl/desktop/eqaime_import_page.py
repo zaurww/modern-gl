@@ -80,7 +80,7 @@ class EqaimeImportDialog(EqaimeImportForm):
         tin = portal_login.company_tin(token)
         self.company.setText(tr("Портал: {name} · VÖEN {tin}", name=name, tin=tin))
         client = EtaxesClient(token)
-        date_from, date_to = self.period_bar.period()
+        date_from, date_to = self.period_field.period()
         purchases, sales = self.purchases.isChecked(), self.sales.isChecked()
         checks = rechecks(self.s.conn, self.s.company_id, date.today())
         self._start(

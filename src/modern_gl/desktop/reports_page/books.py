@@ -53,6 +53,7 @@ class BooksPage(ReportPage):
         label.setObjectName("secondary")
         self.day = date_edit(self.params.date_to)
         self.day.setFixedWidth(130)
+        self.day.dateChanged.connect(lambda _day: self.refresh())  # shown at once (D105)
         run = button(tr("Сформировать"), "primary", "F5")
         run.clicked.connect(self.refresh)
         for w in (label, self.day, run):

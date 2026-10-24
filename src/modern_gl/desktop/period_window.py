@@ -30,6 +30,7 @@ from modern_gl.domain.period_input import (
     parse_period,
     quarter_bounds,
 )
+from modern_gl.domain.periods import DAY, LAST_MONTH, LAST_WEEK, MONTH, WEEK, span_period
 from modern_gl.i18n import tr
 
 # the usual periods: what is typed for them (so the field and the panel agree), caption
@@ -42,16 +43,47 @@ PRESETS = (
     ("г", "Этот год"),
     ("пг", "Прошлый год"),
 )
+# the portal's (D53): its pages look at days and weeks, not at quarters and years
+PORTAL_PRESETS = (
+    (DAY, "Вчера"),
+    (WEEK, "Эта неделя"),
+    (LAST_WEEK, "Прошлая неделя"),
+    (MONTH, "Этот месяц"),
+    (LAST_MONTH, "Прошлый месяц"),
+)
+
+Preset = tuple[str, str, Period]  # a key, the caption (to translate), the period
+
+
+def report_presets(today: date) -> list[Preset]:
+    return [
+        (typed, caption, period)
+        for typed, caption in PRESETS
+        if (period := parse_period(typed, today)) is not None
+    ]
+
+
+def portal_presets(today: date) -> list[Preset]:
+    return [(span, caption, span_period(span, today)) for span, caption in PORTAL_PRESETS]
 
 
 class PeriodWindow(QFrame):
     chosen = Signal(object)  # a Period
 
-    def __init__(self, period: Period, today: date, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        period: Period,
+        today: date,
+        parent: QWidget | None = None,
+        presets: list[Preset] | None = None,
+        dates: Period | None = None,  # the dates the field shows, when it ends `period` early
+    ) -> None:
         super().__init__(parent, Qt.WindowType.Popup)
         self.setObjectName("periodWindow")
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self.period, self.today = period, today
+        self.presets = report_presets(today) if presets is None else presets
+        self.dates = dates or period
         self.year = period[1].year
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 14, 16, 14)
@@ -97,15 +129,12 @@ class PeriodWindow(QFrame):
         column = QVBoxLayout()
         column.setSpacing(2)
         self.preset_buttons: dict[str, QPushButton] = {}
-        for typed, caption in PRESETS:
-            period = parse_period(typed, self.today)
-            if period is None:
-                continue
+        for key, caption, period in self.presets:
             b = self._cell(tr(caption), "periodPreset")
             b.setChecked(period == self.period)
             b.clicked.connect(lambda _=False, p=period: self.choose(p))
             column.addWidget(b)
-            self.preset_buttons[typed] = b
+            self.preset_buttons[key] = b
         column.addStretch(1)
         return column
 
@@ -154,8 +183,8 @@ class PeriodWindow(QFrame):
         row = QHBoxLayout()
         row.setSpacing(8)
         self.first, self.last = (
-            DateEdit(to_qdate(self.period[0])),
-            DateEdit(to_qdate(self.period[1])),
+            DateEdit(to_qdate(self.dates[0])),
+            DateEdit(to_qdate(self.dates[1])),
         )
         for caption, field in ((tr("С"), self.first), (tr("по"), self.last)):
             label = QLabel(caption)

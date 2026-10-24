@@ -1,13 +1,14 @@
 """«Сверка с порталом»: the e-qaimə of a period on the tax portal against the books (D53) —
 what is forgotten, cancelled, different; the totals on top; the period marked reconciled.
 Made for a morning check too: «Вчера», «Эта неделя», «Прошлый месяц»… set the period at
-a click (`period_bar`)."""
+a click (`period_field.portal_period`); a morning check looks at finished days — the
+period ends yesterday."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QColor
@@ -25,7 +26,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.eqaime_portal import fetch_list, read_again, rechecks, usual_span
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_portal_loader import PortalLoader, changes_warning
-from modern_gl.desktop.period_bar import PeriodBar
+from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import button, money
@@ -148,10 +149,12 @@ class EqaimeReconciliationDialog(QDialog):
         bar = QHBoxLayout()
         bar.setSpacing(8)
         # the usual period at a click: the one this company was last marked with
-        self.period_bar = PeriodBar(
-            self.today, usual_span(self.s.conn, self.s.company_id, self.outgoing)
+        self.period_field = portal_period(
+            self.today,
+            usual_span(self.s.conn, self.s.company_id, self.outgoing),
+            last=self.today - timedelta(days=1),
         )
-        bar.addWidget(self.period_bar)
+        bar.addWidget(self.period_field)
         bar.addStretch(1)
         self.load_button = button(tr("Сверить с порталом"), "primary")
         self.load_button.clicked.connect(self.load)
@@ -244,7 +247,7 @@ class EqaimeReconciliationDialog(QDialog):
         if token is None:
             return
         client = EtaxesClient(token)
-        date_from, date_to = self.period_bar.period()
+        date_from, date_to = self.period_field.period()
         outgoing = self.outgoing
         checks = rechecks(self.s.conn, self.s.company_id, date.today())
         self.period = (date_from, date_to)
@@ -496,7 +499,7 @@ class EqaimeReconciliationDialog(QDialog):
             self.s, self, sign_in=self.sign_in, direction="sale" if self.outgoing else "receipt"
         )
         dialog.token = self.token
-        dialog.period_bar.set_period(*self.period_bar.period())
+        dialog.period_field.set_period(*self.period_field.period())
         if dialog.exec() and (dialog.created or dialog.attached):
             self.s.notify(dialog.outcome())
 
