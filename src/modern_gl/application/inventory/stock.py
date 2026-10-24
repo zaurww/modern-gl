@@ -8,6 +8,7 @@ from datetime import date
 
 from modern_gl.application.inventory.amounts import format_quantity, money
 from modern_gl.application.inventory.drafts import DraftCommands
+from modern_gl.application.inventory.model import INCOMING_SQL
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.dates import iso_date
@@ -154,13 +155,13 @@ class StockCommands(DraftCommands):
         """[receipt line, what is left of it], oldest first; while documents are
         recalculated it is read once and then kept in step (debt 6)."""
         rows = self.conn.execute(
-            """
+            f"""
             SELECT l.id, l.quantity - COALESCE(SUM(c.quantity), 0) AS available
             FROM inventory_lines l
             JOIN inventory_documents d ON d.id = l.document_id AND d.company_id = l.company_id
             LEFT JOIN stock_consumptions c ON c.receipt_line_id = l.id
             WHERE l.company_id = ? AND l.item_id = ? AND d.status = 'posted'
-              AND d.doc_type IN ('opening', 'receipt', 'incoming')
+              AND d.doc_type IN {INCOMING_SQL}
             GROUP BY l.id, l.quantity, d.doc_date, d.id, l.line_no
             HAVING available > 0
             ORDER BY d.doc_date, d.id, l.line_no

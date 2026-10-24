@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from modern_gl.application.inventory.model import INCOMING_SQL
 from modern_gl.infrastructure.db import Connection
 
 
@@ -143,7 +144,7 @@ def has_units(conn: Connection, company_id: int) -> bool:
 def receipt_line_choices(conn: Connection, company_id: int) -> list[ReceiptLineChoice]:
     """Posted opening and receipt lines, newest first."""
     rows = conn.execute(
-        """
+        f"""
         SELECT l.id, d.doc_date, d.number, v.name AS item_name, l.quantity, l.amount,
                u.precision, d.id AS document_id, wv.name AS warehouse_name, d.memo,
                u.code AS unit
@@ -155,7 +156,7 @@ def receipt_line_choices(conn: Connection, company_id: int) -> list[ReceiptLineC
         JOIN warehouses w ON w.company_id = l.company_id AND w.id = l.warehouse_id
         JOIN subconto_values wv ON wv.company_id = w.company_id AND wv.id = w.subconto_value_id
         WHERE l.company_id = ? AND d.status = 'posted'
-          AND d.doc_type IN ('opening', 'receipt', 'incoming')
+          AND d.doc_type IN {INCOMING_SQL}
         ORDER BY d.doc_date DESC, d.id DESC, l.line_no
         """,
         (company_id,),

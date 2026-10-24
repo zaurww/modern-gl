@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
 from modern_gl.application.common import closed_on, require_open
+from modern_gl.application.inventory.model import INCOMING_SQL
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.dates import ru_date
@@ -128,11 +129,11 @@ class InventoryBase(LedgerBase):
 
     def _receipt_line(self, company_id: int, line_id: int) -> Row:
         row = self.conn.execute(
-            """
+            f"""
             SELECT l.* FROM inventory_lines l
             JOIN inventory_documents d ON d.id = l.document_id
             WHERE l.company_id = ? AND l.id = ? AND d.status = 'posted'
-              AND d.doc_type IN ('opening', 'receipt', 'incoming')
+              AND d.doc_type IN {INCOMING_SQL}
             """,
             (company_id, line_id),
         ).fetchone()
