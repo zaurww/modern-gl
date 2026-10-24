@@ -14,6 +14,7 @@ dev = [
     "pyright>=1.1.400",
     "pytest-qt>=4.5.0",
     "ruff>=0.6",
+    "pytest-xdist>=3.8.0",
 ]
 
 [build-system]
@@ -56,4 +57,4 @@ modern-gl-mcp = "modern_gl.assistant.server:main"
 modern-gl-cli = "modern_gl.api.cli:cli"
 
 [tool.ruff.lint.per-file-ignores]
-"src/modern_gl/i18n_az.py" = ["E501"]  # translation strings are kept on one line
+"src/modern_gl/i18n_az/*.py" = ["E501"]  # translation strings are kept on one line

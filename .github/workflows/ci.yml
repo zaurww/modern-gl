@@ -22,4 +22,4 @@ jobs:
       - name: Types
         run: uv run pyright
       - name: Tests
-        run: uv run pytest -q
+        run: uv run pytest -q -n auto

@@ -9,7 +9,7 @@ import pytest
 from modern_gl.application.catalog import search
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.i18n import fold, set_language, tr, upper
-from modern_gl.i18n_az import AZ
+from modern_gl.i18n_az import AZ, PARTS
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
 CYRILLIC = set("абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")
@@ -32,6 +32,19 @@ def tr_keys() -> dict[str, str]:
 
 def placeholders(s: str) -> set[str]:
     return {name for _, name, _, _ in string.Formatter().parse(s) if name}
+
+
+def test_a_key_is_translated_in_one_file_only():
+    """Each feature has its file of translations (D131); the same key in two of them
+    would make the second one win silently."""
+    seen: dict[str, str] = {}
+    twice = {}
+    for name, part in PARTS.items():
+        for key in part:
+            if key in seen:
+                twice[key] = (seen[key], name)
+            seen[key] = name
+    assert not twice, twice
 
 
 def test_every_tr_string_has_azerbaijani_translation():
