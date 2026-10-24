@@ -91,7 +91,7 @@ i18n                       тексты: tr(), переводы
   `PickBox` в шапках, `PeriodField`/`DateEdit` с коротким вводом (`domain/period_input.py`).
 - **Вид** — только через `desktop/theme/` (палитры, Inter, `css`), иконки Lucide
   (`desktop/icons.py`); `PageHeader`: одна синяя кнопка + «⋯» (D86).
-- **Тексты** — `tr("русский {x}")`, перевод в `i18n_az.py`; поиск — `i18n.fold`.
+- **Тексты** — `tr("русский {x}")`, перевод в `i18n_az/` (файл на функцию, D131); поиск — `i18n.fold`.
 - **Только просмотр** — `session.read_only`, кнопки записи через `hide_when_viewing`.
 
 ## 7. AI-помощник и разработчики

@@ -1,4 +1,5 @@
-"""Azerbaijani translations. Keys are the Russian source strings used in code."""
+"""Azerbaijani translations of the program up to session 57 (D131: newer ones — a file of
+their own in this package). Keys are the Russian source strings used in code."""
 
 AZ: dict[str, str] = {
     # ---- ledger rules --------------------------------------------------------------------
@@ -83,12 +84,10 @@ AZ: dict[str, str] = {
     "Последние 4 цифры": "Son 4 rəqəm",
     "Держатель": "Kart sahibi",
     "Создать": "Yarat",
-    "остаток банка не введён": "bankın qalığı yazılmayıb",
     "всё сверено": "hamısı üzləşdirilib",
     "сверена": "üzləşdirilib",
     "расхождение {amount}": "fərq {amount}",
     "расхождение: {n}": "fərq: {n}",
-    "без остатка банка: {n}": "bankın qalığı yoxdur: {n}",
     "Последняя выписка": "Son çıxarış",
     "Сверка с банком": "Bankla üzləşdirmə",
     "Выписка": "Çıxarış",
@@ -103,22 +102,6 @@ AZ: dict[str, str] = {
     "Счета и карты · остаток на {day}": "Hesablar və kartlar · {day} tarixinə qalıq",
     "«+ Новый счёт» — расчётный, валютный счёт или бизнес-карта.": (
         "«+ Yeni hesab» — hesablaşma, valyuta hesabı və ya biznes kart."
-    ),
-    "За этот период выписок нет": "Bu dövr üçün çıxarış yoxdur",
-    "Другой период — ‹ › у поля периода; «+ Выписка» — следующий рабочий день.": (
-        "Başqa dövr — dövr sahəsindəki ‹ ›; «+ Çıxarış» — növbəti iş günü."
-    ),
-    "По дням": "Günlər üzrə",
-    "Все операции": "Bütün əməliyyatlar",
-    "Щёлкните счёт — откроются его выписки по дням.": (
-        "Hesaba klikləyin — onun günlər üzrə çıxarışları açılacaq."
-    ),
-    "Щёлкните выписку — её строки; внизу выписки впишите остаток из банка.": (
-        "Çıxarışa klikləyin — onun sətirləri; çıxarışın altında bankdakı qalığı yazın."
-    ),
-    "Двойной щелчок — документ.": "İki dəfə klik — sənəd.",
-    "На начало {opening}   ·   приход {money_in}   ·   расход {money_out}   ·   на конец {closing}": (
-        "Əvvələ {opening}   ·   mədaxil {money_in}   ·   məxaric {money_out}   ·   sona {closing}"
     ),
     "«+ Выписка» — на следующий рабочий день.": "«+ Çıxarış» — növbəti iş günü üçün.",
     "В выписке нет строк": "Çıxarışda sətir yoxdur",
@@ -1920,24 +1903,4 @@ AZ: dict[str, str] = {
     "Прошлый месяц  PgUp": "Əvvəlki ay  PgUp",
     "Следующий месяц  PgDn": "Növbəti ay  PgDn",
     "← → ↑ ↓ — день": "← → ↑ ↓ — gün",
-    # обмен документами (D130)
-    "документ «{id}» в файле дважды": "«{id}» sənədi faylda iki dəfədir",
-    "строка {line}: ожидается объект с полями проводки": "sətir {line}: yazılış sahələri olan obyekt gözlənilir",
-    'субконто — списком, например ["Bakı Elektrik"]': 'subkonto — siyahı ilə, məsələn ["Bakı Elektrik"]',
-    "документ {n}": "sənəd {n}",
-    "файл": "fayl",
-    'это не файл документов Modern GL: нет "format": "{f}"': 'bu Modern GL sənəd faylı deyil: "format": "{f}" yoxdur',
-    "версия формата — целое число, например 1": "format versiyası — tam ədəd, məsələn 1",
-    "файл версии {v}, программа читает до {max} — обновите программу": "fayl {v} versiyasındadır, proqram {max} versiyasına qədər oxuyur — proqramı yeniləyin",
-    'не указан источник файла ("source")': 'faylın mənbəyi göstərilməyib ("source")',
-    'нет списка документов ("documents")': 'sənədlər siyahısı yoxdur ("documents")',
-    "{where}: ожидается объект": "{where}: obyekt gözlənilir",
-    '{where}: нет "id" — его номер в вашей программе': '{where}: "id" yoxdur — sizin proqramınızdakı nömrəsi',
-    "{where}: слой — один из {layers}": "{where}: qat — bunlardan biri: {layers}",
-    '{where}: "memo" — строка': '{where}: "memo" — sətir olmalıdır',
-    "{where}: лишние поля {keys}": "{where}: artıq sahələr {keys}",
-    '{where}: дата — "ГГГГ-ММ-ДД", например "2026-03-05"': '{where}: tarix — "İİİİ-AA-GG", məsələn "2026-03-05"',
-    "строка {line}: e-qaimə или декларация — одно из двух": "sətir {line}: e-qaimə və ya bəyannamə — ikisindən biri",
-    "сторно: документа «{id}» нет среди загруженных": "storno: «{id}» sənədi yüklənənlər arasında yoxdur",
-    '{where}: "reverses" — id документа, без своих проводок': '{where}: "reverses" — sənədin id-si, öz yazılışları olmadan',
 }

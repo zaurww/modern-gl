@@ -13,7 +13,7 @@ from pathlib import Path
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
 LIMITS = {"module": 600, "class": 500, "function": 80}  # lines, docstrings included
-SKIP = {"i18n_az.py"}  # translations: data, not code
+SKIP = ("i18n_az/",)  # translations: data, not code
 
 # Code over the limit and its size: the debt to pay off (STATUS, «Архитектурный аудит»,
 # п. 7). Empty since session 26; an entry may only shrink, never grow.
@@ -25,7 +25,7 @@ def sizes() -> Iterator[tuple[str, str, int]]:
     "path" for a module and "path::Class.method" for the code in it."""
     for path in sorted(SRC.rglob("*.py")):
         rel = path.relative_to(SRC).as_posix()
-        if rel in SKIP:
+        if rel.startswith(SKIP) and rel != "i18n_az/__init__.py":
             continue
         text = path.read_text(encoding="utf-8")
         yield "module", rel, len(text.splitlines())
