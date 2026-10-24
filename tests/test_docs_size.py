@@ -22,6 +22,7 @@ LIMITS = {
     "docs/ARCHITECTURE.md": 8_000,
     "docs/ENGINEERING.md": 13_500,
     "docs/CODE_QUALITY.md": 7_000,
+    "docs/DESIGN.md": 8_000,
 }
 
 # a decision is a short record: the choice, the user's words, where it lives in the code;

@@ -6,7 +6,7 @@ code;type
 05;intangible
 07;fixed_asset
 08;fixed_asset
-09;other_noncurrent_asset
+09;deferred_tax_asset
 10;inventory
 10.1;inventory
 10.3;inventory
@@ -71,7 +71,7 @@ code;type
 76.4;other_liability
 76.5;other_liability
 76H;accrued_expenses
-77;other_long_term_liability
+77;deferred_tax_liability
 79;other_liability
 80;share_capital
 81;other_equity
@@ -87,6 +87,8 @@ code;type
 91;other_income
 91.1;other_income
 91.2;other_expense
+91.3;finance_income
+91.4;finance_expense
 91.9;profit_loss
 94;other_asset
 96;other_liability

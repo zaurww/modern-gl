@@ -87,6 +87,8 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 91;Прочие доходы и расходы;;1;revenue;;1;;
 91.1;Прочие доходы;91;;revenue;;;other_income;;fx_gain
 91.2;Прочие расходы;91;;expense;;;other_income;;fx_loss,bank_fee
+91.3;Процентные доходы;91;;revenue;;;;;
+91.4;Процентные расходы;91;;expense;;;;;
 91.9;Сальдо прочих доходов и расходов;91;;equity;;1;;
 94;Недостачи и потери от порчи ценностей;;;asset;;;;
 96;Резервы предстоящих расходов;;;liability;;;;

@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
@@ -81,8 +81,11 @@ def window(qtbot, tmp_path, monkeypatch):
     win.shutdown()
 
 
-def compare_buttons(page) -> list[QPushButton]:
-    return [b for b in page.findChildren(QPushButton) if b.text() == "Сравнить книги"]
+def compare_buttons(page) -> list:
+    """«Сравнить книги» in «⋯» of the ОСВ (D127): what it does, when it is there."""
+    return [
+        fn for item in page.more_items() if item for text, fn in [item] if text == "Сравнить книги"
+    ]
 
 
 def test_without_parallel_books_there_is_nothing_to_compare(demo, qtbot):
@@ -105,7 +108,7 @@ def test_the_osv_opens_the_comparison(window, qtbot):
     window.show_place(("osv",))
     osv = window.stack.currentWidget()
     assert isinstance(osv, OsvPage)
-    compare_buttons(osv)[0].click()
+    compare_buttons(osv)[0]()
     page = window.stack.currentWidget()
     assert isinstance(page, BooksPage)
     qtbot.waitUntil(lambda: bool(page.model.rows))

@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (
-    QCheckBox,
-)
+from PySide6.QtGui import QAction
 
 from modern_gl.desktop.reports_page.table import (
     SectionRow,
@@ -23,9 +21,11 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     CLASS_ORDER,
+    MenuItem,
     button,
     class_icon,
     class_name,
+    segments,
 )
 from modern_gl.domain.accounts import normal_side
 from modern_gl.i18n import tr
@@ -34,34 +34,48 @@ from modern_gl.reporting import reports
 from modern_gl.reporting.reports import OsvRow
 
 
+@dataclass
+class CurrencyLine(OsvRow):
+    """Amounts of a currency account in one of its currencies: in their own color (D127)."""
+
+
 class OsvPage(ReportPage):
     key = ("osv",)
     compare_books = Signal()  # «Сравнение книг» (D98)
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Оборотно-сальдовая ведомость"), params)
-        self.top_only = QCheckBox(tr("Только основные счета"))
+        # how deep, by the period as on every report (DESIGN.md 2): the main accounts,
+        # with their subaccounts, or down to every subconto
+        detail, buttons = segments(
+            [("top", "Основные счета"), ("sub", "Субсчета"), ("subconto", "Субконто")],
+            lambda: None,
+        )
+        self.top_only, self.expand = buttons["top"], buttons["subconto"]
         self.top_only.setToolTip(tr("Скрыть субсчета; суммы основных счетов не меняются"))
-        self.top_only.toggled.connect(self.refresh)
-        self.header.add_action(self.top_only)
-        self.sections = QCheckBox(tr("По разделам"))
-        self.sections.setToolTip(tr("Сгруппировать счета по классам с подытогами"))
-        self.sections.toggled.connect(self.refresh)
-        self.header.add_action(self.sections)
-        self.expand = QCheckBox(tr("Развернуть по субконто"))
         self.expand.setToolTip(tr("Показать под каждым счётом остатки по всем его субконто"))
-        self.expand.toggled.connect(self.refresh)
-        self.header.add_action(self.expand)
-        self.in_currency = QCheckBox(tr("В валюте"))
+        buttons["sub"].setChecked(True)
+        for b in buttons.values():
+            b.toggled.connect(lambda on: on and self.refresh())
+        self.in_currency = button(tr("В валюте"), "segment")
+        self.in_currency.setCheckable(True)
         self.in_currency.setToolTip(tr("Показать под валютными счетами суммы в каждой валюте"))
-        self.in_currency.toggled.connect(self.refresh)
+        self.in_currency.toggled.connect(lambda _on: self.refresh())
         self.in_currency.setVisible(session.catalog.has_currency_accounts)
-        self.header.add_action(self.in_currency)
-        if session.parallel_books:  # D98: the three books side by side
-            compare = button(tr("Сравнить книги"), "flat")
-            compare.clicked.connect(lambda _=False: self.compare_books.emit())
-            self.header.add_action(compare)
+        self.add_to_bar(detail, self.in_currency)
+        # rare: in «⋯»
+        self.sections = QAction(tr("По разделам"), self)
+        self.sections.setCheckable(True)
+        self.sections.toggled.connect(lambda _on: self.refresh())
         self.refresh()
+
+    def more_items(self) -> list[MenuItem]:
+        """«⋯»: by account classes, the books side by side (D98), then every report's."""
+        mark = "✓  " if self.sections.isChecked() else "    "
+        items: list[MenuItem] = [(mark + tr("По разделам"), self.sections.toggle)]
+        if self.s.parallel_books:
+            items.append((tr("Сравнить книги"), self.compare_books.emit))
+        return [*items, None, *super().more_items()]
 
     def title(self) -> str:
         return tr("ОСВ")
@@ -93,7 +107,7 @@ class OsvPage(ReportPage):
         for r in rows:
             result.append(r)
             for c in currency.get(r.account_id, []) if r.account_id else []:
-                row = OsvRow(name=f"      {c.code}  ·  {tr('в валюте')}", depth=r.depth + 1)
+                row = CurrencyLine(name=f"      {c.code}  ·  {tr('в валюте')}", depth=r.depth + 1)
                 row.add(c)
                 result.append(row)
         return result
@@ -161,6 +175,7 @@ class OsvPage(ReportPage):
             muted=lambda r: r.depth > 0,
             total=lambda r: r.depth < 0,
             section=lambda r: isinstance(r, SectionRow),
+            tone=lambda r: "currency" if isinstance(r, CurrencyLine) else None,
         )
         balanced = osv.total.closing_dt == osv.total.closing_ct
         text = (

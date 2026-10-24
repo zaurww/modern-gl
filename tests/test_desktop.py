@@ -415,7 +415,7 @@ def test_osv_top_level_only(window):
     codes = [r.code for r in osv.model.rows]
     assert "68" in codes and "68.2" not in codes
     total = osv.model.rows[-1]
-    assert osv.model.data(osv.model.index(len(osv.model.rows) - 1, 2)) == "–" or (
+    assert osv.model.data(osv.model.index(len(osv.model.rows) - 1, 2)) == "" or (
         total.opening_dt != 0
     )
 
@@ -897,7 +897,7 @@ def test_make_template_from_document_and_edit_formula(window, monkeypatch):
 
 def test_osv_amounts_stand_next_to_the_names(window, qtbot):
     """Jon Moon: a table as wide as its content, not the window; a narrow window cuts
-    the names first; nothing is a dash, a negative is in brackets."""
+    the names first; nothing is an empty cell, a negative is in brackets."""
     page = OsvPage(window.session)
     qtbot.addWidget(page)
     page.resize(1600, 700)
@@ -913,7 +913,7 @@ def test_osv_amounts_stand_next_to_the_names(window, qtbot):
     assert table.columnWidth(names) >= min(wide, NAME_MIN)
     assert [figure(None), figure(0), figure(12345), figure(-12345)] == [
         "",
-        "–",
+        "",
         "123.45",
         "(123.45)",
     ]
@@ -926,6 +926,27 @@ def test_osv_amounts_stand_next_to_the_names(window, qtbot):
     page.refresh()
     qtbot.waitUntil(lambda: any(page.model.banded))
     assert page.model.banded == [i % 2 == 1 for i in range(rows - 1)] + [False]
+
+
+def test_report_grid_band_and_currency_rows(window, qtbot):
+    """D127: the pale grid is on until turned off; the turnovers (every second group of
+    columns) lie on a band; a row in a currency has its own color, not the grey of a
+    subaccount."""
+    from modern_gl.desktop.reports_page.osv import CurrencyLine
+    from modern_gl.desktop.reports_page.table import grid, set_grid
+
+    assert grid()
+    page = OsvPage(window.session)
+    qtbot.addWidget(page)
+    groups = [c.group for c in page.model.columns]
+    turnover = [g for g in dict.fromkeys(groups) if g][1]  # after the opening balance
+    assert page.model.tinted == [g == turnover and bool(g) for g in groups]
+    set_grid(False)
+    assert not grid()
+    set_grid(True)
+    line = CurrencyLine(name="USD", depth=1)
+    assert page.model.tone(line) == "currency"
+    assert page.model.tone(page.model.rows[0]) is None
 
 
 def test_theme_switches_at_once_and_keeps_the_company(window):

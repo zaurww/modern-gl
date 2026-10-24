@@ -4,6 +4,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 04;Qeyri-maddi aktivlər;;;asset;;;intangible;
 05;Qeyri-maddi aktivlərin köhnəlməsi;;;asset;1;;intangible;
 08;Əsaslı vəsait qoyuluşları;;;asset;;;fixed_asset;
+09;Təxirə salınmış vergi aktivləri;;;asset;;;;
 10;Materiallar;;;asset;;;item,warehouse;
 19;Alınmış sərvətlər üzrə ƏDV;;;asset;;;counterparty;;input_vat
 20;Əsas istehsalat;;;asset;;;cost_item;;incoming_production
@@ -35,6 +36,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 75;Təsisçilərlə hesablaşmalar;;;liability;;1;counterparty;
 76;Müxtəlif debitor və kreditorlarla hesablaşmalar;;;liability;;1;counterparty,contract;
 76H;Hesablanmış xərclər;;;liability;;;counterparty;;accrued_expenses
+77;Təxirə salınmış vergi öhdəlikləri;;;liability;;;;
 80;Mənfəət və zərərlər;;;equity;;1;;;fx_gain,fx_loss,bank_fee
 85;Nizamnamə kapitalı;;;equity;;;counterparty;
 88;Bölüşdürülməmiş mənfəət (ödənilməmiş zərər);;;equity;;1;;

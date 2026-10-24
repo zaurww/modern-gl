@@ -34,19 +34,17 @@ from modern_gl.desktop.reports_page.table import (
     GROUP_GAP,
     NAME_MAX,
     ROW_HEIGHT,
-    SECTION_HEIGHT,
-    TOTAL_HEIGHT,
     Column,
     GroupHeader,
     ReportDelegate,
     ReportModel,
+    fit_rows,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
     PageHeader,
-    button,
     class_name,
     ru_date,
     type_choices,
@@ -195,12 +193,15 @@ class ReportPage(QWidget):
                 if w is self.book and not (self.s.parallel_books and self.has_book):  # D63
                     label.hide()
                     w.hide()
-            run = button(tr("Сформировать"), "primary", "F5")
-            run.clicked.connect(self.refresh)
-            bar.addWidget(run)
-            bar.addStretch(1)
+            bar.addStretch(1)  # no «Сформировать»: a change shows at once, F5 reads again
             root.addLayout(bar)
             self.bar = bar
+
+    def add_to_bar(self, *widgets: QWidget, gap: int = 6) -> None:
+        """A page's own choices in the bar, after the period and the book (DESIGN.md 2)."""
+        for w in widgets:
+            self.bar.insertWidget(self.bar.count() - 1, w)
+            self.bar.insertSpacing(self.bar.count() - 1, gap)
 
     def _build_table(self) -> None:
         self.model = ReportModel()
@@ -344,13 +345,7 @@ class ReportPage(QWidget):
                 width += GROUP_GAP
             self._widths[i] = width if col.width or col.money or col.right else min(width, NAME_MAX)
         self._fit_groups()
-        for r, row in enumerate(self.model.rows):
-            if self.model.section(row):
-                self.table.setRowHeight(r, SECTION_HEIGHT)
-            elif self.model.total(row):
-                self.table.setRowHeight(r, TOTAL_HEIGHT)
-            else:  # a row where another view of the page had a header or a total
-                self.table.setRowHeight(r, ROW_HEIGHT)
+        fit_rows(self.table, self.model)
         self.table.horizontalHeader().updateGeometry()
         self._fit_columns()
 

@@ -18,8 +18,17 @@ from modern_gl.reporting.report_common import _accounts
 from modern_gl.reporting.statements import TYPES, UNTYPED, Line, Names, Statement
 
 MONEY_TYPES = frozenset({"cash", "bank", "vat_deposit", "transit"})
+# IAS 7 as amended with IFRS 18 (D128): interest and dividends received — investing,
+# interest paid — financing
 INVESTING = frozenset(
-    {"fixed_asset", "intangible", "investment", "long_term_investment", "other_noncurrent_asset"}
+    {
+        "fixed_asset",
+        "intangible",
+        "investment",
+        "long_term_investment",
+        "other_noncurrent_asset",
+        "finance_income",
+    }
 )
 FINANCING = frozenset(
     {
@@ -29,6 +38,7 @@ FINANCING = frozenset(
         "short_term_loan",
         "long_term_loan",
         "other_long_term_liability",
+        "finance_expense",
     }
 )
 ACTIVITIES = (

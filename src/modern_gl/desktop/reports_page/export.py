@@ -13,7 +13,7 @@ from PySide6.QtCore import QLocale, QStandardPaths, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from modern_gl.desktop.reports_page.table import DASH, ReportModel
+from modern_gl.desktop.reports_page.table import ReportModel
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.report_file import (
     ReportColumn,
@@ -42,7 +42,7 @@ def report_table(model: ReportModel, title: str, about: list[tuple[str, str]]) -
                 cells.append(c.value(r) if c.value is not None else c.get(r))
                 continue
             text = model.data(model.index(i, j))
-            text = "" if text is None or text == DASH else str(text)
+            text = "" if text is None else str(text)
             if j == 0:  # the first column: its indent is the depth
                 level = (len(text) - len(text.lstrip(" "))) // STEP
             cells.append(text.strip())

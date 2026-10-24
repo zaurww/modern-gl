@@ -87,6 +87,8 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 91;Digər gəlir və xərclər;;1;revenue;;1;;
 91.1;Digər gəlirlər;91;;revenue;;;other_income;;fx_gain
 91.2;Digər xərclər;91;;expense;;;other_income;;fx_loss,bank_fee
+91.3;Faiz gəlirləri;91;;revenue;;;;;
+91.4;Faiz xərcləri;91;;expense;;;;;
 91.9;Digər gəlir və xərclərin qalığı;91;;equity;;1;;
 94;Qıtlıqlar və sərvətlərin korlanmasından itkilər;;;asset;;;;
 96;Gələcək xərclər üzrə ehtiyatlar;;;liability;;;;

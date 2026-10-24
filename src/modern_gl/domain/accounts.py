@@ -88,6 +88,7 @@ ACCOUNT_TYPES = (
     ("intangible", "asset", "Нематериальные активы"),
     ("long_term_investment", "asset", "Долгосрочные финансовые вложения"),
     ("other_noncurrent_asset", "asset", "Прочие внеоборотные активы"),
+    ("deferred_tax_asset", "asset", "Отложенные налоговые активы"),  # D128
     ("payable", "liability", "Поставщики и подрядчики"),
     ("advance_received", "liability", "Авансы полученные"),
     # not a settlement by e-qaimə: Dt 76H / Kt 60 is no payment of the invoice (D65)
@@ -98,15 +99,20 @@ ACCOUNT_TYPES = (
     ("other_liability", "liability", "Прочие краткосрочные обязательства"),
     ("long_term_loan", "liability", "Долгосрочные кредиты"),
     ("other_long_term_liability", "liability", "Прочие долгосрочные обязательства"),
+    ("deferred_tax_liability", "liability", "Отложенные налоговые обязательства"),
     ("share_capital", "equity", "Уставный капитал"),
     ("retained_earnings", "equity", "Нераспределённая прибыль"),
     ("profit_loss", "equity", "Финансовый результат"),
     ("other_equity", "equity", "Прочий капитал"),
     ("sales", "revenue", "Выручка"),
     ("other_income", "revenue", "Прочие доходы"),
+    # IFRS 18 (D128): interest and dividends received — investing; interest on borrowings
+    # — financing
+    ("finance_income", "revenue", "Финансовые доходы"),
     ("cost_of_sales", "expense", "Себестоимость продаж"),
     ("operating_expense", "expense", "Операционные расходы"),
     ("other_expense", "expense", "Прочие расходы"),
+    ("finance_expense", "expense", "Финансовые расходы"),
     ("income_tax", "expense", "Налог на прибыль"),
 )
 # Lines on these accounts may name the e-qaimə they belong to: settlements with partners
@@ -133,8 +139,11 @@ NONCURRENT_TYPES = frozenset(
         "other_noncurrent_asset",
         "long_term_loan",
         "other_long_term_liability",
+        "deferred_tax_asset",
+        "deferred_tax_liability",
     }
 )
+DEFERRED_TAX_TYPES = frozenset({"deferred_tax_asset", "deferred_tax_liability"})
 VAT_TYPES = frozenset({"input_vat", "tax_payable"})
 TYPE_CLASS = {t: cls for t, cls, _ in ACCOUNT_TYPES}
 TYPE_NAMES = {t: name for t, _, name in ACCOUNT_TYPES}

@@ -46,7 +46,7 @@ from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.period_dialog import PeriodDialog
 from modern_gl.desktop.reports_page import ChartPage, OsvPage
-from modern_gl.desktop.reports_page.table import zebra
+from modern_gl.desktop.reports_page.table import grid, set_grid, set_zebra, zebra
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.widgets import EmptyState
@@ -133,7 +133,9 @@ class MainWindow(ReportPlaces):
             act.triggered.connect(lambda _=False, n=name: self.set_ui_theme(n))
         looks.addSeparator()
         stripes = looks.addAction(("✓  " if zebra() else "    ") + tr("Полосы в таблицах"))
-        stripes.triggered.connect(lambda: self.set_zebra(not zebra()))
+        stripes.triggered.connect(lambda: self.set_table_look(set_zebra, not zebra()))
+        lines = looks.addAction(("✓  " if grid() else "    ") + tr("Сетка в отчётах"))
+        lines.triggered.connect(lambda: self.set_table_look(set_grid, not grid()))
         btn = self.sidebar.company
         menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 

@@ -21,8 +21,8 @@ Equity — capital 10 000, result (99) 2 500, profit not closed: 26 (−400) + 9
 −350; 12 150. 5 300 + 12 150 = 17 450.
 
 Profit and loss of February: sales 4 000, cost −1 500 (the closing at 28.02 is not
-income), gross 2 500; operating −400 → 2 100; other income 50 → 2 150 before tax; net
-2 150. January has none."""
+income), gross 2 500; operating expenses −400 and other income 50 — both operating in
+IFRS 18 (D128) → operating profit 2 150 = before tax = net. January has none."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ from datetime import date
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
-from modern_gl.reporting.profit_loss import profit_and_loss
+from modern_gl.reporting.profit_loss import TITLES, profit_and_loss
 from modern_gl.reporting.statements import balance_sheet
 
 
@@ -123,8 +123,8 @@ def test_profit_and_loss_leaves_out_the_closing(books):
         ("Себестоимость продаж", -150_000),
         ("Валовая прибыль", 250_000),
         ("Операционные расходы", -40_000),
-        ("Операционная прибыль", 210_000),
         ("Прочие доходы", 5_000),
+        ("Операционная прибыль", 215_000),
         ("Прибыль до налогообложения", 215_000),
         ("Чистая прибыль (убыток)", 215_000),
     ]
@@ -186,7 +186,8 @@ def test_every_title_of_the_statements_has_azerbaijani_translation(books):
     conn, cid = books
     titles = {ln.title for ln in balance_sheet(conn, cid, "2026-02-28").lines}
     titles |= {ln.title for ln in profit_and_loss(conn, cid, "2026-01-01", "2026-12-31").lines}
-    titles |= {"Доходы без типа", "Расходы без типа", "НДС с продаж"}
+    titles |= {"Прибыль до финансирования и налога на прибыль", "НДС с продаж"}
+    titles |= set(TITLES.values())
     assert sorted(t for t in titles if t not in AZ) == []
 
 
@@ -206,9 +207,10 @@ def test_every_title_of_the_statements_has_azerbaijani_translation(books):
 #  12 31.03  Dt 46             Kt 80              230   the result: 1 180 − 180 − 600 − 170
 #  13 31.03  Dt 80             Kt 68.3             20   the profit tax
 #
-# Profit and loss of March: sales 1 180, ƏDV −180, cost −600, gross 400; operating −170
-# (26: −140 = rent −100 + communication −40; 44: −30) → 230; other income 8, other
-# expense −5 → 233 before tax; tax −20 → net 213 — what is left on 80: 230 + 8 − 5 − 20.
+# Profit and loss of March: revenue 1 180 − ƏDV 180 = 1 000 (IFRS 15.47, D128), cost −600,
+# gross 400; operating expenses −170 (26: −140 = rent −100 + communication −40; 44: −30),
+# other income 8, other expense −5 — all operating (IFRS 18) → 233 = before tax; tax −20
+# → net 213 — what is left on 80: 230 + 8 − 5 − 20.
 # Before D102 the closing 9–11 hid the expenses inside 46 and 7, 8, 13 were not read.
 
 
@@ -254,14 +256,13 @@ def test_the_short_chart_shows_the_expenses_where_they_were_spent(classic):
     conn, cid = classic
     march = profit_and_loss(conn, cid, "2026-03-01", "2026-03-31")
     assert shown(march) == [
-        ("Выручка", 118_000),
-        ("НДС с продаж", -18_000),
+        ("Выручка", 100_000),
         ("Себестоимость продаж", -60_000),
         ("Валовая прибыль", 40_000),
         ("Операционные расходы", -17_000),
-        ("Операционная прибыль", 23_000),
         ("Прочие доходы", 800),
         ("Прочие расходы", -500),
+        ("Операционная прибыль", 23_300),
         ("Прибыль до налогообложения", 23_300),
         ("Налог на прибыль", -2_000),
         ("Чистая прибыль (убыток)", 21_300),

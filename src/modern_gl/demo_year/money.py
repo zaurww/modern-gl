@@ -217,14 +217,16 @@ class Money(Firm):
             return
         interest = s.loan * LOAN_RATE // 1200
         principal = min(250_000, s.loan)
+        bank = self.partner["bank"].sc
+        # the interest is a debt to the bank first: financing in the profit and loss (D128)
+        self.ledger.post_new(
+            self.cid, day, [self.p("80", "90", interest, (), bank)], "Kredit faizinin hesablanması"
+        )
         self.bank_op(
             day,
             OUT,
             OTHER,
-            [
-                BankLine(self.acc["90"], principal, self.partner["bank"].sc),
-                BankLine(self.acc["80"], interest),
-            ],
+            [BankLine(self.acc["90"], principal + interest, bank)],
             "Kredit və faiz ödənişi",
         )
         s.loan -= principal

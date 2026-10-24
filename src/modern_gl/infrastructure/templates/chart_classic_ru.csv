@@ -4,6 +4,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 04;Нематериальные активы;;;asset;;;intangible;
 05;Износ нематериальных активов;;;asset;1;;intangible;
 08;Капитальные вложения;;;asset;;;fixed_asset;
+09;Отложенные налоговые активы;;;asset;;;;
 10;Материалы;;;asset;;;item,warehouse;
 19;НДС по приобретённым ценностям;;;asset;;;counterparty;;input_vat
 20;Основное производство;;;asset;;;cost_item;;incoming_production
@@ -35,6 +36,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 75;Расчёты с учредителями;;;liability;;1;counterparty;
 76;Расчёты с разными дебиторами и кредиторами;;;liability;;1;counterparty,contract;
 76H;Начисленные расходы;;;liability;;;counterparty;;accrued_expenses
+77;Отложенные налоговые обязательства;;;liability;;;;
 80;Прибыли и убытки;;;equity;;1;;;fx_gain,fx_loss,bank_fee
 85;Уставный капитал;;;equity;;;counterparty;
 88;Нераспределённая прибыль (непокрытый убыток);;;equity;;1;;
