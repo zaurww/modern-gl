@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 
 from modern_gl.application.inventory import LandedCostCharge, LandedCostTarget, ReceiptLine
-from modern_gl.demo_year.firm import MAIN, YEAR, Open, money, vat18
+from modern_gl.demo_year.firm import MAIN, Open, money, vat18
 from modern_gl.demo_year.trade import Trade
 
 
@@ -63,16 +63,15 @@ CHINA = Shipment(
     "İdxal: ofis ləvazimatı (Çin)",
     ("ledlamp", "usbhub", "headset", "webcam", "powerstrip"),
 )
-SHIPMENTS = {
-    date(YEAR, 3, 10): GERMANY,
-    date(YEAR, 4, 21): CHINA,
-    date(YEAR, 6, 9): GERMANY,
-    date(YEAR, 8, 18): CHINA,
-    date(YEAR, 9, 8): GERMANY,
-    date(YEAR, 11, 10): CHINA,
-    date(YEAR, 11, 24): GERMANY,
+SHIPMENTS = {  # (month, day) of every year
+    (3, 10): GERMANY,
+    (4, 21): CHINA,
+    (6, 9): GERMANY,
+    (8, 18): CHINA,
+    (9, 8): GERMANY,
+    (11, 10): CHINA,
+    (11, 24): GERMANY,
 }
-IMPORT_DAYS = set(SHIPMENTS)
 CUSTOMS_FEE = 27_500  # gömrük yığımı for a declaration, qəpik
 CERTIFICATE_DAYS = 25  # the certification comes after part of the goods is sold
 
@@ -80,7 +79,7 @@ CERTIFICATE_DAYS = 25  # the certification comes after part of the goods is sold
 class Imports(Trade):
     def import_goods(self, day: date) -> None:
         """The receipt at the day's rate on the customs declaration, then its expenses."""
-        shipment = SHIPMENTS[day]
+        shipment = SHIPMENTS[day.month, day.day]
         code = shipment.currency
         rate = self.rate(code, day)
         partner = self.partner[shipment.supplier]

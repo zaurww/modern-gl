@@ -21,7 +21,7 @@ from modern_gl.application.bank import (
 )
 from modern_gl.application.conversion import ConversionFee, ConversionInput, ConversionSide
 from modern_gl.application.ledger import ImportedDocument, PostingInput
-from modern_gl.demo_year.firm import EMPLOYEES, YEAR, Firm, Open, money
+from modern_gl.demo_year.firm import EMPLOYEES, Firm, Open, money
 from modern_gl.reporting.reports import subconto_balance, trial_balance
 
 CASH_FLOAT = 50_000  # what stays in the till after the money goes to the bank
@@ -69,12 +69,16 @@ class Money(Firm):
             for code, amount, sc in credit
         ]
         self.ledger.save_opening_balances(
-            self.cid, date(YEAR, 1, 1), lines, post=True, memo="İlkin qalıqlar 01.01.2026"
+            self.cid,
+            date(self.first, 1, 1),
+            lines,
+            post=True,
+            memo=f"İlkin qalıqlar 01.01.{self.first}",
         )
         s = self.state
         s.bank, s.deposit, s.cash = 8_500_000, 400_000, 120_000
-        s.receivable.append(Open("absheron", date(YEAR, 1, 14), 800_000, 144_000))
-        s.payable.append(Open("tech", date(YEAR, 1, 9), 525_424, 94_576))
+        s.receivable.append(Open("absheron", date(self.first, 1, 14), 800_000, 144_000))
+        s.payable.append(Open("tech", date(self.first, 1, 9), 525_424, 94_576))
 
     # ---- the bank ---------------------------------------------------------------------
 
@@ -363,7 +367,7 @@ class Money(Firm):
         lines = [
             self.p("46", code, r.closing_dt - r.closing_ct, (), (r.value_id,))
             for code in ("26", "44")
-            for r in subconto_balance(self.ledger.conn, self.cid, code, date(YEAR, 1, 1), day)
+            for r in subconto_balance(self.ledger.conn, self.cid, code, date(day.year, 1, 1), day)
             if r.closing_dt != r.closing_ct
         ]
         if lines:
@@ -389,7 +393,7 @@ class Money(Firm):
 
     def close_year(self, day: date) -> None:
         """Profit tax of the year (20%) and the profit into retained earnings."""
-        profit = self.balance("80", date(YEAR, 1, 1), day)
+        profit = self.balance("80", date(day.year, 1, 1), day)
         if profit > 0:
             tax = profit * 20 // 100
             self.ledger.post_new(

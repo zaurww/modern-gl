@@ -18,7 +18,6 @@ from modern_gl.demo_year.firm import (
     MATERIALS,
     PRODUCTS,
     SHOP,
-    YEAR,
     Firm,
     Open,
     money,
@@ -39,7 +38,7 @@ class Trade(Firm):
         ]
         self.inventory.post_receipt(
             self.cid,
-            date(YEAR - 1, 12, 31),
+            date(self.first - 1, 12, 31),
             lines,
             self.acc["88"],
             (),
