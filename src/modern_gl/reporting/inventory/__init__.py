@@ -30,7 +30,6 @@ from modern_gl.reporting.inventory.declarations import (
 )
 from modern_gl.reporting.inventory.documents import (
     InventoryDocumentSummary,
-    inventory_document_of,
     list_inventory_documents,
 )
 from modern_gl.reporting.inventory.stock import (
@@ -66,7 +65,6 @@ __all__ = [
     "cost_sources",
     "group_paths",
     "has_units",
-    "inventory_document_of",
     "item_choices",
     "item_details",
     "item_name",

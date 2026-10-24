@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
+from PySide6.QtCore import QDate
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.catalog import Catalog
@@ -148,6 +149,43 @@ def test_journal_opens_the_conversion_and_its_postings_are_read_only(qtbot, tmp_
         assert copy.source.reference.text() == ""
         assert copy.target.amount.text() == "1 695.00"
         assert load_conversion(win.open_session.conn, win.open_session.company_id, doc.id)
+    finally:
+        win.shutdown()
+
+
+def test_the_credit_day_opens_the_same_conversion(qtbot, tmp_path):
+    """A conversion credited on a later day has two GL documents; the window learns from
+    document_owners that either opens (and F9 copies) the conversion (debt 12)."""
+    theme.apply(QApplication.instance())
+    workspace = Workspace(tmp_path / "data")
+    conn = connect(workspace.new_path("ООО Валюта"))
+    setup_company(Ledger(conn))
+    conn.close()
+    win = MainWindow(workspace)
+    qtbot.addWidget(win)
+    win.start()
+    win.open_session.working_date = date(2026, 3, 5)
+    try:
+        win.show_place(("bank",))
+        win.pages[("bank",)].new_conversion.emit()
+        page = win.stack.currentWidget()
+        assert isinstance(page, ConversionPage)
+        fill_sale(page)
+        page.target.date.setDate(QDate(2026, 3, 6))
+        assert page.save(post=True)
+        doc = page.doc
+        assert doc is not None and doc.credit_document_id is not None
+        win.close_page(("conversion", doc.id))
+
+        win.open_document(doc.credit_document_id)
+        opened = win.stack.currentWidget()
+        assert isinstance(opened, ConversionPage) and opened.doc is not None
+        assert opened.doc.id == doc.id
+
+        win.copy_document(doc.credit_document_id)
+        copy = win.stack.currentWidget()
+        assert isinstance(copy, ConversionPage) and copy.doc is None
+        assert copy.target.amount.text() == "1 695.00"
     finally:
         win.shutdown()
 

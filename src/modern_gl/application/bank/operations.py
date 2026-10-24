@@ -129,15 +129,6 @@ def load_bank_operation(conn: Connection, company_id: int, operation_id: int) ->
     )
 
 
-def bank_operation_of_document(conn: Connection, company_id: int, document_id: int) -> int | None:
-    """The bank operation whose postings these are."""
-    row = conn.execute(
-        "SELECT id FROM bank_operations WHERE company_id = ? AND document_id = ?",
-        (company_id, document_id),
-    ).fetchone()
-    return row[0] if row else None
-
-
 def find_bank_operation(conn: Connection, company_id: int, reference: str) -> int | None:
     """An operation already entered for a bank statement line (future statement import)."""
     reference = reference.strip()

@@ -10,9 +10,10 @@ from __future__ import annotations
 import pytest
 
 from modern_gl.application.inventory import STANDARD_VAT_RATE, ReceiptLine
+from modern_gl.application.queries import DocumentOwner, document_owner, load_document
 from modern_gl.domain.accounts import ACCRUED_EXPENSES
 from modern_gl.domain.errors import LedgerError, PeriodClosedError, ValidationError
-from modern_gl.reporting.inventory import inventory_document_of, stock_balances
+from modern_gl.reporting.inventory import stock_balances
 from modern_gl.reporting.invoices import invoice_report
 from tests.test_sales import Shop, make_shop
 
@@ -121,7 +122,12 @@ def test_a_september_service_invoiced_in_october(shop, conn):
     assert (row.balance, row.vat) == (-59_000, 9_000)
 
     # the accrual belongs to the receipt: it opens it and is corrected only through it
-    assert inventory_document_of(conn, shop.company_id, doc.accrual_document_id) == receipt
+    for gl_id in (doc.gl_document_id, doc.accrual_document_id):
+        owner = document_owner(conn, shop.company_id, gl_id)
+        assert owner == DocumentOwner("inventory", receipt, doc.number)
+    gl = load_document(conn, shop.company_id, doc.accrual_document_id)
+    assert (gl.inventory_document_id, gl.inventory_number) == (receipt, doc.number)
+    assert gl.conversion_id is None and gl.bank_operation_id is None and not gl.editable
     with pytest.raises(ValidationError, match="складским документом"):
         shop.ledger.delete_document(shop.company_id, doc.accrual_document_id)
 

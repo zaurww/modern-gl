@@ -202,3 +202,16 @@
 - «Долг» 12, пункт 2: остаток «счёт + субконто на дату» — один `application/bank/balance.py::
   account_balance` (элемент или весь счёт, в манатах или в валюте); `place_balance` и
   `counterparty_balance` — через него, API прежний. Тест с ручными цифрами.
+
+## Сессия 47 — 2026-10-24, ветка `claude/debt-12-document-owners-72k8ho` (без новых D)
+- «Долг» 12, пункт 3: владелец GL-документа — только через `document_owners`, по коммиту на
+  место, с тестами.
+- Миграция 0044: в представлении `owner_id` — документ модуля (для `uses` — партия);
+  `queries.document_owner(conn, company, document, role="made")`.
+- `load_document` (журнал), выписка банка (признак конвертации — банк больше не читает
+  таблицу конвертации), главное окно (`open_document`, `copy_document`, перенос строк банка)
+  — через него; `inventory_document_of`, `conversion_of_document`,
+  `bank_operation_of_document` удалены. Новый тест: второй день конвертации открывает и
+  копирует ту же конвертацию, в выписке отмечен на обоих счетах.
+- D75 дополнено; чек-лист `ENGINEERING.md`: новый модуль — `owner_id` и своя страница в
+  `MainWindow.open_document`.

@@ -23,16 +23,16 @@ from dataclasses import replace
 
 import pytest
 
+from modern_gl.application.bank import bank_places, statement
 from modern_gl.application.conversions import (
     ConversionFee,
     ConversionInput,
     ConversionSide,
     bank_rate,
     calculate,
-    conversion_of_document,
     load_conversion,
 )
-from modern_gl.application.queries import load_document
+from modern_gl.application.queries import DocumentOwner, document_owner, load_document
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
@@ -130,7 +130,8 @@ def test_sale_of_currency_posts_through_transit(ledger, conn, firm):
     lines = load_document(conn, cid, conversion.document_id).postings
     names = {ledger._subconto_value(cid, p.debit_subconto[0])["name"] for p in lines[1:3]}
     assert names == {"Курсовая разница при конвертации", "Комиссия банка"}
-    assert conversion_of_document(conn, cid, conversion.document_id) == conversion_id
+    owner = document_owner(conn, cid, conversion.document_id)
+    assert owner == DocumentOwner("conversion", conversion_id, None)
 
 
 def test_purchase_and_cross_currency(ledger, conn, firm):
@@ -178,6 +179,11 @@ def test_credit_on_a_later_day_waits_on_transit(ledger, conn, firm):
     assert postings(conn, cid, credit.id) == [(acc["51"], acc["57"], 169_500, None)]
     assert balances(conn, cid, "2026-03-02")["57"] == (169_500, 0)
     assert balances(conn, cid, "2026-03-03")["57"] == (0, 0)
+    # either GL document opens the conversion (the document_owners view, debt 12)
+    owner = DocumentOwner("conversion", conversion_id, None)
+    assert document_owner(conn, cid, conversion.document_id) == owner
+    assert document_owner(conn, cid, credit.id) == owner
+    assert credit.conversion_id == conversion_id and not credit.editable
 
     # back to one day: the second document goes, the first keeps its number
     ledger.conversion.save_conversion(
@@ -354,3 +360,20 @@ def test_migration_keeps_the_fee_of_older_files(tmp_path, monkeypatch):
     assert loaded.fees == (ConversionFee(azn, 340, (None, None, None)),)
     assert loaded.source is not None and loaded.source.amount == 100_000
     conn.close()
+
+
+def test_the_bank_statement_marks_both_days_of_a_conversion(ledger, conn, firm):
+    """The bank statement learns that a conversion made the postings from document_owners,
+    not from the conversion's table (debt 12): the debit day on the USD account, the
+    credit day on the manat one."""
+    cid = firm["cid"]
+    ledger.conversion.save_conversion(cid, sale(firm, target_date="2026-03-03"), post=True)
+    places = {p.value_id: p for p in bank_places(conn, cid)}
+    usd = statement(conn, cid, places[firm["usd_bank"]], "2026-03-01", "2026-03-31")
+    azn = statement(conn, cid, places[firm["azn_bank"]], "2026-03-01", "2026-03-31")
+    assert [(line.doc_date, line.money_out, line.kind) for line in usd.lines] == [
+        ("2026-03-02", 100_200, "conversion")
+    ]
+    assert [(line.doc_date, line.money_in, line.kind) for line in azn.lines] == [
+        ("2026-03-03", 169_500, "conversion")
+    ]

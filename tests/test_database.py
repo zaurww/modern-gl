@@ -55,6 +55,7 @@ FROZEN = {
     "0041_bank_portal_loads.sql": "1d265c1fa64e29f2",
     "0042_bank_portal_reconciled.sql": "4c717085ecd1097b",
     "0043_awaits_invoice.sql": "2297aebcf3e8dbb3",
+    "0044_document_owner_ids.sql": "229ad0a9b7d6b115",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

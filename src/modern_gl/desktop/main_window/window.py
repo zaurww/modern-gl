@@ -13,10 +13,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.bank import bank_operation_of_document, load_bank_operation
-from modern_gl.application.conversions import conversion_of_document, load_conversion
+from modern_gl.application.bank import load_bank_operation
+from modern_gl.application.conversions import load_conversion
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.queries import (
+    document_owner,
     is_opening_document,
     load_document,
     load_template,
@@ -51,7 +52,6 @@ from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import LANGUAGES, language, tr
 from modern_gl.infrastructure.workspace import Workspace
-from modern_gl.reporting.inventory import inventory_document_of
 from modern_gl.reporting.trade import PURCHASE, SALE
 
 
@@ -267,23 +267,20 @@ class MainWindow(ReportPlaces):
             journal.focus_quick_entry()
 
     def open_document(self, doc_id: int) -> None:
-        """From the journal or a report: the primary document, as in 1C. Postings made by
-        a warehouse document open that document, where they are corrected."""
+        """From the journal or a report: the primary document, as in 1C. Postings a module
+        made (document_owners) open its document, where they are corrected."""
         s = self.open_session
-        source = inventory_document_of(s.conn, s.company_id, doc_id)
-        if source is not None:
-            self.open_inventory_document(source)
+        owner = document_owner(s.conn, s.company_id, doc_id)
+        opens = {
+            "inventory": self.open_inventory_document,
+            "conversion": self.open_conversion,
+            "bank": self.open_bank_operation,
+        }
+        if owner is not None and owner.module in opens:
+            opens[owner.module](owner.id)
             return
         if is_opening_document(s.conn, s.company_id, doc_id):
             self.show_place(("opening",))
-            return
-        conversion = conversion_of_document(s.conn, s.company_id, doc_id)
-        if conversion is not None:
-            self.open_conversion(conversion)
-            return
-        operation = bank_operation_of_document(s.conn, s.company_id, doc_id)
-        if operation is not None:
-            self.open_bank_operation(operation)
             return
         self.show_document(doc_id)
 
@@ -294,15 +291,14 @@ class MainWindow(ReportPlaces):
             self.show_place(("opening",))
             self.notify(tr("Начальные остатки вводятся один раз"))
             return
-        conversion = conversion_of_document(s.conn, s.company_id, doc_id)
-        if conversion is not None:
-            data = load_conversion(s.conn, s.company_id, conversion)
+        owner = document_owner(s.conn, s.company_id, doc_id)
+        if owner is not None and owner.module == "conversion":
+            data = load_conversion(s.conn, s.company_id, owner.id)
             self.new_conversion(ConversionPage.copy_of(data))
             return
-        operation = bank_operation_of_document(s.conn, s.company_id, doc_id)
-        if operation is not None:
-            data = load_bank_operation(s.conn, s.company_id, operation)
-            self.new_bank_operation(BankOperationPage.copy_of(data))
+        if owner is not None and owner.module == "bank":
+            operation = load_bank_operation(s.conn, s.company_id, owner.id)
+            self.new_bank_operation(BankOperationPage.copy_of(operation))
             return
         self.new_document(load_document(s.conn, s.company_id, doc_id))
 
