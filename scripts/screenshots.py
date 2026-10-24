@@ -66,7 +66,8 @@ def main() -> None:
             (
                 w
                 for w in QApplication.topLevelWidgets()
-                if w.objectName() in ("completer", "palette", "periodWindow") and w.isVisible()
+                if w.objectName() in ("completer", "palette", "periodWindow", "calendarWindow")
+                and w.isVisible()
             ),
             None,
         )

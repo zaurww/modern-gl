@@ -1893,6 +1893,18 @@ AZ: dict[str, str] = {
     "e-qaimə дописана в покупки: {n}": "E-qaimə alışlara əlavə edildi: {n}",
     "Загрузить: черновиков {n}, в покупки {m}": "Yüklə: qaralama {n}, alışlara {m}",
     "Покупки ждут e-qaimə, с {date}": "E-qaimə gözləyən alışlar, {date} tarixindən",
+    # the calendar of days (D129)
+    "Пн": "B.e",
+    "Вт": "Ç.a",
+    "Ср": "Ç",
+    "Чт": "C.a",
+    "Пт": "C",
+    "Сб": "Ş",
+    "Вс": "B",
+    "{n} кв": "{n} rüb",
+    "Прошлый месяц  PgUp": "Əvvəlki ay  PgUp",
+    "Следующий месяц  PgDn": "Növbəti ay  PgDn",
+    "← → ↑ ↓ — день": "← → ↑ ↓ — gün",
     # обмен документами (D130)
     "документ «{id}» в файле дважды": "«{id}» sənədi faylda iki dəfədir",
     "строка {line}: ожидается объект с полями проводки": "sətir {line}: yazılış sahələri olan obyekt gözlənilir",

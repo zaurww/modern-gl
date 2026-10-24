@@ -1,6 +1,6 @@
 """One date in a form (D105): it reads «05.10.2026»; type it short — «5», «5.10»,
 «051025», «вчера», «+3» — and Enter or Tab, the same reading as the period of a report;
-↑ ↓ move it by a day; the calendar at the right end picks it with the mouse. What is not
+↑ ↓ move it by a day; the calendar at the right end picks it with the mouse (D129). What is not
 understood turns red on Enter and is dropped on Tab: the field always shows the date
 that will be saved."""
 
@@ -9,11 +9,21 @@ from __future__ import annotations
 from datetime import date
 from typing import cast
 
-from PySide6.QtCore import QDate, QEvent, Qt, Signal
+from PySide6.QtCore import QDate, QEvent, QPoint, Qt, Signal
 from PySide6.QtGui import QFocusEvent, QKeyEvent
-from PySide6.QtWidgets import QCalendarWidget, QLineEdit, QMenu, QWidget, QWidgetAction
+from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
 from modern_gl.desktop import icons
+from modern_gl.desktop.day_calendar import DayCalendar
 from modern_gl.desktop.theme import P
 from modern_gl.domain.period_input import parse_date
 from modern_gl.i18n import tr
@@ -73,18 +83,15 @@ class DateEdit(QLineEdit):
     def show_calendar(self) -> None:
         if self.isReadOnly() or not self.isEnabled():
             return
-        menu = QMenu(self)
-        calendar = QCalendarWidget()
-        calendar.setGridVisible(False)
-        calendar.setSelectedDate(self._date)
-        if self._first is not None and self._last is not None:
-            calendar.setDateRange(self._first, self._last)
-        holder = QWidgetAction(menu)
-        holder.setDefaultWidget(calendar)
-        menu.addAction(holder)
-        calendar.clicked.connect(lambda day: (self.setDate(day), menu.close()))
-        calendar.activated.connect(lambda day: (self.setDate(day), menu.close()))
-        menu.exec(self.mapToGlobal(self.rect().bottomLeft()))
+        self._typed()
+        window = CalendarWindow(
+            cast(date, self._date.toPython()),
+            *(None if d is None else cast(date, d.toPython()) for d in (self._first, self._last)),
+            parent=self,
+        )
+        window.chosen.connect(lambda day: self.setDate(to_qdate(day)))
+        window.open_under(self)
+        self.calendar_shown = window  # tests reach the open calendar
 
     # ---- the keys --------------------------------------------------------------------
 
@@ -165,6 +172,63 @@ class DateEdit(QLineEdit):
         self.setProperty("invalid", wrong)
         self.style().unpolish(self)
         self.style().polish(self)
+
+
+class CalendarWindow(QFrame):
+    """The calendar of a date field: a click (or the keys and Enter) — that day; «Сегодня»."""
+
+    chosen = Signal(object)  # a date
+
+    def __init__(
+        self, day: date, first: date | None, last: date | None, parent: QWidget | None = None
+    ) -> None:
+        super().__init__(parent, Qt.WindowType.Popup)
+        self.setObjectName("calendarWindow")
+        self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        today = date.today()
+        root = QVBoxLayout(self)
+        root.setContentsMargins(14, 12, 14, 10)
+        root.setSpacing(6)
+        self.days = DayCalendar(day, today)
+        self.days.set_span(day, day)
+        self.days.set_limits(first, last)
+        self.days.clicked.connect(self.choose)
+        root.addWidget(self.days)
+        line = QFrame()
+        line.setObjectName("periodLine")
+        line.setFixedHeight(1)
+        root.addWidget(line)
+        foot = QHBoxLayout()
+        self.today_button = QPushButton(tr("Сегодня"))
+        self.today_button.setObjectName("flat")
+        self.today_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.today_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.today_button.clicked.connect(lambda: self.choose(today))
+        self.today_button.setEnabled(self.days.days.allowed(today))
+        foot.addWidget(self.today_button)
+        foot.addStretch(1)
+        keys = QLabel(tr("← → ↑ ↓ — день"))
+        keys.setObjectName("secondary")
+        foot.addWidget(keys)
+        root.addLayout(foot)
+
+    def open_under(self, widget: QWidget) -> None:
+        self.adjustSize()
+        place = widget.mapToGlobal(QPoint(0, widget.height() + 4))
+        screen = QApplication.screenAt(place) or QApplication.primaryScreen()
+        room = screen.availableGeometry()
+        y = (
+            place.y()
+            if place.y() + self.height() <= room.bottom()
+            else (widget.mapToGlobal(QPoint(0, 0)).y() - self.height() - 4)
+        )
+        self.move(min(place.x(), room.right() - self.width()), y)
+        self.show()
+        self.days.days.setFocus()
+
+    def choose(self, day: date) -> None:
+        self.chosen.emit(day)
+        self.close()
 
 
 def date_edit(value: date, parent: QWidget | None = None) -> DateEdit:

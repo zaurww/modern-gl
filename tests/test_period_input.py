@@ -228,6 +228,45 @@ def test_the_period_with_the_mouse(qtbot):
     assert field.period() == (d("2026-01-10"), d("2026-01-20"))
 
 
+def test_the_period_by_days(qtbot):
+    """The days of a month in the panel (D129): a click — the start, the mouse shows the
+    period to be, a second click (even before the first) — the end; the dates below follow,
+    Enter takes them. A date typed below moves the calendar."""
+    from PySide6.QtCore import QDate, Qt
+    from PySide6.QtTest import QTest
+
+    from modern_gl.desktop.date_field import edited_date
+    from modern_gl.desktop.period_field import PeriodField
+
+    field = PeriodField((d("2026-10-01"), d("2026-10-31")), TODAY)
+    qtbot.addWidget(field)
+    field.show()
+    field.show_presets()
+    window = field.window_shown
+    assert window.days.title.text() == "Октябрь 2026"
+    assert window.days.days.span == (d("2026-10-01"), d("2026-10-31"))
+    window.day_clicked(d("2026-10-15"))
+    assert window.days.days.span == (d("2026-10-15"), d("2026-10-15"))
+    window._day_hovered(d("2026-10-06"))
+    assert window.days.days.span == (d("2026-10-06"), d("2026-10-15"))
+    window.day_clicked(d("2026-10-06"))
+    assert (edited_date(window.first), edited_date(window.last)) == (
+        d("2026-10-06"),
+        d("2026-10-15"),
+    )
+    assert field.period() == (d("2026-10-01"), d("2026-10-31"))  # not yet: «Готово»
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    assert field.period() == (d("2026-10-06"), d("2026-10-15"))
+    assert field.edit.text() == "06.10 — 15.10.2026"
+
+    field.show_presets()
+    window = field.window_shown
+    window.first.setDate(QDate(2026, 2, 3))
+    assert window.days.title.text() == "Февраль 2026"
+    assert window.days.days.span == (d("2026-02-03"), d("2026-10-15"))
+    window.close()
+
+
 def test_the_period_field_keeps_together_in_a_wide_window(qtbot):
     """In a window's column (ƏDV DH) the field was stretched: ▾ ‹ › ran apart across it."""
     from PySide6.QtWidgets import QVBoxLayout, QWidget
