@@ -8,11 +8,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
 
 from modern_gl.application.bank import BankPlace
+from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import date_edit
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import OpenInvoice
 
 TWO, ONE = "two", "one"  # money in two columns, or one with its sign
 

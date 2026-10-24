@@ -228,8 +228,8 @@ def test_an_overpaid_e_qaime_leaves_an_advance_offset_later(qtbot, bank):
     ]
 
     from modern_gl.application.bank import counterparty_balance
+    from modern_gl.application.invoices import open_invoices
     from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
-    from modern_gl.reporting.invoices import open_invoices
 
     owe_alfa(session, "MT002", "400", "2026-03-03")
     dialog = AdvanceOffsetDialog(session, "2026-03-03")

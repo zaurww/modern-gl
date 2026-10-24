@@ -26,6 +26,7 @@ from modern_gl.application.bank import (
     BankPlace,
 )
 from modern_gl.application.catalog import AccountInfo
+from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.bank_operation_page.common import (
     FIELD_WIDTH,
     NONE,
@@ -40,7 +41,6 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import Chip, MenuItem, button, date_edit, more_button
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import OpenInvoice
 
 
 class BankOperationForm(QWidget):

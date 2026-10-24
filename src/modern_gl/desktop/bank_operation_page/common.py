@@ -14,13 +14,13 @@ from modern_gl.application.bank import (
     BankPlace,
 )
 from modern_gl.application.catalog import AccountInfo, SubcontoInfo
+from modern_gl.application.invoices import DRAFT, PORTAL, OpenInvoice
 from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import ru_date
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import DRAFT, PORTAL, OpenInvoice
 
 NONE = "—"
 # the line's account suggests the kind of a counterparty's operation

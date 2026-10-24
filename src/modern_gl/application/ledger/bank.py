@@ -27,6 +27,7 @@ from modern_gl.application.bank import (
 )
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.currencies import no_rate_text, rate_on
+from modern_gl.application.invoices import open_invoices
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.module import ModuleDocumentCommands
@@ -38,7 +39,6 @@ from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
-from modern_gl.reporting.invoices import open_invoices
 
 # (the settlement account's type, the advance's role, the company owes the e-qaimə)
 OFFSET_SIDES = (("payable", ADVANCE_PAID, True), ("receivable", ADVANCE_RECEIVED, False))

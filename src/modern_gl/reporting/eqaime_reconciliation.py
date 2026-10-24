@@ -15,10 +15,10 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from modern_gl.application.books import COMMON, book_params
+from modern_gl.application.invoice_rules import invoice_accounts, is_accrual, is_vat_accrual
 from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.invoice_rules import invoice_accounts, is_accrual, is_vat_accrual
 from modern_gl.reporting.report_common import _DOCS_CTE
 
 # the groups of the report, the problems first

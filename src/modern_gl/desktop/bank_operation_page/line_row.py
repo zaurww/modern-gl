@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.bank import BankLine
 from modern_gl.application.catalog import AccountInfo
+from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.bank_operation_page.common import (
     SEVERAL,
     counterparty_kind,
@@ -25,7 +26,6 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import button
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import OpenInvoice
 
 
 class LineRow(QWidget):
