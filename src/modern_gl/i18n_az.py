@@ -940,6 +940,8 @@ AZ: dict[str, str] = {
     "Вместе с товаром появится склад «{name}»": "Mal ilə birlikdə «{name}» anbarı yaranacaq",
     "Начните с товара: название и единица — склад появится сам. Или сразу покупка: новый товар можно написать прямо в строке.": "Maldan başlayın: adı və ölçü vahidi — anbar özü yaranacaq. Və ya birbaşa alış: yeni malı elə sətirdə yazmaq olar.",
     "Остатков пока нет": "Hələ qalıq yoxdur",
+    "Движений пока нет": "Hələ hərəkət yoxdur",
+    "Здесь будет видно, откуда пришёл и куда ушёл каждый товар.": "Burada hər malın haradan gəldiyi və hara getdiyi görünəcək.",
     "Введите покупку или начальные остатки — остатки появятся здесь.": "Alış və ya ilkin qalıqları daxil edin — qalıqlar burada görünəcək.",
     "Штука": "Ədəd",
     "кг": "kq",

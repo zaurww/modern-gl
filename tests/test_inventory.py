@@ -1709,6 +1709,8 @@ def test_the_empty_warehouse_says_what_to_do_next(ledger, conn, qtbot):
 
     assert page.empty.title.text() == "На складе пока пусто"
     assert shown() == ["+ Товар", "+ Покупка", "Начальные остатки"]
+    # nothing to choose yet: not «Выберите товар»
+    assert page.card_empty.title.text() == "Движений пока нет"
     for b in page.empty.buttons:
         b.click()
     assert asked == ["item", "receipt", "opening"]
