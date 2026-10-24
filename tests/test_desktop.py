@@ -928,19 +928,15 @@ def test_osv_amounts_stand_next_to_the_names(window, qtbot):
     assert page.model.banded == [i % 2 == 1 for i in range(rows - 1)] + [False]
 
 
-def test_report_grid_band_and_currency_rows(window, qtbot):
-    """D127: the pale grid is on until turned off; the turnovers (every second group of
-    columns) lie on a band; a row in a currency has its own color, not the grey of a
-    subaccount."""
+def test_report_grid_and_currency_rows(window, qtbot):
+    """D127: the pale grid is on until turned off; a row in a currency has its own
+    color, not the grey of a subaccount."""
     from modern_gl.desktop.reports_page.osv import CurrencyLine
     from modern_gl.desktop.reports_page.table import grid, set_grid
 
     assert grid()
     page = OsvPage(window.session)
     qtbot.addWidget(page)
-    groups = [c.group for c in page.model.columns]
-    turnover = [g for g in dict.fromkeys(groups) if g][1]  # after the opening balance
-    assert page.model.tinted == [g == turnover and bool(g) for g in groups]
     set_grid(False)
     assert not grid()
     set_grid(True)

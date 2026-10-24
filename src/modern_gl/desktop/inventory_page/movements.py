@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.inventory import INCOMING_REASONS, format_quantity
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.reports_page import Column, ReportModel
+from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate
 from modern_gl.desktop.widgets import EmptyState, list_table, ru_date
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -51,7 +52,8 @@ def source_text(source: MovementSource, counterparty: bool = True) -> str:
 class MovementsPart(InventoryForm):
     def _build_movements(self) -> QWidget:
         self.card_model = ReportModel()
-        self.card = list_table(self.card_model, 32)
+        self.card = list_table(self.card_model, ROW_HEIGHT, wrap=False)  # as the stock above
+        self.card.setItemDelegate(ReportDelegate(self.card))
         self.card.doubleClicked.connect(self._open_movement)
         for keys in ("Return", "Enter"):  # only on the list
             shortcut = QShortcut(QKeySequence(keys), self.card)
