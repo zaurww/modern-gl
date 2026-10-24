@@ -1,12 +1,13 @@
 """The list table (DESIGN.md §4): documents, elements, rates, templates — rows to open.
 
 The list fills the page: one text column (the memo, the name) takes the free room, the
-others are as wide as their text. A double click opens a row (the bank alone opens it
+others are as wide as their text. A double click or Enter opens a row (the bank alone opens it
 with one: it is a way through its levels, D132)."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QAbstractItemModel, QSortFilterProxyModel
+from PySide6.QtCore import QAbstractItemModel, QSortFilterProxyModel, Qt
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableView
 
 from modern_gl.desktop.reports_page.table import ReportModel
@@ -72,3 +73,11 @@ class ListTable(QTableView):
             else:
                 hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
                 self.resizeColumnToContents(i)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        """Enter opens the row as a double click does (a page's own Enter comes first)."""
+        enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+        if enter and not event.modifiers() and self.currentIndex().isValid():
+            self.doubleClicked.emit(self.currentIndex())
+            return
+        super().keyPressEvent(event)

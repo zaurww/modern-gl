@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from PySide6.QtCore import QStringListModel
+from PySide6.QtCore import QStringListModel, Qt
 from PySide6.QtWidgets import QAbstractItemView, QApplication
 
 from modern_gl.desktop.list_table import ListTable
@@ -60,6 +60,15 @@ def test_no_page_sets_up_a_list_by_hand():
         and p.relative_to(DESKTOP).as_posix() not in allowed
     ]
     assert not bad, f"таблица-список настраивается вручную: {bad} — ListTable"
+
+
+def test_enter_opens_a_row_of_a_list(qtbot):
+    table = ListTable(QStringListModel(["a", "b"]))
+    qtbot.addWidget(table)
+    table.setCurrentIndex(table.model().index(1, 0))
+    with qtbot.waitSignal(table.doubleClicked) as opened:
+        qtbot.keyClick(table, Qt.Key.Key_Return)
+    assert opened.args[0].row() == 1
 
 
 ROWS = [("01.03.2026", "Аренда офиса", 150_000), ("02.03.2026", "Связь", 4_500)]
