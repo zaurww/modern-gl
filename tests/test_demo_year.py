@@ -159,5 +159,5 @@ def test_two_years_follow_one_another():
         balance = {code: r.closing_dt - r.closing_ct for code, r in rows.items()}
         assert all(balance[money] >= 0 for money in ("50", "51", "54"))
         assert balance["80"] == 0 and rows["88"].turnover_ct > 0
-        assert -balance["90"] == loan  # 5 000 AZN, 250 a month from March 2025
+        assert -balance["90"] == loan  # 50 000 AZN, 2 500 a month from March 2025
     conn.close()
