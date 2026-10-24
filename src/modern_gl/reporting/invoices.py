@@ -19,7 +19,7 @@ from datetime import date
 
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.books import COMMON, book_params
-from modern_gl.application.invoices import InvoiceRow, gathered_invoices
+from modern_gl.application.invoices import IN_PERIOD, UNPAID, InvoiceRow, gathered_invoices
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 
@@ -33,10 +33,8 @@ def invoice_report(
     open_only: bool = False,
 ) -> list[InvoiceRow]:
     params = book_params(conn, company_id, date_from, date_to, layers)
-    rows = gathered_invoices(conn, company_id, params)
-    if open_only:
-        return [r for r in rows.values() if r.balance != 0]
-    return [r for r in rows.values() if r.in_period]
+    only = UNPAID if open_only else IN_PERIOD
+    return list(gathered_invoices(conn, company_id, params, only=only).values())
 
 
 @attention_source
