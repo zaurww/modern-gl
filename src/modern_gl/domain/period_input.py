@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-from modern_gl.domain.dates import month_days, month_name
+from modern_gl.domain.dates import date_range, month_days, month_name
 from modern_gl.i18n import fold, tr
 
 Period = tuple[date, date]
@@ -134,10 +134,7 @@ def describe(period: Period) -> str:
         return tr("{n} квартал {year}", n=quarter_of(first), year=first.year)
     if (first, last) == (date(first.year, 1, 1), date(first.year, 12, 31)):
         return str(first.year)
-    if first == last:
-        return f"{first:%d.%m.%Y}"
-    start = f"{first:%d.%m}" if first.year == last.year else f"{first:%d.%m.%Y}"
-    return f"{start} — {last:%d.%m.%Y}"
+    return date_range(first, last)
 
 
 def shift(period: Period, steps: int) -> Period:

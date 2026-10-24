@@ -28,7 +28,7 @@ CORE = [
             "templates",
         )
     ),
-    SRC / "reporting" / "reports.py",
+    *(SRC / "reporting" / "reports").glob("*.py"),
     SRC / "reporting" / "report_common.py",
     SRC / "reporting" / "plaintext.py",
     SRC / "reporting" / "handover.py",

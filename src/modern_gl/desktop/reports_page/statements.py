@@ -45,7 +45,6 @@ SECTIONS = (
     "Капитал",
 )
 INDENT = "      "
-DEPTH = {"line": 1, "account": 2, "item": 3}
 
 
 def segments(captions: list[tuple[str, str]], on_click) -> tuple[QWidget, dict[str, QPushButton]]:

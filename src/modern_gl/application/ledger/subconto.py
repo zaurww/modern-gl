@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from modern_gl.application.common import insert, where_used
 from modern_gl.application.ledger.base import LedgerBase, account_label
 from modern_gl.domain.errors import NotFoundError, ValidationError
+from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import IntegrityError, Row, transaction
 
@@ -233,14 +234,12 @@ class SubcontoCommands(LedgerBase):
         """Tax details of a counterparty: a resident's VÖEN (10 digits, may be unknown),
         or a non-resident's country and tax number of its own country (any format).
         Another counterparty with the same VÖEN is allowed (branches): the UI warns."""
-        tax_id = " ".join((tax_id or "").split()) or None
         country = (country or "").strip() or None
-        if not nonresident:
+        if nonresident:
+            tax_id = " ".join((tax_id or "").split()) or None
+        else:
             country = None
-            if tax_id is not None:
-                tax_id = tax_id.replace(" ", "")
-                if not (tax_id.isdigit() and len(tax_id) == 10):
-                    raise ValidationError(tr("VÖEN — 10 цифр, а не «{text}»", text=tax_id))
+            tax_id = resident_tax_id(tax_id)
         with transaction(self.conn):
             old = self._subconto_value(company_id, value_id)
             self.conn.execute(

@@ -11,7 +11,7 @@ from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QLabel, QPushButton, QWidget
 
 from modern_gl.desktop.widgets import button, date_edit, edited_date, to_qdate
-from modern_gl.domain.dates import ru_date
+from modern_gl.domain.dates import date_range
 from modern_gl.domain.periods import DAY, LAST_MONTH, LAST_WEEK, MONTH, WEEK, quick_period
 from modern_gl.i18n import tr
 
@@ -113,8 +113,4 @@ class PeriodBar(QWidget):
 
 def period_dates(first: date, last: date) -> str:
     """'20.10.2026', '13.10–19.10.2026', '29.12.2025–04.01.2026'."""
-    end = ru_date(last.isoformat())
-    if first == last:
-        return end
-    start = ru_date(first.isoformat())
-    return f"{start[:5] if first.year == last.year else start}–{end}"
+    return date_range(first, last, "–")

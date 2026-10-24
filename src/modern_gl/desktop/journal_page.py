@@ -160,7 +160,35 @@ class JournalPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 30, 40, 24)
         root.setSpacing(18)
+        root.addWidget(self._build_header(session))
+        self.quick = QuickEntryBar(session)
+        self.quick.posted.connect(lambda doc_id: self.refresh(select_id=doc_id))
+        self.quick.open_form.connect(self.prefill_document.emit)
+        root.addWidget(self.quick)
 
+        self.model = JournalModel(dict(session.layers))
+        self.proxy = QSortFilterProxyModel(self)
+        self.proxy.setSourceModel(self.model)
+        self.proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self.proxy.setFilterKeyColumn(-1)
+        self.search.textChanged.connect(self.proxy.setFilterFixedString)
+        self._build_table(session)
+
+        self.empty = EmptyState(
+            "◎",
+            tr("Документов пока нет"),
+            tr("Нажмите «+ Новый документ» или Ins, чтобы ввести первую операцию."),
+        )
+        self.stack = QStackedLayout()
+        self.stack.addWidget(self.table)
+        self.stack.addWidget(self.empty)
+        root.addLayout(self.stack, 1)
+
+        hide_when_viewing(session.read_only, self.new_button, self.more, self.quick)
+        self._bind_keys()
+        self.refresh()
+
+    def _build_header(self, session: Session) -> PageHeader:
         self.header = PageHeader(tr("Журнал"), session.company_name)
         self.search = QLineEdit()
         self.search.setObjectName("search")
@@ -179,19 +207,9 @@ class JournalPage(QWidget):
             tr("+ Новый документ"), self.new_document.emit, "Ins, Ctrl+N"
         )
         self.more = self.header.more(lambda: [(tr("Импорт из Excel…"), self.import_requested.emit)])
-        root.addWidget(self.header)
-        self.quick = QuickEntryBar(session)
-        self.quick.posted.connect(lambda doc_id: self.refresh(select_id=doc_id))
-        self.quick.open_form.connect(self.prefill_document.emit)
-        root.addWidget(self.quick)
+        return self.header
 
-        self.model = JournalModel(dict(session.layers))
-        self.proxy = QSortFilterProxyModel(self)
-        self.proxy.setSourceModel(self.model)
-        self.proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        self.proxy.setFilterKeyColumn(-1)
-        self.search.textChanged.connect(self.proxy.setFilterFixedString)
-
+    def _build_table(self, session: Session) -> None:
         self.table = QTableView()
         self.table.setObjectName("list")
         self.table.setModel(self.proxy)
@@ -216,20 +234,6 @@ class JournalPage(QWidget):
         hh.setSectionResizeMode(MEMO, QHeaderView.ResizeMode.Stretch)
         self.table.setColumnHidden(BOOK, not session.parallel_books)  # one book (D63)
         self.table.doubleClicked.connect(self._open_current)
-
-        self.empty = EmptyState(
-            "◎",
-            tr("Документов пока нет"),
-            tr("Нажмите «+ Новый документ» или Ins, чтобы ввести первую операцию."),
-        )
-        self.stack = QStackedLayout()
-        self.stack.addWidget(self.table)
-        self.stack.addWidget(self.empty)
-        root.addLayout(self.stack, 1)
-
-        hide_when_viewing(session.read_only, self.new_button, self.more, self.quick)
-        self._bind_keys()
-        self.refresh()
 
     def _bind_keys(self) -> None:
         for keys, fn in (
