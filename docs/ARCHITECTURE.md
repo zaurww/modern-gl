@@ -55,7 +55,8 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 ## 4. Данные
 - **Файл компании** — SQLite `<Название>.gl`; `infrastructure/workspace.py` открывает,
   создаёт (через `.part`), запоминает внешние файлы; `backup.py` — копии через Backup API
-  с `integrity_check`; режим просмотра — снимок в памяти (`db.open_snapshot`, D80).
+  с `integrity_check`; режим просмотра — снимок в памяти (`db.open_snapshot`, D80);
+  закрытие — `db.close` (`PRAGMA optimize`); файл помечен `application_id` «MGL1».
 - **Схема** — только миграциями `migrations/NNNN_*.sql`, подряд, написанные не меняются
   (хэши в `test_database.py`); каждая — в своей транзакции с `foreign_key_check`.
 - **Каждая таблица** — `company_id NOT NULL`, составные FK `(company_id, id)`, индекс на
@@ -106,4 +107,4 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 | Режим просмотра | `test_read_only_ui.py` |
 | Перестроение модулей | `test_rebuild.py` |
 | Вид | `scripts/screenshots.py` — смотреть глазами |
-| Скорость | `scripts/benchmark.py` (100 000 проводок: ОСВ 0,5 с) |
+| Скорость | `scripts/benchmark.py` (100 000 проводок: ОСВ 0,35 с со статистикой `PRAGMA optimize`, 0,6 с без) |
