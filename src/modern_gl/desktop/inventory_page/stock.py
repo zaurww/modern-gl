@@ -29,7 +29,6 @@ from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     StockBalance,
     code_label,
-    has_units,
     last_receipts,
     stock_balances,
 )
@@ -171,9 +170,6 @@ class StockPart(InventoryForm):
         self.s.notify(tr("Единица «{name}» добавлена", name=name.strip()))
 
     def add_item(self) -> None:
-        if not has_units(self.s.conn, self.s.company_id):
-            self.s.notify(tr("Сначала добавьте единицу измерения"))
-            return
         dialog = ItemDialog(self.s, self.inventory, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.s.catalog.reload()

@@ -12,7 +12,13 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
-from modern_gl.application.inventory import INCOMING_REASONS, SALE_ROLE_NAMES, Inventory
+from modern_gl.application.inventory import (
+    INCOMING_REASONS,
+    SALE_ROLE_NAMES,
+    USUAL_UNITS,
+    Inventory,
+    UsualUnit,
+)
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
@@ -23,7 +29,11 @@ from modern_gl.reporting.inventory import (
     item_details,
     stock_account_choices,
     unit_choices,
+    unit_codes,
+    warehouse_choices,
 )
+
+FIRST_WAREHOUSE = "Основной склад"  # made with the first item of a company without one
 
 
 def open_item(session: Session, inventory: Inventory, value_id: int, parent=None) -> bool:
@@ -71,6 +81,8 @@ class ItemDialog(QDialog):
         self.units = QComboBox()
         for unit in unit_choices(session.conn, session.company_id):
             self.units.addItem(unit.label, unit.id)
+        if item is None:  # the usual ones too: made with the item that takes one
+            self._offer_usual_units()
         self.accounts = QComboBox()
         for account in stock_account_choices(session.conn, session.company_id):
             self.accounts.addItem(account.label, account.id)
@@ -87,17 +99,40 @@ class ItemDialog(QDialog):
         form.addRow(tr("Единица измерения"), self.units)
         if not session.stock_only:  # a warehouse only (D90): the first stock account, unseen
             form.addRow(tr("Счёт запасов"), self.accounts)
-        if item is not None and item.used:
-            note = QLabel(tr("По товару есть документы: единица и счёт не меняются"))
-            note.setObjectName("tertiary")
-            note.setFont(fonts().small)
-            form.addRow(note)
+        self._add_notes(form)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _add_notes(self, form: QFormLayout) -> None:
+        """What saving does beyond the item: a beginner's first item makes the first
+        warehouse too; a used one keeps its unit and account."""
+        item = self.item
+        self.first_warehouse = item is None and not warehouse_choices(
+            self.s.conn, self.s.company_id
+        )
+        notes = []
+        if self.first_warehouse:
+            notes.append(tr("Вместе с товаром появится склад «{name}»", name=tr(FIRST_WAREHOUSE)))
+        if item is not None and item.used:
+            notes.append(tr("По товару есть документы: единица и счёт не меняются"))
+        for text in notes:
+            note = QLabel(text)
+            note.setObjectName("tertiary")
+            note.setFont(fonts().small)
+            form.addRow(note)
+
+    def _offer_usual_units(self) -> None:
+        """The usual units the company has no code of; the first unit there is chosen."""
+        taken = unit_codes(self.s.conn, self.s.company_id)
+        for usual in USUAL_UNITS:
+            unit = UsualUnit(tr(usual.code), tr(usual.name), usual.precision)
+            if unit.code not in taken:
+                self.units.addItem(f"{unit.code}  {unit.name}", unit)
+        self.units.setCurrentIndex(0)
 
     def _item_kind(self) -> int | None:
         return next((k for k, code in self.s.catalog.kind_codes.items() if code == "item"), None)
@@ -111,16 +146,22 @@ class ItemDialog(QDialog):
                 self, self.caption, tr("В плане счетов нет счёта с субконто Товар и Склад")
             )
             return
-        group = self.group.currentData()
-        unit, account = int(self.units.currentData()), int(self.accounts.currentData())
+        group, unit = self.group.currentData(), self.units.currentData()
+        account = int(self.accounts.currentData())
         code = self.code.text().strip() or None
         try:
             if self.item is None:
-                self.item_id = self.inventory.add_item(
-                    self.s.company_id, self.name.text(), unit, account, code, group_id=group
+                self.item_id = self.inventory.add_new_item(
+                    self.s.company_id,
+                    self.name.text(),
+                    unit if isinstance(unit, UsualUnit) else int(unit),
+                    account,
+                    code,
+                    group_id=group,
+                    first_warehouse=tr(FIRST_WAREHOUSE) if self.first_warehouse else None,
                 )
             else:
-                self._update(group, unit, account, code)
+                self._update(group, int(unit), account, code)
         except LedgerError as exc:
             QMessageBox.warning(self, self.caption, str(exc))
             return

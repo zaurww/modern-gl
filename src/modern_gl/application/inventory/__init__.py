@@ -28,6 +28,7 @@ from modern_gl.application.inventory.model import (
     QUANTITY_SCALE,
     SALE_ROLE_NAMES,
     STANDARD_VAT_RATE,
+    USUAL_UNITS,
     VAT_DOCUMENTS,
     VAT_RATE_SCALE,
     InventoryDocumentData,
@@ -39,6 +40,7 @@ from modern_gl.application.inventory.model import (
     ReceiptLine,
     SaleLine,
     TransferLine,
+    UsualUnit,
 )
 from modern_gl.application.inventory.rebuild import RebuildCommands
 
@@ -51,6 +53,7 @@ __all__ = [
     "QUANTITY_SCALE",
     "SALE_ROLE_NAMES",
     "STANDARD_VAT_RATE",
+    "USUAL_UNITS",
     "VAT_DOCUMENTS",
     "VAT_RATE_SCALE",
     "Inventory",
@@ -63,6 +66,7 @@ __all__ = [
     "ReceiptLine",
     "SaleLine",
     "TransferLine",
+    "UsualUnit",
     "allocate_charges",
     "allocate_minor",
     "default_vat_rate",
