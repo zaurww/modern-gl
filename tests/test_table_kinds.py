@@ -50,7 +50,7 @@ def test_a_tree_list_is_as_wide_as_a_list():
         and "fit_tree(" not in text
         and path.relative_to(DESKTOP).as_posix() not in TREES
     ]
-    assert loose == [], "дерево-список — ширины через list_table.fit_tree (D-new1)"
+    assert loose == [], "дерево-список — ширины через list_table.fit_tree (D133)"
 
 
 def test_a_list_table(qtbot):
