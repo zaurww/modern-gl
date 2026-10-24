@@ -100,6 +100,12 @@ def unit_choices(conn: Connection, company_id: int) -> list[Choice]:
     return [Choice(r["id"], code_label(r["code"], r["name"])) for r in rows]
 
 
+def unit_codes(conn: Connection, company_id: int) -> set[str]:
+    """The codes of the company's units, active or not (a code is taken once)."""
+    rows = conn.execute("SELECT code FROM inventory_units WHERE company_id = ?", (company_id,))
+    return {r["code"] for r in rows}
+
+
 def landed_cost_type_choices(conn: Connection, company_id: int) -> list[Choice]:
     """Active kinds of additional costs, by name."""
     rows = conn.execute(

@@ -71,9 +71,6 @@ class NewValuesPart(InventoryDocumentForm):
                 self._make_service(index.row(), text)
                 return
         dialog = ItemDialog(self.s, self.inventory, self, name=text)
-        if dialog.units.count() == 0:
-            self.show_error(tr("Сначала добавьте единицу измерения"))
-            return
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.item_id is None:
             edit_again(self.table, index, text)
             return
