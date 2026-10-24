@@ -13,16 +13,15 @@ from __future__ import annotations
 from dataclasses import fields, replace
 from datetime import date
 
-from modern_gl.application.bank import (
+from modern_gl.application.bank.advances import AdvanceOffset, counterparty_balance
+from modern_gl.application.bank.operations import (
     IN,
     KIND_NAMES,
     OUT,
     VAT_DEPOSIT_KINDS,
-    AdvanceOffset,
     BankLine,
     BankOperationInput,
     allocate,
-    counterparty_balance,
     load_bank_operation,
 )
 from modern_gl.application.common import pad_subconto

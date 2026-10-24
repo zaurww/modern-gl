@@ -4,7 +4,7 @@ end by the bank. Neither changes a posting: lines are read from postings."""
 
 from __future__ import annotations
 
-from modern_gl.application.bank import ACCOUNT_KINDS
+from modern_gl.application.bank.accounts import ACCOUNT_KINDS
 from modern_gl.application.common import insert
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.subconto import SubcontoCommands

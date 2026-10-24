@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import pytest
 
-from modern_gl.application.eqaime_import import (
+from modern_gl.application.eqaime import (
     EInvoice,
     EInvoiceLine,
     import_drafts,

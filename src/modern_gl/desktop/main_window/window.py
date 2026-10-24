@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.bank import load_bank_operation
-from modern_gl.application.conversions import load_conversion
+from modern_gl.application.conversion import load_conversion
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.queries import (
     document_owner,

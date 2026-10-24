@@ -10,7 +10,7 @@ import pytest
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
-from modern_gl.application.eqaime_portal import fetch_list, rechecks, usual_span
+from modern_gl.application.eqaime.portal import fetch_list, rechecks, usual_span
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.eqaime import ALL, ON_APPROVAL, PortalInvoice, portal_invoice

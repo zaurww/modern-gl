@@ -461,7 +461,7 @@ def main() -> None:
     shot("0_home_awaiting")  # «Bu gün» reminds of it
     win.show_place(("sales",))
     shot("8c0_sales")
-    from modern_gl.application.eqaime_import import parse_invoice
+    from modern_gl.application.eqaime import parse_invoice
     from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 
     sample = {  # the shape of the portal's answer (etaxes-ext docs/api-reference.md)

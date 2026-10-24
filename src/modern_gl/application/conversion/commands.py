@@ -14,7 +14,7 @@ from __future__ import annotations
 from datetime import date
 
 from modern_gl.application.common import pad_subconto
-from modern_gl.application.conversions import (
+from modern_gl.application.conversion.calc import (
     Conversion,
     ConversionCalc,
     ConversionFee,

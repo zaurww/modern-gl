@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
-from modern_gl.application.conversions import load_conversion
+from modern_gl.application.conversion import load_conversion
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme

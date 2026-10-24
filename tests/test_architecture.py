@@ -44,9 +44,9 @@ MODULE_TABLE = re.compile(
 MODULE_CODE = (
     "modern_gl.application.inventory",
     "modern_gl.application.bank",
-    "modern_gl.application.conversions",
-    "modern_gl.application.eqaime_import",
-    "modern_gl.application.eqaime_portal",
+    "modern_gl.application.conversion",
+    "modern_gl.application.eqaime",
+    "modern_gl.application.eqaime.portal",
     "modern_gl.application.quick_entry",
     "modern_gl.application.trade_batch",
     "modern_gl.reporting.inventory",
@@ -173,18 +173,31 @@ def test_windows_open_no_transaction():
 
 
 def test_ledger_is_the_core_and_modules_are_objects_of_their_own():
-    """Debt 2 (paid in session 38): the bank, conversion and e-qaimə are not mixed into
-    Ledger; they are its objects over the same connection — the core knows none of them."""
-    from modern_gl.application.ledger import BankModule, ConversionModule, EqaimeModule, Ledger
+    """Debt 2 (paid in session 38; D122): the bank, conversion and e-qaimə are not mixed
+    into Ledger; each is an object of its own package over the same connection — the core
+    knows none of them, and asks for a module only when its handle is used."""
+    from modern_gl.application.bank import BankModule
+    from modern_gl.application.conversion import ConversionModule
+    from modern_gl.application.eqaime import EqaimeModule
+    from modern_gl.application.ledger import Ledger
     from modern_gl.infrastructure.db import connect
 
+    packages = (
+        "modern_gl.application.bank",
+        "modern_gl.application.conversion",
+        "modern_gl.application.eqaime",
+    )
     module_groups = {
         cls
         for module in (BankModule, ConversionModule, EqaimeModule)
         for cls in module.__mro__
-        if cls.__module__.rsplit(".", 1)[-1] in {"bank", "bank_statements", "conversion", "eqaime"}
+        if cls.__module__.startswith(packages)
     }
-    assert not module_groups & set(Ledger.__mro__)
+    assert module_groups and not module_groups & set(Ledger.__mro__)
+    core_init = SRC / "application" / "ledger" / "__init__.py"
+    tree = ast.parse(core_init.read_text(encoding="utf-8"))
+    top = {n.module for n in tree.body if isinstance(n, ast.ImportFrom) and n.module}
+    assert not {m for m in top if m.startswith(packages)}, "Ledger импортирует модуль при загрузке"
     ledger = Ledger(connect(":memory:"), actor="Aynur")
     assert ledger.bank.conn is ledger.conn and ledger.bank.actor == "Aynur"
     assert ledger.bank is ledger.bank  # one object per ledger

@@ -6,12 +6,12 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
 from modern_gl.application.common import pad_subconto
-from modern_gl.application.eqaime_import.counterparties import (
+from modern_gl.application.eqaime.counterparties import (
     add_counterparties,
     new_counterparties,
     remember_legal_names,
 )
-from modern_gl.application.eqaime_import.planning import InvoicePlan, LinePlan
+from modern_gl.application.eqaime.planning import InvoicePlan, LinePlan
 from modern_gl.application.inventory import (
     QUANTITY_SCALE,
     STANDARD_VAT_RATE,

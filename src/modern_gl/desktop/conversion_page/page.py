@@ -16,15 +16,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.conversions import (
+from modern_gl.application.conversion import (
     ConversionInput,
+    MissingAccountRole,
     bank_rate,
     calculate,
     load_conversion,
     official_rate,
 )
 from modern_gl.application.currencies import missing_rates_text
-from modern_gl.application.ledger.conversion import MissingAccountRole
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.conversion_page.accounts_dialog import ConversionAccountsDialog
 from modern_gl.desktop.conversion_page.common import (

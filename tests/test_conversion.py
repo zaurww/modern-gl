@@ -25,7 +25,7 @@ import pytest
 
 from modern_gl.application.bank import bank_places, statement
 from modern_gl.application.chart_csv import apply_chart_template
-from modern_gl.application.conversions import (
+from modern_gl.application.conversion import (
     ConversionFee,
     ConversionInput,
     ConversionSide,

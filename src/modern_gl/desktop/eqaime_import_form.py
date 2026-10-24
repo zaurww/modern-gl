@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.eqaime_import import (
+from modern_gl.application.eqaime import (
     EInvoice,
     InvoicePlan,
     NewCounterparty,

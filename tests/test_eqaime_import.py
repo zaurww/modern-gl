@@ -10,7 +10,7 @@ from decimal import Decimal
 import pytest
 from PySide6.QtCore import Qt
 
-from modern_gl.application.eqaime_import import EInvoice, import_drafts, parse_invoice, plan_import
+from modern_gl.application.eqaime import EInvoice, import_drafts, parse_invoice, plan_import
 from modern_gl.application.inventory import QUANTITY_FACTOR, ReceiptLine, SaleLine
 from modern_gl.infrastructure.etaxes import (
     APPROVED,
@@ -378,7 +378,7 @@ def test_import_dialog_loads_shows_and_creates_drafts(shop, conn, qtbot, monkeyp
     ],
 )
 def test_short_name_suggests_a_shorter_counterparty_name(portal, short):
-    from modern_gl.application.eqaime_import import short_name
+    from modern_gl.application.eqaime import short_name
 
     assert short_name(portal) == short
 
@@ -386,7 +386,7 @@ def test_short_name_suggests_a_shorter_counterparty_name(portal, short):
 def test_one_new_counterparty_per_voen_named_by_the_user(shop, conn):
     """Two e-qaimə of one new supplier: it is listed once and added once, under the name
     the user typed; the documents point at it."""
-    from modern_gl.application.eqaime_import import new_counterparties
+    from modern_gl.application.eqaime import new_counterparties
 
     long_name = '"KOMPYUTER DÜNYASI" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ'
     invoices = []
@@ -415,7 +415,7 @@ def test_one_new_counterparty_per_voen_named_by_the_user(shop, conn):
 
 def test_counterparties_can_be_added_before_any_document(shop, conn):
     """«Add counterparties» alone: no documents; the next plan finds them by VÖEN."""
-    from modern_gl.application.eqaime_import import add_counterparties, new_counterparties
+    from modern_gl.application.eqaime import add_counterparties, new_counterparties
 
     plans = plan_import(conn, shop.company_id, [parse_invoice(*received(), outgoing=False)])
     parties = new_counterparties(plans)
@@ -493,7 +493,7 @@ def test_a_counterparty_renamed_on_the_portal_is_asked_about(shop, conn):
     TREYD" MMC» with the same VÖEN: listed as renamed, with the latest name; renaming
     changes the name here and remembers the new official one; quotes and case alone are
     no rename."""
-    from modern_gl.application.eqaime_import import (
+    from modern_gl.application.eqaime import (
         apply_renames,
         new_counterparties,
         renamed_counterparties,
@@ -536,7 +536,7 @@ def test_a_counterparty_renamed_on_the_portal_is_asked_about(shop, conn):
 
 def test_a_kept_name_is_not_asked_about_again(shop, conn):
     """The user keeps its name here: only the official name is remembered."""
-    from modern_gl.application.eqaime_import import apply_renames, renamed_counterparties
+    from modern_gl.application.eqaime import apply_renames, renamed_counterparties
 
     shop.ledger.set_subconto_value_tax(shop.company_id, shop.supplier[0], SUPPLIER_TIN)
     shop.ledger.set_subconto_value_legal_name(shop.company_id, shop.supplier[0], "Köhnə MMC")
@@ -554,7 +554,7 @@ def test_a_kept_name_is_not_asked_about_again(shop, conn):
 def test_a_known_counterparty_gets_its_official_name_quietly(shop, conn):
     """A counterparty made by hand (no official name) is not «renamed»: importing its
     e-qaimə remembers the portal's name."""
-    from modern_gl.application.eqaime_import import renamed_counterparties
+    from modern_gl.application.eqaime import renamed_counterparties
 
     shop.ledger.set_subconto_value_tax(shop.company_id, shop.supplier[0], SUPPLIER_TIN)
     plans = plan_import(conn, shop.company_id, [_named("MT6", "2026-03-01", "Rəsmi Ad MMC")])

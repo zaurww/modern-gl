@@ -37,6 +37,7 @@ from modern_gl.application.bank import (
     bank_statements,
     load_bank_operation,
 )
+from modern_gl.application.bank.deposit_commands import DRAFT, POSTED
 from modern_gl.application.bank.deposit_import import (
     PortalLoad,
     day_closings,
@@ -48,7 +49,6 @@ from modern_gl.application.bank.deposit_import import (
     portal_loads,
 )
 from modern_gl.application.chart_csv import apply_chart_template
-from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient, Response, TokenExpired
 

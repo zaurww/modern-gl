@@ -7,8 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from modern_gl.application.counterparties import known_counterparty, short_name
-from modern_gl.application.eqaime_import.parsing import EInvoice
-from modern_gl.application.eqaime_import.planning import InvoicePlan
+from modern_gl.application.eqaime.parsing import EInvoice
+from modern_gl.application.eqaime.planning import InvoicePlan
 from modern_gl.application.ledger import Ledger
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection, transaction
