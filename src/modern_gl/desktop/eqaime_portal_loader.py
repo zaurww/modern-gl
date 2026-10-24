@@ -9,7 +9,7 @@ from datetime import date
 
 from PySide6.QtCore import QObject, Signal
 
-from modern_gl.application.eqaime_import import (
+from modern_gl.application.eqaime import (
     EInvoice,
     parse_invoice,
 )

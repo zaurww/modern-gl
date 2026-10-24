@@ -13,6 +13,7 @@ from datetime import date
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
 
 from modern_gl.application.bank import BankPlace
+from modern_gl.application.bank.deposit_commands import DRAFT, POSTED, DepositImported
 from modern_gl.application.bank.deposit_import import (
     DepositFetched,
     loaded_already,
@@ -22,7 +23,6 @@ from modern_gl.application.bank.deposit_import import (
     unfinished_days,
 )
 from modern_gl.application.bank.statement import place_balance
-from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED, DepositImported
 from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch, reconciled_changes
 from modern_gl.desktop.bank_page.deposit_rows import DepositRows
 from modern_gl.desktop.period_field import portal_period

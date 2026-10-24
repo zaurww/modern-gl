@@ -12,7 +12,9 @@ from datetime import date
 import pytest
 from PySide6.QtCore import QPersistentModelIndex, Qt
 
+from modern_gl.application import chart_csv
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.inventory import (
     QUANTITY_FACTOR,
     STANDARD_VAT_RATE,
@@ -37,8 +39,6 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.accounts import COST_OF_SALES, OUTPUT_VAT, SALES_REVENUE, SALES_VAT
 from modern_gl.domain.errors import ValidationError
-from modern_gl.infrastructure import chart_csv
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
 from modern_gl.reporting.inventory import stock_balances
 from modern_gl.reporting.invoices import invoice_report

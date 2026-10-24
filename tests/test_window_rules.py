@@ -13,7 +13,7 @@ from modern_gl.application.bank import (
     split_by_deposit,
     vat_deposit_part,
 )
-from modern_gl.application.conversions import ConversionInput, ConversionSide, official_rate
+from modern_gl.application.conversion import ConversionInput, ConversionSide, official_rate
 from modern_gl.application.currencies import Rate
 from modern_gl.application.inventory import default_vat_rate, line_vat
 from modern_gl.application.ledger import Ledger, PostingInput, opening_posting

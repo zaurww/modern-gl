@@ -8,6 +8,7 @@ say how many were left out, so the model asks for a narrower period instead of g
 from __future__ import annotations
 
 from modern_gl.application import queries
+from modern_gl.application.books import BOOKS
 from modern_gl.application.catalog import Catalog
 from modern_gl.domain.accounts import is_current
 from modern_gl.domain.money import format_minor
@@ -15,7 +16,7 @@ from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import invoices as invoice_reports
 from modern_gl.reporting import reports
-from modern_gl.reporting.report_common import BOOKS, Turnovers
+from modern_gl.reporting.report_common import Turnovers
 
 LIMIT = 500
 

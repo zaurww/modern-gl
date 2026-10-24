@@ -44,9 +44,9 @@ MODULE_TABLE = re.compile(
 MODULE_CODE = (
     "modern_gl.application.inventory",
     "modern_gl.application.bank",
-    "modern_gl.application.conversions",
-    "modern_gl.application.eqaime_import",
-    "modern_gl.application.eqaime_portal",
+    "modern_gl.application.conversion",
+    "modern_gl.application.eqaime",
+    "modern_gl.application.eqaime.portal",
     "modern_gl.application.quick_entry",
     "modern_gl.application.trade_batch",
     "modern_gl.reporting.inventory",
@@ -173,18 +173,31 @@ def test_windows_open_no_transaction():
 
 
 def test_ledger_is_the_core_and_modules_are_objects_of_their_own():
-    """Debt 2 (paid in session 38): the bank, conversion and e-qaimə are not mixed into
-    Ledger; they are its objects over the same connection — the core knows none of them."""
-    from modern_gl.application.ledger import BankModule, ConversionModule, EqaimeModule, Ledger
+    """Debt 2 (paid in session 38; D123): the bank, conversion and e-qaimə are not mixed
+    into Ledger; each is an object of its own package over the same connection — the core
+    knows none of them, and asks for a module only when its handle is used."""
+    from modern_gl.application.bank import BankModule
+    from modern_gl.application.conversion import ConversionModule
+    from modern_gl.application.eqaime import EqaimeModule
+    from modern_gl.application.ledger import Ledger
     from modern_gl.infrastructure.db import connect
 
+    packages = (
+        "modern_gl.application.bank",
+        "modern_gl.application.conversion",
+        "modern_gl.application.eqaime",
+    )
     module_groups = {
         cls
         for module in (BankModule, ConversionModule, EqaimeModule)
         for cls in module.__mro__
-        if cls.__module__.rsplit(".", 1)[-1] in {"bank", "bank_statements", "conversion", "eqaime"}
+        if cls.__module__.startswith(packages)
     }
-    assert not module_groups & set(Ledger.__mro__)
+    assert module_groups and not module_groups & set(Ledger.__mro__)
+    core_init = SRC / "application" / "ledger" / "__init__.py"
+    tree = ast.parse(core_init.read_text(encoding="utf-8"))
+    top = {n.module for n in tree.body if isinstance(n, ast.ImportFrom) and n.module}
+    assert not {m for m in top if m.startswith(packages)}, "Ledger импортирует модуль при загрузке"
     ledger = Ledger(connect(":memory:"), actor="Aynur")
     assert ledger.bank.conn is ledger.conn and ledger.bank.actor == "Aynur"
     assert ledger.bank is ledger.bank  # one object per ledger
@@ -200,3 +213,54 @@ def test_the_counterparty_of_a_line_has_one_rule():
         if "offset_sc" in (text := path.read_text(encoding="utf-8")) and "'counterparty'" in text
     ]
     assert not bad, f"контрагент строки выбирается вручную: {bad} — inventory_line_counterparties"
+
+
+# The layers and their order (docs/ARCHITECTURE.md, § 1; D122): a layer imports only itself
+# and the layers below it. `i18n` is the bottom (texts), `domain` knows no SQL, `infrastructure`
+# is the engine and the files, `application` the scenarios and the shared reading,
+# `reporting` the reports over them; the top is everything that shows or serves.
+LAYERS: list[tuple[str, ...]] = [
+    ("i18n", "i18n_az"),
+    ("domain",),
+    ("infrastructure",),
+    ("application",),
+    ("reporting",),
+    ("desktop", "assistant", "demo_data", "demo_year"),
+]
+
+
+def _layer_of(module: str) -> int | None:
+    name = module.removeprefix("modern_gl.").split(".")[0]
+    for level, names in enumerate(LAYERS):
+        if name in names:
+            return level
+    return None
+
+
+def _layer_files(names: tuple[str, ...]) -> list[Path]:
+    found = []
+    for name in names:
+        found += files(name) if (SRC / name).is_dir() else [SRC / f"{name}.py"]
+    return sorted(found)
+
+
+@pytest.mark.parametrize("level", range(len(LAYERS)), ids=lambda i: "+".join(LAYERS[i]))
+def test_layers_depend_downwards_only(level):
+    bad = {}
+    for path in _layer_files(LAYERS[level]):
+        above = sorted(
+            m for m in imports(path) if m.startswith("modern_gl") and (_layer_of(m) or 0) > level
+        )
+        if above:
+            bad[rel(path)] = above
+    assert not bad, (
+        f"слой {'+'.join(LAYERS[level])} импортирует слои выше себя: {bad} — "
+        "зависимости только сверху вниз (docs/ARCHITECTURE.md, § 1)"
+    )
+
+
+def test_every_package_has_a_layer():
+    """A new top-level package or module takes its place in LAYERS first."""
+    names = {p.stem if p.is_file() else p.name for p in SRC.iterdir() if not p.name.startswith("_")}
+    known = {name for names in LAYERS for name in names}
+    assert names - known == set(), f"не в LAYERS: {sorted(names - known)}"

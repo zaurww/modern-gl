@@ -31,7 +31,6 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor, round_ratio
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
-from modern_gl.reporting.inventory.costs import allocated_sql
 
 explain_owner(
     "landed_cost",
@@ -42,6 +41,18 @@ explain_owner(
         m=m,
     ),
 )
+
+
+def allocated_sql(company: str, document: str, line: str) -> str:
+    """A subquery: how much of the GL posting `document`, `line` (SQL expressions) posted
+    «Расходы по партии» documents took, all but the one of the next parameter (NULL — none
+    left out). The picker and the check on posting count it alike."""
+    return (
+        "(SELECT COALESCE(SUM(c.amount), 0) FROM landed_cost_charges c "
+        "JOIN inventory_documents i ON i.id = c.document_id AND i.status = 'posted' "
+        f"WHERE c.company_id = {company} AND c.source_document_id = {document} "
+        f"AND c.source_line_no = {line} AND c.document_id IS DISTINCT FROM ?)"
+    )
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-"""Карточка субконто (as in 1C 7.7, D123): every posting that carries one element of a
+"""Карточка субконто (as in 1C 7.7, D126): every posting that carries one element of a
 directory, on any account or on one — a counterparty on 60 and 62, an order on the
 client's, the suppliers' and the revenue accounts — with the running balance."""
 
@@ -8,17 +8,16 @@ import json
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
-    COMMON,
     SubcontoCard,
     SubcontoCardLine,
     _accounts,
     _find_account,
-    _params,
     _subtree,
 )
 
@@ -36,7 +35,7 @@ def subconto_card(
     the side(s) the element is on; the running balance nets every account carrying it
     (what is owed to us less what we owe, the revenue less the costs). With `account`
     only that account (a group — with its subaccounts)."""
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     params["value"] = value_id
     if (
         conn.execute(

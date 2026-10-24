@@ -2,7 +2,7 @@
 every settlement turnover and every ƏDV line (what is left to pay); the reconciliation
 with the portal only the accrual of the e-qaimə and its ƏDV."""
 
-from modern_gl.reporting.invoice_rules import (
+from modern_gl.application.invoice_rules import (
     InvoiceAccount,
     is_accrual,
     is_vat_accrual,

@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import list_templates, load_document, past_postings
 from modern_gl.application.quick_entry import describe, parse
@@ -23,7 +24,6 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 
 TODAY = date(2026, 3, 5)
@@ -284,9 +284,9 @@ def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
 ):
     from PySide6.QtWidgets import QMessageBox
 
+    from modern_gl.application.workspace import Workspace
     from modern_gl.demo_data import create_demo_company
     from modern_gl.desktop.main_window import MainWindow
-    from modern_gl.infrastructure.workspace import Workspace
 
     monkeypatch.setattr(
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)

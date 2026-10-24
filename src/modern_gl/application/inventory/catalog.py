@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from modern_gl.application.common import insert, where_used
 from modern_gl.application.inventory.base import InventoryBase
-from modern_gl.application.inventory.model import INCOMING_REASONS, QUANTITY_SCALE
+from modern_gl.application.inventory.model import INCOMING_REASONS, QUANTITY_SCALE, UsualUnit
 from modern_gl.domain.accounts import FX_GAIN
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -151,6 +151,41 @@ class CatalogCommands(InventoryBase):
                     )
                 self.conn.execute(f"DELETE FROM {table} WHERE id = ?", (row["id"],))
             self.ledger.delete_subconto_value(company_id, value_id)
+
+    def add_new_item(
+        self,
+        company_id: int,
+        name: str,
+        unit: int | UsualUnit,
+        inventory_account_id: int,
+        code: str | None = None,
+        *,
+        group_id: int | None = None,
+        first_warehouse: str | None = None,
+    ) -> int:
+        """The item dialog's «Сохранить», in one transaction: a usual unit is taken by its
+        code or made, and a company with no warehouse yet gets `first_warehouse` — a
+        beginner's first item needs nothing set up before it."""
+        with transaction(self.conn):
+            unit_id = unit if isinstance(unit, int) else self._usual_unit(company_id, unit)
+            item_id = self.add_item(
+                company_id, name, unit_id, inventory_account_id, code, group_id=group_id
+            )
+            has_warehouse = self.conn.execute(
+                "SELECT 1 FROM warehouses WHERE company_id = ? LIMIT 1", (company_id,)
+            ).fetchone()
+            if first_warehouse and has_warehouse is None:
+                self.add_warehouse(company_id, first_warehouse)
+        return item_id
+
+    def _usual_unit(self, company_id: int, unit: UsualUnit) -> int:
+        row = self.conn.execute(
+            "SELECT id FROM inventory_units WHERE company_id = ? AND code = ?",
+            (company_id, unit.code.strip()),
+        ).fetchone()
+        if row is not None:
+            return row["id"]
+        return self.add_unit(company_id, unit.code, unit.name, unit.precision)
 
     def add_warehouse(
         self,

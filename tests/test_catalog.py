@@ -1,7 +1,7 @@
 import pytest
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.infrastructure.chart_csv import apply_chart_template
+from modern_gl.application.chart_csv import apply_chart_template
 
 
 @pytest.fixture

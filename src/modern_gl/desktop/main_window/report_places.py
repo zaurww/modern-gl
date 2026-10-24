@@ -198,7 +198,7 @@ class ReportPlaces(OpenPages):
         self._activate(key)
 
     def open_subconto_analysis(self) -> None:
-        """«Анализ субконто» (D122): one page, the directory is chosen on it."""
+        """«Анализ субконто» (D125): one page, the directory is chosen on it."""
         key = SubcontoAnalysisPage.key
         if key not in self.pages:
             page = SubcontoAnalysisPage(self.open_session)

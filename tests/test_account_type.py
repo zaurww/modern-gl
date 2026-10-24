@@ -4,10 +4,10 @@ import sqlite3
 
 import pytest
 
+from modern_gl.application.chart_csv import apply_chart_template, import_chart_csv
 from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_CLASS, is_current
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n_az import AZ
-from modern_gl.infrastructure.chart_csv import apply_chart_template, import_chart_csv
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
 
 

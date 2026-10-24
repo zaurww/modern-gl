@@ -1,4 +1,4 @@
-"""Карточка субконто (D123): the postings of one element across every account, or on one
+"""Карточка субконто (D126): the postings of one element across every account, or on one
 account — opened from «Анализ субконто» by a double click; a line leads to its document."""
 
 from __future__ import annotations

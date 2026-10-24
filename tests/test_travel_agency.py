@@ -23,10 +23,10 @@ from __future__ import annotations
 import pytest
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.inventory import Inventory, ReceiptLine, SaleLine
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.errors import ValidationError
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.reporting.reports import subconto_balance
 
 JUNE = ("2026-06-01", "2026-06-30")

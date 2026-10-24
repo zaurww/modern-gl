@@ -16,11 +16,11 @@ from fractions import Fraction
 import pytest
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.journal_import import check, header, parse_date, read_plan, run
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import list_documents, load_document
 from modern_gl.domain.currency import parse_rate
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 from modern_gl.infrastructure.table_files import from_clipboard, read_rows
 from modern_gl.reporting.reports import trial_balance

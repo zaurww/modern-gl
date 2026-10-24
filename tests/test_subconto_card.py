@@ -1,4 +1,4 @@
-"""Карточка субконто (D123): one element's postings across every account, or on one.
+"""Карточка субконто (D126): one element's postings across every account, or on one.
 
 On the travel agency of tests/test_travel_agency.py (June 2026, hand-calculated):
   S-002 on every account — the element is on both sides of the booking and the commission,

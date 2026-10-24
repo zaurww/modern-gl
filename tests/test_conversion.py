@@ -24,7 +24,8 @@ from dataclasses import replace
 import pytest
 
 from modern_gl.application.bank import bank_places, statement
-from modern_gl.application.conversions import (
+from modern_gl.application.chart_csv import apply_chart_template
+from modern_gl.application.conversion import (
     ConversionFee,
     ConversionInput,
     ConversionSide,
@@ -36,7 +37,6 @@ from modern_gl.application.queries import DocumentOwner, document_owner, load_do
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.reporting.reports import trial_balance
 
 

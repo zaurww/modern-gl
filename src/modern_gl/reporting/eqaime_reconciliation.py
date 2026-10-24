@@ -14,11 +14,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params
+from modern_gl.application.invoice_rules import invoice_accounts, is_accrual, is_vat_accrual
 from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.invoice_rules import invoice_accounts, is_accrual, is_vat_accrual
-from modern_gl.reporting.report_common import _DOCS_CTE, COMMON, _params
+from modern_gl.reporting.report_common import _DOCS_CTE
 
 # the groups of the report, the problems first
 MISSING = "missing"  # on the portal, not in the books: forgotten
@@ -138,7 +139,7 @@ def book_invoices(
     """The e-qaimə of the books by number, purchases or sales, every date: their accruals.
     One reversed to nothing (red storno) is not there."""
     accounts = invoice_accounts(conn, company_id)
-    params = _params(conn, company_id, "0001-01-01", "9999-12-31", layers)
+    params = book_params(conn, company_id, "0001-01-01", "9999-12-31", layers)
     result: dict[str, BookInvoice] = {}
     for p in conn.execute(
         f"""

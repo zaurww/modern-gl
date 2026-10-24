@@ -1,54 +1,17 @@
-"""What the ledger reports share: the books, the documents a report reads, turnovers and
-the rows of the reports, the parameters of a period, the accounts of the chart."""
+"""What the ledger reports share: turnovers and the rows of the reports, the accounts of
+the chart. The books and the documents a report reads — `application/books.py`."""
 
 from __future__ import annotations
 
-import json
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import NotFoundError, ValidationError
+from modern_gl.application.books import docs_cte
+from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
-
-COMMON = ("common",)
-IFRS = ("common", "ifrs_adj")
-TAX = ("common", "tax_adj")
-BOOKS = {"common": COMMON, "ifrs": IFRS, "tax": TAX}  # by the name a file or a client uses
-
-FROM, AFTER = "from", "after"  # where `docs_cte` starts: :date_from, the day after :after
-
-
-def docs_cte(
-    columns: str = "d.id",
-    *,
-    start: str = "",
-    every_layer: bool = False,
-    status: str = "'posted'",
-) -> str:
-    """`docs AS (…)`: the posted documents of the requested book (:layers) up to :date_to —
-    the one meaning of «in the book» for every report. `start` — FROM :date_from or AFTER
-    :after (else from the beginning); `every_layer` — all the books (the caller tells
-    them apart by `l.code`); `status` — another SQL value instead of posted."""
-    since = {
-        "": "",
-        FROM: "\n      AND d.doc_date >= :date_from",
-        AFTER: "\n      AND d.doc_date > :after",
-    }[start]
-    book = "" if every_layer else "\n      AND l.code IN (SELECT value FROM json_each(:layers))"
-    return f"""
-docs AS (
-    SELECT {columns}
-    FROM documents d
-    JOIN layers l ON l.id = d.layer_id
-    WHERE d.company_id = :company_id
-      AND d.status = {status}{since}
-      AND d.doc_date <= :date_to{book}
-)"""
-
 
 _DOCS_CTE = docs_cte("d.id, d.doc_date, d.number, d.memo")
 
@@ -137,7 +100,7 @@ class SubcontoRow(Turnovers):
 
 @dataclass
 class SubcontoAnalysisRow(Turnovers):
-    """Анализ субконто (D122): an element of a directory (depth 0) and, under it, each
+    """Анализ субконто (D125): an element of a directory (depth 0) and, under it, each
     account that carries the element (depth 1)."""
 
     value_id: int | None = None  # None — the postings where the position was left empty
@@ -191,7 +154,7 @@ class AccountCard:
 
 @dataclass
 class SubcontoCardLine:
-    """A posting carrying one element (D123): on its debit side, its credit side or both."""
+    """A posting carrying one element (D126): on its debit side, its credit side or both."""
 
     doc_date: str
     number: int
@@ -229,25 +192,6 @@ class CorrRow:
 
 def _split(net: int) -> tuple[int, int]:
     return (net, 0) if net >= 0 else (0, -net)
-
-
-def _params(conn, company_id, date_from, date_to, layers) -> dict:
-    date_from, date_to = iso_date(date_from), iso_date(date_to)
-    if date_from > date_to:
-        raise ValidationError(tr("начало периода позже конца"))
-    known = {
-        r["code"]
-        for r in conn.execute("SELECT code FROM layers WHERE company_id = ?", (company_id,))
-    }
-    unknown = set(layers) - known
-    if unknown:
-        raise NotFoundError(tr("неизвестные слои: {layers}", layers=sorted(unknown)))
-    return {
-        "company_id": company_id,
-        "date_from": date_from,
-        "date_to": date_to,
-        "layers": json.dumps(list(layers)),
-    }
 
 
 def _accounts(conn: Connection, company_id: int) -> dict[int, Row]:

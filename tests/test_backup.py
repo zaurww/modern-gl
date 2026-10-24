@@ -8,9 +8,9 @@ import sqlite3
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.workspace import Workspace
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
-from modern_gl.infrastructure.workspace import Workspace
 
 
 def company(ws: Workspace, name: str = "Firma"):

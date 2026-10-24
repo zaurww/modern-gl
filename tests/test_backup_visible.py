@@ -10,6 +10,7 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.workspace import Workspace
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.backups_dialog import MIRROR_SETTING, BackupsDialog
@@ -17,7 +18,6 @@ from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 from tests.test_backup import company, documents
 
 

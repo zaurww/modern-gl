@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.inventory import (
     STANDARD_VAT_RATE,
     Inventory,
@@ -11,7 +12,6 @@ from modern_gl.application.inventory import (
 )
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 
 
 def create_demo_company(ledger: Ledger, name: str | None = None) -> int:

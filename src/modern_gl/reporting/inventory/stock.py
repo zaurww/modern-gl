@@ -5,11 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.common import group_path
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.overview import Attention, attention_source
 
 
 @dataclass(frozen=True)

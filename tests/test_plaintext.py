@@ -11,9 +11,10 @@ from collections import defaultdict
 
 import pytest
 
+from modern_gl.application.books import IFRS
 from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.plaintext import account_name, hledger_journal
-from modern_gl.reporting.report_common import IFRS, _accounts
+from modern_gl.reporting.report_common import _accounts
 from modern_gl.reporting.reports import trial_balance
 from tests.test_currency import books, post_example  # noqa: F401  (fixture)
 

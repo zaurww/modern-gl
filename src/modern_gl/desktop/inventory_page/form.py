@@ -183,6 +183,9 @@ class InventoryForm(QWidget):
     def chosen_balance(self) -> StockBalance | None:
         raise NotImplementedError
 
+    def has_stock(self) -> bool:
+        raise NotImplementedError
+
     def _show_movements(self) -> None:
         raise NotImplementedError
 

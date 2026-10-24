@@ -16,6 +16,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from modern_gl import i18n
+from modern_gl.application.workspace import Workspace
 from modern_gl.assistant import answers
 from modern_gl.assistant.companies import Companies
 from modern_gl.assistant.draft_tools import ABOUT as DRAFTS_ABOUT
@@ -23,7 +24,6 @@ from modern_gl.assistant.draft_tools import draft_tools
 from modern_gl.assistant.drafts import Drafts
 from modern_gl.assistant.protocol import Server, Session, Tool
 from modern_gl.infrastructure.app_settings import default_folder, read_settings
-from modern_gl.infrastructure.workspace import Workspace
 
 ABOUT = """Modern GL — the user's accounting books (general ledger, 1C 7.7 style: postings
 debit/credit with subconto — counterparties, contracts, bank accounts, items).

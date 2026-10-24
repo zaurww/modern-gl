@@ -9,11 +9,11 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.money import from_minor
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 
 YEAR = 2026
 MAIN, SHOP = "main", "shop"  # the warehouses

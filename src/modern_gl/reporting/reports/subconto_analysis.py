@@ -1,4 +1,4 @@
-"""Анализ субконто (as in 1C 7.7, D122): the elements of one directory across every
+"""Анализ субконто (as in 1C 7.7, D125): the elements of one directory across every
 account that carries it — a counterparty on 60, 62 and 76 at once; an order or a project
 on the client's, the suppliers' and the revenue accounts. An element whose accounts all
 close at zero is a closed case."""
@@ -10,16 +10,15 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
-    COMMON,
     SubcontoAnalysisRow,
     Turnovers,
     _accounts,
-    _params,
 )
 
 Key = tuple[int | None, int]  # (the element — None: the position left empty, the account)
@@ -41,7 +40,7 @@ def subconto_analysis(
     sheet account (a case settled with the client and the suppliers is closed, whatever
     stays on revenue and expenses). «<не указано>» first, then the elements by name;
     accounts in chart order."""
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     params["kind"], params["value"] = kind_id, value_id
     if (
         conn.execute(

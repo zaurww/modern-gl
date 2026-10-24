@@ -1,4 +1,4 @@
-"""Анализ субконто (D122): one directory's elements across every account that carries it.
+"""Анализ субконто (D125): one directory's elements across every account that carries it.
 
 On the travel agency of tests/test_travel_agency.py (June 2026, hand-calculated):
   by order                      Dt turnover / Ct turnover → closing Dt / Ct
@@ -166,7 +166,7 @@ def test_the_page_chooses_the_directory_and_drills_to_the_account(ledger, conn, 
 
     opened = []
     page.open_report.connect(lambda kind, account, params: opened.append((kind, account)))
-    page.drill(page.model.rows[0])  # the element: its card across every account (D123)
+    page.drill(page.model.rows[0])  # the element: its card across every account (D126)
     page.drill(page.model.rows[2])  # one account of it
     assert opened == [("subconto_card", 0), ("subconto_card", acc["62.1"])]
 

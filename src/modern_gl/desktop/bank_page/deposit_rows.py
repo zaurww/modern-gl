@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QHeaderView, QTreeWidget, QTreeWidgetItem, QWidget
 
 from modern_gl.application.bank import IN
-from modern_gl.application.ledger.bank_deposit import DRAFT, KNOWN, LINKED, POSTED, DepositRow
+from modern_gl.application.bank.deposit_commands import DRAFT, KNOWN, LINKED, POSTED, DepositRow
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.dates import ru_date

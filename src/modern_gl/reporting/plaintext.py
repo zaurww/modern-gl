@@ -13,10 +13,11 @@ import re
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.report_common import _DOCS_CTE, COMMON, _accounts, _params
+from modern_gl.reporting.report_common import _DOCS_CTE, _accounts
 
 BASE = "AZN"
 _TYPES = {"asset": "A", "liability": "L", "equity": "E", "revenue": "R", "expense": "X"}
@@ -31,7 +32,7 @@ def hledger_journal(
     generated: date | str | None = None,
 ) -> str:
     """Posted documents of the book `layers` up to `date_to` as hledger journal text."""
-    params = _params(conn, company_id, _EARLIEST, date_to, layers)
+    params = book_params(conn, company_id, _EARLIEST, date_to, layers)
     accounts = _accounts(conn, company_id)
     names = {a: account_name(accounts, a) for a in accounts}
     values = _subconto_names(conn, company_id)

@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.workspace import Workspace
 from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.main_window import MainWindow
@@ -16,7 +17,6 @@ from modern_gl.desktop.reports_hub import HUB, AccountPrompt, ReportsPage, catal
 from modern_gl.desktop.reports_page import StatementsPage
 from modern_gl.desktop.reports_page.account import CardPage
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)
@@ -174,7 +174,7 @@ def test_a_report_of_an_account_asks_the_account(window, monkeypatch):
 
 
 def test_the_subconto_analysis_opens_as_one_page(window):
-    """«Анализ субконто» asks nothing first: the directory is chosen on the page (D122);
+    """«Анализ субконто» asks nothing first: the directory is chosen on the page (D125);
     opened again, the same page comes back."""
     from modern_gl.desktop.reports_page import SubcontoAnalysisPage
 

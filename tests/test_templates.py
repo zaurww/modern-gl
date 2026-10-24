@@ -10,11 +10,11 @@ from decimal import Decimal
 
 import pytest
 
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import PostingInput, TemplateLine
 from modern_gl.application.queries import list_templates, load_template
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.formula import compute, uses_amount
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.reporting.reports import trial_balance
 
 

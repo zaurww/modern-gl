@@ -8,9 +8,9 @@ from __future__ import annotations
 import io
 import sys
 
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.domain.money import format_minor
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.reports import IFRS, account_card, subconto_balance, trial_balance
 

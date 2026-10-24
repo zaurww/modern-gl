@@ -7,17 +7,16 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
-    COMMON,
     SubcontoRow,
     Turnovers,
     _accounts,
     _find_account,
-    _params,
     _subtree,
 )
 
@@ -60,7 +59,7 @@ def subconto_balance(
     positions = tuple(range(position, position + levels))
     if levels < 1 or not set(positions) <= {1, 2, 3}:
         raise ValidationError(tr("позиция субконто должна быть 1, 2 или 3"))
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     acc = _find_account(accounts, account)
     for i in positions:

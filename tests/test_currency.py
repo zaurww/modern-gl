@@ -324,8 +324,9 @@ def test_migration_gives_existing_companies_their_currencies(tmp_path):
 
 def test_split_shared_file_keeps_each_company_currencies(tmp_path):
     from modern_gl.application.ledger import Ledger
+    from modern_gl.application.workspace import Workspace
+    from modern_gl.infrastructure.company_file import open_company
     from modern_gl.infrastructure.db import connect
-    from modern_gl.infrastructure.workspace import Workspace, open_company
 
     shared = tmp_path / "shared.db"
     conn = connect(shared)

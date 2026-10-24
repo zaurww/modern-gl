@@ -9,9 +9,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from modern_gl.application.books import docs_cte
 from modern_gl.domain.dates import iso_date
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.report_common import _accounts, docs_cte, fold_chart
+from modern_gl.reporting.report_common import _accounts, fold_chart
 
 ADJUSTMENTS = ("ifrs_adj", "tax_adj")
 

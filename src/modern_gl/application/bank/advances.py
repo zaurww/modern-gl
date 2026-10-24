@@ -43,7 +43,7 @@ def payment_lines(
     known, it takes the whole amount). Only a payment that settles (out on 60, in on 62)
     is spread; any other line is the amount as typed, on its one e-qaimə if any. The
     advance line takes the line's subconto in their places on the advance account — the
-    contract, an order (D121) — by kind; the counterparty is put in by the operation."""
+    contract, an order (D124) — by kind; the counterparty is put in by the operation."""
     sc = tuple(pad_subconto(subconto))
     settles = SETTLES.get(account_type or "") == direction and counterparty_id is not None
     if not settles:

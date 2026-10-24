@@ -10,12 +10,12 @@ import pytest
 from modern_gl.application.authorship import document_authors
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import document_by_number, load_document
+from modern_gl.application.workspace import Workspace
 from modern_gl.assistant.companies import Companies
 from modern_gl.assistant.drafts import Drafts
 from modern_gl.assistant.protocol import Server, Session
 from modern_gl.assistant.server import build_tools
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 from tests.conftest import build_demo
 
 PAY_B = {"debit": "531", "debit_subconto": ["Поставщик B"], "credit": "221", "amount": "500.00"}

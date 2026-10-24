@@ -1,4 +1,4 @@
-"""Анализ субконто (D122): a directory's elements across every account that carries it —
+"""Анализ субконто (D125): a directory's elements across every account that carries it —
 a counterparty on 60, 62 and 76 at once, an order or a project on the client's, the
 suppliers' and the revenue accounts. The directory, one element and «Только с остатком»
 are chosen on the page itself; a double click on an account opens its card."""
@@ -163,7 +163,7 @@ class SubcontoAnalysisPage(ReportPage):
         )
 
     def drill(self, row) -> None:
-        """The card of the element (D123): across every account from its own row, on one
+        """The card of the element (D126): across every account from its own row, on one
         account from the account's row under it."""
         if row is not None and row.value_id is not None:
             params = replace(self.params, subconto=(row.value_id,))

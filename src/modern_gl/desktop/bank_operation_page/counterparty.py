@@ -10,6 +10,7 @@ from modern_gl.application.bank import (
     VAT_DEPOSIT_KINDS,
     default_memo,
 )
+from modern_gl.application.invoices import open_invoices
 from modern_gl.desktop.bank_operation_page.common import (
     WITH_COUNTERPARTY,
     counterparty_kind,
@@ -20,7 +21,6 @@ from modern_gl.desktop.bank_operation_page.form import BankOperationForm
 from modern_gl.desktop.widgets import (
     edited_date,
 )
-from modern_gl.reporting.invoices import open_invoices
 
 
 class CounterpartyPart(BankOperationForm):

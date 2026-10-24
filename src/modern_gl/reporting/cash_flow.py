@@ -8,12 +8,13 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params, docs_cte
 from modern_gl.domain.accounts import ACCOUNT_TYPES
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.period_input import Period
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.columns import Amounts
-from modern_gl.reporting.report_common import COMMON, _accounts, _params, docs_cte
+from modern_gl.reporting.report_common import _accounts
 from modern_gl.reporting.statements import TYPES, UNTYPED, Line, Names, Statement
 
 MONEY_TYPES = frozenset({"cash", "bank", "vat_deposit", "transit"})
@@ -89,7 +90,7 @@ def _read(conn: Connection, company_id: int, columns: list[tuple[str, str]], lay
     """Money at the start and the end of each column, and its flows by the other
     account's type and by the other account."""
     first = min(a for a, _ in columns)
-    params = _params(conn, company_id, first, max(b for _, b in columns), layers)
+    params = book_params(conn, company_id, first, max(b for _, b in columns), layers)
     money = {i for i, a in accounts.items() if a["account_type"] in MONEY_TYPES}
     n = len(columns)
     opening, closing = Amounts(), Amounts()

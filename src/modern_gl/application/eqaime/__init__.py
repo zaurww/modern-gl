@@ -1,4 +1,9 @@
-"""Import of e-qaimə from the tax portal into purchase and sale drafts (D45).
+"""E-qaimə of the tax portal (D45, D53): the import into purchase and sale drafts
+(`parsing`, `planning`, `counterparties`, `drafts`), the portal's lists read for the
+reconciliation (`portal`), and what the portal showed with the months reconciled —
+`EqaimeModule`, one object over the ledger's connection (`ledger.eqaime`, `commands`).
+
+The import (D45).
 
 A received e-qaimə becomes a purchase, a sent one a sale; only drafts are made: the user
 checks every one by eye and posts it (suppliers write names and codes wrongly).
@@ -14,7 +19,8 @@ the e-qaimə is written into it (with its VAT when the amounts agree), not made 
 
 from __future__ import annotations
 
-from modern_gl.application.eqaime_import.counterparties import (
+from modern_gl.application.eqaime.commands import EqaimeCommands
+from modern_gl.application.eqaime.counterparties import (
     NewCounterparty,
     RenamedCounterparty,
     add_counterparties,
@@ -24,10 +30,10 @@ from modern_gl.application.eqaime_import.counterparties import (
     renamed_counterparties,
     short_name,
 )
-from modern_gl.application.eqaime_import.drafts import (
+from modern_gl.application.eqaime.drafts import (
     import_drafts,
 )
-from modern_gl.application.eqaime_import.parsing import (
+from modern_gl.application.eqaime.parsing import (
     PURCHASE,
     RETURN_KINDS,
     SALE,
@@ -35,12 +41,17 @@ from modern_gl.application.eqaime_import.parsing import (
     EInvoiceLine,
     parse_invoice,
 )
-from modern_gl.application.eqaime_import.planning import (
+from modern_gl.application.eqaime.planning import (
     AwaitingPurchase,
     InvoicePlan,
     LinePlan,
     plan_import,
 )
+
+
+class EqaimeModule(EqaimeCommands):
+    """E-qaimə of the portal: what it showed, and what was reconciled (D52)."""
+
 
 __all__ = [
     "PURCHASE",
@@ -49,6 +60,7 @@ __all__ = [
     "AwaitingPurchase",
     "EInvoice",
     "EInvoiceLine",
+    "EqaimeModule",
     "InvoicePlan",
     "LinePlan",
     "NewCounterparty",

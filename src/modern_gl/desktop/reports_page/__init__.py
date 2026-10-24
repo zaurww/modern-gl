@@ -28,7 +28,7 @@ from modern_gl.desktop.reports_page.view import (
     month_of,
 )
 
-REPORTS["subconto_card"] = SubcontoCardPage  # from «Анализ субконто» (D123)
+REPORTS["subconto_card"] = SubcontoCardPage  # from «Анализ субконто» (D126)
 
 __all__ = [
     "NAME_MAX",

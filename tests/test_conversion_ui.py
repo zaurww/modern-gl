@@ -9,17 +9,17 @@ from PySide6.QtCore import QDate
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.application.conversions import load_conversion
+from modern_gl.application.chart_csv import apply_chart_template
+from modern_gl.application.conversion import load_conversion
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)

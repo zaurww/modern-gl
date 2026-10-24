@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from modern_gl.application.attention import Attention, attention_source
 from modern_gl.domain.dates import ru_date
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
-from modern_gl.reporting.overview import Attention, attention_source
 
 PURCHASE, SALE = "receipt", "sale"
 

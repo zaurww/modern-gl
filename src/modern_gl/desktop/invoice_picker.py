@@ -19,11 +19,11 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.bank import allocate
+from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, ru_date, tick_icon
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
-from modern_gl.reporting.invoices import OpenInvoice
 
 
 class InvoicePicker(QDialog):

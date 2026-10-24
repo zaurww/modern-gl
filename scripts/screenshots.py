@@ -21,6 +21,7 @@ from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication, QLineEdit
 
 from modern_gl import i18n
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import qt_texts, theme
 from modern_gl.desktop.app import add_demo_company
 from modern_gl.desktop.directories_page import DirectoriesPage
@@ -36,7 +37,6 @@ from modern_gl.desktop.reports_page import (
     SubcontoAnalysisPage,
     SubcontoPage,
 )
-from modern_gl.infrastructure.workspace import Workspace
 
 
 def main() -> None:
@@ -471,7 +471,7 @@ def main() -> None:
     shot("0_home_awaiting")  # «Bu gün» reminds of it
     win.show_place(("sales",))
     shot("8c0_sales")
-    from modern_gl.application.eqaime_import import parse_invoice
+    from modern_gl.application.eqaime import parse_invoice
     from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 
     sample = {  # the shape of the portal's answer (etaxes-ext docs/api-reference.md)

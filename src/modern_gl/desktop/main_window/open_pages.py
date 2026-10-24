@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.home_page import HomePage
@@ -53,7 +54,6 @@ from modern_gl.desktop.toast import Toast
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.workspace import Workspace
 
 
 class OpenPages(CompanyFiles):

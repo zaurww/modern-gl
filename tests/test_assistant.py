@@ -10,11 +10,11 @@ import json
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.workspace import Workspace
 from modern_gl.assistant.companies import Companies
 from modern_gl.assistant.protocol import Server
 from modern_gl.assistant.server import build_tools
 from modern_gl.infrastructure.db import connect
-from modern_gl.infrastructure.workspace import Workspace
 from tests.conftest import build_demo
 
 

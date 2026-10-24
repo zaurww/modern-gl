@@ -3,10 +3,10 @@
 import pytest
 
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.workspace import Workspace
 from modern_gl.domain.errors import NotFoundError, ReadOnlyError
 from modern_gl.infrastructure.backup import BackupError
 from modern_gl.infrastructure.db import Error, connect, is_read_only, latest_version
-from modern_gl.infrastructure.workspace import Workspace
 from modern_gl.reporting.reports import trial_balance
 from tests.conftest import build_demo
 from tests.test_workspace import file_at_version

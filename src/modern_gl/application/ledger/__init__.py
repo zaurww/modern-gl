@@ -7,15 +7,13 @@ UI and importers call these methods; they never write ledger tables directly.
 from __future__ import annotations
 
 from functools import cached_property
+from typing import TYPE_CHECKING
 
 from modern_gl.application.ledger.account_form import AccountForm, AccountFormCommands
-from modern_gl.application.ledger.bank_deposit import VatDepositCommands
 from modern_gl.application.ledger.companies import CompanyCommands
-from modern_gl.application.ledger.conversion import ConversionCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
 from modern_gl.application.ledger.document_import import DocumentImportCommands
 from modern_gl.application.ledger.documents import DocumentCommands
-from modern_gl.application.ledger.eqaime import EqaimeCommands
 from modern_gl.application.ledger.inputs import (
     DEFAULT_LAYERS,
     SIDES,
@@ -33,14 +31,16 @@ from modern_gl.application.ledger.subconto_details import (
 )
 from modern_gl.application.ledger.templates import TemplateCommands
 
+if TYPE_CHECKING:
+    from modern_gl.application.bank import BankModule
+    from modern_gl.application.conversion import ConversionModule
+    from modern_gl.application.eqaime import EqaimeModule
+
 __all__ = [
     "DEFAULT_LAYERS",
     "NO_TAX",
     "SIDES",
     "AccountForm",
-    "BankModule",
-    "ConversionModule",
-    "EqaimeModule",
     "ImportOutcome",
     "ImportedDocument",
     "Ledger",
@@ -49,19 +49,6 @@ __all__ = [
     "ValueDetails",
     "opening_posting",
 ]
-
-
-class BankModule(VatDepositCommands):
-    """The bank (D47, D78): bank accounts, statements, operations, advances, the ƏDV
-    deposit account from the portal (D112)."""
-
-
-class ConversionModule(ConversionCommands):
-    """Currency conversion (D44)."""
-
-
-class EqaimeModule(EqaimeCommands):
-    """E-qaimə of the portal: what it showed, and what was reconciled (D52)."""
 
 
 class Ledger(
@@ -82,12 +69,18 @@ class Ledger(
 
     @cached_property
     def bank(self) -> BankModule:
+        from modern_gl.application.bank import BankModule
+
         return BankModule(self.conn, self.actor)
 
     @cached_property
     def conversion(self) -> ConversionModule:
+        from modern_gl.application.conversion import ConversionModule
+
         return ConversionModule(self.conn, self.actor)
 
     @cached_property
     def eqaime(self) -> EqaimeModule:
+        from modern_gl.application.eqaime import EqaimeModule
+
         return EqaimeModule(self.conn, self.actor)

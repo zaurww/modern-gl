@@ -8,13 +8,13 @@ from datetime import date
 import pytest
 
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import load_document
 from modern_gl.application.quick_entry import parse
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.invoices import invoice_report
 from modern_gl.reporting.reports import account_card, subconto_balance
@@ -353,8 +353,8 @@ def test_a_payment_is_offered_the_e_qaime_of_drafts_and_of_the_portal(firm):
     Money from Alfa: only the sale MT6 70.00 — the 200.00 paid on the purchase MT2 (the
     portal lists it as received) is not offered as owed to us."""
     from modern_gl.application.inventory import Inventory, ReceiptLine
+    from modern_gl.application.invoices import DRAFT, PORTAL, open_invoices
     from modern_gl.domain.eqaime import PortalInvoice
-    from modern_gl.reporting.invoices import DRAFT, PORTAL, open_invoices
 
     conn, ledger, cid, acc, v = firm
     kind = ledger.subconto_kind_id(cid, "counterparty")
@@ -416,8 +416,8 @@ def test_the_vat_left_to_pay_from_the_deposit_account(firm):
     04.03 from the bank 500.00          -> left  80.00, of it ƏDV 80.00
     05.03 from the bank another 50.00   -> left  30.00, of it ƏDV 30.00 (no more than left)
     A portal e-qaimə: its own ƏDV (236.00 with 36.00)."""
+    from modern_gl.application.invoices import open_invoices
     from modern_gl.domain.eqaime import PortalInvoice
-    from modern_gl.reporting.invoices import open_invoices
 
     conn, ledger, cid, acc, v = firm
     acc["55"] = ledger.add_account(cid, "55", "ƏDV depozit", account_type="vat_deposit")

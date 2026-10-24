@@ -1,34 +1,36 @@
 # Как устроена программа
 
-Текущее устройство (сессия 47). Зачем и в каких рамках — `docs/CONCEPT.md`; правила для
+Текущее устройство (сессия 49). Зачем и в каких рамках — `docs/CONCEPT.md`; правила для
 нового кода — `docs/ENGINEERING.md`; список пакетов и файлов — «Структура» в `CLAUDE.md`.
-Первые черновики (v0.1, англ.) — в `docs/history/`, они устарели.
 
 ## 1. Слои
 
 ```text
-desktop (PySide6)          страницы, формы, таблицы — без SQL и без правил учёта
+desktop (PySide6) · assistant (MCP) · demo   страницы и формы — без SQL и без правил учёта
    │  Session: conn, ledger, catalog, read(), notify
-application                сценарии записи (Ledger, Inventory) и чтение для форм (queries, catalog)
-reporting                  отчёты — только чтение, агрегация в SQL
-assistant                  MCP-сервер для AI — те же application/reporting
-   │
+reporting                  отчёты — только чтение, агрегация в SQL; строятся над application
+application                запись (Ledger, Inventory); общее чтение (queries, catalog, books,
+                           invoices); точки модулей (attention, rebuild); файлы (workspace)
+infrastructure             движок: sqlite3 только здесь (db, company_file, backup); миграции,
+                           CSV/Excel, порталы (cbar, e-taxes)
 domain                     деньги, даты, периоды, формулы — без SQL и Qt
-infrastructure             SQLite (sqlite3 — только здесь: db.py, копии, файлы), миграции,
-                           файлы компаний, копии, CSV/Excel, порталы (cbar, e-taxes)
+i18n                       тексты: tr(), переводы
 ```
 
-Зависимости — сверху вниз. Следят `tests/test_architecture.py` (слои, ядро не знает
-модулей, нет SQL в виджетах, окно не открывает транзакцию) и `tests/test_database.py`.
+Зависимости — только сверху вниз: слой импортирует себя и слои ниже (D122;
+`test_layers_depend_downwards_only`, новый пакет — сначала в `LAYERS`). Следят `tests/test_architecture.py` и
+`tests/test_database.py` (раздел 8).
 
 ## 2. Запись: `Ledger` и модули
 - **`Ledger`** (`application/ledger/`) — ядро: компании, валюты, справочники, план счетов,
   шаблоны, документы и проводки, проверки при проведении, импорт, переоценка, начальные
   остатки. Собран из групп-классов над одним соединением (`ledger.documents`, …), снаружи —
   один объект.
-- **Модули — отдельные объекты над тем же соединением:** `ledger.bank`,
-  `ledger.conversion`, `ledger.eqaime`; склад — `Inventory` (`application/inventory/`, тоже
-  из групп). Общее модулей — `ledger/module.py` (запись GL-документа модуля).
+- **Модуль — свой пакет целиком, чтение и запись (D123):** `application/bank/`,
+  `conversion/`, `eqaime/`, `inventory/`. Запись модуля — `*Module` (`commands.py`, …),
+  объект над тем же соединением; `ledger.bank`, `ledger.conversion`, `ledger.eqaime` —
+  ручки, импорт при первом обращении: ядро модулей не загружает. Склад — `Inventory`.
+  Общее модулей — `ledger/module.py` (запись GL-документа модуля).
 - **Сценарий = один метод = одна транзакция** (`db.transaction`). Ошибка — `LedgerError`
   с текстом для пользователя; половины документа не остаётся.
 - **Входы — dataclass** (`ledger/inputs.py`), не словари; строка формы → `typed_posting`.
@@ -42,9 +44,9 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 
 | Точка | Что даёт | Где |
 |---|---|---|
-| `document_owners` (представление) | Чей GL-документ: модуль создал (`made`) или взял (`uses`), его документ (`owner_id`); журнал не даёт его править, окно открывает документ модуля | миграции 0032, 0044 + миграция модуля, `explain_owner`; читать — `queries.document_owner` |
+| `document_owners` (представление) | Чей GL-документ: модуль создал (`made`) или взял (`uses`), его документ (`owner_id`) | миграции 0032, 0044 + миграция модуля, `explain_owner`; читать — `queries.document_owner` |
 | `rebuild_postings(company_id, since)` | Модуль строит свои проводки заново с даты | `application/rebuild.py`, `tests/test_rebuild.py` |
-| `attention_source` | Строки «Diqqət tələb edir» на «Bu gün» | `reporting/overview.py` |
+| `attention_source` | Строки «Diqqət tələb edir» на «Bu gün» | `application/attention.py` |
 | Команды и места Ctrl+K | Что предлагает палитра | `desktop/main_window/commands.py` |
 | Роли счетов | Счёт для операции модуля (НДС, авансы, транзит) — по роли или типу | `default_accounts.py`, `account_role` |
 | `SECTIONS` / `STOCK_SECTIONS` | Место модуля в боковой панели и в режиме «Только склад» | `main_window/sidebar.py` |
@@ -53,31 +55,33 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 `desktop/`, и подключение к точкам выше.
 
 ## 4. Данные
-- **Файл компании** — SQLite `<Название>.gl`; `infrastructure/workspace.py` открывает,
-  создаёт (через `.part`), запоминает внешние файлы; `backup.py` — копии через Backup API
-  с `integrity_check`; режим просмотра — снимок в памяти (`db.open_snapshot`, D80).
+- **Файл компании** — SQLite `<Название>.gl`; `application/workspace.py` — папка компаний:
+  открывает, создаёт (через `.part` и `Ledger`), запоминает внешние файлы; что делает с
+  файлом сам движок (имя, версия, копия) — `infrastructure/company_file.py`; `backup.py` —
+  копии; режим просмотра — снимок в памяти (`db.open_snapshot`, D80); закрытие — `db.close`
+  (`PRAGMA optimize`); файл помечен `application_id` «MGL1».
 - **Схема** — только миграциями `migrations/NNNN_*.sql`, подряд, написанные не меняются
   (хэши в `test_database.py`); каждая — в своей транзакции с `foreign_key_check`.
 - **Каждая таблица** — `company_id NOT NULL`, составные FK `(company_id, id)`, индекс на
   ссылку, `CHECK` на перечисления и даты (исключения — «Долг» в `ENGINEERING.md`).
 - **Проводки** (`documents` + `postings`): пара Дт/Кт, сумма в копейках, до 3 субконто на
   сторону, валюта и сумма в ней, слой. Остатки не хранятся — считаются запросом.
-- **Хранимое производное** — себестоимость и движения склада: пересчитываются одной
-  процедурой задним числом (`inventory/rebuild`), сверка «пересчёт = хранимое» в тестах.
-- **SQL общий для SQLite и PostgreSQL** (D77): `string_agg`, без `PRAGMA`/`rowid`/`INSERT OR`.
+- **Хранимое производное** — себестоимость и движения склада: одна процедура пересчёта
+  (`inventory/rebuild`), тест «пересчёт = хранимое».
+- **SQL общий для SQLite и PostgreSQL** (D77).
 
 ## 5. Чтение и отчёты
-- `application/queries.py`, `catalog.py` — то, что нужно формам (списки, «как в прошлый
-  раз»); `reporting/` — отчёты: ОСВ, карточка, анализ, анализ и карточка субконто (`reports/`), баланс, ОПиУ, ДДС,
-  сравнение книг, колонки (`statements`, `profit_loss`, `cash_flow`, `books`, `columns`),
-  склад (`inventory/`), e-qaimə (`invoices`, `invoice_rules`, `eqaime_reconciliation`),
-  «Bu gün» (`overview`), hledger, «Передача дел».
+- `application/queries.py`, `catalog.py` — для форм; `reporting/` — ОСВ, карточка, анализ, анализ и карточка
+  субконто (`reports/`), баланс, ОПиУ, ДДС, сравнение книг (`statements`, `profit_loss`, `cash_flow`,
+  `books`, `columns`), склад (`inventory/`), e-qaimə, «Bu gün» (`overview`), hledger,
+  «Передача дел».
 - Агрегация — в SQL с индексом; без «прочитать всё в Python» и без запроса на строку.
-- Книга в отчёте = набор слоёв (`report_common.BOOKS`).
+- Книга = набор слоёв, «в книге» = `docs_cte` — `application/books.py`; проводки по номеру
+  e-qaimə и неоплаченные — `application/invoices.py` (правило — `invoice_rules`, D120).
 
 ## 6. Интерфейс
 - **Окно:** `CompanyFiles` (файл компании) ← `OpenPages` (стек страниц, Esc — назад) ←
-  `ReportPlaces` (как открываются отчёты) ← `MainWindow` (какие страницы есть); боковая панель вместо вкладок.
+  `ReportPlaces` (как открываются отчёты) ← `MainWindow` (какие страницы есть).
 - **Страница читает в два шага:** `fetch(conn)` — только SQL, `present(data)` — заполнить;
   через `Session.read` — у большой компании в фоновом потоке (`desktop/background.py`).
   Страница при открытии ничего не пишет.
@@ -91,8 +95,8 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 - **Только просмотр** — `session.read_only`, кнопки записи через `hide_when_viewing`.
 
 ## 7. AI-помощник
-`modern-gl-mcp` (`assistant/`): JSON-RPC по stdio, каждая компания — снимком только для
-чтения; с `--allow-drafts` — черновики через тот же `Ledger`, автор «AI · Claude» (D83, D84).
+`modern-gl-mcp` (`assistant/`): JSON-RPC по stdio, компании — снимками; `--allow-drafts` —
+черновики через тот же `Ledger` (D83, D84).
 
 ## 8. Проверки
 | Что | Чем |
@@ -100,10 +104,9 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 | Учёт | тесты с цифрами вручную, `tests/conftest.py`, демо-год `tests/test_demo_year.py` |
 | Слои и границы модулей | `test_architecture.py` |
 | Схема | `test_database.py` |
-| Размер кода (600/500/80) | `test_code_size.py` |
-| Размер документов | `test_docs_size.py` (D109) |
+| Размер кода (600/500/80) и документов (D109) | `test_code_size.py`, `test_docs_size.py` |
 | Переводы | `test_i18n.py` |
 | Режим просмотра | `test_read_only_ui.py` |
 | Перестроение модулей | `test_rebuild.py` |
 | Вид | `scripts/screenshots.py` — смотреть глазами |
-| Скорость | `scripts/benchmark.py` (100 000 проводок: ОСВ 0,5 с) |
+| Скорость | `scripts/benchmark.py` (100 000 проводок: ОСВ 0,35 с со статистикой `PRAGMA optimize`, 0,6 с без) |
