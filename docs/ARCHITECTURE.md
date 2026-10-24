@@ -6,7 +6,7 @@
 ## 1. Слои
 
 ```text
-desktop (PySide6) · assistant (MCP) · demo   страницы и формы — без SQL и без правил учёта
+desktop (PySide6) · assistant (MCP) · api · demo   страницы, формы, API — без SQL и правил учёта
    │  Session: conn, ledger, catalog, read(), notify
 reporting                  отчёты — только чтение, агрегация в SQL; строятся над application
 application                запись (Ledger, Inventory); общее чтение (queries, catalog, books,
@@ -94,9 +94,12 @@ i18n                       тексты: tr(), переводы
 - **Тексты** — `tr("русский {x}")`, перевод в `i18n_az.py`; поиск — `i18n.fold`.
 - **Только просмотр** — `session.read_only`, кнопки записи через `hide_when_viewing`.
 
-## 7. AI-помощник
+## 7. AI-помощник и разработчики
 `modern-gl-mcp` (`assistant/`): JSON-RPC по stdio, компании — снимками; `--allow-drafts` —
-черновики через тот же `Ledger` (D83, D84).
+черновики через тот же `Ledger` (D83, D84). Для разработчиков (D130): `modern_gl.api` —
+единственная обещанная поверхность (`docs/API.md`), `modern-gl-cli`; файл обмена
+документами — `application/exchange/` + `reporting/exchange.py` (`docs/EXCHANGE.md`),
+повтор без дублей по `document_sources`.
 
 ## 8. Проверки
 | Что | Чем |
@@ -108,5 +111,6 @@ i18n                       тексты: tr(), переводы
 | Переводы | `test_i18n.py` |
 | Режим просмотра | `test_read_only_ui.py` |
 | Перестроение модулей | `test_rebuild.py` |
+| API и формат обмена — контракт версии | `test_api.py`, `test_exchange.py` |
 | Вид | `scripts/screenshots.py` — смотреть глазами |
 | Скорость | `scripts/benchmark.py` (100 000 проводок: ОСВ 0,35 с со статистикой `PRAGMA optimize`, 0,6 с без) |
