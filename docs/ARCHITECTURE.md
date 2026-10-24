@@ -107,4 +107,4 @@ infrastructure             SQLite (sqlite3 — только здесь: db.py, �
 | Режим просмотра | `test_read_only_ui.py` |
 | Перестроение модулей | `test_rebuild.py` |
 | Вид | `scripts/screenshots.py` — смотреть глазами |
-| Скорость | `scripts/benchmark.py` (100 000 проводок: ОСВ 0,5 с) |
+| Скорость | `scripts/benchmark.py` (100 000 проводок: ОСВ 0,35 с со статистикой `PRAGMA optimize`, 0,6 с без) |
