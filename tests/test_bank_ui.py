@@ -729,6 +729,10 @@ def test_the_vat_part_goes_from_the_deposit_account(qtbot, session):
     assert (page.amount.text(), page.vat_amount.text()) == ("1 000.00", "180.00")
     assert page.amount_caption.text() == "Из банка"
     assert page.check.text().endswith("e-qaimə оплачивается полностью")
+    page.line_rows[0].invoice.setText("№ mt 7")  # typed by hand: as the portal writes it
+    page._show_check()
+    assert page.check.isVisibleTo(page)
+    page.line_rows[0].invoice.setText("MT7")
     assert page.save(post=True), page.error.text()
     bank_lines = [(x.account_id, x.amount, x.invoice) for x in page.doc.lines]
     assert bank_lines == [(acc(session, "60.1"), 100_000, "MT7")]

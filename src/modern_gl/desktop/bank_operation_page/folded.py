@@ -20,6 +20,8 @@ from modern_gl.desktop.conversion_page.common import amount_text
 from modern_gl.desktop.widgets import (
     edited_date,
 )
+from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import format_minor, to_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.invoices import OpenInvoice
@@ -116,7 +118,10 @@ class FoldedPart(BankOperationForm):
     def _show_check(self) -> None:
         """How the amounts typed close the e-qaimə chosen: in full, partly, or over."""
         row = self.line_rows[0] if self.folded else None
-        number = row.invoice.text().strip().upper() if row is not None else ""
+        try:  # as the portal writes it: "№ mt 7" is MT7
+            number = normalize_invoice(row.invoice.text()) if row is not None else None
+        except ValidationError:
+            number = None  # too long to be one: nothing to check against
         chosen = next((i for i in self.open_invoices if i.invoice == number), None)
         if chosen is None or self.doc is not None:
             self.check.hide()
