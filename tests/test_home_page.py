@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
 import modern_gl.desktop.main_window  # noqa: F401  modules add their rows of «what waits»
+from modern_gl.application.attention import POST_DRAFTS
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import load_document
 from modern_gl.application.workspace import Workspace
@@ -18,7 +19,7 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
-from modern_gl.reporting.overview import POST_DRAFTS, attention, money, rates
+from modern_gl.reporting.overview import attention, money, rates
 from modern_gl.reporting.reports import trial_balance
 
 

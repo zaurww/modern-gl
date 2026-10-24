@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
 
+from modern_gl.application.attention import POST_DRAFTS, Attention
 from modern_gl.desktop.home_page.rows import Line, Section
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import PageHeader, button, hide_when_viewing, money, ru_date
@@ -19,8 +20,6 @@ from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.overview import (
-    POST_DRAFTS,
-    Attention,
     DayRate,
     Money,
     attention,

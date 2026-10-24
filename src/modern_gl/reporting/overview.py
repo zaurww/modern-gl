@@ -1,16 +1,14 @@
 """«Bu gün» (D86): what waits for the accountant, the money on hand and today's rates —
-read only, one company, on a day.
-
-The core knows its own rows (journal drafts, cash and bank balances, rates); a module adds
-the rows of what waits in it with `attention_source` (D71): the core never asks a module.
+read only, one company, on a day. The rows of «Требует внимания» a module adds —
+`application/attention.py` (`attention_source`, D71): the core never asks a module.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
 from dataclasses import dataclass
 
+from modern_gl.application.attention import POST_DRAFTS, Attention, attention_sources
 from modern_gl.application.books import COMMON
 from modern_gl.application.currencies import Rate, latest_rates, list_currencies, rate_on
 from modern_gl.application.queries import journal_drafts
@@ -19,37 +17,13 @@ from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.report_common import _DOCS_CTE
 
-POST_DRAFTS = "post_drafts"  # the row's button: post them all
-
-
-@dataclass(frozen=True)
-class Attention:
-    """One thing that waits: «Черновики в журнале · 3» → its place in the sidebar."""
-
-    text: str
-    count: int
-    place: tuple[str, ...]
-    amount: int | None = None  # in kopecks, when a sum tells more than the count
-    action: str = ""  # POST_DRAFTS: a button on the row
-
-
-AttentionSource = Callable[[Connection, int, str], list[Attention]]
-_SOURCES: list[AttentionSource] = []
-
-
-def attention_source(source: AttentionSource) -> AttentionSource:
-    """A module's rows of «Требует внимания»: (conn, company_id, ISO day) → rows."""
-    if source not in _SOURCES:
-        _SOURCES.append(source)
-    return source
-
 
 def attention(conn: Connection, company_id: int, day: str) -> list[Attention]:
     """What waits on the day: the journal's drafts, then each module's rows; only rows
     with something in them."""
     day = iso_date(day)
     rows = [_journal_drafts(conn, company_id, day)]
-    for source in _SOURCES:
+    for source in attention_sources():
         rows += source(conn, company_id, day)
     return [r for r in rows if r.count]
 
