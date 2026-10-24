@@ -114,8 +114,7 @@ def test_the_osv_opens_the_comparison(window, qtbot):
         ("26", 5_000, 0),
     ]
     assert page.footer.text() == "Расхождения по счетам: 2"
-    page.day.setDate(to_qdate(date(2026, 2, 27)))
-    page.refresh()
+    page.day.setDate(to_qdate(date(2026, 2, 27)))  # a new day is shown at once (D105)
     qtbot.waitUntil(lambda: not page.model.rows)
     assert page.footer.text() == "Книги совпадают  ✓"
     page.only.setChecked(False)  # every account with a balance
