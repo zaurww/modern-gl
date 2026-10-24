@@ -17,7 +17,7 @@ from modern_gl.application.default_accounts import SUPPLIER, default_account
 from modern_gl.application.inventory import (
     LandedCostCharge,
     LandedCostTarget,
-    allocate_minor,
+    allocate_charges,
     format_quantity,
     unit_price,
     vat_of,
@@ -55,6 +55,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.currency import format_unit_rate, parse_rate, unit_rate
 from modern_gl.domain.dates import ru_date
+from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor, from_minor, to_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -496,11 +497,13 @@ class TargetsModel(QAbstractTableModel):
         for target in self.rows:
             target.share = target.manual if method == "manual" else None
         if method != "manual" and total > 0 and self.rows:
-            field_name = "amount" if method == "value" else "quantity"
-            weights = [(n, getattr(t.receipt, field_name)) for n, t in enumerate(self.rows)]
-            if sum(w for _, w in weights) > 0:
-                for n, share in allocate_minor(total, weights).items():
-                    self.rows[n].share = share
+            lines = [(n, t.receipt.amount, t.receipt.quantity) for n, t in enumerate(self.rows)]
+            try:
+                shares = allocate_charges(method, total, lines)
+            except ValidationError:  # nothing to allocate by yet (no amounts or quantities)
+                shares = {}
+            for n, share in shares.items():
+                self.rows[n].share = share
         if self.rows:
             self.dataChanged.emit(
                 self.index(0, 0), self.index(len(self.rows) - 1, len(self.columns) - 1)

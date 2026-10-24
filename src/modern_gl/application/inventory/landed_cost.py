@@ -9,6 +9,7 @@ from datetime import date
 
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.inventory.amounts import (
+    allocate_charges,
     allocate_minor,
     blank,
     money,
@@ -348,8 +349,14 @@ class LandedCostCommands(StockCommands):
                     )
                 )
             return {line["id"]: line["amount"] for line in lines}
-        field = "amount" if method == "value" else "quantity"
-        return allocate_minor(total, [(line["id"], receipts[line["id"]][field]) for line in lines])
+        return allocate_charges(
+            method,
+            total,
+            [
+                (line["id"], receipts[line["id"]]["amount"], receipts[line["id"]]["quantity"])
+                for line in lines
+            ],
+        )
 
     def _landed_cost_debits(
         self,

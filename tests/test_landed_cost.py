@@ -18,6 +18,7 @@ from modern_gl.application.inventory import (
     ReceiptLine,
     split_charges,
 )
+from modern_gl.application.inventory.amounts import allocate_charges
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.desktop.landed_cost_page import (
     ACCOUNT,
@@ -154,6 +155,20 @@ def subconto_of(conn, item_id: int) -> int:
     return conn.execute(
         "SELECT subconto_value_id FROM inventory_items WHERE id = ?", (item_id,)
     ).fetchone()[0]
+
+
+def test_charges_are_allocated_by_value_or_by_quantity():
+    """One rule for the form's preview and for posting (debt 12). A: 170.00 for 10 pcs,
+    B: 127.50 for 5 pcs. Duty 29.75 by value: 29.75 × 170/297.50 = 17.00, B 12.75;
+    freight 51.00 by quantity: 51 × 10/15 = 34.00, B 17.00; a kopeck left by the
+    remainders goes to the larger remainder: 0.01 by quantity — A (10/15 = 0.0067)."""
+    lines = [(1, 17_000, 10_000_000), (2, 12_750, 5_000_000)]
+    assert allocate_charges("value", 2_975, lines) == {1: 1_700, 2: 1_275}
+    assert allocate_charges(None, 2_975, lines) == {1: 1_700, 2: 1_275}  # value by default
+    assert allocate_charges("quantity", 5_100, lines) == {1: 3_400, 2: 1_700}
+    assert allocate_charges("quantity", 1, lines) == {1: 1, 2: 0}
+    with pytest.raises(ValidationError, match="база распределения равна нулю"):
+        allocate_charges("quantity", 100, [(1, 500, 0)])
 
 
 def test_split_charges_keeps_both_totals():

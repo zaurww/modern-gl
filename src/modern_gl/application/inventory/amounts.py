@@ -79,6 +79,16 @@ def allocate_minor(total: int, weights: Sequence[tuple[int, int]]) -> dict[int, 
     return result
 
 
+def allocate_charges(
+    method: str | None, total: int, lines: Sequence[tuple[int, int, int]]
+) -> dict[int, int]:
+    """A batch's expenses over its receipt lines (key, amount, quantity) by their value
+    (also when no method is set) or by quantity — the same in the form's preview and in
+    posting; by hand ('manual') nothing is allocated here."""
+    by_quantity = method == "quantity"
+    return allocate_minor(total, [(key, q if by_quantity else a) for key, a, q in lines])
+
+
 def split_charges(
     charges: Sequence[tuple[int, int]], targets: Mapping[int, int]
 ) -> dict[tuple[int, int], int]:
