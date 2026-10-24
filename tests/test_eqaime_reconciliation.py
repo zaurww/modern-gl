@@ -4,7 +4,7 @@ books against it, the months marked reconciled. Figures worked out by hand in co
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 
@@ -21,8 +21,9 @@ from modern_gl.domain.periods import (
     WEEK,
     full_month,
     month_bounds,
-    quick_period,
     span_of,
+    span_period,
+    up_to,
 )
 from modern_gl.infrastructure.chart_csv import apply_chart_template
 from modern_gl.infrastructure.db import connect
@@ -571,14 +572,16 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
     ],
 )
 def test_quick_periods_of_a_morning_check(today, span, period):
-    assert quick_period(span, today) == period
+    """The reconciliation's periods end yesterday: it looks at finished days."""
+    assert up_to(span_period(span, today), today - timedelta(days=1)) == period
 
 
 def test_quick_periods_of_the_import_take_today():
     today = date(2026, 10, 21)
-    assert quick_period(WEEK, today, through_today=True) == (date(2026, 10, 19), today)
-    assert quick_period(MONTH, today, through_today=True) == (date(2026, 10, 1), today)
-    assert quick_period(DAY, today, through_today=True) == (date(2026, 10, 20),) * 2
+    assert span_period(WEEK, today) == (date(2026, 10, 19), date(2026, 10, 25))
+    assert up_to(span_period(WEEK, today), today) == (date(2026, 10, 19), today)
+    assert up_to(span_period(MONTH, today), today) == (date(2026, 10, 1), today)
+    assert up_to(span_period(DAY, today), today) == (date(2026, 10, 20),) * 2
 
 
 @pytest.mark.parametrize(

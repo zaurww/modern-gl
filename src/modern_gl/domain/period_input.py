@@ -3,6 +3,7 @@ Russian, Azerbaijani (with or without the Azerbaijani letters) or English — al
 whatever the language of the interface.
 
 A period:
+  «нед» / «həftə» — this week (Monday to Sunday), «пн» / «kh» — the last one,
   «пм» / «ka» — the last month, «м» / «ay» — this one, «кв» / «rüb» — this quarter,
   «пк» / «kr» — the last quarter, «г» / «il» — this year, «пг» / «ki» — the last year,
   «сг» / «ilb» — from the start of the year to today, «ск» / «rb» — of the quarter,
@@ -63,7 +64,16 @@ def _presets(today: date) -> dict[str, Period]:
     quarter = quarter_of(today)
     last_quarter = (today.year, quarter - 1) if quarter > 1 else (today.year - 1, 4)
     quarter_start = quarter_bounds(today.year, quarter)[0]
+    monday = today - timedelta(days=today.weekday())
     periods = {
+        ("н", "нед", "неделя", "эта неделя", "hefte", "bu hefte", "this week"): (
+            monday,
+            monday + timedelta(days=6),
+        ),
+        ("пн", "прошлая неделя", "kh", "kecen hefte", "lw", "last week"): (
+            monday - timedelta(days=7),
+            monday - timedelta(days=1),
+        ),
         ("м", "мес", "месяц", "этот месяц", "ay", "bu ay", "this month"): month_bounds(
             today.year, today.month
         ),
