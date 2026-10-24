@@ -51,6 +51,14 @@ _MONTHS = (
 )
 
 
+_SHORT_MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def month_short(month: int) -> str:
+    """3 -> 'Mar': a month in three English letters, the same in every language (D129)."""
+    return _SHORT_MONTHS[month - 1]
+
+
 def month_name(month: str) -> str:
     """'2026-03' -> 'март 2026' (in the interface's language)."""
     return f"{tr(_MONTHS[int(month[5:7]) - 1])} {month[:4]}"

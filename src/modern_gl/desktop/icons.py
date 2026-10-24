@@ -38,6 +38,7 @@ GLYPHS: dict[str, str] = {
     "home": "sun",
     "search": "search",
     "next": "chevron-right",
+    "previous": "chevron-left",
     "more": "ellipsis",
     "check": "check",
     "account": "hash",
