@@ -12,7 +12,8 @@ from PySide6.QtWidgets import QInputDialog, QMessageBox, QWidget
 from modern_gl.application.queries import company_tax_id
 from modern_gl.desktop import portal_login
 from modern_gl.desktop.session import Session
-from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.errors import LedgerError, ValidationError
+from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import tr
 
 TITLE = "Портал e-taxes"
@@ -30,12 +31,10 @@ def ask_tax_id(parent: QWidget, current: str = "") -> str | None:
         )
         if not ok:
             return None
-        typed = "".join(text.split())
-        if not typed or (typed.isdigit() and len(typed) == 10):
-            return typed
-        QMessageBox.warning(
-            parent, tr("VÖEN компании"), tr("VÖEN — 10 цифр, а не «{text}»", text=typed)
-        )
+        try:
+            return resident_tax_id(text) or ""
+        except ValidationError as e:
+            QMessageBox.warning(parent, tr("VÖEN компании"), str(e))
 
 
 def company_token(

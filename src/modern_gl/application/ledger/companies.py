@@ -11,6 +11,7 @@ from modern_gl.domain.company import COMPANY_MODES
 from modern_gl.domain.currency import DEFAULT_CURRENCIES, currency_name
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
@@ -54,9 +55,7 @@ class CompanyCommands(LedgerBase):
 
     def set_company_tax_id(self, company_id: int, tax_id: str | None) -> None:
         """The company's own VÖEN (D113): 10 digits, or None — not known. Audited."""
-        tax_id = "".join((tax_id or "").split()) or None
-        if tax_id is not None and not (tax_id.isdigit() and len(tax_id) == 10):
-            raise ValidationError(tr("VÖEN — 10 цифр, а не «{text}»", text=tax_id))
+        tax_id = resident_tax_id(tax_id)
         with transaction(self.conn):
             old = self._company(company_id)["tax_id"]
             if old == tax_id:
