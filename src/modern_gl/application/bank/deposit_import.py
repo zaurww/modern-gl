@@ -28,6 +28,7 @@ from modern_gl.application.bank.operations import (
 )
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.application.bank.statement import StatementLine, statement
+from modern_gl.domain.dates import next_day
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
@@ -187,7 +188,7 @@ def loaded_spans(loads: Sequence[PortalLoad]) -> list[tuple[str, str]]:
     spans: list[tuple[str, str]] = []
     closed = [(x.date_from, x.closed_to) for x in loads if x.date_from <= x.closed_to]
     for first, last in sorted(closed):
-        if spans and first <= _next_day(spans[-1][1]):
+        if spans and first <= next_day(spans[-1][1]):
             spans[-1] = (spans[-1][0], max(spans[-1][1], last))
         else:
             spans.append((first, last))
@@ -204,7 +205,7 @@ def next_to_load(loads: Sequence[PortalLoad]) -> str | None:
     day again); nothing loaded — None."""
     spans = loaded_spans(loads)
     if spans:
-        return _next_day(spans[-1][1])
+        return next_day(spans[-1][1])
     return min((x.date_from for x in loads), default=None)
 
 
@@ -213,10 +214,6 @@ def unfinished_days(loads: Sequence[PortalLoad]) -> list[str]:
     spans = loaded_spans(loads)
     days = {x.date_to for x in loads if x.closed_to < x.date_to}
     return sorted(d for d in days if not any(a <= d <= b for a, b in spans))
-
-
-def _next_day(day: str) -> str:
-    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
 
 
 def invoices_in(text: str) -> list[str]:

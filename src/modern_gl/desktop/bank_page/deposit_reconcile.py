@@ -6,7 +6,7 @@ the portal or in the books, is said here."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date, timedelta
+from datetime import date
 
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
@@ -29,6 +29,7 @@ from modern_gl.desktop.period_bar import PeriodBar, period_dates
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
+from modern_gl.domain.dates import next_day
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.domain.periods import MONTH
@@ -121,7 +122,7 @@ class DepositReconcileDialog(QDialog):
         """From the day after the last period reconciled up to today; none — this month."""
         periods = reconciled_periods(self.s.conn, self.s.company_id, self.place)
         if periods:
-            following = date.fromisoformat(periods[-1].date_to) + timedelta(days=1)
+            following = date.fromisoformat(next_day(periods[-1].date_to))
             if following <= self.today:
                 self.period_bar.set_period(following, self.today)
 

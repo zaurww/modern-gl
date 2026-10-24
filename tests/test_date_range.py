@@ -24,3 +24,10 @@ def test_a_bank_statement_across_a_new_year_shows_both_years():
     """Was «29.12 — 04.01.2026»: the start looked like 29.12.2026."""
     statement = BankStatement(None, "2025-12-29", "2026-01-04", 0, 0, 0, 0, 0, None)
     assert period_text(statement) == "29.12.2025 — 04.01.2026"
+
+
+def test_the_day_after():
+    from modern_gl.domain.dates import next_day
+
+    assert next_day("2026-12-31") == "2027-01-01"
+    assert next_day(date(2028, 2, 28)) == "2028-02-29"

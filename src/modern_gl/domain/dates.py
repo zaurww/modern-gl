@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import calendar
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from modern_gl.i18n import tr
 
@@ -19,6 +19,11 @@ def ru_date(iso: str) -> str:
     """'2026-03-05' -> '05.03.2026', as dates are shown to the user."""
     y, m, d = iso.split("-")
     return f"{d}.{m}.{y}"
+
+
+def next_day(day: date | str) -> str:
+    """The day after (ISO): «2026-12-31» -> «2027-01-01»."""
+    return (date.fromisoformat(iso_date(day)) + timedelta(days=1)).isoformat()
 
 
 def date_range(first: date | str, last: date | str, sep: str = " — ") -> str:
