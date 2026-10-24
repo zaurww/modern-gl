@@ -10,7 +10,9 @@ from datetime import date
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import QWidget
 
-from modern_gl.application.bank.deposit_import import fetch_deposit
+from modern_gl.application.bank import BankPlace
+from modern_gl.application.bank.deposit_import import DepositFetched, fetch_deposit
+from modern_gl.application.bank.deposit_reconciliation import changed_since
 from modern_gl.desktop import portal_login
 from modern_gl.desktop.eqaime_portal_loader import PortalLoader
 from modern_gl.desktop.portal_company import company_token
@@ -62,3 +64,14 @@ class DepositFetch(QObject):
     def _failed(self, message: str) -> None:
         portal_login.forget_token()  # a new sign-in next time
         self.failed.emit(message)
+
+
+def reconciled_changes(
+    session: Session, place: BankPlace, fetched: DepositFetched | None
+) -> list[str]:
+    """What changed in the periods reconciled (D118): in the books always, on the portal
+    once it is read for them — the same words in the loading and reconciling windows."""
+    conn, cid = session.conn, session.company_id
+    if fetched is None:
+        return changed_since(conn, cid, place)
+    return changed_since(conn, cid, place, fetched.operations, fetched.balance, fetched.date_from)

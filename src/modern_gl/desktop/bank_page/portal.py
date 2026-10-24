@@ -23,7 +23,7 @@ from modern_gl.application.bank.deposit_import import (
 )
 from modern_gl.application.bank.statement import place_balance
 from modern_gl.application.ledger.bank_deposit import DRAFT, POSTED, DepositImported
-from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch
+from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch, reconciled_changes
 from modern_gl.desktop.bank_page.deposit_rows import DepositRows
 from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
@@ -81,10 +81,15 @@ class DepositDialog(QDialog):
         self.loaded = QLabel()
         self.loaded.setWordWrap(True)
         root.addWidget(self.loaded)
+        self.changes = QLabel()  # a reconciled period changed since (D118)
+        self.changes.setObjectName("warning")
+        self.changes.setWordWrap(True)
+        root.addWidget(self.changes)
         self._build_rows(root)
         self._build_actions(root)
         self._suggest_period()
         self._show_loaded()
+        self._show_changes()
         self._show_step(PERIOD)
 
     def _build_rows(self, root: QVBoxLayout) -> None:
@@ -157,6 +162,7 @@ class DepositDialog(QDialog):
         if self.step == PREVIEW:  # the rows were of another period
             self.fetched = None
             self.status.setText(tr("Период изменён — загрузите его с портала."))
+            self._show_changes()
             self._show_step(PERIOD)
 
     def _show_loaded(self) -> None:
@@ -176,6 +182,13 @@ class DepositDialog(QDialog):
             self.loaded.setText(text)
         self.loaded.style().unpolish(self.loaded)
         self.loaded.style().polish(self.loaded)
+
+    def _show_changes(self) -> None:
+        """A reconciled period that changed since — in the books at once, on the portal
+        once it is read: said here too, not only in the reconciliation window."""
+        changes = reconciled_changes(self.s, self.place, self.fetched)
+        self.changes.setText(" ".join(f"{text}." for text in changes))
+        self.changes.setVisible(bool(changes))
 
     def _loaded_texts(self, spans: list[tuple[str, str]]) -> list[str]:
         texts = []
@@ -244,6 +257,7 @@ class DepositDialog(QDialog):
         self.rows.show_rows(seen.rows, written=False)
         self.rows.blockSignals(False)
         self.status.setText(preview_summary(seen))
+        self._show_changes()
         self._show_step(PREVIEW)
         self._show_balances()
 
@@ -274,6 +288,7 @@ class DepositDialog(QDialog):
         if any(row.document_id is not None for row in done.rows):
             text += ". " + tr("Двойной щелчок по строке — открыть документ.")
         self.status.setText(text)
+        self._show_changes()  # what was written may change a reconciled period
         self._show_step(DONE)
         self._show_balances()
 
