@@ -568,7 +568,6 @@ def lines_of(ledger, f, amount: str, invoices=(), advance=True, account="60.1"):
             day="2026-03-05",
             invoices=invoices,
             advance_account=ledger.account_role(f["cid"], ADVANCE_PAID) if advance else None,
-            advance_subconto=(None, v["contract"]),
         )
     ]
 

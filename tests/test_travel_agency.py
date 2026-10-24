@@ -39,15 +39,15 @@ def agency(ledger):
 
 def make_agency(ledger):
     """The agency on the 1C 7.7 chart with «Sifarişlər» as the third subconto of 60.1,
-    62.1 and 90.1: (company, accounts by code, elements by name, kinds by code, the order
-    kind)."""
+    60.2, 62.1, 62.2 and 90.1: (company, accounts by code, elements by name, kinds by code,
+    the order kind)."""
     cid = ledger.create_company("Səyahət MMC")
     apply_chart_template(ledger, cid, "1c77", "az")
     kind = {
         c: ledger.subconto_kind_id(cid, c) for c in ("counterparty", "contract", "bank_account")
     }
     order = ledger.add_subconto_kind(cid, "order", "Sifarişlər")
-    for code in ("60.1", "62.1"):
+    for code in ("60.1", "60.2", "62.1", "62.2"):  # the advances carry the order too
         ledger.update_account(cid, code, subconto=[kind["counterparty"], kind["contract"], order])
     ledger.update_account(cid, "90.1", subconto=[order])
     acc = {c: ledger.account_id(cid, c) for c in ("51", "60.1", "62.1", "90.1")}
@@ -289,3 +289,47 @@ def test_purchase_form_takes_the_ticket_for_the_client(ledger, conn, agency, qtb
     assert page.save(post=True), page.error.text()
     assert _by_order(conn, cid, acc["60.1"]) == {"S-002": (0, 95000, 0, 95000)}
     assert _by_order(conn, cid, acc["62.1"]) == {"S-002": (95000, 0, 95000, 0)}
+
+
+def test_a_bank_payment_ahead_of_the_tour_carries_the_order_to_the_advance(ledger, conn, agency):
+    """Zaur pays 2 000.00 before anything is owed: the bank spreads it onto 62.2 (D78) —
+    with the order, which 62.2 requires; typed on 62.1 as (Zaur, —, S-001)."""
+    from modern_gl.application.bank.advances import payment_lines
+    from modern_gl.application.bank.operations import IN
+    from modern_gl.domain.accounts import ADVANCE_RECEIVED
+
+    cid, acc, v, _, _ = agency
+    advance = ledger.account_role(cid, ADVANCE_RECEIVED)
+    assert advance == ledger.account_id(cid, "62.2")
+    lines = payment_lines(
+        conn,
+        cid,
+        account_id=acc["62.1"],
+        account_type="receivable",
+        subconto=(v["Zaur"], None, v["S-001"]),
+        counterparty_id=v["Zaur"],
+        amount=200000,
+        direction=IN,
+        day="2026-06-01",
+        advance_account=advance,
+    )
+    assert [(ln.account_id, ln.amount, ln.subconto) for ln in lines] == [
+        (advance, 200000, (v["Zaur"], None, v["S-001"]))
+    ]
+    from modern_gl.application.bank.operations import CUSTOMER, BankOperationInput
+
+    ledger.bank.save_bank_operation(
+        cid,
+        BankOperationInput(
+            doc_date="2026-06-01",
+            direction=IN,
+            account_id=acc["51"],
+            subconto=(v["bank"],),
+            kind=CUSTOMER,
+            counterparty_id=v["Zaur"],
+            lines=tuple(lines),
+            memo="Antalya turu üçün",
+        ),
+        post=True,
+    )
+    assert _by_order(conn, cid, ledger.account_id(cid, "62.2")) == {"S-001": (0, 200000, 0, 200000)}

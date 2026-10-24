@@ -94,19 +94,7 @@ class EntrySaving(EntryChoices):
             day=self.day(),
             invoices=self.invoices_of_line(),
             advance_account=advance,
-            advance_subconto=self._contract_on(advance),
         )
-
-    def _contract_on(self, account_id: int | None) -> tuple[int | None, ...]:
-        """The line's contract in its place on another account (the advance one)."""
-        values: list[int | None] = [None, None, None]
-        if account_id is None:
-            return tuple(values)
-        kinds = self.s.catalog.accounts[account_id].sc_kinds
-        at = next((i for i, k in enumerate(kinds) if k in self.s.catalog.owner_kinds), None)
-        if at is not None:
-            values[at] = self.contract()
-        return tuple(values)
 
     def _kind(self, account_id: int, account_type: str | None) -> str:
         fee = self.s.ledger.account_role(self.s.company_id, BANK_FEE)
