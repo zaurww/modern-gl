@@ -14,7 +14,6 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal
 
 from modern_gl.application.bank.operations import (
     CUSTOMER,
@@ -28,8 +27,9 @@ from modern_gl.application.bank.operations import (
 )
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.application.bank.statement import StatementLine, statement
+from modern_gl.domain.dates import next_day
 from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.domain.money import to_minor
+from modern_gl.domain.money import portal_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.infrastructure.etaxes import EtaxesClient
@@ -70,12 +70,6 @@ class DepositOperation:
         return self.amount if self.direction == IN else -self.amount
 
 
-def _minor(value: object) -> int:
-    """An amount of the portal (a JSON number read as Decimal, 12.4369) in minor units."""
-    number = Decimal(str(value or 0)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-    return to_minor(number)
-
-
 def parse_operation(raw: dict, own_tin: str = "") -> DepositOperation:
     """An operation as the portal gives it."""
     direction = IN if raw.get("paymentType") == "INCOME" else OUT
@@ -90,7 +84,7 @@ def parse_operation(raw: dict, own_tin: str = "") -> DepositOperation:
         kind = TAX
     memo = " ".join(str(raw.get("explanation") or "").replace("\n", "").split())
     listed = tuple(
-        (normalize_invoice(str(i.get("serialNumber"))) or "", _minor(i.get("vat")))
+        (normalize_invoice(str(i.get("serialNumber"))) or "", portal_minor(i.get("vat")))
         for i in raw.get("invoices") or ()
         if i.get("serialNumber")
     )
@@ -104,7 +98,7 @@ def parse_operation(raw: dict, own_tin: str = "") -> DepositOperation:
         day=f"{moment[:4]}-{moment[4:6]}-{moment[6:8]}",
         moment=moment,
         direction=direction,
-        amount=_minor(amount),
+        amount=portal_minor(amount),
         tin=tin,
         name=" ".join(str(raw.get("name") or "").split()),
         kind=kind,
@@ -146,7 +140,9 @@ def fetch_deposit(
         if not cutoff or op.moment <= cutoff:
             operations.append(op)
     last = min(date_to or today, today)
-    return DepositFetched(operations, _minor(balance), date_from.isoformat(), last.isoformat())
+    return DepositFetched(
+        operations, portal_minor(balance), date_from.isoformat(), last.isoformat()
+    )
 
 
 @dataclass(frozen=True)
@@ -187,7 +183,7 @@ def loaded_spans(loads: Sequence[PortalLoad]) -> list[tuple[str, str]]:
     spans: list[tuple[str, str]] = []
     closed = [(x.date_from, x.closed_to) for x in loads if x.date_from <= x.closed_to]
     for first, last in sorted(closed):
-        if spans and first <= _next_day(spans[-1][1]):
+        if spans and first <= next_day(spans[-1][1]):
             spans[-1] = (spans[-1][0], max(spans[-1][1], last))
         else:
             spans.append((first, last))
@@ -204,7 +200,7 @@ def next_to_load(loads: Sequence[PortalLoad]) -> str | None:
     day again); nothing loaded — None."""
     spans = loaded_spans(loads)
     if spans:
-        return _next_day(spans[-1][1])
+        return next_day(spans[-1][1])
     return min((x.date_from for x in loads), default=None)
 
 
@@ -213,10 +209,6 @@ def unfinished_days(loads: Sequence[PortalLoad]) -> list[str]:
     spans = loaded_spans(loads)
     days = {x.date_to for x in loads if x.closed_to < x.date_to}
     return sorted(d for d in days if not any(a <= d <= b for a, b in spans))
-
-
-def _next_day(day: str) -> str:
-    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
 
 
 def invoices_in(text: str) -> list[str]:

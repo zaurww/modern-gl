@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.date_field import DateEdit, edited_date, to_qdate
 from modern_gl.desktop.widgets import button, icon_button
-from modern_gl.domain.dates import month_name
+from modern_gl.domain.dates import month_title
 from modern_gl.domain.period_input import (
     Period,
     month_bounds,
@@ -129,8 +129,8 @@ class PeriodWindow(QFrame):
         grid.setVerticalSpacing(4)
         self.month_buttons: list[QPushButton] = []
         for month in range(1, 13):
-            name = month_name(f"2000-{month:02d}").split()[0]
-            b = self._cell(name[:1].upper() + name[1:], "periodCell")
+            name = month_title(f"2000-{month:02d}").split()[0]
+            b = self._cell(name, "periodCell")
             b.setToolTip(tr("Shift+щелчок — от начала периода до этого месяца"))
             b.clicked.connect(lambda _=False, m=month: self._month_clicked(m))
             grid.addWidget(b, (month - 1) // 3, (month - 1) % 3)

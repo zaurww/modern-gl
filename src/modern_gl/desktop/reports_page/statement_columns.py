@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QPushButton
 
 from modern_gl.desktop.reports_page.table import Column, figure
 from modern_gl.desktop.widgets import MenuItem, button, menu_button, trailing_icon
-from modern_gl.domain.dates import month_name
+from modern_gl.domain.dates import month_title
 from modern_gl.domain.period_input import Period, describe, month_bounds, quarter_of
 from modern_gl.i18n import tr
 from modern_gl.reporting.columns import (
@@ -125,8 +125,7 @@ def _part_title(mode: str, period: Period, with_year: bool) -> str:
         return (
             tr("{n} квартал {year}", n=n, year=first.year) if with_year else tr("{n} квартал", n=n)
         )
-    name = month_name(f"{first:%Y-%m}")
-    name = name[:1].upper() + name[1:]
+    name = month_title(f"{first:%Y-%m}")
     if not with_year:
         name = name.rsplit(" ", 1)[0]
     if period != month_bounds(first.year, first.month):

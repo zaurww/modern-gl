@@ -243,3 +243,11 @@
   VÖEN резидента — `domain/tax_id.resident_tax_id` (3 копии). Остальное — «Долг» 14.
 - Документы: «Структура», ARCHITECTURE (карта отчётов и сценариев вне `Ledger`), STATUS
   (ветки, «У предела»). Старая ветка `qaime-status-counterparty-filter` не в master — вопрос.
+- PR #46 влит; старая ветка `qaime-status-counterparty-filter` сверена (решения, миграции,
+  функции — всё в master), удалить её сессия не смогла — удаляет пользователь.
+- «Долг» 14 закрыт, по коммиту на пункт: `INCOMING_SQL`; `common.group_path` (с защитой от
+  цикла); `currencies.missing_rates_text`; `table_text.POSTING_HEADERS` + `subconto_header`
+  (форма знала не все имена колонок, импорт — тоже); `widgets.list_table` (8 страниц);
+  `dates.next_day`; суммы портала — `money.portal_minor`, **арифметическое округление**
+  (выбор пользователя; e-qaimə раньше — банковское, мусор — 0, теперь ошибка).
+  **Ошибка:** месяц с заглавной по-азербайджански — «Iyun» вместо «İyun» (`dates.month_title`).

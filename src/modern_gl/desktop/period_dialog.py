@@ -4,7 +4,7 @@ click away; drafts that could not be posted afterwards are told before closing."
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout
 
@@ -13,7 +13,7 @@ from modern_gl.desktop.reason_dialog import ask_reason
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, date_edit, edited_date, ru_date, to_qdate
-from modern_gl.domain.dates import iso_date
+from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -114,7 +114,7 @@ class PeriodDialog(QDialog):
             notes.append(
                 tr(
                     "Период с {start} по {end} снова станет открытым.",
-                    start=ru_date(iso_date(date.fromisoformat(day) + timedelta(days=1))),
+                    start=ru_date(next_day(day)),
                     end=ru_date(self.closed),
                 )
             )

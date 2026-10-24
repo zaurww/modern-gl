@@ -14,12 +14,10 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QHeaderView,
     QLineEdit,
     QMessageBox,
     QStackedLayout,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -41,6 +39,7 @@ from modern_gl.desktop.widgets import (
     PageHeader,
     button,
     hide_when_viewing,
+    list_table,
     menu_button,
     money,
     ru_date,
@@ -210,16 +209,7 @@ class JournalPage(QWidget):
         return self.header
 
     def _build_table(self, session: Session) -> None:
-        self.table = QTableView()
-        self.table.setObjectName("list")
-        self.table.setModel(self.proxy)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.setWordWrap(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table = list_table(self.proxy, 36, wrap=False)
         hh = self.table.horizontalHeader()
         hh.setHighlightSections(False)
         for col, width in (

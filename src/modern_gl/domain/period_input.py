@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from datetime import date, timedelta
 
-from modern_gl.domain.dates import date_range, month_days, month_name
+from modern_gl.domain.dates import date_range, month_days, month_title
 from modern_gl.i18n import fold, tr
 
 Period = tuple[date, date]
@@ -128,8 +128,7 @@ def describe(period: Period) -> str:
     «05.10.2026», «01.10 — 15.10.2026», «29.12.2025 — 04.01.2026»."""
     first, last = period
     if _months_long(period) == 1:
-        name = month_name(f"{first:%Y-%m}")
-        return name[:1].upper() + name[1:]
+        return month_title(f"{first:%Y-%m}")
     if first.year == last.year and (first, last) == quarter_bounds(first.year, quarter_of(first)):
         return tr("{n} квартал {year}", n=quarter_of(first), year=first.year)
     if (first, last) == (date(first.year, 1, 1), date(first.year, 12, 31)):

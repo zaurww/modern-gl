@@ -33,6 +33,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     button,
+    list_table,
     money,
 )
 from modern_gl.domain.currency import format_unit_rate, unit_rate
@@ -50,15 +51,7 @@ from modern_gl.reporting.inventory.costs import BatchCharge
 
 
 def _list(selection: QAbstractItemView.SelectionMode) -> QTableView:
-    table = QTableView()
-    table.setObjectName("list")
-    table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-    table.setSelectionMode(selection)
-    table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-    table.setShowGrid(False)
-    table.verticalHeader().hide()
-    table.verticalHeader().setDefaultSectionSize(32)
-    return table
+    return list_table(None, 32, selection=selection)
 
 
 class PickerDialog(QDialog):

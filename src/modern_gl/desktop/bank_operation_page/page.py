@@ -26,7 +26,7 @@ from modern_gl.application.bank import (
     BankOperationInput,
     load_bank_operation,
 )
-from modern_gl.application.currencies import rate_on
+from modern_gl.application.currencies import missing_rates_text
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.bank_operation_page.bank import BankAccountPart
 from modern_gl.desktop.bank_operation_page.common import (
@@ -41,7 +41,6 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     MenuItem,
     edited_date,
-    ru_date,
     to_qdate,
 )
 from modern_gl.domain.errors import LedgerError
@@ -308,24 +307,10 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
 
     def _update_rate_note(self) -> None:
         currency_id = self.currency.currentData()
-        if self.read_only or self.posted or currency_id is None:
-            self.rate_note.hide()
-            return
-        day = edited_date(self.date).isoformat()
-        code = self.s.catalog.currencies[currency_id].code
-        rate = rate_on(self.s.conn, self.s.company_id, currency_id, day)
-        if rate is not None and rate.rate_date == day:
-            self.rate_note.hide()
-            return
-        what = (
-            tr("нет курса {code}", code=code)
-            if rate is None
-            else tr("курс {code} от {old}", code=code, old=ru_date(rate.rate_date))
-        )
-        self.rate_text.setText(
-            tr("На {date} курс не загружен: {what}", date=ru_date(day), what=what)
-        )
-        self.rate_note.show()
+        shown = [] if self.read_only or self.posted or currency_id is None else [currency_id]
+        text = missing_rates_text(self.s.conn, self.s.company_id, shown, edited_date(self.date))
+        self.rate_text.setText(text)
+        self.rate_note.setVisible(bool(text))
 
     def load_rates(self) -> None:
         if load_day_rates(self.s, edited_date(self.date), self.show_error):

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
 from fractions import Fraction
@@ -71,6 +72,31 @@ def rate_on(conn: Connection, company_id: int, currency_id: int, day: date | str
 def no_rate_text(code: str, day: date | str) -> str:
     """The same words wherever a rate is missing: «нет курса USD на 05.03.2026»."""
     return tr("нет курса {code} на {date}", code=code, date=ru_date(iso_date(day)))
+
+
+def missing_rates_text(
+    conn: Connection, company_id: int, currency_ids: Iterable[int], day: date | str
+) -> str:
+    """«На 05.03.2026 курс не загружен: нет курса RUB, курс USD от 01.03.2026» — the
+    currencies (each once, by code) without a rate set for the day itself; "" if none."""
+    day = iso_date(day)
+    stale: dict[str, str] = {}
+    for currency_id in set(currency_ids):
+        rate = rate_on(conn, company_id, currency_id, day)
+        if rate is None or rate.rate_date < day:
+            code = conn.execute(
+                "SELECT code FROM currencies WHERE company_id = ? AND id = ?",
+                (company_id, currency_id),
+            ).fetchone()["code"]
+            stale[code] = (
+                tr("курс {code} от {old}", code=code, old=ru_date(rate.rate_date))
+                if rate
+                else tr("нет курса {code}", code=code)
+            )
+    if not stale:
+        return ""
+    what = ", ".join(stale[code] for code in sorted(stale))
+    return tr("На {date} курс не загружен: {what}", date=ru_date(day), what=what)
 
 
 def latest_rates(conn: Connection, company_id: int) -> dict[int, Rate]:

@@ -12,7 +12,8 @@ from PySide6.QtCore import (
 )
 
 from modern_gl.application.queries import PostingData
-from modern_gl.application.table_text import header_names
+from modern_gl.application.table_text import POSTING_HEADERS, subconto_header
+from modern_gl.application.table_text import header_names as header_names  # for the grids
 from modern_gl.i18n import fold
 
 DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO, INVOICE = 0, 4, 8, 9, 10, 11, 12, 13
@@ -95,16 +96,18 @@ class PasteResult:
 
 
 HEADER_FIELDS = [  # header names -> column (subconto headers are handled separately)
-    (header_names("Дебет", "Дт", "Счёт Дт"), DT),
-    (header_names("Кредит", "Кт", "Счёт Кт"), CT),
-    (header_names("Валюта"), CURRENCY),
-    (header_names("В валюте", "Сумма в валюте"), CURRENCY_AMOUNT),
-    (header_names("Курс"), RATE),
-    (header_names("Сумма"), AMOUNT),
-    (header_names("Содержание", "Комментарий"), MEMO),
-    (header_names("E-qaimə", "E-qaime", "Е-гаимя", "Счёт-фактура", "Qaimə"), INVOICE),
+    (POSTING_HEADERS[key], column)
+    for key, column in (
+        ("debit", DT),
+        ("credit", CT),
+        ("currency", CURRENCY),
+        ("currency_amount", CURRENCY_AMOUNT),
+        ("rate", RATE),
+        ("amount", AMOUNT),
+        ("memo", MEMO),
+        ("invoice", INVOICE),
+    )
 ]
-SUBCONTO_NAMES = header_names("Субконто")
 
 
 def header_columns(
@@ -118,13 +121,10 @@ def header_columns(
     for cell in cells:
         name = fold(cell.strip())
         column = next((col for names, col in fields if name in names), None)
-        words = name.split()
-        if column is None and words and words[0] in SUBCONTO_NAMES:
-            side = next((w for w in words[1:] if w in ("дт", "dt", "кт", "kt")), None)
-            digits = [int(w) for w in words if w.isdigit()]
+        if column is None and (sub := subconto_header(name, pos)) is not None:
+            side, pos = sub
             if side is not None:
-                base, pos = (DT if side in ("дт", "dt") else CT), 0
-            pos = digits[0] if digits else pos + 1
+                base = DT if side == "dt" else CT
             if base is not None and 1 <= pos <= 3:
                 column = base + pos
         elif column in (DT, CT):

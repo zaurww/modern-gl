@@ -5,11 +5,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.domain.money import to_minor
+from modern_gl.domain.money import portal_minor
 from modern_gl.i18n import tr
 
 # statuses that count in turnover (etaxes-ext DOVRIYYE_STATUSES); the API takes one at a time
@@ -80,14 +79,6 @@ class PortalInvoice:
         return self.total - self.vat
 
 
-def _minor(value: Any) -> int:
-    try:
-        number = Decimal(str(value if value not in (None, "") else 0))
-    except InvalidOperation:
-        number = Decimal(0)
-    return to_minor(number.quantize(Decimal("0.01")))
-
-
 def portal_invoice(row: Mapping[str, Any], outgoing: bool) -> PortalInvoice | None:
     """A list row as the portal sends it; None for a row without a number. The total is
     `amount` (with ƏDV); a row without it: `costWithoutVat` + `vat`."""
@@ -96,7 +87,7 @@ def portal_invoice(row: Mapping[str, Any], outgoing: bool) -> PortalInvoice | No
         return None
     party_key = "receiver" if outgoing else "sender"
     party = row.get(party_key) or {}
-    vat = _minor(row.get("vat"))
+    vat = portal_minor(row.get("vat"))
     total = row.get("amount")
     return PortalInvoice(
         number,
@@ -105,7 +96,9 @@ def portal_invoice(row: Mapping[str, Any], outgoing: bool) -> PortalInvoice | No
         str(row.get("status") or ""),
         str(party.get("tin") or row.get(f"{party_key}Tin") or "").strip(),
         str(party.get("name") or row.get(f"{party_key}Name") or "").strip(),
-        _minor(total) if total not in (None, "") else _minor(row.get("costWithoutVat")) + vat,
+        portal_minor(total)
+        if total not in (None, "")
+        else portal_minor(row.get("costWithoutVat")) + vat,
         vat,
         str(row.get("id") or ""),
         str(row.get("sourceSystem") or ""),

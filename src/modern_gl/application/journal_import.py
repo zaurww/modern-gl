@@ -25,7 +25,12 @@ from fractions import Fraction
 from modern_gl.application.catalog import AccountInfo, Catalog
 from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.ledger import ImportedDocument, Ledger, PostingInput
-from modern_gl.application.table_text import header_names, plain_number
+from modern_gl.application.table_text import (
+    POSTING_HEADERS,
+    header_names,
+    plain_number,
+    subconto_header,
+)
 from modern_gl.domain.currency import parse_rate, to_base, unit_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
@@ -39,16 +44,8 @@ FIELDS = {
     "date": header_names("Дата"),
     "document": header_names("Документ", "№", "Номер", "Номер документа", "Sənəd", "Nömrə"),
     "layer": header_names("Книга"),
-    DT: header_names("Дебет", "Дт", "Счёт Дт"),
-    CT: header_names("Кредит", "Кт", "Счёт Кт"),
-    "amount": header_names("Сумма", "Сумма AZN"),
-    "currency": header_names("Валюта"),
-    "currency_amount": header_names("В валюте", "Сумма в валюте"),
-    "rate": header_names("Курс"),
-    "memo": header_names("Содержание", "Комментарий"),
-    "invoice": header_names("E-qaimə", "E-qaime", "Qaimə", "Номер e-qaimə", "Счёт-фактура"),
+    **POSTING_HEADERS,
 }
-SUBCONTO = header_names("Субконто")
 REQUIRED = ("date", DT, CT, "amount")
 REQUIRED_NAMES = {"date": "Дата", DT: "Дебет", CT: "Кредит", "amount": "Сумма"}
 EXCEL_EPOCH = date(1899, 12, 30)
@@ -95,18 +92,15 @@ def header(cells: Sequence[str]) -> dict[int, tuple[str, int]]:
     side, pos = None, 0
     for i, cell in enumerate(cells):
         name = fold(cell.strip())
-        words = name.split()
         found = next((f for f, names in FIELDS.items() if name in names), None)
         if found is not None:
             result[i] = (found, 0)
             if found in (DT, CT):
                 side, pos = found, 0
-        elif words and words[0] in SUBCONTO:
-            explicit = next((w for w in words[1:] if w in ("дт", "dt", "кт", "kt")), None)
-            digits = [int(w) for w in words if w.isdigit()]
+        elif (sub := subconto_header(name, pos)) is not None:
+            explicit, pos = sub
             if explicit is not None:
-                side, pos = (DT if explicit in ("дт", "dt") else CT), 0
-            pos = digits[0] if digits else pos + 1
+                side = DT if explicit == "dt" else CT
             if side is not None and 1 <= pos <= 3:
                 result[i] = (side, pos)
     return result

@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 
-from modern_gl.domain.dates import iso_date
+from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.invoice_rules import invoice_accounts, is_accrual, is_vat_accrual
@@ -354,14 +354,10 @@ def reconciled_through(conn: Connection, company_id: int, outgoing: bool) -> str
     """The last day reconciled without a gap from the first mark: «сверено по …»."""
     through: str | None = None
     for mark in reconciled_periods(conn, company_id, outgoing):
-        if through is not None and mark.date_from > _next_day(through):
+        if through is not None and mark.date_from > next_day(through):
             break
         through = max(through or mark.date_to, mark.date_to)
     return through
-
-
-def _next_day(day: str) -> str:
-    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
 
 
 @dataclass(frozen=True)

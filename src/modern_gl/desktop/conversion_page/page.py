@@ -23,7 +23,7 @@ from modern_gl.application.conversions import (
     load_conversion,
     official_rate,
 )
-from modern_gl.application.currencies import rate_on
+from modern_gl.application.currencies import missing_rates_text
 from modern_gl.application.ledger.conversion import MissingAccountRole
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.conversion_page.accounts_dialog import ConversionAccountsDialog
@@ -41,7 +41,6 @@ from modern_gl.desktop.widgets import (
     MenuItem,
     edited_date,
     enter_goes_on,
-    ru_date,
     to_qdate,
 )
 from modern_gl.domain.currency import format_unit_rate
@@ -332,27 +331,17 @@ class ConversionPage(ConversionForm):
 
     def _update_rate_note(self, data: ConversionInput) -> None:
         """Currencies without a rate set for the date itself: offer the official ones."""
-        if self.read_only or self.posted:
-            self.rate_note.hide()
-            return
-        day = data.doc_date
-        parts = []
-        for side in (data.source, data.target):
-            if side is None or side.currency_id is None:
-                continue
-            code = self.s.catalog.currencies[side.currency_id].code
-            rate = rate_on(self.s.conn, self.s.company_id, side.currency_id, day)
-            if rate is None:
-                parts.append(tr("нет курса {code}", code=code))
-            elif rate.rate_date < day:
-                parts.append(tr("курс {code} от {old}", code=code, old=ru_date(rate.rate_date)))
-        if not parts:
-            self.rate_note.hide()
-            return
-        self.rate_text.setText(
-            tr("На {date} курс не загружен: {what}", date=ru_date(day), what=", ".join(parts))
+        currencies = [
+            side.currency_id
+            for side in (data.source, data.target)
+            if side is not None and side.currency_id is not None
+        ]
+        shown = not (self.read_only or self.posted)
+        text = missing_rates_text(
+            self.s.conn, self.s.company_id, currencies if shown else [], data.doc_date
         )
-        self.rate_note.show()
+        self.rate_text.setText(text)
+        self.rate_note.setVisible(bool(text))
 
     def load_rates(self) -> None:
         if load_day_rates(self.s, edited_date(self.date), self.show_error):

@@ -8,12 +8,13 @@ day on (`rebuild_postings`, D101): after a rule is fixed, the books follow the d
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from datetime import date, timedelta
+from datetime import date
 
+from modern_gl.application.common import closed_on
 from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
-from modern_gl.domain.dates import iso_date, ru_date
+from modern_gl.domain.dates import iso_date, next_day, ru_date
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.infrastructure.db import Row, transaction
 
@@ -29,10 +30,7 @@ def rebuild_start(company: Row, since: date | str) -> str:
     """The first day a rebuild may change (ISO): `since`, or the day after the closed
     period — what is closed stays as it is (D5)."""
     day = iso_date(since)
-    closed = company["closed_through"]
-    if closed is not None and day <= closed:
-        return (date.fromisoformat(closed) + timedelta(days=1)).isoformat()
-    return day
+    return next_day(company["closed_through"]) if closed_on(company, day) else day
 
 
 def document_contents(rows: Iterable[Row]) -> dict[int, tuple]:

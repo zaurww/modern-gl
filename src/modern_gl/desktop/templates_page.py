@@ -12,14 +12,12 @@ from functools import partial
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
     QStackedLayout,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -37,6 +35,7 @@ from modern_gl.desktop.widgets import (
     button,
     enter_goes_on,
     hide_when_viewing,
+    list_table,
     money,
 )
 from modern_gl.domain import formula
@@ -67,17 +66,7 @@ class TemplatesPage(QWidget):
         root.addWidget(self.header)
 
         self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setObjectName("list")
-        self.table.setModel(self.model)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.setWordWrap(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(36)
-        self.table.horizontalHeader().setHighlightSections(False)
+        self.table = list_table(self.model, 36, wrap=False)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.doubleClicked.connect(lambda idx: self._use(self._at(idx)))
         self.empty = EmptyState(

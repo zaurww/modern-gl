@@ -12,7 +12,6 @@ from datetime import date, timedelta
 from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QGuiApplication, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -28,7 +27,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSpinBox,
     QStackedLayout,
-    QTableView,
     QVBoxLayout,
     QWidget,
 )
@@ -45,6 +43,7 @@ from modern_gl.desktop.widgets import (
     date_edit,
     edited_date,
     hide_when_viewing,
+    list_table,
     ru_date,
 )
 from modern_gl.domain.currency import KNOWN, currency_name, format_rate, parse_rate
@@ -162,16 +161,7 @@ class CurrenciesPage(QWidget):
 
     def _build_table(self) -> None:
         self.model = ReportModel()
-        self.table = QTableView()
-        self.table.setObjectName("list")
-        self.table.setModel(self.model)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setShowGrid(False)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(34)
-        self.table.horizontalHeader().setHighlightSections(False)
+        self.table = list_table(self.model, 34)
         self.table.doubleClicked.connect(lambda idx: self.edit_rate(self._rate_at(idx)))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._rate_menu)
