@@ -173,10 +173,9 @@ def item_details(conn: Connection, company_id: int, value_id: int) -> ItemDetail
 # inventory_documents d
 MOVEMENT_SOURCE = """
     d.doc_type, m.movement_type, d.invoice, d.invoice_kind, d.incoming_reason,
-    (SELECT v.name FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id
-     WHERE v.company_id = m.company_id AND k.code = 'counterparty'
-       AND v.id IN (l.offset_sc1, l.offset_sc2, l.offset_sc3)
-     ORDER BY v.id LIMIT 1) AS counterparty,
+    (SELECT c.name FROM inventory_line_counterparties c
+     WHERE c.company_id = m.company_id AND c.line_id = l.id
+     ORDER BY c.counterparty_id LIMIT 1) AS counterparty,
     (SELECT wv.name FROM warehouses w JOIN subconto_values wv ON wv.id = w.subconto_value_id
      WHERE w.company_id = m.company_id AND w.id = CASE m.movement_type
          WHEN 'transfer_in' THEN l.warehouse_id WHEN 'transfer_out' THEN l.to_warehouse_id

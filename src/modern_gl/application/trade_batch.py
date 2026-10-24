@@ -162,12 +162,9 @@ def _fill(inventory: Inventory, company_id: int, doc: Row, booking: Booking | No
 def _counterparty(conn: Connection, company_id: int, document_id: int) -> int | None:
     row = conn.execute(
         """
-        SELECT v.id FROM inventory_lines x
-        JOIN subconto_values v
-          ON v.company_id = x.company_id AND v.id IN (x.offset_sc1, x.offset_sc2, x.offset_sc3)
-        JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'counterparty'
-        WHERE x.company_id = ? AND x.document_id = ?
-        ORDER BY x.line_no LIMIT 1
+        SELECT counterparty_id AS id FROM inventory_line_counterparties
+        WHERE company_id = ? AND document_id = ?
+        ORDER BY line_no, counterparty_id LIMIT 1
         """,
         (company_id, document_id),
     ).fetchone()

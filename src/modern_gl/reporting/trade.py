@@ -45,22 +45,15 @@ def trade_documents(
                COALESCE(d.invoice, '') AS invoice, d.awaits_invoice,
                COALESCE((
                    SELECT string_agg(name, ', ') FROM (
-                       SELECT DISTINCT v.name FROM inventory_lines x
-                       JOIN subconto_values v
-                         ON v.company_id = x.company_id
-                        AND v.id IN (x.offset_sc1, x.offset_sc2, x.offset_sc3)
-                       JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'counterparty'
-                       WHERE x.document_id = d.id
+                       SELECT DISTINCT c.name FROM inventory_line_counterparties c
+                       WHERE c.company_id = d.company_id AND c.document_id = d.id
                    )
                ), '') AS counterparties,
                COALESCE((
                    SELECT string_agg(tax_id, ', ') FROM (
-                       SELECT DISTINCT v.tax_id FROM inventory_lines x
-                       JOIN subconto_values v
-                         ON v.company_id = x.company_id
-                        AND v.id IN (x.offset_sc1, x.offset_sc2, x.offset_sc3)
-                       JOIN subconto_kinds k ON k.id = v.kind_id AND k.code = 'counterparty'
-                       WHERE x.document_id = d.id AND v.tax_id IS NOT NULL
+                       SELECT DISTINCT c.tax_id FROM inventory_line_counterparties c
+                       WHERE c.company_id = d.company_id AND c.document_id = d.id
+                         AND c.tax_id IS NOT NULL
                    )
                ), '') AS tax_ids,
                COALESCE(SUM(l.amount), 0) AS amount,
