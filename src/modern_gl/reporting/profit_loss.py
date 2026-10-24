@@ -11,10 +11,11 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import date
 
+from modern_gl.application.books import COMMON, FROM, book_params, docs_cte
 from modern_gl.domain.period_input import Period
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.columns import Amounts, total
-from modern_gl.reporting.report_common import COMMON, FROM, _accounts, _params, docs_cte
+from modern_gl.reporting.report_common import _accounts
 from modern_gl.reporting.statements import (
     ACCOUNTS,
     CLOSING_TYPES,
@@ -127,7 +128,7 @@ def _turnovers(
 ) -> dict[tuple[str, int, int | None], int]:
     """Income (Ct − Dt) and expense (−(Dt − Ct)) of the period by line, account and the
     account's first subconto, signed so they add; each leg judged by `_pl_key`."""
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     output_vat = {
         r["account_id"]

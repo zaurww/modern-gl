@@ -6,16 +6,15 @@ import json
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
-    COMMON,
     AccountCard,
     CardLine,
     CorrRow,
     _accounts,
     _find_account,
-    _params,
     _subtree,
 )
 
@@ -37,7 +36,7 @@ def account_card(
     own side from the first subconto on (None = «не указано»). `invoice` — only the lines
     of that e-qaimə ("" — the lines without one; D110).
     """
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account)["id"]))
     raw = _card_rows(conn, params, subconto, invoice)
@@ -145,7 +144,7 @@ def account_analysis(
     layers: Sequence[str] = COMMON,
 ) -> list[CorrRow]:
     """Анализ счёта: period turnovers of the account broken down by corresponding account."""
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     params["accounts"] = json.dumps(_subtree(accounts, _find_account(accounts, account)["id"]))
     raw = conn.execute(

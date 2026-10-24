@@ -5,10 +5,8 @@ A book is a list of layer codes: ("common",), ("common", "ifrs_adj"), ("common",
 All amounts are int minor units.
 """
 
+from modern_gl.application.books import COMMON, IFRS, TAX
 from modern_gl.reporting.report_common import (
-    COMMON,
-    IFRS,
-    TAX,
     AccountCard,
     CardLine,
     CorrRow,

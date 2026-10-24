@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
+from modern_gl.application.books import COMMON, docs_cte
 from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.documents import DocumentCommands
@@ -15,7 +16,6 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
-from modern_gl.reporting.report_common import COMMON, docs_cte
 
 
 class RevaluationCommands(DocumentCommands):

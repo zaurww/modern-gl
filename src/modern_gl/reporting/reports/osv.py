@@ -6,17 +6,16 @@ from collections import defaultdict
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params
 from modern_gl.domain.accounts import wrong_side
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
-    COMMON,
     CurrencyRow,
     Osv,
     OsvRow,
     Turnovers,
     _accounts,
-    _params,
     fold_chart,
 )
 from modern_gl.reporting.reports.subconto import Sums, _add_up, _name_subconto
@@ -36,7 +35,7 @@ def trial_balance(
     so receivables and payables of different counterparties do not cancel out.
     Group rows sum their children's columns.
     """
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
     values, flags, by_value = _account_turnovers(accounts, _moves_by_account(conn, params))
     rows, total = _osv_rows(accounts, values, flags)

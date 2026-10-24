@@ -11,12 +11,13 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from modern_gl.application.books import COMMON
 from modern_gl.application.currencies import Rate, latest_rates, list_currencies, rate_on
 from modern_gl.application.queries import journal_drafts
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import Connection
-from modern_gl.reporting.report_common import _DOCS_CTE, COMMON
+from modern_gl.reporting.report_common import _DOCS_CTE
 
 POST_DRAFTS = "post_drafts"  # the row's button: post them all
 

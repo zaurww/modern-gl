@@ -19,12 +19,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
+from modern_gl.application.books import COMMON, book_params, docs_cte
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.invoice_rules import invoice_accounts, turnover_sides
 from modern_gl.reporting.overview import Attention, attention_source
-from modern_gl.reporting.report_common import COMMON, _params, docs_cte
 
 # documents of a status: drafts too, for the e-qaimə a payment may name
 _STATUS_DOCS_CTE = docs_cte("d.id, d.doc_date, d.number, d.memo", status=":status")
@@ -62,7 +62,7 @@ def invoice_report(
     layers: Sequence[str] = COMMON,
     open_only: bool = False,
 ) -> list[InvoiceRow]:
-    params = _params(conn, company_id, date_from, date_to, layers)
+    params = book_params(conn, company_id, date_from, date_to, layers)
     rows = _gathered(conn, company_id, params)
     if open_only:
         return [r for r in rows.values() if r.balance != 0]
@@ -161,7 +161,7 @@ def open_invoices(
     what the portal showed (an e-qaimə not entered at all). The posted payments on its
     number are taken off. The counterparty is known by its VÖEN as well: a second element
     of the directory with the same VÖEN is the same firm."""
-    params = _params(conn, company_id, on_date, on_date, layers)
+    params = book_params(conn, company_id, on_date, on_date, layers)
     parties, tin = _same_firm(conn, company_id, counterparty_id)
 
     def accrued(row: InvoiceRow) -> int:  # what the e-qaimə itself made owed
