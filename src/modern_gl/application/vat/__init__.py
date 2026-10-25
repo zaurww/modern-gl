@@ -14,7 +14,7 @@ from modern_gl.application.vat.rules import (
     liability_rule_for,
     rule_for,
 )
-from modern_gl.application.vat.sales import SaleFacts, sale_facts
+from modern_gl.application.vat.sales import SaleFacts, party_money, sale_facts
 
 __all__ = [
     "LIABILITY_RULES",
@@ -29,6 +29,7 @@ __all__ = [
     "credit_events",
     "liability_events",
     "liability_rule_for",
+    "party_money",
     "purchase_facts",
     "rule_for",
     "sale_facts",

@@ -57,38 +57,38 @@ def test_buyers_money_against_their_eqaime(invoice_firm):  # noqa: F811
     receive(ledger, cid, acc, v, "Альфа", "2026-02-10", "100", "MA02")
 
     january = vat_receipts(conn, cid, "2026-01-01", "2026-01-31")
-    alfa, beta = january.buyers
+    alfa, beta = january.parties
     assert (alfa.name, beta.name) == ("Альфа", "Бета")
     assert [
-        (ln.invoice, ln.no_number, ln.by_invoice, ln.amount, ln.vat, ln.owed) for ln in beta.lines
+        (ln.invoice, ln.no_number, ln.by_invoice, ln.amount, ln.vat, ln.tax) for ln in beta.lines
     ] == [
         ("MS01", 0, 0, 10_000, 1_800, 0),
         ("MS02", 0, 0, 10_000, 1_800, 0),
         (None, 23_600, 0, 0, 0, 4_248),
     ]
     assert beta.lines[0].document_id == ms01
-    assert (beta.no_number, beta.amount, beta.vat, beta.owed) == (23_600, 20_000, 3_600, 4_248)
+    assert (beta.no_number, beta.amount, beta.vat, beta.tax) == (23_600, 20_000, 3_600, 4_248)
     assert (beta.advance, beta.unpaid, beta.excess) == (0, 0, 648)
-    assert warning(beta) == "ƏDV больше, чем в e-qaimə: ƏDV пришёл на расчётный счёт?"
-    assert [(ln.invoice, ln.amount, ln.vat, ln.owed) for ln in alfa.lines] == [
+    assert warning(beta) == "ƏDV больше, чем в e-qaimə, на 6.48: ƏDV пришёл на расчётный счёт?"
+    assert [(ln.invoice, ln.amount, ln.vat, ln.tax) for ln in alfa.lines] == [
         ("MA01", 10_000, 0, 0),
         ("MA02", 20_000, 3_600, 0),
         (None, 0, 0, 1_800),
     ]
     assert (alfa.advance, alfa.unpaid, alfa.excess) == (0, 23_600, 1_800)
-    assert warning(alfa) == "ƏDV начислен с аванса, а e-qaimə без ƏDV: начислено лишнее"
+    assert warning(alfa) == "ƏDV начислен с аванса, а e-qaimə без ƏDV: начислено лишнее 18.00"
     total = january.total
-    assert (total.owed, total.advance, total.unpaid, january.warnings) == (6_048, 0, 23_600, 2)
-    assert total.owed == vat_liability(conn, cid, "2026-01-01", "2026-01-31").owed
+    assert (total.tax, total.advance, total.unpaid, january.warnings) == (6_048, 0, 23_600, 2)
+    assert total.tax == vat_liability(conn, cid, "2026-01-01", "2026-01-31").owed
 
     february = vat_receipts(conn, cid, "2026-02-01", "2026-02-28")
-    alfa, beta = february.buyers
-    assert [(ln.invoice, ln.by_invoice, ln.owed) for ln in alfa.lines] == [("MA02", 10_000, 1_800)]
+    alfa, beta = february.parties
+    assert [(ln.invoice, ln.by_invoice, ln.tax) for ln in alfa.lines] == [("MA02", 10_000, 1_800)]
     assert (alfa.advance, alfa.unpaid, alfa.excess) == (0, 13_600, 1_800)
-    assert [(ln.invoice, ln.no_number, ln.owed) for ln in beta.lines] == [(None, 5_000, 900)]
+    assert [(ln.invoice, ln.no_number, ln.tax) for ln in beta.lines] == [(None, 5_000, 900)]
     assert (beta.advance, beta.unpaid, beta.excess) == (5_000, 0, 648)
-    assert february.total.owed == 2_700
-    assert february.total.owed == vat_liability(conn, cid, "2026-02-01", "2026-02-28").owed
+    assert february.total.tax == 2_700
+    assert february.total.tax == vat_liability(conn, cid, "2026-02-01", "2026-02-28").owed
 
 
 def test_money_on_the_deposit_and_an_honest_advance_warn_nothing(invoice_firm):  # noqa: F811
@@ -104,10 +104,10 @@ def test_money_on_the_deposit_and_an_honest_advance_warn_nothing(invoice_firm): 
         PostingInput(acc["54"], acc["62"], "18", (v["Kapital"],), party(v, "Бета")),
     )
     sell(ledger, cid, acc, v, "Бета", "2026-01-20", "118", "18", "MS05")
-    (beta,) = vat_receipts(conn, cid, "2026-01-01", "2026-01-31").buyers
-    assert (beta.no_number, beta.deposit, beta.owed) == (10_000, 1_800, 1_800)
+    (beta,) = vat_receipts(conn, cid, "2026-01-01", "2026-01-31").parties
+    assert (beta.no_number, beta.deposit, beta.tax) == (10_000, 1_800, 1_800)
     assert (beta.advance, beta.unpaid, beta.excess, warning(beta)) == (0, 0, 0, None)
-    assert vat_receipts(conn, cid, "2026-02-01", "2026-02-28").buyers == []
+    assert vat_receipts(conn, cid, "2026-02-01", "2026-02-28").parties == []
 
 
 def test_the_eqaimes_vat_paid_to_the_settlement_account(invoice_firm):  # noqa: F811
@@ -118,8 +118,8 @@ def test_the_eqaimes_vat_paid_to_the_settlement_account(invoice_firm):  # noqa: 
     conn, ledger, cid, acc, v = invoice_firm
     sell(ledger, cid, acc, v, "Бета", "2026-03-10", "118", "18", "MS07")
     receive(ledger, cid, acc, v, "Бета", "2026-03-15", "118", "MS07")
-    (beta,) = vat_receipts(conn, cid, "2026-03-01", "2026-03-31").buyers
-    assert (beta.by_invoice, beta.owed, beta.to_account, beta.excess) == (11_800, 1_800, 1_800, 0)
+    (beta,) = vat_receipts(conn, cid, "2026-03-01", "2026-03-31").parties
+    assert (beta.by_invoice, beta.tax, beta.excess) == (11_800, 1_800, 0)
     assert (beta.advance, beta.unpaid) == (0, 0)
     assert warning(beta) == "ƏDV e-qaimə пришёл на расчётный счёт, не на депозит"
 
@@ -147,7 +147,7 @@ def test_the_page_shows_buyers_and_leads_to_documents(invoice_firm, qtbot):  # n
         "Итого",
     ]
     assert "Предупреждений: 1" in page.footer.text()
-    assert "Бета — ƏDV больше, чем в e-qaimə" in page.footer.text()
+    assert "Бета — ƏDV больше, чем в e-qaimə, на 6.48" in page.footer.text()
     opened, reports = [], []
     page.open_document.connect(opened.append)
     page.open_report.connect(lambda kind, _a, p: reports.append((kind, p.subconto)))

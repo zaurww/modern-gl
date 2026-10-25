@@ -21,7 +21,7 @@ from modern_gl.desktop.reports_page.table import (
 )
 from modern_gl.desktop.reports_page.vat_credit import VatCreditPage
 from modern_gl.desktop.reports_page.vat_liability import VatLiabilityPage
-from modern_gl.desktop.reports_page.vat_receipts import VatReceiptsPage
+from modern_gl.desktop.reports_page.vat_receipts import VatPaymentsPage, VatReceiptsPage
 from modern_gl.desktop.reports_page.vat_register import VatRegisterPage
 from modern_gl.desktop.reports_page.view import (
     Column,
@@ -55,6 +55,7 @@ __all__ = [
     "SubcontoPage",
     "VatCreditPage",
     "VatLiabilityPage",
+    "VatPaymentsPage",
     "VatReceiptsPage",
     "VatRegisterPage",
     "figure",

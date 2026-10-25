@@ -4,7 +4,8 @@ the e-qaimə it names, or, with no number, as an advance of the buyer; and each 
 day, amount and ƏDV (`book_invoices`, D120). Read from the posted documents of the common
 book: a receipt is money debited against the buyer's settlement (62) or advance (62.2)
 account, a refund the other way. An advance set against an e-qaimə moves no money and is
-no receipt."""
+no receipt. The money paid to suppliers is read the same way, the other way round
+(`party_money`, the reconciliation of payments with e-qaimə)."""
 
 from __future__ import annotations
 
@@ -15,11 +16,13 @@ from modern_gl.application.book_invoices import book_invoices
 from modern_gl.application.books import COMMON, book_params, docs_cte
 from modern_gl.application.invoice_rules import InvoiceAccount, invoice_accounts
 from modern_gl.application.vat.facts import Payment
-from modern_gl.domain.accounts import ADVANCE_RECEIVED
+from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
+from modern_gl.domain.dates import iso_date
 from modern_gl.infrastructure.db import Connection
 
 _DOCS = docs_cte("d.id, d.doc_date")
 BUYER_TYPES = frozenset({"receivable", ADVANCE_RECEIVED})
+SUPPLIER_TYPES = frozenset({"payable", ADVANCE_PAID})
 
 
 @dataclass
@@ -44,13 +47,29 @@ def sale_facts(
 ) -> list[SaleFacts]:
     """The money received from buyers up to `date_to`, by e-qaimə number (an advance — by
     buyer), with the e-qaimə it names."""
+    found = party_money(conn, company_id, date_to, outgoing=True, layers=layers)
+    sales = book_invoices(conn, company_id, outgoing=True, layers=layers)
+    for facts in found:
+        sale = sales.get(facts.invoice) if facts.invoice is not None else None
+        if sale is not None and sale.doc_date <= iso_date(date_to):
+            facts.doc_date, facts.amount, facts.vat = sale.doc_date, sale.amount, sale.vat
+    return found
+
+
+def party_money(
+    conn: Connection, company_id: int, date_to: date | str, outgoing: bool, layers=COMMON
+) -> list[SaleFacts]:
+    """The money from buyers (`outgoing`) or to suppliers up to `date_to`, by e-qaimə
+    number, or without one by counterparty; `main` — to or from a bank account or the
+    cash desk, `vat` — the ƏDV deposit. A refund is negative."""
     params = book_params(conn, company_id, date_to, date_to, layers)
     accounts = invoice_accounts(conn, company_id)
-    buyers = [i for i, a in accounts.items() if a.account_type in BUYER_TYPES]
-    if not buyers:
+    types = BUYER_TYPES if outgoing else SUPPLIER_TYPES
+    parties = [i for i, a in accounts.items() if a.account_type in types]
+    if not parties:
         return []
     found: dict[tuple, SaleFacts] = {}
-    marks = ", ".join(str(i) for i in buyers)
+    marks = ", ".join(str(i) for i in parties)
     for p in conn.execute(
         f"""
         WITH {_DOCS}
@@ -64,22 +83,24 @@ def sale_facts(
         """,
         params,
     ):
-        _count(found, p, accounts)
-    sales = book_invoices(conn, company_id, outgoing=True, layers=layers)
-    for (_who, number), facts in found.items():
-        sale = sales.get(number) if number is not None else None
-        if sale is not None and sale.doc_date <= str(params["date_to"]):
-            facts.doc_date, facts.amount, facts.vat = sale.doc_date, sale.amount, sale.vat
+        _count(found, p, accounts, types, 1 if outgoing else -1)
     return list(found.values())
 
 
-def _count(found: dict[tuple, SaleFacts], p, accounts: dict[int, InvoiceAccount]) -> None:
-    """A receipt (money against the buyer's account) or a refund (the other way)."""
+def _count(
+    found: dict[tuple, SaleFacts],
+    p,
+    accounts: dict[int, InvoiceAccount],
+    types: frozenset[str],
+    way: int,
+) -> None:
+    """Money against the counterparty's account: received from a buyer (`way` 1) or paid
+    to a supplier (-1); the other way — a refund."""
     debit, credit = accounts[p["debit_account_id"]], accounts[p["credit_account_id"]]
-    if debit.money and credit.account_type in BUYER_TYPES:
-        money, buyer, prefix, sign = debit, credit, "ct", 1
-    elif credit.money and debit.account_type in BUYER_TYPES:
-        money, buyer, prefix, sign = credit, debit, "dt", -1
+    if debit.money and credit.account_type in types:
+        money, buyer, prefix, sign = debit, credit, "ct", way
+    elif credit.money and debit.account_type in types:
+        money, buyer, prefix, sign = credit, debit, "dt", -way
     else:
         return  # the e-qaimə itself, an offset of an advance, anything else
     if p["kind"]:  # a customs declaration is no sale

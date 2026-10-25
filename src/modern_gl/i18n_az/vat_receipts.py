@@ -25,11 +25,11 @@ AZ: dict[str, str] = {
         "Dövr üzrə hesablanmış ƏDV: {owed}   ·   avans: {advance}   ·   ödənilməmiş: {unpaid}"
     ),
     "Предупреждений: {n}": "Xəbərdarlıq: {n}",
-    "ƏDV начислен с аванса, а e-qaimə без ƏDV: начислено лишнее": (
-        "ƏDV avansdan hesablanıb, e-qaimə isə ƏDV-siz: artıq hesablanıb"
+    "ƏDV начислен с аванса, а e-qaimə без ƏDV: начислено лишнее {x}": (
+        "ƏDV avansdan hesablanıb, e-qaimə isə ƏDV-siz: artıq hesablanıb {x}"
     ),
-    "ƏDV больше, чем в e-qaimə: ƏDV пришёл на расчётный счёт?": (
-        "ƏDV e-qaimədəkindən çoxdur: ƏDV hesablaşma hesabına gəlib?"
+    "ƏDV больше, чем в e-qaimə, на {x}: ƏDV пришёл на расчётный счёт?": (
+        "ƏDV e-qaimədəkindən {x} çoxdur: ƏDV hesablaşma hesabına gəlib?"
     ),
     "ƏDV e-qaimə пришёл на расчётный счёт, не на депозит": (
         "E-qaimənin ƏDV-si depozitə yox, hesablaşma hesabına gəlib"

@@ -128,6 +128,13 @@ REPORTS = (
         "invoices",
     ),
     Report(
+        "vat_payments",
+        GROUPS[2],
+        "Оплаты поставщикам и e-qaimə",
+        "Сверка по поставщикам: оплаты с номером и без, e-qaimə, зачёт ƏDV, аванс",
+        "invoices",
+    ),
+    Report(
         "vat_credit",
         GROUPS[2],
         "ƏDV к зачёту",

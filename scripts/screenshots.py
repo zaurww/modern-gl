@@ -37,6 +37,7 @@ from modern_gl.desktop.reports_page import (
     SubcontoAnalysisPage,
     SubcontoPage,
     VatLiabilityPage,
+    VatPaymentsPage,
     VatReceiptsPage,
     VatRegisterPage,
 )
@@ -729,6 +730,11 @@ def main() -> None:
     receipts.period.set_period(osv.params.date_from, osv.params.date_to)
     receipts.refresh()
     shot("11e_vat_receipts")
+    win.open_single(VatPaymentsPage)  # «Оплаты поставщикам и e-qaimə»: by supplier
+    payments = cast(VatPaymentsPage, win.pages[VatPaymentsPage.key])
+    payments.period.set_period(osv.params.date_from, osv.params.date_to)
+    payments.refresh()
+    shot("11f_vat_payments")
     # The bank module (D47): bank accounts and the statement; a payment to a supplier
     from modern_gl.desktop.bank_operation_page import BankOperationPage
     from modern_gl.desktop.bank_page import BankPage
