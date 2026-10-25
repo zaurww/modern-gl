@@ -6,7 +6,7 @@ total, what is unpaid at the period's end; the totals by rate.
 An e-qaimə is its accrual and its ƏDV, as the reconciliation with the portal counts it
 (`book_invoices`, D120); its day is the first accrual's. Customs declarations are
 purchases only. A correction belongs to the period of its e-qaimə, whenever it is posted
-(D-new1): the register of a month is what that month's declaration says now — an amended
+(D140): the register of a month is what that month's declaration says now — an amended
 one, if the month changed after it was filed; the difference reaches the account with
 the budget on the day the amended declaration is filed. Unpaid — the settlement accounts'
 balance of the number at the period's end (`gathered_invoices`), a purchase paid to the
