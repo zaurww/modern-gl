@@ -20,4 +20,14 @@ AZ: dict[str, str] = {
     "Покупки: ƏDV {bought}   ·   продажи: ƏDV {sold}": (
         "Alışlar: ƏDV {bought}   ·   satışlar: ƏDV {sold}"
     ),
+    "Сверить покупки с порталом…": "Alışları portalla üzləşdir…",
+    "Сверить продажи с порталом…": "Satışları portalla üzləşdir…",
+    "{side} — сверены с порталом": "{side} — portalla üzləşdirilib",
+    "{side} — не сверены с порталом": "{side} — portalla üzləşdirilməyib",
+    "{side} — после сверки изменились в книге, сверьте снова": (
+        "{side} — üzləşdirmədən sonra uçotda dəyişib, yenidən üzləşdirin"
+    ),
+    "{side} — после сверки изменились на портале: {numbers}": (
+        "{side} — üzləşdirmədən sonra portalda dəyişib: {numbers}"
+    ),
 }

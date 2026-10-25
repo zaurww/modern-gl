@@ -8,7 +8,8 @@ too, but are not the e-qaimə's amount. Only posted documents of the common book
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import hashlib
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from modern_gl.application.books import COMMON, book_params, docs_cte
@@ -87,3 +88,22 @@ def book_invoices(
             )
         ]
     return {n: r for n, r in result.items() if r.total or r.vat}
+
+
+def book_digest(
+    conn: Connection, company_id: int, outgoing: bool, date_from: str, date_to: str
+) -> str:
+    """What the books say of the e-qaimə of a period, as one fingerprint (`digest`)."""
+    return digest(book_invoices(conn, company_id, outgoing).values(), date_from, date_to)
+
+
+def digest(books: Iterable[BookInvoice], date_from: str, date_to: str) -> str:
+    """Each number dated in the period with its total, ƏDV and counterparties, as one
+    fingerprint. A period marked reconciled keeps it; a later correction to one of its
+    e-qaimə (D140) changes it."""
+    lines = sorted(
+        f"{b.number}|{b.total}|{b.vat}|{','.join(map(str, sorted(b.parties)))}"
+        for b in books
+        if date_from <= b.doc_date <= date_to
+    )
+    return hashlib.sha256("\n".join(lines).encode()).hexdigest()

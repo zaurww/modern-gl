@@ -22,12 +22,18 @@ from datetime import date
 from modern_gl.application.book_invoices import BookInvoice, book_invoices
 from modern_gl.application.books import COMMON, book_params
 from modern_gl.application.invoices import gathered_invoices
-from modern_gl.domain.dates import iso_date
+from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.domain.money import round_ratio
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting.eqaime_reconciliation import (
+    Mark,
+    books_changed,
+    changed_after_reconciliation,
+    reconciled_periods,
+)
 
 
 @dataclass(frozen=True)
@@ -66,10 +72,29 @@ class RateTotal:
         return self.amount + self.vat
 
 
+# how the period stands with the portal, per direction (stage 2): the worst first
+BOOKS_CHANGED = "books"  # marked reconciled, then an e-qaimə changed in the books (D140)
+PORTAL_CHANGED = "portal"  # marked reconciled, then an e-qaimə changed on the portal
+NOT_RECONCILED = "not"  # some day of the period is not marked reconciled
+RECONCILED = "reconciled"
+
+
+@dataclass(frozen=True)
+class PortalCheck:
+    outgoing: bool
+    state: str
+    numbers: tuple[str, ...] = ()  # PORTAL_CHANGED: the e-qaimə that changed
+
+    @property
+    def agrees(self) -> bool:
+        return self.state == RECONCILED
+
+
 @dataclass
 class VatRegister:
     purchases: list[RegisterRow] = field(default_factory=list)
     sales: list[RegisterRow] = field(default_factory=list)
+    checks: list[PortalCheck] = field(default_factory=list)  # purchases, then sales
 
     @property
     def purchase_rates(self) -> list[RateTotal]:
@@ -105,7 +130,47 @@ def vat_register(
     return VatRegister(
         purchases=order(rows(False, EQAIME) + rows(False, CUSTOMS)),
         sales=order(rows(True, EQAIME)),
+        checks=[portal_check(conn, company_id, out, date_from, date_to) for out in (False, True)],
     )
+
+
+def portal_check(
+    conn: Connection, company_id: int, outgoing: bool, date_from: str, date_to: str
+) -> PortalCheck:
+    """Whether the e-qaimə of the period agree with the portal: every day of it marked
+    reconciled (D118), and neither the books nor the portal changed since. Customs
+    declarations are not on the portal and need no check."""
+
+    def touches(start: str, end: str) -> bool:
+        return start <= date_to and end >= date_from
+
+    if any(touches(m.date_from, m.date_to) for m in books_changed(conn, company_id, outgoing)):
+        return PortalCheck(outgoing, BOOKS_CHANGED)
+    months = [
+        c
+        for c in changed_after_reconciliation(conn, company_id)
+        if c.outgoing == outgoing and date_from[:7] <= c.month <= date_to[:7]
+    ]
+    if months:
+        numbers = tuple(dict.fromkeys(n for c in months for n in c.numbers))
+        return PortalCheck(outgoing, PORTAL_CHANGED, numbers)
+    marks = reconciled_periods(conn, company_id, outgoing)
+    if not _covered(marks, date_from, date_to):
+        return PortalCheck(outgoing, NOT_RECONCILED)
+    return PortalCheck(outgoing, RECONCILED)
+
+
+def _covered(marks: Iterable[Mark], date_from: str, date_to: str) -> bool:
+    """Every day from `date_from` to `date_to` lies in some marked period."""
+    day = date_from
+    for mark in sorted(marks, key=lambda m: m.date_from):
+        if mark.date_from > day:
+            break
+        if mark.date_to >= day:
+            day = next_day(mark.date_to)
+        if day > date_to:
+            return True
+    return False
 
 
 def rate_totals(rows: Iterable[RegisterRow]) -> list[RateTotal]:

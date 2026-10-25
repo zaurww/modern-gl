@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
-from modern_gl.application.book_invoices import BookInvoice, book_invoices
+from modern_gl.application.book_invoices import BookInvoice, book_invoices, digest
 from modern_gl.application.books import COMMON
 from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
@@ -266,13 +266,14 @@ class Mark:
     date_from: str
     date_to: str
     reconciled_at: str
+    book_digest: str | None = None  # the books it agreed with; None: marked before (0051)
 
 
 def reconciled_periods(conn: Connection, company_id: int, outgoing: bool) -> list[Mark]:
     return [
-        Mark(r["date_from"], r["date_to"], r["reconciled_at"])
+        Mark(r["date_from"], r["date_to"], r["reconciled_at"], r["book_digest"])
         for r in conn.execute(
-            "SELECT date_from, date_to, reconciled_at FROM eqaime_reconciled "
+            "SELECT date_from, date_to, reconciled_at, book_digest FROM eqaime_reconciled "
             "WHERE company_id = ? AND outgoing = ? ORDER BY date_from, date_to",
             (company_id, int(outgoing)),
         )
@@ -318,6 +319,17 @@ def changed_after_reconciliation(conn: Connection, company_id: int) -> list[Chan
                         numbers.append(number)
         result += [ChangedMonth(outgoing, m, tuple(n)) for m, n in sorted(found.items())]
     return result
+
+
+def books_changed(conn: Connection, company_id: int, outgoing: bool) -> list[Mark]:
+    """Periods marked reconciled whose e-qaimə changed in the books since (a correction,
+    D140): the mark is no longer true. A mark made before the books were remembered is
+    taken as it is."""
+    marks = [m for m in reconciled_periods(conn, company_id, outgoing) if m.book_digest]
+    if not marks:
+        return []
+    books = list(book_invoices(conn, company_id, outgoing).values())
+    return [m for m in marks if m.book_digest != digest(books, m.date_from, m.date_to)]
 
 
 def portal_status(

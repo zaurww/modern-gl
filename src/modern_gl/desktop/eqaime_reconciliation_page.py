@@ -49,6 +49,7 @@ from modern_gl.reporting.eqaime_reconciliation import (
     VOID_IN_BOOKS,
     Reconciliation,
     ReconciliationRow,
+    books_changed,
     reconcile,
     reconciled_periods,
     reconciled_through,
@@ -452,9 +453,11 @@ class EqaimeReconciliationDialog(QDialog):
         return self.outcome.date_from, self.outcome.date_to
 
     def _is_marked(self, period: tuple[str, str]) -> bool:
-        return any(
-            (m.date_from, m.date_to) == period
-            for m in reconciled_periods(self.s.conn, self.s.company_id, self.outgoing)
+        """Marked, and the books did not change since (D140): else it is marked again."""
+        conn, cid = self.s.conn, self.s.company_id
+        stale = {(m.date_from, m.date_to) for m in books_changed(conn, cid, self.outgoing)}
+        return period not in stale and any(
+            (m.date_from, m.date_to) == period for m in reconciled_periods(conn, cid, self.outgoing)
         )
 
     def _show_mark(self) -> None:

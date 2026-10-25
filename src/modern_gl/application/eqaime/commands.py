@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import date
 
+from modern_gl.application.book_invoices import book_digest
 from modern_gl.application.common import now
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.dates import iso_date
@@ -102,7 +103,8 @@ class EqaimeCommands(LedgerBase):
         at: str | None = None,
     ) -> None:
         """The period (a day, a week, a month) of purchases or sales agrees with the
-        portal: changes seen after this moment in e-qaimə dated in it are warned about."""
+        portal: changes seen after this moment in e-qaimə dated in it are warned about, and
+        so is a change of the books (`book_digest`, D140). Marking again renews both."""
         start, end = iso_date(date_from), iso_date(date_to)
         if start > end:
             raise ValidationError(tr("начало периода позже конца"))
@@ -110,10 +112,19 @@ class EqaimeCommands(LedgerBase):
             self._company(company_id)
             self.conn.execute(
                 "INSERT INTO eqaime_reconciled "
-                "(company_id, outgoing, date_from, date_to, reconciled_at) VALUES (?, ?, ?, ?, ?) "
+                "(company_id, outgoing, date_from, date_to, reconciled_at, book_digest) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT (company_id, outgoing, date_from, date_to) "
-                "DO UPDATE SET reconciled_at = excluded.reconciled_at",
-                (company_id, int(outgoing), start, end, at or now()),
+                "DO UPDATE SET reconciled_at = excluded.reconciled_at, "
+                "book_digest = excluded.book_digest",
+                (
+                    company_id,
+                    int(outgoing),
+                    start,
+                    end,
+                    at or now(),
+                    book_digest(self.conn, company_id, outgoing, start, end),
+                ),
             )
 
     def unmark_reconciled(
