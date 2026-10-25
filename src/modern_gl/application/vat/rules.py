@@ -34,7 +34,7 @@ class LiabilityRule:
     of the value without ƏDV or of the ƏDV (166.7). What is owed up to a day is the larger
     of the ƏDV received on the deposit account and the ƏDV of the value received — the
     e-qaimə's share of it, or `rate` percent before there is an e-qaimə (the user's
-    practice, D-new1: 100 and ƏDV 14 in January — 18 owed; the other 3 in February —
+    practice, D142: 100 and ƏDV 14 in January — 18 owed; the other 3 in February —
     nothing more)."""
 
     valid_from: str

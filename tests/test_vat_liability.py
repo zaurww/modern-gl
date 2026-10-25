@@ -1,4 +1,4 @@
-"""The ƏDV a sale owes (Tax Code 166, 2024 edition; the user's practice, D-new1): each
+"""The ƏDV a sale owes (Tax Code 166, 2024 edition; the user's practice, D142): each
 payment received is a taxable transaction, an advance too; what is owed up to a day is
 the larger of the ƏDV received on the deposit account and the ƏDV of the value received.
 Every figure is worked out by hand in the test's docstring."""
