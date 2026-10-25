@@ -137,14 +137,12 @@ def book_invoices(
     outgoing: bool,
     layers: Sequence[str] = COMMON,
     kind: str = EQAIME,
-    date_to: str = "9999-12-31",
 ) -> dict[str, BookInvoice]:
     """The e-qaimə of the books by number, purchases or sales, every date: their accruals.
     One reversed to nothing (red storno) is not there. `kind` CUSTOMS: the customs
-    declarations instead (the ƏDV register, `reporting/vat_register`); `date_to` — what
-    was posted up to the day."""
+    declarations instead (the ƏDV register, `reporting/vat_register`)."""
     accounts = invoice_accounts(conn, company_id)
-    params = book_params(conn, company_id, "0001-01-01", date_to, layers) | {"kind": kind}
+    params = book_params(conn, company_id, "0001-01-01", "9999-12-31", layers) | {"kind": kind}
     result: dict[str, BookInvoice] = {}
     for p in conn.execute(
         f"""

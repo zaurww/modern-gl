@@ -5,9 +5,12 @@ total, what is unpaid at the period's end; the totals by rate.
 
 An e-qaimə is its accrual and its ƏDV, as the reconciliation with the portal counts it
 (`book_invoices`, D120); its day is the first accrual's. Customs declarations are
-purchases only. What is posted up to the period's end counts: a correction made later
-is the next period's. Unpaid — the settlement accounts' balance of the number
-(`gathered_invoices`), a purchase paid to the supplier, a declaration to the customs too.
+purchases only. A correction belongs to the period of its e-qaimə, whenever it is posted
+(D-new1): the register of a month is what that month's declaration says now — an amended
+one, if the month changed after it was filed; the difference reaches the account with
+the budget on the day the amended declaration is filed. Unpaid — the settlement accounts'
+balance of the number at the period's end (`gathered_invoices`), a purchase paid to the
+supplier, a declaration to the customs too.
 """
 
 from __future__ import annotations
@@ -88,7 +91,7 @@ def vat_register(
     names = _directory(conn, company_id)
 
     def rows(outgoing: bool, kind: str) -> list[RegisterRow]:
-        found = book_invoices(conn, company_id, outgoing, kind=kind, date_to=date_to)
+        found = book_invoices(conn, company_id, outgoing, kind=kind)
         sign = 1 if outgoing else -1  # a sale owes Dt, a purchase Kt
         return [
             _row(kind, b, names, sign * balances.get((kind, b.number), 0))
