@@ -19,6 +19,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 
+from modern_gl.application.book_invoices import BookInvoice, book_invoices
 from modern_gl.application.books import COMMON, book_params
 from modern_gl.application.invoices import gathered_invoices
 from modern_gl.domain.dates import iso_date
@@ -27,7 +28,6 @@ from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.domain.money import round_ratio
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
-from modern_gl.reporting.eqaime_reconciliation import BookInvoice, book_invoices
 
 
 @dataclass(frozen=True)
