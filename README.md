@@ -61,7 +61,7 @@ libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`). Скринш
 4. `docs/DECISIONS.md` — журнал решений `D1…D128`, только добавление. На номера ссылаются
    код и документы; при расхождении решение важнее остальных документов.
 5. `docs/STATUS.md` — что есть и что дальше; `docs/CODE_QUALITY.md` — размер и обзоры кода;
-   документы модулей — `INVENTORY.md`, `REPORTING.md`, `EQAIME_RECONCILIATION.md`,
+   документы модулей — `INVENTORY.md`, `REPORTING.md`, `BOOKS.md`, `EQAIME_RECONCILIATION.md`,
    `ASSISTANT.md`; `docs/history/` — летопись сессий.
 
 `CLAUDE.md` в корне — сжатая рабочая карта (структура пакетов и правила) для AI-помощника
