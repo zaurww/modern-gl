@@ -3,6 +3,7 @@ document type, the lists a cell offers, which cells a line has and which are typ
 
 from __future__ import annotations
 
+from datetime import date
 from fractions import Fraction
 
 from PySide6.QtCore import (
@@ -23,6 +24,7 @@ from modern_gl.application.inventory import (
     INCOMING_TYPES,
     Inventory,
 )
+from modern_gl.desktop.cell_editing import resolve_choice
 from modern_gl.desktop.inventory_document_page.columns import (
     ACCOUNT,
     AMOUNT,
@@ -32,6 +34,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC3,
     ESC_KEYS,
     EXPENSE,
+    EXPENSE_MONTH,
     ITEM,
     MEMO,
     PRICE,
@@ -43,6 +46,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     SC1,
     SC2,
     SC3,
+    SEVERAL_MONTHS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
     UNIT,
@@ -52,6 +56,8 @@ from modern_gl.desktop.inventory_document_page.columns import (
     InventoryGridRow,
 )
 from modern_gl.desktop.session import Session
+from modern_gl.domain.dates import earlier_months, iso_date, month_code, month_name, parse_month
+from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     Choice,
     ItemChoice,
@@ -89,11 +95,14 @@ class InventoryLinesBase(QAbstractTableModel):
         read_only: bool = False,
         vat_rate: int | None = None,
         incoming_account: int | None = None,
+        doc_date: date | str | None = None,
     ) -> None:
         super().__init__()
         self.incoming_account = incoming_account  # a mədaxil's: its reason's account (D91)
         self.s = session
         self.doc_type = doc_type
+        # the document's date: the months before it are the ones an expense may belong to
+        self.doc_date = iso_date(doc_date or session.working_date)
         self.read_only = read_only
         self.vat_rate = vat_rate if doc_type in VAT_DOCUMENTS else None
         self.rate: Fraction | None = None  # a receipt in a currency: manat per unit
@@ -131,7 +140,7 @@ class InventoryLinesBase(QAbstractTableModel):
                 *([CURRENCY_AMOUNT] if doc_type == "receipt" else []),
                 AMOUNT,
                 *([VAT] if doc_type in VAT_DOCUMENTS else []),
-                *([EXPENSE, ESC1, ESC2, ESC3] if doc_type == "receipt" else []),
+                *([EXPENSE, ESC1, ESC2, ESC3, EXPENSE_MONTH] if doc_type == "receipt" else []),
                 *([SALE1, SALE2, SALE3] if doc_type == "sale" else []),
                 ACCOUNT,
                 SC1,
@@ -165,6 +174,8 @@ class InventoryLinesBase(QAbstractTableModel):
                 for account in catalog.leaf_accounts
                 if not catalog.is_stock_account(account.id)
             ]
+        if key == EXPENSE_MONTH:
+            return [*self.month_choices(), (SEVERAL_MONTHS, tr("несколько месяцев…"))]
         kind_id = self.kind_at(row_index, key)
         owner = self.owner_at(row_index, key)
         return (
@@ -172,6 +183,25 @@ class InventoryLinesBase(QAbstractTableModel):
             if kind_id
             else []
         )
+
+    def month_choices(self) -> list[tuple[int, str]]:
+        """The twelve months before the document's, latest first (D65): an expense of the
+        document's own month is accrued nowhere, so the cell is simply left empty."""
+        return [(month_code(last), month_name(last[:7])) for last in earlier_months(self.doc_date)]
+
+    def set_doc_date(self, doc_date: date | str) -> None:
+        self.doc_date = iso_date(doc_date)
+
+    def month_code_of(self, text: str) -> int:
+        """The month a typed text names: by numbers ('09.2026') or by the list's names;
+        SEVERAL_MONTHS when the range choice is picked."""
+        typed = parse_month(text)
+        if typed is not None:
+            return month_code(typed)
+        found = resolve_choice(self.choices(0, EXPENSE_MONTH), text)
+        if found is None:
+            raise ValueError(tr("месяц не распознан: {text}", text=text))
+        return found
 
     def owner_at(self, row_index: int, key: str) -> int | None:
         """The counterparty chosen on the line, for its contracts (None: any contract)."""
@@ -261,7 +291,7 @@ class InventoryLinesBase(QAbstractTableModel):
     def applies(self, row: int, key: str) -> bool:
         if key in {WAREHOUSE, UNIT} and self.is_service(row):
             return False
-        if key in ESC_KEYS | {EXPENSE} and not self.is_service(row):
+        if key in ESC_KEYS | {EXPENSE, EXPENSE_MONTH} and not self.is_service(row):
             return False
         if key in SALE_KEYS:
             return self._takes_sale(self.rows[row], key)
@@ -308,6 +338,8 @@ class InventoryLinesBase(QAbstractTableModel):
             return False
         if key == CURRENCY_AMOUNT:  # in a currency the manat amount follows from the rate
             return self.rate is not None
+        if key == EXPENSE_MONTH:
+            return self.doc_type == "receipt"
         if key == AMOUNT and self.rate is not None:
             return False
         return self.doc_type != "landed_cost"

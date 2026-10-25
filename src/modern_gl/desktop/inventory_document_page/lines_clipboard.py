@@ -16,6 +16,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     AMOUNT,
     CURRENCY_AMOUNT,
     EXPENSE,
+    EXPENSE_MONTH,
     HEADERS,
     ITEM,
     LIST_KEYS,
@@ -51,6 +52,8 @@ class LinesClipboard(InventoryLinesBase):
             return value
         if key in {ACCOUNT, EXPENSE}:
             return self.s.catalog.resolve_account(text).id
+        if key == EXPENSE_MONTH:
+            return self.month_code_of(text)
         if key in SUBCONTO_KEYS:
             kind_id = self.kind_at(row_index, key)
             if kind_id is None:

@@ -1,5 +1,5 @@
 """The header of a warehouse document: VAT rate, currency and rate, the basis (e-qaimə or
-customs declaration) with its portal status, the month of the expense (D65)."""
+customs declaration) with its portal status."""
 
 from __future__ import annotations
 
@@ -15,7 +15,6 @@ from modern_gl.desktop.widgets import (
     edited_date,
 )
 from modern_gl.domain.currency import format_unit_rate, parse_rate, unit_rate
-from modern_gl.domain.dates import earlier_months, month_name
 from modern_gl.domain.eqaime import status_group, status_label
 from modern_gl.domain.invoice import EQAIME
 from modern_gl.i18n import tr
@@ -62,6 +61,7 @@ class HeaderPart(InventoryDocumentForm):
         self._apply_currency()
 
     def _date_changed(self, *_args) -> None:
+        self.model.set_doc_date(edited_date(self.date))  # the months an expense may be of
         if self._chosen_currency() is not None and not self.rate_typed:
             self._rate_of_the_day()
             self._apply_currency()
@@ -137,26 +137,3 @@ class HeaderPart(InventoryDocumentForm):
         if self._awaits():
             return {"invoice": "", "invoice_kind": ""}
         return {"invoice": number, "invoice_kind": self.basis.currentData() if number else ""}
-
-    def _fill_expense_months(self, chosen: str | None) -> None:
-        """The months a receipt's services may belong to: the document's own (nothing is
-        accrued) or one of the twelve before it, each as its last day."""
-        self.expense_month.clear()
-        self.expense_month.addItem(tr("месяц документа"), None)
-        for last in earlier_months(edited_date(self.date)):
-            self.expense_month.addItem(month_name(last[:7]), last)
-        if chosen is not None and self.expense_month.findData(chosen) < 0:
-            self.expense_month.addItem(month_name(chosen[:7]), chosen)  # saved earlier
-        self.expense_month.setCurrentIndex(max(self.expense_month.findData(chosen), 0))
-        self._show_expense_month()
-
-    def _expense_months_changed(self, *_args) -> None:
-        self._fill_expense_months(self._expense_date())
-
-    def _show_expense_month(self) -> None:
-        """Only a receipt with services (or with a month already chosen) asks for it."""
-        shown = self.doc_type == "receipt" and (
-            self.model.has_expenses() or self._expense_date() is not None
-        )
-        self.expense_caption.setVisible(shown)
-        self.expense_month.setVisible(shown)

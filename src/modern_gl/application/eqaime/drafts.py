@@ -81,19 +81,21 @@ def import_drafts(
                     inventory.create_receipt_draft(
                         company_id,
                         invoice.doc_date,
-                        [_receipt_line(conn, p, warehouse) for p in plan.lines],
+                        [_receipt_line(conn, p, warehouse, plan.expense_date) for p in plan.lines],
                         account,
                         subconto,
                         tr("Покупка по e-qaimə {n}", n=invoice.number),
                         vat_rate=vat_rate,
                         invoice=invoice.number,
-                        expense_date=plan.expense_date if plan.has_expenses else None,
                     )
                 )
     return created
 
 
-def _receipt_line(conn: Connection, plan: LinePlan, warehouse: int | None) -> ReceiptLine:
+def _receipt_line(
+    conn: Connection, plan: LinePlan, warehouse: int | None, expense_date: str | None
+) -> ReceiptLine:
+    """`expense_date`: the month the purchase's services belong to (D65), the goods none."""
     line = plan.line
     goods = plan.item_id is not None
     return ReceiptLine(
@@ -105,6 +107,7 @@ def _receipt_line(conn: Connection, plan: LinePlan, warehouse: int | None) -> Re
         vat_amount=_amount(line.vat, zero=True),
         expense_account_id=None if goods else plan.account_id,
         expense_subconto=() if goods else plan.subconto,
+        expense_date=None if goods else expense_date,
     )
 
 

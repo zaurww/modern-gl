@@ -19,6 +19,7 @@ from modern_gl.application.inventory.amounts import (
 from modern_gl.application.inventory.model import INCOMING_REASONS, INCOMING_TYPES, ReceiptLine
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.domain.currency import to_base, unit_rate
+from modern_gl.domain.dates import month_end
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
@@ -46,7 +47,6 @@ class ReceiptDraftCommands(StockCommands):
         currency_rate: str | int | Decimal | None = None,
         invoice: str = "",
         invoice_kind: str = "",
-        expense_date: date | str | None = None,
         awaits_invoice: bool = False,
     ) -> int:
         """Save an editable receipt/opening document — or, with `incoming_reason`, a mədaxil
@@ -70,7 +70,6 @@ class ReceiptDraftCommands(StockCommands):
                 invoice_kind,
                 awaits=purchase and awaits_invoice,
             )
-            self._set_expense_date(document_id, expense_date if purchase else None)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
             )
@@ -99,7 +98,6 @@ class ReceiptDraftCommands(StockCommands):
         currency_rate: str | int | Decimal | None = None,
         invoice: str = "",
         invoice_kind: str = "",
-        expense_date: date | str | None = None,
         awaits_invoice: bool = False,
     ) -> None:
         check_reason(incoming_reason)
@@ -120,7 +118,6 @@ class ReceiptDraftCommands(StockCommands):
                 invoice_kind,
                 awaits=receipt and awaits_invoice,
             )
-            self._set_expense_date(document_id, expense_date if receipt else None)
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(
                 company_id, document_id, lines, credit_account_id, credit_subconto
@@ -230,6 +227,7 @@ class ReceiptDraftCommands(StockCommands):
                 self._account(company_id, line_credit_account)
             line_credit_sc = pad_subconto(source.credit_subconto or credit_subconto)
             stock = source.item_id is not None
+            expense_date = self._line_expense_date(doc_type, source, line_no)
             self._insert_line(
                 document_id,
                 company_id,
@@ -250,7 +248,24 @@ class ReceiptDraftCommands(StockCommands):
                 currency_amount=currency_amount,
                 cost_account_id=expense[0],
                 cost_subconto=expense[1],
+                expense_date=expense_date,
             )
+
+    @staticmethod
+    def _line_expense_date(doc_type: str, source: ReceiptLine, line_no: int) -> str | None:
+        """The month a purchased service's expense belongs to (D65), as its last day. Goods
+        come to stock on the document's date and have none."""
+        if source.expense_date is None or source.expense_date == "":
+            return None
+        if source.item_id is not None or doc_type != "receipt":
+            raise ValidationError(
+                tr(
+                    "строка {line}: месяц расхода указывается для услуг и расходов в покупке, "
+                    "не для товара",
+                    line=line_no,
+                )
+            )
+        return month_end(source.expense_date)
 
     def _expense_of(
         self, company_id: int, doc_type: str, source: ReceiptLine, line_no: int

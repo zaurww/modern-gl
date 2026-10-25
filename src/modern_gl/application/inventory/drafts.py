@@ -20,7 +20,7 @@ from modern_gl.application.inventory.model import (
     SaleLine,
     TransferLine,
 )
-from modern_gl.domain.dates import iso_date, month_end
+from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import EQAIME, KINDS, normalize_invoice
 from modern_gl.i18n import tr
@@ -47,6 +47,7 @@ LINE_COLUMNS = (
     "cost_sc1",
     "cost_sc2",
     "cost_sc3",
+    "expense_date",
 )
 
 
@@ -87,6 +88,7 @@ class DraftCommands(InventoryBase):
                     row["currency_amount"],
                     row["cost_account_id"],
                     (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"]),
+                    row["expense_date"],
                 )
                 for row in rows
             ),
@@ -115,8 +117,7 @@ class DraftCommands(InventoryBase):
             currency_rate=doc["currency_rate"],
             invoice=doc["invoice"] or "",
             invoice_kind=doc["invoice_kind"] or "",
-            expense_date=doc["expense_date"],
-            accrual_document_id=doc["accrual_document_id"],
+            accruals=self._accruals(company_id, document_id),
             incoming_reason=doc["incoming_reason"],
             awaits_invoice=doc["awaits_invoice"] == 1,
         )
@@ -209,13 +210,6 @@ class DraftCommands(InventoryBase):
             ),
         )
 
-    def _set_expense_date(self, document_id: int, expense_date: date | str | None) -> None:
-        """The month a receipt's expense belongs to (D65), kept as its last day."""
-        value = None if expense_date is None or expense_date == "" else month_end(expense_date)
-        self.conn.execute(
-            "UPDATE inventory_documents SET expense_date = ? WHERE id = ?", (value, document_id)
-        )
-
     def _draft_warehouse(self, company_id: int, warehouse_id: int | None) -> int | None:
         return None if warehouse_id is None else self._warehouse(company_id, warehouse_id)["id"]
 
@@ -241,6 +235,7 @@ class DraftCommands(InventoryBase):
         currency_amount: int | None = None,
         cost_account_id: int | None = None,
         cost_subconto: Sequence[int | None] = (),
+        expense_date: str | None = None,
     ) -> int:
         values = (
             line_no,
@@ -259,6 +254,7 @@ class DraftCommands(InventoryBase):
             currency_amount,
             cost_account_id,
             *pad_subconto(cost_subconto),
+            expense_date,
         )
         if line_id is not None:  # an edited line keeps its id: landed cost refers to it
             updated = self.conn.execute(

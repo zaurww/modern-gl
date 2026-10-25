@@ -7,6 +7,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from PySide6.QtCore import (
+    QPersistentModelIndex,
     Qt,
     Signal,
 )
@@ -48,6 +49,7 @@ from modern_gl.desktop.widgets import (
     Chip,
     button,
     date_edit,
+    edited_date,
 )
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.i18n import tr
@@ -85,6 +87,7 @@ class InventoryDocumentForm(QWidget):
             doc_type,
             vat_rate=self._chosen_vat_rate(),
             incoming_account=self._incoming_account(),
+            doc_date=edited_date(self.date),
         )
         self.delegate = InventoryLinesDelegate(self)
         self.table = InventoryLinesTable(self.model, self.delegate)
@@ -143,7 +146,6 @@ class InventoryDocumentForm(QWidget):
         meta.addSpacing(GAP)
         self._build_reason(meta)
         self._build_basis(meta)
-        self._build_expense_month(meta)
         self._build_currency(meta)
         meta.addStretch(1)
         root.addLayout(meta)
@@ -186,23 +188,6 @@ class InventoryDocumentForm(QWidget):
         for key, (name, _role) in INCOMING_REASONS.items():
             self.reason.addItem(tr(name), key)
         meta.addWidget(self.reason)
-        meta.addSpacing(GAP)
-
-    def _build_expense_month(self, meta: QHBoxLayout) -> None:
-        # services of an earlier month whose e-qaimə came later: accrued there (D65)
-        self.expense_caption = QLabel(tr("Расход за"))
-        self.expense_caption.setObjectName("secondary")
-        meta.addWidget(self.expense_caption)
-        self.expense_month = PickBox()
-        self.expense_month.setFixedWidth(150)
-        self.expense_month.setToolTip(
-            tr(
-                "Месяц расхода по услугам, если e-qaimə пришла позже: расход начисляется "
-                "последним днём этого месяца (Дт затрат / Кт 76H), долг поставщику и НДС — "
-                "датой e-qaimə"
-            )
-        )
-        meta.addWidget(self.expense_month)
         meta.addSpacing(GAP)
 
     def _build_currency(self, meta: QHBoxLayout) -> None:
@@ -316,9 +301,6 @@ class InventoryDocumentForm(QWidget):
     def _chosen_currency(self) -> int | None:
         return self.currency.currentData() if self.doc_type == "receipt" else None
 
-    def _expense_date(self) -> str | None:
-        return self.expense_month.currentData() if self.doc_type == "receipt" else None
-
     def _chosen_reason(self) -> str | None:
         return self.reason.currentData() if self.doc_type == "incoming" else None
 
@@ -337,4 +319,7 @@ class InventoryDocumentForm(QWidget):
     # ---- made by the groups of the page; each group may call the others --------------
 
     def _changed(self, *_args) -> None:  # the page
+        raise NotImplementedError
+
+    def _split_months(self, index: QPersistentModelIndex) -> None:  # the splits
         raise NotImplementedError

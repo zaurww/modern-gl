@@ -62,6 +62,7 @@ FROZEN = {
     "0047_company_scoped_references.sql": "86041a67459f7242",
     "0048_ifrs_types.sql": "6cfdde82474f65bf",
     "0049_document_sources.sql": "16358f1735946b2c",
+    "0050_expense_per_line.sql": "7e6955a40daf47b5",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

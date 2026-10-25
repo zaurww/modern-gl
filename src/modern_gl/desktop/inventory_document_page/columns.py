@@ -29,6 +29,9 @@ EXPENSE = "expense"
 ESC1 = "esc1"
 ESC2 = "esc2"
 ESC3 = "esc3"
+# a receipt's line without an item: the earlier month its expense belongs to (D65)
+EXPENSE_MONTH = "expense_month"
+SEVERAL_MONTHS = -1  # the choice that splits the line over a range of months
 # a sale line: the subconto of the sale's own accounts (46; 90.1 / 90.2 / 90.3) that
 # the customer, the item and the warehouse do not give — a sales group, a channel (D61)
 SALE1 = "sale1"
@@ -48,11 +51,11 @@ STORED_FIELDS = {
     AMOUNT: "amount",
     MEMO: "memo",
 }
-LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE} | SUBCONTO_KEYS
+LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
 # the name of a line keeps this much; these columns narrow first, down to NARROW_MIN
 ITEM_MIN = 300
 NARROW_MIN = 84
-SOFT_KEYS = {WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE} | SUBCONTO_KEYS
+SOFT_KEYS = {WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
 NUMBER_KEYS = {QUANTITY, PRICE, AMOUNT, CURRENCY_AMOUNT, VAT}
 # the VAT of a receipt or a sale: rate in hundredths of a percent, None = without VAT
 VAT_RATES = [(STANDARD_VAT_RATE, "18%"), (None, "Без НДС")]
@@ -76,6 +79,7 @@ HEADERS = {
     ESC1: "Субконто затрат",
     ESC2: "",
     ESC3: "",
+    EXPENSE_MONTH: "Расход за",
     SALE1: "",  # the name of the directory
     SALE2: "",
     SALE3: "",
@@ -100,8 +104,8 @@ DOCUMENT_TYPES = {
 
 HINT = (
     "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   Ctrl+S — сохранить   ·   "
-    "Ctrl+Enter — провести"
+    "F8 — разделить строку   ·   Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
+    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
 )
 
 
@@ -116,6 +120,7 @@ PASTE_HEADERS = [
     (header_names("Сумма", "Məbləğ", "Сумма без НДС", "ƏDV-siz məbləğ"), AMOUNT),
     (header_names("НДС", "Сумма НДС", "ƏDV", "ƏDV məbləği"), VAT),
     (header_names("Корр. счёт", "Счёт", "Hesab"), ACCOUNT),
+    (header_names("Расход за", "Месяц расхода", "Xərc dövrü", "Xərc ayı"), EXPENSE_MONTH),
     (header_names("Комментарий", "Содержание", "Şərh", "Məzmun"), MEMO),
 ]
 # accounts before their subconto, the quantity before a price, a pasted amount over a price
@@ -132,6 +137,7 @@ PASTE_ORDER = [
     CURRENCY_AMOUNT,
     AMOUNT,
     VAT,
+    EXPENSE_MONTH,
 ]
 
 
@@ -185,6 +191,8 @@ class InventoryGridRow:
     expense_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
     # a sale's line: a value for each of the model's `sale_kinds`
     sale_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
+    # a receipt's service of an earlier month (D65): the last day of that month
+    expense_date: str | None = None
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""
@@ -213,4 +221,5 @@ class InventoryGridRow:
             expense_account_id=self.expense_account_id,
             expense_subconto=list(self.expense_subconto),
             sale_subconto=list(self.sale_subconto),
+            expense_date=self.expense_date,
         )  # a copy is a new line: no line id

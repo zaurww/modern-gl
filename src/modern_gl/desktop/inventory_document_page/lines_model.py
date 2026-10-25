@@ -23,6 +23,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     AMOUNT,
     CURRENCY_AMOUNT,
     EXPENSE,
+    EXPENSE_MONTH,
     HEADERS,
     ITEM,
     MEMO,
@@ -51,11 +52,13 @@ from modern_gl.desktop.inventory_document_page.lines_base import (
 )
 from modern_gl.desktop.inventory_document_page.lines_clipboard import LinesClipboard
 from modern_gl.desktop.inventory_document_page.lines_inputs import LineInputs
+from modern_gl.desktop.inventory_document_page.lines_split import LineSplits
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     money,
 )
 from modern_gl.domain.currency import to_base
+from modern_gl.domain.dates import month_code, month_from_code, month_name
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
@@ -66,7 +69,7 @@ from modern_gl.reporting.inventory import (
 __all__ = ["InventoryLinesBase", "InventoryLinesModel", "by_sale_kinds", "sale_kinds"]
 
 
-class InventoryLinesModel(LinesClipboard, LineInputs):
+class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
     def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
@@ -161,6 +164,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
             return self._account_of(row, key)
         if key in SUBCONTO_KEYS:
             return self._subconto_of(row, key)[int(key[-1]) - 1]
+        if key == EXPENSE_MONTH:
+            return None if row.expense_date is None else month_code(row.expense_date)
         if key == QUANTITY:
             return "" if row.quantity is None else format_quantity(row.quantity, 6)
         if key in {PRICE, AMOUNT, VAT, CURRENCY_AMOUNT}:
@@ -202,12 +207,18 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
             account = self.s.catalog.accounts.get(account_id) if account_id is not None else None
             return account.label if account else ""
         if key in SUBCONTO_KEYS:
-            value_id = self._subconto_of(row, key)[int(key[-1]) - 1]
-            if value_id is not None:
-                return self.s.catalog.value(value_id).name
-            kind_id = self.kind_at(row_index, key)
-            return self.s.catalog.kinds[kind_id] if kind_id else ""
+            return self._subconto_text(row_index, key)
+        if key == EXPENSE_MONTH:
+            return "" if row.expense_date is None else month_name(row.expense_date[:7])
         return row.memo
+
+    def _subconto_text(self, row_index: int, key: str) -> str:
+        """The element chosen, else the name of the directory the cell asks for."""
+        value_id = self._subconto_of(self.rows[row_index], key)[int(key[-1]) - 1]
+        if value_id is not None:
+            return self.s.catalog.value(value_id).name
+        kind_id = self.kind_at(row_index, key)
+        return self.s.catalog.kinds[kind_id] if kind_id else ""
 
     def _item_text(self, row_index: int, item: ItemChoice | None) -> str:
         """An item's name; a sale's service shows what it is (its memo)."""
@@ -221,24 +232,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
             return False
         row = self.rows[index.row()]
         key = self.key(index)
-        if key == PRICE:
-            if not row.quantity:
-                raise ValidationError(tr("сначала укажите количество"))
-            total = line_amount(value, row.quantity)
-            if self.rate is not None:
-                self._set_currency_amount(row, total)
-            else:
-                row.amount = total
-            self._recalculate_vat(row)
-        elif key == CURRENCY_AMOUNT:
-            self._set_currency_amount(row, value)
-        elif key == AMOUNT:
-            row.amount = value
-            self._recalculate_vat(row)
-        elif key == VAT:
-            row.vat_typed = value is not None  # cleared: calculated from the rate again
-            row.vat_amount = value
-            self._recalculate_vat(row)
+        if key in {PRICE, CURRENCY_AMOUNT, AMOUNT, VAT}:
+            self._set_money(row, key, value)
         elif key == ACCOUNT:
             self._set_account(row, value)
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
@@ -250,6 +245,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
             self._subconto_of(row, key)[int(key[-1]) - 1] = value
             if key in SC_KEYS:
                 self._remember_expense(index.row())
+        elif key == EXPENSE_MONTH:
+            row.expense_date = None if value is None else month_from_code(value)
         else:
             self._set_stored(index.row(), key, value)
         self.dataChanged.emit(
@@ -257,6 +254,26 @@ class InventoryLinesModel(LinesClipboard, LineInputs):
         )
         self.changed.emit()
         return True
+
+    def _set_money(self, row: InventoryGridRow, key: str, value: int | None) -> None:
+        """A price, an amount (in manat or in the currency) or the VAT typed into a line."""
+        if key == PRICE:
+            if not row.quantity:
+                raise ValidationError(tr("сначала укажите количество"))
+            total = line_amount(value or 0, row.quantity)
+            if self.rate is not None:
+                self._set_currency_amount(row, total)
+            else:
+                row.amount = total
+        elif key == CURRENCY_AMOUNT:
+            self._set_currency_amount(row, value)
+            return
+        elif key == AMOUNT:
+            row.amount = value
+        else:
+            row.vat_typed = value is not None  # cleared: calculated from the rate again
+            row.vat_amount = value
+        self._recalculate_vat(row)
 
     def _set_stored(self, row_index: int, key: str, value) -> None:
         row = self.rows[row_index]

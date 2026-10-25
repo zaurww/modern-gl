@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 
 from modern_gl.domain.accounts import (
@@ -66,6 +67,9 @@ class ReceiptLine:
     currency_amount: str | int | Decimal | None = None  # a receipt in a currency: the amount
     expense_account_id: int | None = None  # a line without an item: where its value goes
     expense_subconto: Sequence[int | None] = ()
+    # a line without an item whose expense belongs to an earlier month (D65): any day of
+    # that month; the receipt accrues it on the month's last day
+    expense_date: date | str | None = None
 
 
 @dataclass(frozen=True)
@@ -199,6 +203,16 @@ class InventoryLineData:
     # sale accounts' subconto (SaleLine.sale_subconto)
     cost_account_id: int | None = None
     cost_subconto: tuple[int | None, int | None, int | None] = (None, None, None)
+    # a receipt's line without an item accrued in an earlier month: its last day (D65)
+    expense_date: str | None = None
+
+
+@dataclass(frozen=True)
+class AccrualData:
+    """A receipt's accrual of one month (D65): the GL document dated its last day."""
+
+    expense_date: str
+    gl_document_id: int
 
 
 @dataclass(frozen=True)
@@ -220,10 +234,8 @@ class InventoryDocumentData:
     currency_rate: int | None = None  # millionths of a manat per unit
     invoice: str = ""  # a receipt's e-qaimə number (or customs declaration number)
     invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a declaration
-    # a receipt whose expense belongs to an earlier month (D65): the last day of that month,
-    # and the GL document of the accrual posted on it
-    expense_date: str | None = None
-    accrual_document_id: int | None = None
+    # a receipt with lines of earlier months (D65): an accrual per month, earliest first
+    accruals: tuple[AccrualData, ...] = ()
     incoming_reason: str | None = None  # a mədaxil's reason: a key of INCOMING_REASONS
     awaits_invoice: bool = False  # a purchase whose e-qaimə comes later (D119)
 

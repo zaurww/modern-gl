@@ -297,7 +297,9 @@ def test_a_purchase_imported_with_an_earlier_expense_month(shop, conn):
         ("76H", "60", 5_000),
         ("19", "60", 3_060),
     ]
-    accrual = shop.inventory.load_document(shop.company_id, draft).accrual_document_id
+    doc = shop.inventory.load_document(shop.company_id, draft)
+    assert [line.expense_date for line in doc.lines] == [None, "2026-02-28"]  # goods, repair
+    (accrual,) = [a.gl_document_id for a in doc.accruals]
     row = conn.execute(
         "SELECT d.doc_date, p.debit_account_id, p.credit_account_id, p.amount "
         "FROM postings p JOIN documents d ON d.id = p.document_id WHERE d.id = ?",
@@ -364,7 +366,8 @@ def test_import_dialog_loads_shows_and_creates_drafts(shop, conn, qtbot, monkeyp
     dialog.create_drafts()
     assert len(dialog.created) == 1
     draft = shop.inventory.load_document(shop.company_id, dialog.created[0])
-    assert (draft.status, draft.expense_date) == ("draft", "2026-02-28")
+    assert draft.status == "draft"
+    assert [line.expense_date for line in draft.lines if line.item_id is None] == ["2026-02-28"]
 
 
 @pytest.mark.parametrize(

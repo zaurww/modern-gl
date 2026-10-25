@@ -111,6 +111,7 @@ class LineInputs(InventoryLinesBase):
             manats(row.currency_amount),
             row.expense_account_id if item_id is None else None,
             tuple(row.expense_subconto) if item_id is None else (),
+            expense_date=row.expense_date if item_id is None else None,
         )
 
     def _validate_complete(self, row: InventoryGridRow, line_no: int) -> None:

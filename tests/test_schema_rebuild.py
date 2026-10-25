@@ -20,19 +20,26 @@ REBUILT_TABLES = (
     "bank_portal_loads", "bank_portal_reconciled", "eqaime_portal", "eqaime_portal_changes",
     "eqaime_reconciled",
 )  # fmt: skip
+POSTED_TABLES = ("documents", "inventory_documents")  # the triggers guard their posted rows
 
 
-def rows_by_table(conn: sqlite3.Connection) -> dict[str, list[tuple]]:
-    """Every row of every table, by its id, columns as the schema names them."""
+def table_columns(conn: sqlite3.Connection) -> dict[str, list[str]]:
     names = [
         r[0]
         for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
         )
     ]
+    return {t: [r[1] for r in conn.execute(f"PRAGMA table_info({t})")] for t in names}
+
+
+def rows_by_table(
+    conn: sqlite3.Connection, columns_of: dict[str, list[str]] | None = None
+) -> dict[str, list[tuple]]:
+    """Every row of every table, by its id — the columns the schema names, or `columns_of`
+    (those of another schema, to compare across a migration that adds or drops one)."""
     result = {}
-    for table in names:
-        columns = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+    for table, columns in (columns_of or table_columns(conn)).items():
         order = "id" if "id" in columns else ", ".join(columns)
         result[table] = [
             tuple(r)
@@ -41,21 +48,69 @@ def rows_by_table(conn: sqlite3.Connection) -> dict[str, list[tuple]]:
     return result
 
 
+def plain(rows) -> list[tuple]:
+    return [tuple(r) for r in rows]
+
+
+def rows_by_table_projection(rows: list[tuple], columns: list[str], keep: list[str]) -> list[tuple]:
+    """The rows with only the `keep` columns (a column dropped by a later migration)."""
+    positions = [columns.index(c) for c in keep]
+    return [tuple(r[i] for i in positions) for r in rows]
+
+
 def company_of_version(path: Path, version: int) -> None:
-    """The demo year written into a file of an older schema: the columns of 0046 and 0047
-    are the same, so the program of today can fill a file of yesterday — once its accounts
-    take the account types of today (0048: the same columns, a longer CHECK)."""
+    """The demo year as the program of yesterday would have left it: written by the program
+    of today, then copied into a file of schema `version` column by column (0048's longer
+    CHECK of account types is applied to the old file first). What later migrations moved
+    goes back to where yesterday kept it: the month of a purchase's expense and its accrual
+    document on the purchase (0050)."""
     file_at_version(path, version, [])
-    conn = sqlite3.connect(path, isolation_level=None)
-    conn.row_factory = sqlite3.Row
+    today = connect(":memory:")
+    create_year_demo(Ledger(today))
+    fill_the_empty_tables(today)
+    old = sqlite3.connect(path, isolation_level=None)
+    old.row_factory = sqlite3.Row
     sql = (MIGRATIONS_DIR / "0048_ifrs_types.sql").read_text(encoding="utf-8")
-    conn.executescript(sql[sql.index("CREATE TABLE") : sql.index("-- 09 and 77")])
-    conn.execute("PRAGMA foreign_keys = ON")
+    old.executescript(sql[sql.index("CREATE TABLE") : sql.index("-- 09 and 77")])
     try:
-        create_year_demo(Ledger(conn))
-        fill_the_empty_tables(conn)
+        copy_rows(today, old)
+        old.executemany(
+            "UPDATE inventory_documents SET expense_date = ?, accrual_document_id = ? WHERE id = ?",
+            today.execute(
+                "SELECT expense_date, gl_document_id, document_id FROM inventory_accruals"
+            ).fetchall(),
+        )
+        post_again(today, old)
     finally:
-        conn.close()
+        old.close()
+        today.close()
+
+
+def copy_rows(source: sqlite3.Connection, target: sqlite3.Connection) -> None:
+    """Every row of every table both schemas have, in the columns they share. Posted
+    documents are written as drafts (their lines could not be added to a posted one):
+    `post_again` once everything is in."""
+    target_columns = table_columns(target)
+    for table, columns in table_columns(source).items():
+        shared = [c for c in columns if c in target_columns.get(table, ())]
+        if not shared:
+            continue
+        rows = source.execute(f"SELECT {', '.join(shared)} FROM {table}").fetchall()
+        if table in POSTED_TABLES:
+            status = shared.index("status")
+            rows = [tuple("draft" if i == status else v for i, v in enumerate(r)) for r in rows]
+        target.executemany(
+            f"INSERT INTO {table} ({', '.join(shared)}) VALUES ({', '.join('?' * len(shared))})",
+            rows,
+        )
+
+
+def post_again(source: sqlite3.Connection, target: sqlite3.Connection) -> None:
+    for table in POSTED_TABLES:
+        target.executemany(
+            f"UPDATE {table} SET status = ? WHERE id = ?",
+            source.execute(f"SELECT status, id FROM {table}").fetchall(),
+        )
 
 
 def fill_the_empty_tables(conn: sqlite3.Connection) -> None:
@@ -111,20 +166,56 @@ def test_rebuilt_tables_keep_every_row(tmp_path):
     path = tmp_path / "old.gl"
     company_of_version(path, REBUILT - 1)
     before_conn = sqlite3.connect(path)
+    before_columns = table_columns(before_conn)
     before = rows_by_table(before_conn)
+    moved = plain(
+        before_conn.execute(
+            "SELECT id, expense_date, accrual_document_id FROM inventory_documents "
+            "WHERE accrual_document_id IS NOT NULL ORDER BY id"
+        )
+    )
     before_conn.close()
     assert all(before[t] for t in REBUILT_TABLES), "a rebuilt table has nothing to move"
+    assert moved, "no purchase with an accrual to move (0050)"
 
     conn = connect(path)  # migrates
     try:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == latest_version()
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-        after = rows_by_table(conn)
+        after_columns = table_columns(conn)
+        shared = {
+            t: [c for c in columns if c in after_columns.get(t, ())]
+            for t, columns in before_columns.items()
+        }
+        after = rows_by_table(conn, {t: c for t, c in shared.items() if c})
+        # 0050: the month and the accrual of a purchase moved to its lines and to
+        # inventory_accruals, the same values
+        assert (
+            plain(
+                conn.execute(
+                    "SELECT document_id, expense_date, gl_document_id FROM inventory_accruals "
+                    "ORDER BY document_id"
+                )
+            )
+            == moved
+        )
+        for document_id, expense_date, _accrual in moved:
+            months = conn.execute(
+                "SELECT DISTINCT expense_date FROM inventory_lines "
+                "WHERE document_id = ? AND item_id IS NULL",
+                (document_id,),
+            )
+            assert plain(months) == [(expense_date,)]
+        newer = {t for t in after_columns if t not in before_columns} - {"inventory_accruals"}
+        assert all(not rows_by_table(conn, {t: after_columns[t]})[t] for t in newer)
     finally:
         conn.close()
-    assert {t: rows for t, rows in after.items() if t in before} == before
-    assert all(not rows for t, rows in after.items() if t not in before)  # newer tables
+    assert after == {
+        t: rows_by_table_projection(rows, before_columns[t], shared[t])
+        for t, rows in before.items()
+        if shared[t]
+    }
 
 
 def test_company_scoped_references_replace_the_triggers():
@@ -143,6 +234,6 @@ def test_company_scoped_references_replace_the_triggers():
         ("owner_id", "subconto_values"),
         ("parent_id", "subconto_values"),
         ("owner_kind_id", "subconto_kinds"),
-        ("accrual_document_id", "documents"),
+        ("gl_document_id", "documents"),
     } <= composite
     conn.close()
