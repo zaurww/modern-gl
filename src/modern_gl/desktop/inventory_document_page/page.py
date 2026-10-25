@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtWidgets import (
+    QMenu,
     QMessageBox,
 )
 
@@ -28,6 +29,7 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
     InventoryLinesDelegate,
 )
 from modern_gl.desktop.inventory_document_page.new_values import NewValuesPart
+from modern_gl.desktop.inventory_document_page.splits import SplitPart
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     edited_date,
@@ -35,12 +37,13 @@ from modern_gl.desktop.widgets import (
     money,
     to_qdate,
 )
+from modern_gl.domain.dates import month_title
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.invoice import EQAIME
 from modern_gl.i18n import tr
 
 
-class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
+class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart, SplitPart):
     def __init__(
         self,
         session: Session,
@@ -69,16 +72,15 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self.basis.activated.connect(self._basis_changed)
         self.reason.activated.connect(self._reason_changed)
         self.invoice.textEdited.connect(self._changed)
-        self.expense_month.activated.connect(self._changed)
         self.currency.activated.connect(self._currency_changed)
         self.rate.textEdited.connect(self._rate_edited)
         self.date.dateChanged.connect(self._date_changed)
-        self.date.dateChanged.connect(self._expense_months_changed)
         self._shortcut("Ctrl+S", lambda: self.save(post=False))
         self._shortcut("Ctrl+Return", lambda: self.save(post=True))
         self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
         self._grid_shortcut("Ins", self._insert_row, while_editing=True)
         self._grid_shortcut("F9", self._duplicate_row, while_editing=True)
+        self._grid_shortcut("F8", self._split_row, while_editing=True)
         self._grid_shortcut("Del", self._remove_row)
         self._grid_shortcut("Ctrl+V", self.paste)  # inside a cell editor: its own paste
         self._grid_shortcut("Ctrl+C", self.copy)
@@ -142,7 +144,6 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self._show_reason(None)
         if self.doc_type == "incoming":  # the first reason's account on the first line
             self._reason_changed()
-        self._fill_expense_months(None)
         self.dirty = False  # showing the defaults is not an edit
         self._show_totals()
 
@@ -176,6 +177,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
                     list(line.cost_subconto) if self.doc_type == "receipt" else [None, None, None]
                 ),
                 sale_subconto=by_sale_kinds(self.s.catalog, kinds, line.cost_subconto),
+                expense_date=line.expense_date if self.doc_type == "receipt" else None,
             )
             for line in self.doc.lines
         ] or [InventoryGridRow()]
@@ -188,6 +190,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
             read_only=read_only,
             vat_rate=vat_rate,
             incoming_account=self._incoming_account(),
+            doc_date=self.doc.doc_date,
         )
         self.table.setModel(self.model)
         self.table.configure_columns()
@@ -203,7 +206,6 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self._apply_mode(read_only)
         self._show_currency(self.doc.currency_id, self.doc.currency_rate)
         self._show_basis(self.doc.invoice_kind, self.doc.invoice, self.doc.awaits_invoice)
-        self._fill_expense_months(self.doc.expense_date)
         self.dirty = False
         self._show_totals()
         self.title_changed.emit()
@@ -217,7 +219,6 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self.rate.setReadOnly(read_only)
         self.basis.setEnabled(not read_only)
         self.invoice.setReadOnly(read_only)
-        self.expense_month.setEnabled(not read_only)
         self.reason.setEnabled(not read_only)
         self.model.read_only = read_only
         posted = self.doc is not None and self.doc.status == "posted"
@@ -231,9 +232,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         self.btn_gl.setVisible(
             books and self.doc is not None and self.doc.gl_document_id is not None
         )
-        self.btn_accrual.setVisible(
-            books and self.doc is not None and self.doc.accrual_document_id is not None
-        )
+        self.btn_accrual.setVisible(books and self.doc is not None and bool(self.doc.accruals))
         self.hint.setVisible(not read_only and self.doc_type != "landed_cost")
 
     def _show_totals(self) -> None:
@@ -254,7 +253,6 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
         if self._expense_columns() != self.expense_columns:  # a service line came or went
             self.table.configure_columns()
             self.expense_columns = self._expense_columns()
-            self._show_expense_month()
         if not self.model.read_only and not self.dirty:
             self.dirty = True
             self.title_changed.emit()
@@ -313,7 +311,6 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
                     vat_rate=self._chosen_vat_rate(),
                     currency_id=self._chosen_currency(),
                     currency_rate=self._rate_text(),
-                    expense_date=self._expense_date(),
                     awaits_invoice=self._awaits(),
                     **self._invoice(),
                 )
@@ -329,7 +326,6 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
                 vat_rate=self._chosen_vat_rate(),
                 currency_id=self._chosen_currency(),
                 currency_rate=self._rate_text(),
-                expense_date=self._expense_date(),
                 awaits_invoice=self._awaits(),
                 **self._invoice(),
             )
@@ -401,5 +397,16 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart):
             self.open_gl_document.emit(self.doc.gl_document_id)
 
     def _open_accrual(self) -> None:
-        if self.doc is not None and self.doc.accrual_document_id is not None:
-            self.open_gl_document.emit(self.doc.accrual_document_id)
+        """The accrual document; a receipt with several months offers them in a menu."""
+        accruals = self.doc.accruals if self.doc is not None else ()
+        if len(accruals) == 1:
+            self.open_gl_document.emit(accruals[0].gl_document_id)
+            return
+        menu = QMenu(self.btn_accrual)
+        for accrual in accruals:
+            action = menu.addAction(month_title(accrual.expense_date[:7]))
+            action.triggered.connect(
+                lambda _=False, gl_id=accrual.gl_document_id: self.open_gl_document.emit(gl_id)
+            )
+        if accruals:
+            menu.exec(self.btn_accrual.mapToGlobal(self.btn_accrual.rect().bottomLeft()))

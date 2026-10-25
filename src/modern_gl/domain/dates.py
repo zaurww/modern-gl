@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import re
 from datetime import date, datetime, timedelta
 
 from modern_gl.i18n import tr, upper
@@ -79,6 +80,28 @@ def month_end(value: date | str) -> str:
     """The last day of the month of `value`: '2026-09-14' -> '2026-09-30'."""
     day = date.fromisoformat(iso_date(value))
     return month_days(day.year, day.month)[1].isoformat()
+
+
+def month_code(month_end: str) -> int:
+    """'2026-09-30' -> 202609: a month as the id of a list cell (D65)."""
+    return int(month_end[:4]) * 100 + int(month_end[5:7])
+
+
+def month_from_code(code: int) -> str:
+    """202609 -> '2026-09-30', the last day of the month."""
+    return month_end(f"{code // 100:04d}-{code % 100:02d}-01")
+
+
+def parse_month(text: str) -> str | None:
+    """A month typed as numbers — '09.2026', '9/2026', '2026-09' — as its last day; None
+    for anything else (a month's name is matched against the list instead)."""
+    parts = re.fullmatch(r"\s*(\d{1,2})\s*[./-]\s*(\d{4})\s*|\s*(\d{4})-(\d{1,2})\s*", text)
+    if parts is None:
+        return None
+    month, year = (parts[1], parts[2]) if parts[1] else (parts[4], parts[3])
+    if not 1 <= int(month) <= 12:
+        return None
+    return month_end(f"{int(year):04d}-{int(month):02d}-01")
 
 
 def earlier_months(value: date | str, count: int = 12) -> list[str]:

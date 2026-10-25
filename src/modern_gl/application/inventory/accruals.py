@@ -1,4 +1,4 @@
-"""Expenses of an earlier month: a receipt's accrual document (D65)."""
+"""Expenses of earlier months: a receipt's accrual documents, one per month (D65)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from modern_gl.domain.accounts import ACCRUED_EXPENSES
 from modern_gl.domain.dates import month_name
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import Row
+from modern_gl.infrastructure.db import Row, insert
 
 
 class AccrualCommands(InventoryBase):
@@ -23,34 +23,32 @@ class AccrualCommands(InventoryBase):
         doc: Row,
         lines: Sequence[Row],
         postings: list[PostingInput],
-    ) -> list[PostingInput]:
-        """A receipt whose expense belongs to an earlier month (D65). Each line without an
-        item is accrued on the last day of that month (Dr expense / Cr accrued expenses,
-        the supplier as subconto); the receipt closes the accrual (Dr accrued expenses /
-        Cr supplier) instead of debiting the expense. Rewrites `postings` in place and
-        returns the accrual's postings. Goods are not accrued: stock comes on its date."""
-        expense_date = doc["expense_date"]
-        if expense_date >= doc["doc_date"][:7] + "-01":
-            raise ValidationError(
-                tr(
-                    "расход за {month} должен быть раньше месяца документа",
-                    month=month_name(expense_date[:7]),
+    ) -> dict[str, list[PostingInput]]:
+        """The lines of a receipt whose expense belongs to an earlier month (D65): each is
+        accrued on the last day of its month (Dr expense / Cr accrued expenses, the supplier
+        as subconto) and the receipt closes the accrual (Dr accrued expenses / Cr supplier)
+        instead of debiting the expense. Rewrites `postings` in place; returns the accrual
+        postings by month. Goods are never accrued: stock comes on the receipt's date."""
+        first_of_month = doc["doc_date"][:7] + "-01"
+        account_id: int | None = None
+        by_month: dict[str, list[PostingInput]] = {}
+        for i, line in enumerate(lines):
+            expense_date = line["expense_date"]
+            if expense_date is None:
+                continue
+            if expense_date >= first_of_month:
+                raise ValidationError(
+                    tr(
+                        "строка {line}: расход за {month} должен быть раньше месяца документа",
+                        line=line["line_no"],
+                        month=month_name(expense_date[:7]),
+                    )
                 )
-            )
-        expense_lines = [i for i, line in enumerate(lines) if line["item_id"] is None]
-        if not expense_lines:
-            raise ValidationError(
-                tr(
-                    "месяц расхода указывается для услуг и расходов: в документе нет строк "
-                    "без товара"
-                )
-            )
-        account_id = self._accrual_account(company_id)
-        accrual = []
-        for i in expense_lines:
+            if account_id is None:
+                account_id = self._accrual_account(company_id)
             p = postings[i]
             accrued_sc = self._by_kind(company_id, account_id, p.credit_subconto)
-            accrual.append(
+            by_month.setdefault(expense_date, []).append(
                 PostingInput(
                     p.debit_account_id,
                     account_id,
@@ -61,7 +59,7 @@ class AccrualCommands(InventoryBase):
                 )
             )
             postings[i] = replace(p, debit_account_id=account_id, debit_subconto=accrued_sc)
-        return accrual
+        return dict(sorted(by_month.items()))
 
     def _accrual_account(self, company_id: int) -> int:
         """The accrued expenses account (76H): the role's, the only account of its type,
@@ -98,40 +96,54 @@ class AccrualCommands(InventoryBase):
             account_type=ACCRUED_EXPENSES,
         )
 
-    def _finish_accrual(
-        self, company_id: int, document_id: int, postings: Sequence[PostingInput]
+    def _finish_accruals(
+        self, company_id: int, doc: Row, by_month: dict[str, list[PostingInput]]
     ) -> None:
-        """Post, rewrite or remove the receipt's accrual document (D65). A recalculation
-        that changes nothing leaves an accrual in a closed period alone."""
-        doc = self._document(company_id, document_id)
-        accrual_id = doc["accrual_document_id"]
-        if not postings:
-            if accrual_id is not None:
-                self._drop_accrual(company_id, doc)
-            return
+        """Post, rewrite or remove the receipt's accrual documents so that there is one per
+        month of `by_month` (D65). A recalculation that changes nothing leaves an accrual in
+        a closed period alone; a month no line belongs to any more loses its document."""
+        existing = {
+            row["expense_date"]: row
+            for row in self.conn.execute(
+                "SELECT * FROM inventory_accruals WHERE company_id = ? AND document_id = ?",
+                (company_id, doc["id"]),
+            )
+        }
+        for expense_date, row in existing.items():
+            if expense_date not in by_month:
+                self._drop_accrual(company_id, row)
         memo = tr("Начисление расхода по поступлению №{n}", n=doc["number"])
-        if accrual_id is not None:
-            self.ledger.rewrite_linked(company_id, accrual_id, doc["expense_date"], postings, memo)
-            return
-        require_open(
-            self._company(company_id),
-            doc["expense_date"],
-            lambda closed: tr(
-                "расход за {month} не отнести: период закрыт по {closed}. Выберите в "
-                "«Расход за» месяц документа",
-                month=month_name(doc["expense_date"][:7]),
-                closed=closed,
-            ),
-        )
-        accrual_id = self.ledger.post_new(company_id, doc["expense_date"], postings, memo)
-        self.conn.execute(
-            "UPDATE inventory_documents SET accrual_document_id = ? WHERE id = ?",
-            (accrual_id, document_id),
-        )
+        for expense_date, postings in by_month.items():
+            if expense_date in existing:
+                gl_id = existing[expense_date]["gl_document_id"]
+                self.ledger.rewrite_linked(company_id, gl_id, expense_date, postings, memo)
+                continue
+            require_open(
+                self._company(company_id),
+                expense_date,
+                lambda closed, month=expense_date: tr(
+                    "расход за {month} не отнести: период закрыт по {closed}. Выберите в "
+                    "«Расход за» месяц документа",
+                    month=month_name(month[:7]),
+                    closed=closed,
+                ),
+            )
+            gl_id = self.ledger.post_new(company_id, expense_date, postings, memo)
+            insert(
+                self.conn,
+                "INSERT INTO inventory_accruals (company_id, document_id, expense_date, "
+                "gl_document_id) VALUES (?, ?, ?, ?)",
+                (company_id, doc["id"], expense_date, gl_id),
+            )
 
-    def _drop_accrual(self, company_id: int, doc: Row) -> None:
-        accrual_id = doc["accrual_document_id"]
-        self.conn.execute(
-            "UPDATE inventory_documents SET accrual_document_id = NULL WHERE id = ?", (doc["id"],)
-        )
-        self.ledger.delete_document(company_id, accrual_id)
+    def _drop_accruals(self, company_id: int, document_id: int) -> None:
+        """Remove every accrual document of a receipt (unposting, deletion)."""
+        for row in self.conn.execute(
+            "SELECT * FROM inventory_accruals WHERE company_id = ? AND document_id = ?",
+            (company_id, document_id),
+        ).fetchall():
+            self._drop_accrual(company_id, row)
+
+    def _drop_accrual(self, company_id: int, row: Row) -> None:
+        self.conn.execute("DELETE FROM inventory_accruals WHERE id = ?", (row["id"],))
+        self.ledger.delete_document(company_id, row["gl_document_id"])

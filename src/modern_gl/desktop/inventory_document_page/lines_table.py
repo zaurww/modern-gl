@@ -47,6 +47,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     CURRENCY_AMOUNT,
     ESC_KEYS,
     EXPENSE,
+    EXPENSE_MONTH,
     ITEM,
     ITEM_MIN,
     LIST_KEYS,
@@ -57,6 +58,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     QUANTITY,
     SALE_KEYS,
     SC_KEYS,
+    SEVERAL_MONTHS,
     SOFT_KEYS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
@@ -102,6 +104,7 @@ class InventoryLinesDelegate(QStyledItemDelegate):
     unknown_item = Signal(QPersistentModelIndex, str)
     # index, name, picked as "+ Добавить «…»" (then added without a question)
     unknown_warehouse = Signal(QPersistentModelIndex, str, bool)
+    several_months = Signal(QPersistentModelIndex)  # «несколько месяцев…» picked: split it
     # (kind_id, name, owner_id) -> the new element's id: a subconto list offers
     # "+ Добавить «…»" (see `attach_list`)
     add_value: Callable[[int, str, int | None], int] | None = None
@@ -165,6 +168,23 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         self.unknown_value.emit(QPersistentModelIndex(index), kind_id, text)
         return UNSET
 
+    def _list_value(self, editor, model, index, key: str, text: str) -> object:
+        """The item, warehouse or account named; a name the list lacks is asked about
+        (UNSET: nothing to set now). A service's corrected name stays its memo."""
+        value = resolve_choice(model.choices(index.row(), key), text) if text else None
+        if key == ITEM and text and value is None and model.is_service(index.row()):
+            model.setData(model.index(index.row(), model.columns.index(MEMO)), text)
+            return UNSET
+        if text and value is None:
+            editor.setProperty("gl_unknown", True)  # the cell waits for the answer
+            where = QPersistentModelIndex(index)
+            if key == ITEM:
+                self.unknown_item.emit(where, text)
+            else:
+                self.unknown_warehouse.emit(where, text, bool(editor.property("gl_add")))
+            return UNSET
+        return value
+
     def setModelData(self, editor, model, index):
         model = cast(InventoryLinesModel, model)
         key = model.key(index)
@@ -176,19 +196,15 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                 value = self._subconto_value(editor, model, index, key, text)
                 if value is UNSET:  # no subconto here, or the page asks about the name
                     return
-            elif key in LIST_KEYS:
-                value = resolve_choice(model.choices(index.row(), key), text) if text else None
-                if key == ITEM and text and value is None and model.is_service(index.row()):
-                    # the service's name corrected: it stays a service
-                    model.setData(model.index(index.row(), model.columns.index(MEMO)), text)
+            elif key == EXPENSE_MONTH:
+                value = model.month_code_of(text) if text else None
+                if value == SEVERAL_MONTHS:
+                    editor.setProperty("gl_unknown", True)  # the page asks for the months
+                    self.several_months.emit(QPersistentModelIndex(index))
                     return
-                if text and value is None:
-                    editor.setProperty("gl_unknown", True)  # the cell waits for the answer
-                    where = QPersistentModelIndex(index)
-                    if key == ITEM:
-                        self.unknown_item.emit(where, text)
-                    else:
-                        self.unknown_warehouse.emit(where, text, bool(editor.property("gl_add")))
+            elif key in LIST_KEYS:
+                value = self._list_value(editor, model, index, key, text)
+                if value is UNSET:
                     return
             elif key == QUANTITY:
                 value = to_quantity(text) if text else None
@@ -268,6 +284,7 @@ class InventoryLinesTable(QTableView):
             VAT: 84,
             ACCOUNT: 130,
             EXPENSE: 130,
+            EXPENSE_MONTH: 120,
             **dict.fromkeys(SALE_KEYS, 130),  # named after its directory: «Satış qrupları»
         }
         used = model.s.catalog.used_positions()
@@ -286,7 +303,7 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, int(key[-1]) not in used)
             if key in {WAREHOUSE, UNIT}:
                 self.setColumnHidden(column, not goods)
-            if key == EXPENSE:
+            if key in {EXPENSE, EXPENSE_MONTH}:
                 self.setColumnHidden(column, not expenses)
             if key == ACCOUNT:
                 self.setColumnHidden(column, model.accounts_hidden)

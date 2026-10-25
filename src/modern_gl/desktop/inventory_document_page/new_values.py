@@ -47,6 +47,9 @@ class NewValuesPart(InventoryDocumentForm):
                 0, lambda: self._create_warehouse(index, text, ask=not picked)
             )
         )
+        self.delegate.several_months.connect(
+            lambda index: QTimer.singleShot(0, lambda: self._split_months(index))
+        )
 
     def _create_value(self, index: QPersistentModelIndex, kind_id: int, text: str) -> None:
         offer_new_value(

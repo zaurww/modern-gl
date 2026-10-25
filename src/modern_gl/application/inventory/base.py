@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
 from modern_gl.application.common import closed_on, require_open
-from modern_gl.application.inventory.model import INCOMING_SQL
+from modern_gl.application.inventory.model import INCOMING_SQL, AccrualData
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.dates import ru_date
@@ -126,6 +126,17 @@ class InventoryBase(LedgerBase):
         if row is None:
             raise NotFoundError(tr("складской документ не найден"))
         return row
+
+    def _accruals(self, company_id: int, document_id: int) -> tuple[AccrualData, ...]:
+        """The accruals of a receipt (D65), earliest month first."""
+        return tuple(
+            AccrualData(row["expense_date"], row["gl_document_id"])
+            for row in self.conn.execute(
+                "SELECT expense_date, gl_document_id FROM inventory_accruals "
+                "WHERE company_id = ? AND document_id = ? ORDER BY expense_date",
+                (company_id, document_id),
+            )
+        )
 
     def _receipt_line(self, company_id: int, line_id: int) -> Row:
         row = self.conn.execute(
@@ -276,8 +287,10 @@ class InventoryBase(LedgerBase):
             "invoice": doc["invoice"],
             "invoice_kind": doc["invoice_kind"],
             "awaits_invoice": doc["awaits_invoice"],
-            "expense_date": doc["expense_date"],
-            "accrual_document_id": doc["accrual_document_id"],
+            "accruals": [
+                {"expense_date": a.expense_date, "gl_document_id": a.gl_document_id}
+                for a in self._accruals(doc["company_id"], doc["id"])
+            ],
             "lines": lines,
             "charges": [
                 {key: row[key] for key in row.keys() if key not in {"company_id", "document_id"}}

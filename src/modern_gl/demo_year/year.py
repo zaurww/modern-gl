@@ -129,6 +129,7 @@ class Year(Imports, Money):
                 vat_amount=money(vat18(amount)),
                 expense_account_id=self.acc[account] if known else None,
                 expense_subconto=[self.cost[item]] if known else (),
+                expense_date=d - timedelta(days=d.day) if supplier == "power" else None,
             )
             invoice = self.invoice_number(d)
             drafts.append(
@@ -141,7 +142,6 @@ class Year(Imports, Money):
                     what,
                     vat_rate=STANDARD_VAT_RATE,
                     invoice=invoice,
-                    expense_date=d - timedelta(days=d.day) if supplier == "power" else None,
                 )
             )
             self.owe(d + timedelta(days=7), supplier, amount, vat18(amount), invoice)

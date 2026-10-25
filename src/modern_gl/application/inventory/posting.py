@@ -81,11 +81,10 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         currency_rate: str | int | Decimal | None = None,
         invoice: str = "",
         invoice_kind: str = "",
-        expense_date: date | str | None = None,
     ) -> int:
         """Post a receipt/opening balance (or a mədaxil, D91) and its Dr inventory / Cr
-        offset entries (and Dr input VAT / Cr offset for the lines' VAT). With `expense_date` the
-        lines without an item are an expense of that earlier month (D65)."""
+        offset entries (and Dr input VAT / Cr offset for the lines' VAT). A line without an
+        item with an `expense_date` is an expense of that earlier month (D65)."""
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
         with transaction(self.conn):
@@ -103,7 +102,6 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
                 currency_rate=currency_rate,
                 invoice=invoice,
                 invoice_kind=invoice_kind,
-                expense_date=expense_date,
             )
             self._post_in_sequence(company_id, inv_id)
         return inv_id
@@ -274,8 +272,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         )
         if gl_document_id is not None:
             self.ledger.delete_document(company_id, gl_document_id)
-        if doc["accrual_document_id"] is not None:
-            self._drop_accrual(company_id, doc)
+        self._drop_accruals(company_id, doc["id"])
         self._apply_in_order(company_id, None, later)
 
     def _withdraw_after(self, company_id: int, doc: Row) -> list[int]:
@@ -367,7 +364,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         ).fetchall()
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
-        accrual: list[PostingInput] = []
+        accruals: dict[str, list[PostingInput]] = {}
         if doc["doc_type"] == "landed_cost":
             postings = self._apply_landed_cost(company_id, doc, lines)
         elif doc["doc_type"] == "sale":
@@ -376,8 +373,8 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             postings = [self._apply_line(company_id, doc, line) for line in lines]
             if doc["doc_type"] in INCOMING_TYPES:
                 self._forget_receipts(company_id, lines)
-            if doc["doc_type"] == "receipt" and doc["expense_date"] is not None:
-                accrual = self._accrue(company_id, doc, lines, postings)
+            if doc["doc_type"] == "receipt":
+                accruals = self._accrue(company_id, doc, lines, postings)
             if doc["doc_type"] == "receipt":
                 postings += self._vat_postings(
                     company_id,
@@ -391,8 +388,8 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
                         for line in lines
                     ],
                 )
-        if doc["doc_type"] == "receipt":  # while the document is still a draft
-            self._finish_accrual(company_id, doc["id"], accrual)
+        if doc["doc_type"] == "receipt":
+            self._finish_accruals(company_id, doc, accruals)
         self._finish(doc["id"], company_id, doc["doc_date"], postings, doc["memo"])
 
     def _finish(

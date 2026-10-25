@@ -413,6 +413,7 @@ def main() -> None:
                 vat_amount="9",
                 expense_account_id=ledger.account_id(cid, "26"),
                 expense_subconto=[kind_value("cost_item", i18n.tr("Ремонт"))],
+                expense_date="2026-01-31",  # the repair was January's (D65)
             ),
             ReceiptLine(
                 None,
@@ -430,7 +431,6 @@ def main() -> None:
         i18n.tr("Ремонт и ноутбук"),
         vat_rate=STANDARD_VAT_RATE,
         invoice="MT2602007788",
-        expense_date="2026-01-31",  # the repair was January's (D65)
     )
     session.catalog.reload()  # the new cost item and fixed asset
     win.open_inventory_document(purchase)
