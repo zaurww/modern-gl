@@ -35,6 +35,7 @@ from modern_gl.desktop.reports_page import (
     ReportParams,
     StatementsPage,
     SubcontoAnalysisPage,
+    VatCreditPage,
     month_of,
 )
 from modern_gl.desktop.reports_page.statements import VIEW_SETTING
@@ -121,6 +122,7 @@ class ReportPlaces(OpenPages):
             "subconto_analysis": self.open_subconto_analysis,
             "handover": self.hand_over,
             "invoices": lambda: self.show_place(("invoices",)),
+            "vat_credit": self.open_vat_credit,
             "reconcile_purchases": lambda: self.open_reconciliation(PURCHASE),
             "reconcile_sales": lambda: self.open_reconciliation(SALE),
             "landed": self.open_landed_report,
@@ -193,6 +195,15 @@ class ReportPlaces(OpenPages):
         key = BooksPage.key
         if key not in self.pages:
             page = BooksPage(self.open_session)
+            self._wire_report(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def open_vat_credit(self) -> None:
+        """«ƏDV к зачёту»: one page, the period on it."""
+        key = VatCreditPage.key
+        if key not in self.pages:
+            page = VatCreditPage(self.open_session)
             self._wire_report(page)
             self._add_page(key, page, open_item=True)
         self._activate(key)

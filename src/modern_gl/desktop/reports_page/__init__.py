@@ -19,6 +19,7 @@ from modern_gl.desktop.reports_page.table import (
     SectionRow,
     figure,
 )
+from modern_gl.desktop.reports_page.vat_credit import VatCreditPage
 from modern_gl.desktop.reports_page.view import (
     Column,
     MenuAction,
@@ -49,6 +50,7 @@ __all__ = [
     "SubcontoAnalysisPage",
     "SubcontoCardPage",
     "SubcontoPage",
+    "VatCreditPage",
     "figure",
     "month_of",
 ]

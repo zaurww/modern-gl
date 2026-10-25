@@ -107,6 +107,13 @@ REPORTS = (
         "invoices",
     ),
     Report(
+        "vat_credit",
+        GROUPS[2],
+        "ƏDV к зачёту",
+        "Зачёт ƏDV покупок по дням: e-qaimə, оплата суммы и ƏDV; декларации — по оплате ƏDV",
+        "invoices",
+    ),
+    Report(
         "reconcile_purchases",
         GROUPS[2],
         "Сверка покупок с порталом",

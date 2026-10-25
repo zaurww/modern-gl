@@ -49,9 +49,11 @@ MODULE_CODE = (
     "modern_gl.application.eqaime.portal",
     "modern_gl.application.quick_entry",
     "modern_gl.application.trade_batch",
+    "modern_gl.application.vat",
     "modern_gl.reporting.inventory",
     "modern_gl.reporting.trade",
     "modern_gl.reporting.eqaime_reconciliation",
+    "modern_gl.reporting.vat",
 )
 
 # The core never reads a module's table (debt 1 paid in session 25: the document_owners
