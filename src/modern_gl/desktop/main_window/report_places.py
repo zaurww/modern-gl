@@ -37,6 +37,7 @@ from modern_gl.desktop.reports_page import (
     SubcontoAnalysisPage,
     VatCreditPage,
     VatLiabilityPage,
+    VatReceiptsPage,
     VatRegisterPage,
     month_of,
 )
@@ -126,6 +127,7 @@ class ReportPlaces(OpenPages):
             "invoices": lambda: self.show_place(("invoices",)),
             "vat_credit": self.open_vat_credit,
             "vat_liability": lambda: self.open_single(VatLiabilityPage),
+            "vat_receipts": lambda: self.open_single(VatReceiptsPage),
             "vat_register": self.open_vat_register,
             "reconcile_purchases": lambda: self.open_reconciliation(PURCHASE),
             "reconcile_sales": lambda: self.open_reconciliation(SALE),
