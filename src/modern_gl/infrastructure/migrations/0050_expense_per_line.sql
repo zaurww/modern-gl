@@ -1,4 +1,4 @@
--- The month of an expense moves from the purchase to its line (D134 practice, D-new1): an
+-- The month of an expense moves from the purchase to its line (D134 practice, D136): an
 -- e-qaimə whose lines belong to different months, a line split by months. A purchase then
 -- has one accrual document per month — `inventory_accruals`; `inventory_documents` loses
 -- expense_date and accrual_document_id. SQLite cannot drop a column a foreign key uses:

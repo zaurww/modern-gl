@@ -1,4 +1,4 @@
-"""«Расход за» on the line of a purchase and splitting a line (D65 practice, D-new1)."""
+"""«Расход за» on the line of a purchase and splitting a line (D65 practice, D136)."""
 
 AZ: dict[str, str] = {
     "несколько месяцев…": "bir neçə ay…",

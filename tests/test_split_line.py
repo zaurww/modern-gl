@@ -1,4 +1,4 @@
-"""«Разделить строку» (D-new1): a line of a warehouse document in two, by a quantity of the
+"""«Разделить строку» (D136): a line of a warehouse document in two, by a quantity of the
 goods or an amount of the service, VAT and the currency amount following in proportion; the
 parts add up to the line as it was. Every number is worked out by hand."""
 
