@@ -36,6 +36,7 @@ from modern_gl.desktop.reports_page import (
     StatementsPage,
     SubcontoAnalysisPage,
     VatCreditPage,
+    VatRegisterPage,
     month_of,
 )
 from modern_gl.desktop.reports_page.statements import VIEW_SETTING
@@ -123,6 +124,7 @@ class ReportPlaces(OpenPages):
             "handover": self.hand_over,
             "invoices": lambda: self.show_place(("invoices",)),
             "vat_credit": self.open_vat_credit,
+            "vat_register": self.open_vat_register,
             "reconcile_purchases": lambda: self.open_reconciliation(PURCHASE),
             "reconcile_sales": lambda: self.open_reconciliation(SALE),
             "landed": self.open_landed_report,
@@ -204,6 +206,15 @@ class ReportPlaces(OpenPages):
         key = VatCreditPage.key
         if key not in self.pages:
             page = VatCreditPage(self.open_session)
+            self._wire_report(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def open_vat_register(self) -> None:
+        """«Реестр e-qaimə»: one page, the period on it."""
+        key = VatRegisterPage.key
+        if key not in self.pages:
+            page = VatRegisterPage(self.open_session)
             self._wire_report(page)
             self._add_page(key, page, open_item=True)
         self._activate(key)

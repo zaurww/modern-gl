@@ -36,6 +36,7 @@ from modern_gl.desktop.reports_page import (
     StatementsPage,
     SubcontoAnalysisPage,
     SubcontoPage,
+    VatRegisterPage,
 )
 
 
@@ -711,6 +712,11 @@ def main() -> None:
     shot("11_invoices")
     win.open_report("card", acc["62"].id, osv.params)
     shot("11b_card_invoice")
+    win.open_vat_register()  # «Реестр e-qaimə»: purchases and sales, totals by rate
+    register = cast(VatRegisterPage, win.pages[VatRegisterPage.key])
+    register.period.set_period(osv.params.date_from, osv.params.date_to)
+    register.refresh()
+    shot("11c_vat_register")
     # The bank module (D47): bank accounts and the statement; a payment to a supplier
     from modern_gl.desktop.bank_operation_page import BankOperationPage
     from modern_gl.desktop.bank_page import BankPage

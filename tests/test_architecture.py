@@ -54,6 +54,7 @@ MODULE_CODE = (
     "modern_gl.reporting.trade",
     "modern_gl.reporting.eqaime_reconciliation",
     "modern_gl.reporting.vat",
+    "modern_gl.reporting.vat_register",
 )
 
 # The core never reads a module's table (debt 1 paid in session 25: the document_owners

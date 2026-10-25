@@ -107,6 +107,13 @@ REPORTS = (
         "invoices",
     ),
     Report(
+        "vat_register",
+        GROUPS[2],
+        "Реестр e-qaimə",
+        "Покупки и продажи периода для декларации ƏDV: суммы, ƏDV, оплата; итоги по ставкам",
+        "invoices",
+    ),
+    Report(
         "vat_credit",
         GROUPS[2],
         "ƏDV к зачёту",
