@@ -103,7 +103,7 @@ class VatReceipts:
     parties: list[PartyRow] = field(default_factory=list)
     total: PartyRow = field(default_factory=PartyRow)  # of the period and the balances
     warnings: int = 0
-    payer_from: str = ""  # the company pays ƏDV since (D-new1); "" — all along
+    payer_from: str = ""  # the company pays ƏDV since (D145); "" — all along
 
 
 class Parties(dict[int | None, PartyRow]):

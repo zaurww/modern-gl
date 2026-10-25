@@ -37,7 +37,7 @@ class PostingInput:
     currency_amount: str | int | Decimal | None = None
     invoice: str = ""  # number of the e-qaimə the posting belongs to ("" = none)
     invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a customs declaration
-    # a payment from a bank account to the supplier's ƏDV deposit: it pays the ƏDV (D-new1)
+    # a payment from a bank account to the supplier's ƏDV deposit: it pays the ƏDV (D145)
     pays_vat: bool = False
 
 

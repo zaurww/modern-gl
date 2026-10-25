@@ -1,4 +1,4 @@
-"""Stage 4 of the ƏDV declaration (D-new1): ƏDV paid to the supplier's deposit straight
+"""Stage 4 of the ƏDV declaration (D145): ƏDV paid to the supplier's deposit straight
 from a bank account (`pays_vat`), in part from the deposit; an advance paid to the
 supplier's deposit without a number, set against the e-qaimə later; and the day the
 company became a payer of ƏDV. Every figure is worked out by hand in the docstring."""

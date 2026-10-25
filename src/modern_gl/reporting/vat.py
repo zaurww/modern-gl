@@ -34,7 +34,7 @@ class VatCredit:
     credited: int = 0  # in the period
     waiting: int = 0  # at the period's end, over every purchase
     waiting_count: int = 0  # purchases with something waiting
-    payer_from: str = ""  # the company pays ƏDV since (D-new1); "" — all along
+    payer_from: str = ""  # the company pays ƏDV since (D145); "" — all along
 
 
 def vat_credit(

@@ -443,7 +443,7 @@ class MainWindow(ReportPlaces):
         self._refresh_trade()
 
     def edit_vat_payer(self) -> None:
-        """«Плательщик ƏDV с…» (D-new1): the ƏDV reports open are counted again."""
+        """«Плательщик ƏDV с…» (D145): the ƏDV reports open are counted again."""
         if self.session is None or not edit_vat_payer(self, self.session):
             return
         for key in VAT_REPORTS:

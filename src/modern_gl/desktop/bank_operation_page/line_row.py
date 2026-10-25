@@ -71,7 +71,7 @@ class LineRow(QWidget):
         self.invoice.setFixedWidth(160)
         self.invoice.activated.connect(self._invoice_chosen)
         lay.addWidget(self.invoice)
-        # the ƏDV paid from this account straight to the supplier's deposit (D-new1)
+        # the ƏDV paid from this account straight to the supplier's deposit (D145)
         self.vat = QCheckBox(tr("ƏDV"))
         self.vat.setToolTip(tr("ƏDV — с этого счёта на депозитный счёт поставщика"))
         self.vat.toggled.connect(lambda _: self.changed.emit())

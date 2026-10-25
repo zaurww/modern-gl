@@ -34,7 +34,7 @@ class LiabilityRow:
 class VatLiability:
     rows: list[LiabilityRow] = field(default_factory=list)
     owed: int = 0  # in the period
-    payer_from: str = ""  # the company pays ƏDV since (D-new1); "" — all along
+    payer_from: str = ""  # the company pays ƏDV since (D145); "" — all along
 
 
 def vat_liability(

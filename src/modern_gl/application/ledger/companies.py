@@ -107,7 +107,7 @@ class CompanyCommands(LedgerBase):
             self._audit(company_id, "company", company_id, "set_mode", {"from": old, "to": mode})
 
     def set_vat_payer_from(self, company_id: int, day: date | str | None) -> None:
-        """Since when the company pays ƏDV (D-new1); None — all along. Before that day the
+        """Since when the company pays ƏDV (D145); None — all along. Before that day the
         ƏDV reports owe and credit nothing. Audited."""
         value = None if day is None else iso_date(day)
         with transaction(self.conn):

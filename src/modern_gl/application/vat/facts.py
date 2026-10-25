@@ -4,7 +4,7 @@ Read from the posted documents of the common book; what a posting counts as foll
 rule of the invoice number (`invoice_rules`, D120). The ƏDV is paid from the deposit
 account, or from a bank account straight to the supplier's deposit (`pays_vat`); an
 advance paid so without a number is the supplier's ƏDV advance, and an advance set
-against an e-qaimə pays its ƏDV out of it first (D-new1)."""
+against an e-qaimə pays its ƏDV out of it first (D145)."""
 
 from __future__ import annotations
 

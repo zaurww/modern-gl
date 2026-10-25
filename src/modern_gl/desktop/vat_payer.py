@@ -1,4 +1,4 @@
-"""«Плательщик ƏDV с…» (D-new1): the day the company became a payer of ƏDV, asked from
+"""«Плательщик ƏDV с…» (D145): the day the company became a payer of ƏDV, asked from
 the company's menu; empty — a payer all along. Before that day the ƏDV reports owe and
 credit nothing."""
 

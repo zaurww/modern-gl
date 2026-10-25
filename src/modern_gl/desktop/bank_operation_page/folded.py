@@ -174,7 +174,7 @@ class FoldedPart(BankOperationForm):
 
     def _vat_line(self, data: BankOperationInput) -> BankOperationInput:
         """The ƏDV part paid from this account straight to the supplier's deposit: a line
-        of its own on the same operation, marked (D-new1)."""
+        of its own on the same operation, marked (D145)."""
         text = self.vat_amount.text().strip()
         if not self.deposit_shown or self.deposit.currentData() != FROM_BANK or not text:
             return data

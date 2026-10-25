@@ -1,4 +1,4 @@
-"""Since when the company is a payer of ƏDV (D-new1): before that day no ƏDV is owed on
+"""Since when the company is a payer of ƏDV (D145): before that day no ƏDV is owed on
 its sales nor credited on its purchases. A company set no day is a payer all along."""
 
 from __future__ import annotations

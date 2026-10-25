@@ -1,5 +1,5 @@
 """The payment form pays a supplier's ƏDV from the current account straight to their
-deposit (D-new1): the ƏDV part is a line of its own, marked ƏDV, and is credited."""
+deposit (D145): the ƏDV part is a line of its own, marked ƏDV, and is credited."""
 
 from __future__ import annotations
 

@@ -74,7 +74,7 @@ class BankAccountPart(BankOperationForm):
         self.deposit.clear()
         for place in self.deposits:
             self.deposit.addItem(place_label(place), place)
-        # or the ƏDV straight from this account to the supplier's deposit (D-new1)
+        # or the ƏDV straight from this account to the supplier's deposit (D145)
         self.deposit.addItem(tr("С этого счёта — на депозит поставщика"), FROM_BANK)
         items = [*self.deposits, FROM_BANK]
         self.deposit.setCurrentIndex(next((i for i, p in enumerate(items) if p == chosen), 0))
