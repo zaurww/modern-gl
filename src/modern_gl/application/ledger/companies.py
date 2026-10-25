@@ -106,6 +106,21 @@ class CompanyCommands(LedgerBase):
             self.conn.execute("UPDATE companies SET mode = ? WHERE id = ?", (mode, company_id))
             self._audit(company_id, "company", company_id, "set_mode", {"from": old, "to": mode})
 
+    def set_vat_payer_from(self, company_id: int, day: date | str | None) -> None:
+        """Since when the company pays ƏDV (D-new1); None — all along. Before that day the
+        ƏDV reports owe and credit nothing. Audited."""
+        value = None if day is None else iso_date(day)
+        with transaction(self.conn):
+            old = self._company(company_id)["vat_payer_from"]
+            if old == value:
+                return
+            self.conn.execute(
+                "UPDATE companies SET vat_payer_from = ? WHERE id = ?", (value, company_id)
+            )
+            self._audit(
+                company_id, "company", company_id, "set_vat_payer_from", {"from": old, "to": value}
+            )
+
     def set_closed_through(
         self, company_id: int, through: date | str | None, reason: str = ""
     ) -> None:

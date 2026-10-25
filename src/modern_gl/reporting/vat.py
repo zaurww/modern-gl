@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from modern_gl.application.vat import credit_events, purchase_facts, rule_for
+from modern_gl.application.vat import credit_events, payer_from, purchase_facts, rule_for
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -34,6 +34,7 @@ class VatCredit:
     credited: int = 0  # in the period
     waiting: int = 0  # at the period's end, over every purchase
     waiting_count: int = 0  # purchases with something waiting
+    payer_from: str = ""  # the company pays ƏDV since (D-new1); "" — all along
 
 
 def vat_credit(
@@ -44,8 +45,10 @@ def vat_credit(
         raise ValidationError(tr("начало периода позже конца"))
     rule = rule_for(date_from)
     names = _names(conn, company_id)
-    result = VatCredit()
+    result = VatCredit(payer_from=payer_from(conn, company_id))
     for facts in purchase_facts(conn, company_id, date_to):
+        if facts.doc_date < result.payer_from:  # bought before the company paid ƏDV
+            continue
         events = credit_events(facts, rule)
         before = sum(e.amount for e in events if e.day < date_from)
         total = sum(e.amount for e in events)

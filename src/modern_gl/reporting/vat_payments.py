@@ -12,7 +12,13 @@ from __future__ import annotations
 from datetime import date
 
 from modern_gl.application.book_invoices import BookInvoice, book_invoices
-from modern_gl.application.vat import credit_events, party_money, purchase_facts, rule_for
+from modern_gl.application.vat import (
+    credit_events,
+    party_money,
+    payer_from,
+    purchase_facts,
+    rule_for,
+)
 from modern_gl.domain.money import round_ratio
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.vat_receipts import (
@@ -38,8 +44,9 @@ def vat_payments(
     bought = book_invoices(conn, company_id, outgoing=False)
     # number: (credited in the period, by its end; the value paid naming it)
     credits: dict[str, tuple[int, int, int]] = {}
+    since = payer_from(conn, company_id)  # bought before it — no credit, nothing to warn
     for facts in purchase_facts(conn, company_id, date_to):
-        if not facts.kind:
+        if not facts.kind and facts.doc_date >= since:
             events = credit_events(facts, rule)
             credits[facts.invoice] = (
                 sum(e.amount for e in events if e.day >= date_from),
@@ -62,7 +69,7 @@ def vat_payments(
             row = parties.of(invoice.parties[0] if invoice.parties else None)
             _issue(row, line, invoice, 0, credits, date_from, date_to)
             keep(row, line)
-    return collect(parties, _close)
+    return collect(parties, lambda row: _close(row, since), since)
 
 
 def _issue(
@@ -82,11 +89,11 @@ def _issue(
     return True
 
 
-def _close(row: PartyRow) -> None:
+def _close(row: PartyRow, since: str) -> None:
     """The ƏDV of what is paid of each e-qaimə, beyond what is credited — a warning: its
     value paid without the number, or its ƏDV not to the deposit."""
     for i in row.issued:
-        if not i.total:
+        if not i.total or i.day < since:
             continue
         covered = min(max(i.got, 0), i.total) + i.extra
         short = max(round_ratio(i.vat * covered, i.total) - i.credited, 0)

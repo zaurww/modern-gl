@@ -45,10 +45,11 @@ from modern_gl.desktop.main_window.report_places import ReportPlaces
 from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.period_dialog import PeriodDialog
-from modern_gl.desktop.reports_page import ChartPage, OsvPage
+from modern_gl.desktop.reports_page import ChartPage, OsvPage, ReportPage
 from modern_gl.desktop.reports_page.table import grid, set_grid, set_zebra, zebra
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
+from modern_gl.desktop.vat_payer import VAT_REPORTS, edit_vat_payer
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import LANGUAGES, language, tr
@@ -166,6 +167,7 @@ class MainWindow(ReportPlaces):
         menu.addAction(tr("Удалить компанию…")).triggered.connect(self.delete_company)
         menu.addSeparator()
         menu.addAction(tr("VÖEN компании…")).triggered.connect(self.edit_tax_id)
+        menu.addAction(tr("Плательщик ƏDV с…")).triggered.connect(self.edit_vat_payer)
         stock_only = menu.addAction(tr("Только склад (без бухгалтерии)"))
         stock_only.setCheckable(True)
         stock_only.setChecked(s.stock_only)
@@ -439,6 +441,15 @@ class MainWindow(ReportPlaces):
         if report is not None:
             report.refresh()
         self._refresh_trade()
+
+    def edit_vat_payer(self) -> None:
+        """«Плательщик ƏDV с…» (D-new1): the ƏDV reports open are counted again."""
+        if self.session is None or not edit_vat_payer(self, self.session):
+            return
+        for key in VAT_REPORTS:
+            page = self.pages.get((key,))
+            if isinstance(page, ReportPage):
+                page.refresh()
 
     def _refresh_trade(self) -> None:
         for key in (("purchases",), ("sales",)):

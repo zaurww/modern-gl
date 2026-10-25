@@ -83,6 +83,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.amount.textEdited.connect(self._amount_typed)
         self.vat_amount.textEdited.connect(self._changed)
         self.deposit.unknown.connect(self._not_listed)
+        self.deposit.activated.connect(self._changed)
         self.btn_add_line.clicked.connect(lambda: self.add_line(focus=True))
         self.btn_add_fee.clicked.connect(self.add_fee)
         self.btn_unfold.clicked.connect(self.unfold)
@@ -324,6 +325,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         try:
             data = self.collect()
             if self.doc is None:  # a new one: with its ƏDV part on the deposit, if typed
+                data = self._vat_line(data)
                 deposit = self._deposit_part(data)
                 saved = self.s.ledger.bank.save_bank_payment(
                     self.s.company_id, data, deposit, post=post

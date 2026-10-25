@@ -20,6 +20,7 @@ LINE_KEYS = {
     "customs",  # the number of a customs declaration instead of an e-qaimə
     "currency",
     "currency_amount",
+    "pays_vat",  # true: the ƏDV paid from a bank account to the supplier's deposit
 }
 
 
@@ -52,7 +53,14 @@ def _line(cat: Catalog, i: int, p: object, exact: bool) -> PostingInput:
         _amount(i, p["currency_amount"]) if p.get("currency_amount") is not None else None,
         str(p.get("e_qaime") or p.get("customs") or ""),
         "customs" if p.get("customs") else "",
+        _flag(i, p.get("pays_vat", False)),
     )
+
+
+def _flag(line: int, value: object) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError(tr("строка {line}: pays_vat — true или false", line=line))
+    return value
 
 
 def _amount(line: int, value: object) -> str:

@@ -6,6 +6,7 @@ rule in force on the day."""
 from modern_gl.application.vat.credit import CreditEvent, credit_events
 from modern_gl.application.vat.facts import InvoiceFacts, Payment, purchase_facts
 from modern_gl.application.vat.liability import LiabilityEvent, liability_events
+from modern_gl.application.vat.payer import payer_from
 from modern_gl.application.vat.rules import (
     LIABILITY_RULES,
     RULES,
@@ -30,6 +31,7 @@ __all__ = [
     "liability_events",
     "liability_rule_for",
     "party_money",
+    "payer_from",
     "purchase_facts",
     "rule_for",
     "sale_facts",

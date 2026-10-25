@@ -20,7 +20,13 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from modern_gl.application.book_invoices import BookInvoice, book_invoices
-from modern_gl.application.vat import SaleFacts, liability_events, liability_rule_for, sale_facts
+from modern_gl.application.vat import (
+    SaleFacts,
+    liability_events,
+    liability_rule_for,
+    payer_from,
+    sale_facts,
+)
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor, round_ratio
@@ -97,6 +103,7 @@ class VatReceipts:
     parties: list[PartyRow] = field(default_factory=list)
     total: PartyRow = field(default_factory=PartyRow)  # of the period and the balances
     warnings: int = 0
+    payer_from: str = ""  # the company pays ƏDV since (D-new1); "" — all along
 
 
 class Parties(dict[int | None, PartyRow]):
@@ -132,6 +139,7 @@ def vat_receipts(
     rate = liability_rule_for(date_to).rate
     sales = book_invoices(conn, company_id, outgoing=True)
     parties = Parties(conn, company_id)
+    since = payer_from(conn, company_id)
     numbers = set()
     for facts in sale_facts(conn, company_id, date_to):
         numbers.add(facts.invoice)
@@ -140,8 +148,9 @@ def vat_receipts(
         line, received = money_line(facts, date_from)
         owed = 0
         for e in liability_events(facts):
-            owed += e.amount
-            line.tax += e.amount if e.day >= date_from else 0
+            if e.day >= since:  # nothing is owed before the company pays ƏDV
+                owed += e.amount
+                line.tax += e.amount if e.day >= date_from else 0
         if issue(row, line, sale, received, date_from, date_to):
             assert sale is not None
             if _to_account(facts, sale):
@@ -156,7 +165,7 @@ def vat_receipts(
             row = parties.of(sale.parties[0] if sale.parties else None)
             issue(row, line, sale, 0, date_from, date_to)
             keep(row, line)
-    return collect(parties, lambda row: _close(row, rate))
+    return collect(parties, lambda row: _close(row, rate), since)
 
 
 def money_line(facts: SaleFacts, date_from: str) -> tuple[ReceiptLine, int]:
@@ -204,9 +213,9 @@ def keep(row: PartyRow, line: ReceiptLine) -> None:
         row.add(line)
 
 
-def collect(parties: Parties, close: Callable[[PartyRow], None]) -> VatReceipts:
+def collect(parties: Parties, close: Callable[[PartyRow], None], since: str = "") -> VatReceipts:
     """The rows with something in the period or open at its end, by name; the total."""
-    result = VatReceipts()
+    result = VatReceipts(payer_from=since)
     for row in sorted(parties.values(), key=lambda b: (b.name == "", b.name)):
         lay_out(row)
         close(row)

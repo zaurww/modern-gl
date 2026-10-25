@@ -32,6 +32,7 @@ TYPE_KINDS = {
 }
 WITH_COUNTERPARTY = (SUPPLIER, CUSTOMER, OTHER)
 SEVERAL = "several"  # the list item «several e-qaimə…»
+FROM_BANK = "from_bank"  # the ƏDV part from this account to the supplier's deposit
 # an e-qaimə the books do not have yet: an imported draft, or only seen on the portal
 SOURCES = {DRAFT: "черновик", PORTAL: "с портала"}
 

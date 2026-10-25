@@ -8,7 +8,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from modern_gl.application.vat import liability_events, liability_rule_for, sale_facts
+from modern_gl.application.vat import (
+    liability_events,
+    liability_rule_for,
+    payer_from,
+    sale_facts,
+)
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -29,6 +34,7 @@ class LiabilityRow:
 class VatLiability:
     rows: list[LiabilityRow] = field(default_factory=list)
     owed: int = 0  # in the period
+    payer_from: str = ""  # the company pays ƏDV since (D-new1); "" — all along
 
 
 def vat_liability(
@@ -44,11 +50,12 @@ def vat_liability(
             "SELECT id, name FROM subconto_values WHERE company_id = ?", (company_id,)
         )
     }
-    result = VatLiability()
+    result = VatLiability(payer_from=payer_from(conn, company_id))
+    start = max(date_from, result.payer_from)  # nothing is owed before the company pays
     for facts in sale_facts(conn, company_id, date_to):
         name = names.get(facts.counterparty_id or 0, "")
         for e in liability_events(facts):
-            if date_from <= e.day <= date_to:
+            if start <= e.day <= date_to:
                 result.rows.append(
                     LiabilityRow(e.day, facts.invoice, name, e.main, e.vat, e.amount)
                 )

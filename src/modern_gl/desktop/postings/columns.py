@@ -150,6 +150,7 @@ class PostingRow:
     invoice: str = ""  # e-qaimə number
     invoice_kind: str = ""  # "customs": a customs declaration (from a warehouse receipt)
     invoice_auto: bool = False  # inherited from a related line, safe to refresh
+    pays_vat: bool = False  # kept as posted: the ƏDV paid to a supplier's deposit (bank form)
 
     def is_empty(self) -> bool:
         return (
@@ -176,4 +177,5 @@ class PostingRow:
             rate_auto=False,
             invoice=p.invoice,
             invoice_kind=p.invoice_kind,
+            pays_vat=p.pays_vat,
         )

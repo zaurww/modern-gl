@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.vat_payer import payer_note
 from modern_gl.desktop.widgets import EmptyState, money
 from modern_gl.domain.dates import ru_date
 from modern_gl.i18n import tr
@@ -51,6 +52,6 @@ class VatLiabilityPage(ReportPage):
             Column(tr("ƏDV к уплате"), lambda r: r.owed, money=True),
         ]
         self.model.set(columns, data.rows)
-        self.footer.setText(
-            tr("ƏDV продаж за период: {owed}", owed=money(data.owed, blank_zero=False))
-        )
+        text = tr("ƏDV продаж за период: {owed}", owed=money(data.owed, blank_zero=False))
+        note = payer_note(data.payer_from, self.params.date_from)
+        self.footer.setText(f"{text}\n{note}" if note else text)

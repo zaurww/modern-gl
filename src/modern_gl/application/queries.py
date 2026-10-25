@@ -49,6 +49,7 @@ class PostingData:
     currency_amount: int | None = None
     invoice: str = ""  # e-qaimə number
     invoice_kind: str = ""  # "customs": the number of a customs declaration
+    pays_vat: bool = False  # paid to the supplier's ƏDV deposit from a bank account
 
 
 @dataclass
@@ -298,6 +299,7 @@ def load_document(conn: Connection, company_id: int, doc_id: int) -> DocumentDat
                 p["currency_amount"],
                 p["invoice"] or "",
                 p["invoice_kind"] or "",
+                bool(p["pays_vat"]),
             )
         )
     return doc

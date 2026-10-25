@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.vat_payer import payer_note
 from modern_gl.desktop.widgets import EmptyState, money
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.invoice import CUSTOMS
@@ -54,15 +55,15 @@ class VatCreditPage(ReportPage):
             Column(tr("Ждёт"), lambda r: r.waiting, money=True),
         ]
         self.model.set(columns, data.rows)
-        self.footer.setText(
-            tr(
-                "К зачёту за период: {credited}   ·   ждут e-qaimə или оплаты: {waiting} "
-                "по {n} покупкам",
-                credited=money(data.credited, blank_zero=False),
-                waiting=money(data.waiting, blank_zero=False),
-                n=data.waiting_count,
-            )
+        text = tr(
+            "К зачёту за период: {credited}   ·   ждут e-qaimə или оплаты: {waiting} "
+            "по {n} покупкам",
+            credited=money(data.credited, blank_zero=False),
+            waiting=money(data.waiting, blank_zero=False),
+            n=data.waiting_count,
         )
+        note = payer_note(data.payer_from, self.params.date_from)
+        self.footer.setText(f"{text}\n{note}" if note else text)
 
     def drill(self, row) -> None:
         if row is not None and row.document_id:

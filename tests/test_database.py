@@ -64,6 +64,7 @@ FROZEN = {
     "0049_document_sources.sql": "16358f1735946b2c",
     "0050_expense_per_line.sql": "7e6955a40daf47b5",
     "0051_reconciled_books.sql": "57e0bf8cfe5ecda6",
+    "0052_vat_payer.sql": "3fd20def7c6eebfa",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

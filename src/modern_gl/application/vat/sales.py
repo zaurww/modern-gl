@@ -61,7 +61,8 @@ def party_money(
 ) -> list[SaleFacts]:
     """The money from buyers (`outgoing`) or to suppliers up to `date_to`, by e-qaimə
     number, or without one by counterparty; `main` — to or from a bank account or the
-    cash desk, `vat` — the ƏDV deposit. A refund is negative."""
+    cash desk, `vat` — the ƏDV deposit (or from a bank account to the supplier's deposit,
+    `pays_vat`). A refund is negative."""
     params = book_params(conn, company_id, date_to, date_to, layers)
     accounts = invoice_accounts(conn, company_id)
     types = BUYER_TYPES if outgoing else SUPPLIER_TYPES
@@ -74,7 +75,7 @@ def party_money(
         f"""
         WITH {_DOCS}
         SELECT p.invoice, COALESCE(p.invoice_kind, '') AS kind, docs.doc_date, p.amount,
-               p.debit_account_id, p.credit_account_id,
+               p.debit_account_id, p.credit_account_id, p.pays_vat,
                p.dt_sc1, p.dt_sc2, p.dt_sc3, p.ct_sc1, p.ct_sc2, p.ct_sc3
         FROM postings p JOIN docs ON docs.id = p.document_id
         WHERE p.company_id = :company_id
@@ -111,7 +112,7 @@ def _count(
     facts = found.setdefault(key, SaleFacts(who, number))
     if facts.counterparty_id is None:
         facts.counterparty_id = who
-    if money.account_type == "vat_deposit":
+    if money.account_type == "vat_deposit" or p["pays_vat"]:  # to a supplier's deposit
         facts.receive(p["doc_date"], vat=sign * p["amount"])
     else:
         facts.receive(p["doc_date"], main=sign * p["amount"])

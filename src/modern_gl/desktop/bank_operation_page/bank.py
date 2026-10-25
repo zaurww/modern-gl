@@ -11,6 +11,7 @@ from modern_gl.application.bank import (
     place_balance,
 )
 from modern_gl.desktop.bank_operation_page.common import (
+    FROM_BANK,
     bank_accounts,
     fits,
     place_label,
@@ -73,8 +74,10 @@ class BankAccountPart(BankOperationForm):
         self.deposit.clear()
         for place in self.deposits:
             self.deposit.addItem(place_label(place), place)
-        at = next((i for i, p in enumerate(self.deposits) if p == chosen), 0)
-        self.deposit.setCurrentIndex(at if self.deposits else -1)
+        # or the ƏDV straight from this account to the supplier's deposit (D-new1)
+        self.deposit.addItem(tr("С этого счёта — на депозит поставщика"), FROM_BANK)
+        items = [*self.deposits, FROM_BANK]
+        self.deposit.setCurrentIndex(next((i for i, p in enumerate(items) if p == chosen), 0))
         self._show_bank()
 
     def _unused_places(self, listed: set[tuple[int, int | None]]) -> list[BankPlace]:

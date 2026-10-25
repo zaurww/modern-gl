@@ -72,6 +72,8 @@ def _line(p: Row, accounts: dict[int, str], names: dict[int, str]) -> dict:
         line["currency_amount"] = _money(p["currency_amount"])
     if p["invoice"]:
         line["customs" if p["invoice_kind"] == "customs" else "e_qaime"] = p["invoice"]
+    if p["pays_vat"]:
+        line["pays_vat"] = True
     if p["line_memo"]:
         line["memo"] = p["line_memo"]
     return line

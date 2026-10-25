@@ -869,6 +869,11 @@ def shoot_vat_deposit(session, win, ledger, shot) -> None:
     payment.invoice.setCurrentIndex(index)
     payment.invoice.activated.emit(index)
     shot("12b3_bank_vat_deposit")
+    # the ƏDV straight from the current account to the supplier's deposit (D-new1)
+    from_bank = payment.deposit.count() - 1
+    payment.deposit.setCurrentIndex(from_bank)
+    payment.deposit.activated.emit(from_bank)
+    shot("12b4_bank_vat_from_bank")
 
 
 def shoot_sale_groups(session, win, ledger, shot) -> None:

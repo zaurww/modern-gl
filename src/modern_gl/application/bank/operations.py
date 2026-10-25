@@ -66,6 +66,8 @@ class BankLine:
     amount: int  # minor units of the operation's currency; 0 only in a draft
     subconto: Sequence[int | None] = ()
     invoice: str = ""
+    # money from this bank account straight to the supplier's ƏDV deposit: the ƏDV (D-new1)
+    pays_vat: bool = False
 
 
 @dataclass(frozen=True)
@@ -104,7 +106,13 @@ def load_bank_operation(conn: Connection, company_id: int, operation_id: int) ->
     if r is None:
         raise NotFoundError(tr("документ {id} не найден", id=operation_id))
     lines = tuple(
-        BankLine(x["account_id"], x["amount"], (x["sc1"], x["sc2"], x["sc3"]), x["invoice"])
+        BankLine(
+            x["account_id"],
+            x["amount"],
+            (x["sc1"], x["sc2"], x["sc3"]),
+            x["invoice"],
+            bool(x["pays_vat"]),
+        )
         for x in conn.execute(
             "SELECT * FROM bank_operation_lines WHERE company_id = ? AND operation_id = ? "
             "ORDER BY line_no",

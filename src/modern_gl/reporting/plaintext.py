@@ -137,7 +137,7 @@ def posted_documents(conn: Connection, params: dict) -> list[tuple[Row, list[Row
                p.debit_account_id, p.credit_account_id, p.amount,
                p.dt_sc1, p.dt_sc2, p.dt_sc3, p.ct_sc1, p.ct_sc2, p.ct_sc3,
                p.currency_amount, c.code AS currency_code, p.invoice, p.invoice_kind,
-               p.memo AS line_memo
+               p.pays_vat, p.memo AS line_memo
         FROM docs
         JOIN documents d ON d.id = docs.id
         JOIN layers l ON l.id = d.layer_id

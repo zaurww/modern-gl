@@ -37,6 +37,8 @@ class PostingInput:
     currency_amount: str | int | Decimal | None = None
     invoice: str = ""  # number of the e-qaimə the posting belongs to ("" = none)
     invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a customs declaration
+    # a payment from a bank account to the supplier's ƏDV deposit: it pays the ƏDV (D-new1)
+    pays_vat: bool = False
 
 
 class TypedLine(Protocol):
@@ -63,7 +65,13 @@ class TypedLine(Protocol):
 
 
 def typed_posting(
-    n: int, line: TypedLine, *, currency: bool = True, invoice: bool = True, invoice_kind: str = ""
+    n: int,
+    line: TypedLine,
+    *,
+    currency: bool = True,
+    invoice: bool = True,
+    invoice_kind: str = "",
+    pays_vat: bool = False,
 ) -> PostingInput:
     """Line `n` of a form as the ledger's input; `currency` / `invoice` — whether its
     accounts keep them (else what was typed there is not passed on)."""
@@ -86,6 +94,7 @@ def typed_posting(
         from_minor(line.currency_amount or 0) if in_currency else None,
         number,
         invoice_kind if number else "",
+        pays_vat,
     )
 
 

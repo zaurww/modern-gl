@@ -22,7 +22,7 @@ from modern_gl.infrastructure.db import Row, transaction
 POSTING_CONTENT = (
     "p.debit_account_id, p.credit_account_id, p.amount, p.dt_sc1, p.dt_sc2, p.dt_sc3, "
     "p.ct_sc1, p.ct_sc2, p.ct_sc3, p.memo, p.currency_id, p.currency_amount, p.invoice, "
-    "p.invoice_kind"
+    "p.invoice_kind, p.pays_vat"
 )
 
 

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QHBoxLayout,
     QLineEdit,
     QWidget,
@@ -44,6 +45,7 @@ class LineRow(QWidget):
         super().__init__()
         self.s = session
         self.counterparty: int | None = None
+        self.pays_out = True  # a payment out: its line may pay a supplier's ƏDV
         lay = QHBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
@@ -69,6 +71,11 @@ class LineRow(QWidget):
         self.invoice.setFixedWidth(160)
         self.invoice.activated.connect(self._invoice_chosen)
         lay.addWidget(self.invoice)
+        # the ƏDV paid from this account straight to the supplier's deposit (D-new1)
+        self.vat = QCheckBox(tr("ƏDV"))
+        self.vat.setToolTip(tr("ƏDV — с этого счёта на депозитный счёт поставщика"))
+        self.vat.toggled.connect(lambda _: self.changed.emit())
+        lay.addWidget(self.vat)
         self.amount = QLineEdit()
         self.amount.setFixedWidth(130)
         self.amount.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -122,7 +129,9 @@ class LineRow(QWidget):
                 select_data(box, value, catalog.value(value).name)
             elif box.count() == 1:  # the only element: chosen already
                 box.setCurrentIndex(0)
-        self.invoice.setVisible(catalog.takes_invoice(account.id if account else None))
+        takes = catalog.takes_invoice(account.id if account else None)
+        self.invoice.setVisible(takes)
+        self.vat.setVisible(takes and self.pays_out)
 
     def set_counterparty(self, counterparty: int | None) -> None:
         if counterparty == self.counterparty:
@@ -140,6 +149,11 @@ class LineRow(QWidget):
                 None if k == own else v for k, v in zip(account.sc_kinds, kept, strict=True)
             )
         self._fill_subconto(kept)
+
+    def set_pays_out(self, on: bool) -> None:
+        """Money out of a current account: the line may pay a supplier's ƏDV."""
+        self.pays_out = on
+        self.vat.setVisible(on and not self.invoice.isHidden())
 
     def set_invoices(self, invoices: Sequence[OpenInvoice]) -> None:
         offer_invoices(self.invoice, invoices)
@@ -184,6 +198,7 @@ class LineRow(QWidget):
             to_minor(text) if text else 0,
             self.subconto(),
             "" if self.invoice.isHidden() else self.invoice.text().strip(),
+            not self.vat.isHidden() and self.vat.isChecked(),
         )
 
     def set_line(self, line: BankLine, amount: bool = True) -> None:
@@ -197,9 +212,10 @@ class LineRow(QWidget):
         if amount:
             self.amount.setText(amount_text(line.amount))
             self.invoice.setText(line.invoice)
+            self.vat.setChecked(line.pays_vat)
 
     def set_read_only(self, read_only: bool) -> None:
-        for w in (self.account, *self.sc):
+        for w in (self.account, *self.sc, self.vat):
             w.setEnabled(not read_only)
         for edit in (self.invoice, self.amount):
             edit.setReadOnly(read_only)

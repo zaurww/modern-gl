@@ -368,10 +368,14 @@ class BankOperationForm(QWidget):
             self.doc is None
             and not self.read_only
             and self.folded
-            and bool(self.deposits)
+            and (bool(self.deposits) or self._pays_supplier())
             and self.kind.currentData() in (SUPPLIER, CUSTOMER)
             and not self._on_deposit()
         )
+
+    def _pays_supplier(self) -> bool:
+        """A payment to a supplier: its ƏDV may go from this account to their deposit."""
+        return self.kind.currentData() == SUPPLIER and self.direction_value == OUT
 
     def _on_deposit(self) -> bool:
         return self.bank_info is not None and self.bank_info.account_type == "vat_deposit"

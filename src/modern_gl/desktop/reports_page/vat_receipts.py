@@ -14,6 +14,7 @@ from modern_gl.desktop.reports_page.subconto_analysis import INDENT
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
+from modern_gl.desktop.vat_payer import payer_note
 from modern_gl.desktop.widgets import EmptyState, money
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
@@ -126,7 +127,10 @@ class VatReceiptsPage(ReportPage):
         text = self.totals_text(total)
         if data.warnings:
             text += "   ·   " + tr("Предупреждений: {n}", n=data.warnings)
-        self.footer.setText(html.escape(text).replace("  ", "&nbsp; ") + warnings_text(data))
+        note = payer_note(data.payer_from, self.params.date_from)
+        note = f"<br>{html.escape(note)}" if note else ""
+        rich = html.escape(text).replace("  ", "&nbsp; ")
+        self.footer.setText(rich + note + warnings_text(data))
         self._parties = {id(ln): b for b in data.parties for ln in b.lines}
 
     def drill(self, row) -> None:

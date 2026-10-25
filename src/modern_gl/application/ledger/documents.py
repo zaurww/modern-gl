@@ -172,6 +172,7 @@ class DocumentCommands(PostingChecks):
                 p["currency_amount"],
                 p["invoice"],
                 p["invoice_kind"],
+                p["pays_vat"],
             )
             for p in self.conn.execute(
                 "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
@@ -190,6 +191,7 @@ class DocumentCommands(PostingChecks):
                     None if p.currency_id is None else to_minor(p.currency_amount or 0),
                     normalize_invoice(p.invoice),
                     _invoice_kind(p),
+                    int(p.pays_vat),
                 )
                 for p in postings
             ]
@@ -364,10 +366,10 @@ class DocumentCommands(PostingChecks):
                 """
                 INSERT INTO postings (company_id, document_id, line_no, debit_account_id,
                     credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, currency_amount, invoice, invoice_kind)
+                    currency_id, currency_amount, invoice, invoice_kind, pays_vat)
                 SELECT company_id, ?, line_no, debit_account_id, credit_account_id, -amount,
                     dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, -currency_amount, invoice, invoice_kind
+                    currency_id, -currency_amount, invoice, invoice_kind, pays_vat
                 FROM postings WHERE document_id = ? ORDER BY line_no
                 """,
                 (new_id, doc_id),
@@ -443,14 +445,17 @@ class DocumentCommands(PostingChecks):
                     currency_amount,
                     invoice,
                     _invoice_kind(p) if invoice else None,
+                    int(p.pays_vat),
                 )
             )
+        if not rows:  # a draft without postings (a file of an older schema has no new columns)
+            return
         try:
             self.conn.executemany(
                 "INSERT INTO postings (company_id, document_id, line_no, debit_account_id, "
                 "credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo, "
-                "currency_id, currency_amount, invoice, invoice_kind) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "currency_id, currency_amount, invoice, invoice_kind, pays_vat) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
             )
         except IntegrityError as e:

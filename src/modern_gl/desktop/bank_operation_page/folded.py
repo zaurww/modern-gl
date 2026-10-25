@@ -3,6 +3,8 @@ part typed beside the amount (D69)."""
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import QTimer
 
 from modern_gl.application.bank import (
@@ -14,6 +16,7 @@ from modern_gl.application.bank import (
 )
 from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.bank_operation_page.common import (
+    FROM_BANK,
     SEVERAL,
 )
 from modern_gl.desktop.bank_operation_page.form import BankOperationForm
@@ -36,8 +39,10 @@ class FoldedPart(BankOperationForm):
 
     def _layout_lines(self) -> None:
         folded = self.folded
+        pays_out = self.direction_value != IN and not self._on_deposit()
         for row in self.line_rows:
             row.setVisible(not folded)
+            row.set_pays_out(pays_out)
         self.lines_header.setVisible(not folded and bool(self.line_rows))
         self.total_row.setVisible(not folded)
         self.summary.setVisible(folded)
@@ -51,8 +56,16 @@ class FoldedPart(BankOperationForm):
             w.setVisible(deposit)
         into = self.direction_value == IN
         if deposit:
+            from_bank = self.deposit.currentData() == FROM_BANK
+            self.deposit_date.setVisible(not from_bank)  # one operation, on this day
             self.amount_caption.setText(tr("В банк") if into else tr("Из банка"))
-            self.vat_caption.setText(tr("На депозит ƏDV") if into else tr("С депозита ƏDV"))
+            self.vat_caption.setText(
+                tr("На депозит ƏDV")
+                if into
+                else tr("ƏDV поставщику")
+                if from_bank
+                else tr("С депозита ƏDV")
+            )
         else:
             self.amount_caption.setText(tr("Сумма"))
         self._show_check()
@@ -134,16 +147,17 @@ class FoldedPart(BankOperationForm):
             return
         vat = vat if self.deposit_shown else 0
         paid = bank + vat
-        parts = (
-            tr(
-                "банк {bank} + депозит {vat} = {total}",
-                bank=format_minor(bank),
-                vat=format_minor(vat),
-                total=format_minor(paid),
-            )
-            if vat
-            else ""
+        text = (  # the ƏDV from this account, or from the deposit
+            "банк {bank} + ƏDV {vat} = {total}"
+            if self.deposit.currentData() == FROM_BANK
+            else "банк {bank} + депозит {vat} = {total}"
         )
+        figures = {
+            "bank": format_minor(bank),
+            "vat": format_minor(vat),
+            "total": format_minor(paid),
+        }
+        parts = tr(text, **figures) if vat else ""
         if paid == chosen.amount:
             text, tone = tr("✓ e-qaimə оплачивается полностью"), "success"
         elif paid < chosen.amount:
@@ -157,6 +171,17 @@ class FoldedPart(BankOperationForm):
         self.check.style().unpolish(self.check)  # the new name's color
         self.check.style().polish(self.check)
         self.check.show()
+
+    def _vat_line(self, data: BankOperationInput) -> BankOperationInput:
+        """The ƏDV part paid from this account straight to the supplier's deposit: a line
+        of its own on the same operation, marked (D-new1)."""
+        text = self.vat_amount.text().strip()
+        if not self.deposit_shown or self.deposit.currentData() != FROM_BANK or not text:
+            return data
+        if data.direction == IN or not data.lines:
+            raise ValidationError(tr("ƏDV от покупателя приходит на депозит — выберите его"))
+        line = replace(data.lines[0], amount=to_minor(text), pays_vat=True)
+        return replace(data, lines=(*data.lines, line))
 
     def _deposit_part(self, data: BankOperationInput) -> BankOperationInput | None:
         """The operation on the ƏDV deposit account, if its amount is typed: the same

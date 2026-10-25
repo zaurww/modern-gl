@@ -339,6 +339,10 @@ class BankCommands(ModuleDocumentCommands):
                 normalize_invoice(line.invoice)
             except ValidationError as e:
                 raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
+            if line.pays_vat and data.direction != OUT:
+                raise ValidationError(
+                    tr("строка {line}: ƏDV на депозит поставщика — только расход", line=line_no)
+                )
 
     def _store_bank(self, company_id: int, operation_id: int, data: BankOperationInput) -> None:
         self.conn.execute(
@@ -363,7 +367,7 @@ class BankCommands(ModuleDocumentCommands):
         )
         self.conn.executemany(
             "INSERT INTO bank_operation_lines (company_id, operation_id, line_no, account_id, "
-            "sc1, sc2, sc3, amount, invoice) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "sc1, sc2, sc3, amount, invoice, pays_vat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     company_id,
@@ -373,6 +377,7 @@ class BankCommands(ModuleDocumentCommands):
                     *self._line_subconto(company_id, line, data.counterparty_id),
                     line.amount,
                     normalize_invoice(line.invoice) or "",
+                    int(line.pays_vat),
                 )
                 for line_no, line in enumerate(data.lines, start=1)
             ],
@@ -450,6 +455,7 @@ class BankCommands(ModuleDocumentCommands):
                     data.currency_id,
                     None if data.currency_id is None else from_minor(line.amount),
                     line.invoice,
+                    pays_vat=line.pays_vat,
                 )
             )
         return postings

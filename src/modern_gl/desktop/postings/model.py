@@ -368,6 +368,7 @@ class PostingsModel(PostingsClipboard):
                     currency=self.is_currency(n - 1),
                     invoice=invoice,
                     invoice_kind=r.invoice_kind if invoice else "",
+                    pays_vat=r.pays_vat,
                 )
             )
         if not result:
