@@ -36,6 +36,7 @@ from modern_gl.desktop.reports_page import (
     StatementsPage,
     SubcontoAnalysisPage,
     SubcontoPage,
+    VatLiabilityPage,
     VatRegisterPage,
 )
 
@@ -717,6 +718,11 @@ def main() -> None:
     register.period.set_period(osv.params.date_from, osv.params.date_to)
     register.refresh()
     shot("11c_vat_register")
+    win.open_single(VatLiabilityPage)  # «ƏDV продаж к уплате»: on the money received
+    liability = cast(VatLiabilityPage, win.pages[VatLiabilityPage.key])
+    liability.period.set_period(osv.params.date_from, osv.params.date_to)
+    liability.refresh()
+    shot("11d_vat_liability")
     # The bank module (D47): bank accounts and the statement; a payment to a supplier
     from modern_gl.desktop.bank_operation_page import BankOperationPage
     from modern_gl.desktop.bank_page import BankPage

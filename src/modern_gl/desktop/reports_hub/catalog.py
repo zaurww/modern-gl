@@ -114,6 +114,13 @@ REPORTS = (
         "invoices",
     ),
     Report(
+        "vat_liability",
+        GROUPS[2],
+        "ƏDV продаж к уплате",
+        "ƏDV продаж по дням поступления денег, аванс тоже: e-qaimə, ƏDV на депозит",
+        "invoices",
+    ),
+    Report(
         "vat_credit",
         GROUPS[2],
         "ƏDV к зачёту",

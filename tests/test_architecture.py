@@ -54,6 +54,7 @@ MODULE_CODE = (
     "modern_gl.reporting.trade",
     "modern_gl.reporting.eqaime_reconciliation",
     "modern_gl.reporting.vat",
+    "modern_gl.reporting.vat_liability",
     "modern_gl.reporting.vat_register",
 )
 

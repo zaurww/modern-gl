@@ -36,6 +36,7 @@ from modern_gl.desktop.reports_page import (
     StatementsPage,
     SubcontoAnalysisPage,
     VatCreditPage,
+    VatLiabilityPage,
     VatRegisterPage,
     month_of,
 )
@@ -124,6 +125,7 @@ class ReportPlaces(OpenPages):
             "handover": self.hand_over,
             "invoices": lambda: self.show_place(("invoices",)),
             "vat_credit": self.open_vat_credit,
+            "vat_liability": lambda: self.open_single(VatLiabilityPage),
             "vat_register": self.open_vat_register,
             "reconcile_purchases": lambda: self.open_reconciliation(PURCHASE),
             "reconcile_sales": lambda: self.open_reconciliation(SALE),
@@ -215,6 +217,15 @@ class ReportPlaces(OpenPages):
         key = VatRegisterPage.key
         if key not in self.pages:
             page = VatRegisterPage(self.open_session)
+            self._wire_report(page)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def open_single(self, page_class) -> None:
+        """A report of one page, the period on it («ƏDV продаж к уплате»)."""
+        key = page_class.key
+        if key not in self.pages:
+            page = page_class(self.open_session)
             self._wire_report(page)
             self._add_page(key, page, open_item=True)
         self._activate(key)
