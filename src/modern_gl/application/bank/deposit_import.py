@@ -5,7 +5,10 @@ balance at the end of each day.
 The portal's operation (POST vatacc/…/operation/find.outbox) is money in or out of the
 deposit account: from or to another taxpayer's deposit account (SUB_TO_SUB), from a bank
 current account (CURRENT_TO_SUB — a customer pays the ƏDV from its bank; the receipt
-number is then "nb"), to the budget (SUB_TO_BUDGET). The e-qaimə it pays are listed with
+number is then "nb"), to the budget (SUB_TO_BUDGET). The portal also lists the ƏDV the
+company paid a supplier from its own bank current account (D145; «Hesabın növü: Cari
+hesabı», "nb"): that money never was on the deposit account — not an operation of it. The
+e-qaimə it pays are listed with
 their ƏDV; an advance names none (the purpose may: "ƏDV köçürməsi-MT2604 11863435")."""
 
 from __future__ import annotations
@@ -68,6 +71,17 @@ class DepositOperation:
     @property
     def net(self) -> int:
         return self.amount if self.direction == IN else -self.amount
+
+
+def paid_from_bank(raw: dict) -> bool:
+    """The ƏDV paid to a supplier from the company's bank current account: the portal
+    lists it among the deposit's operations, the deposit's balance does not count it."""
+    if raw.get("paymentType") == "INCOME":
+        return False  # a customer's bank pays onto the deposit: it is on the deposit
+    from_current = (
+        raw.get("account") == "CURRENT" or str(raw.get("operationType") or "")[:8] == "CURRENT_"
+    )
+    return from_current or not str(raw.get("receiptNumber") or "").isdigit()
 
 
 def parse_operation(raw: dict, own_tin: str = "") -> DepositOperation:
@@ -136,6 +150,8 @@ def fetch_deposit(
     operations = []
     for n, raw in enumerate(client.vat_deposit_operations(date_from, today), 1):
         progress(tr("Загружено операций: {n}", n=n))
+        if paid_from_bank(raw):
+            continue
         op = parse_operation(raw, own_tin)
         if not cutoff or op.moment <= cutoff:
             operations.append(op)

@@ -370,7 +370,7 @@ class BankPage(BankActions):
         else:
             first, last = self.period_dates()
             shown = [s for s in self.statements if s.date_from <= last and s.date_to >= first]
-            self.model.set(statement_columns(), list(reversed(shown)))
+            self.model.set(statement_columns(), shown)
         kind = dict(ACCOUNT_KINDS)[account.kind]
         self.header.title.setText(account.title)
         self.header.subtitle.setText(f"{where(account)}  ·  {tr(kind)}")

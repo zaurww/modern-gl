@@ -395,6 +395,37 @@ def test_an_operation_after_the_balance_waits_for_next_time():
     assert (fetched.balance, fetched.operations[1].amount) == (71000, 1244)
 
 
+def test_the_vat_paid_to_a_supplier_from_the_bank_is_not_on_the_deposit():
+    """The portal's file of 26.10.2026 (shortened): «Hesabın növü: Cari hesabı» — the ƏDV
+    paid from the company's current account, the deposit's balance does not count it.
+
+      31.07  in   1 666.80  a customer from its bank ("nb")   on the deposit
+      10.08  out    720.00  a supplier, from the current account  not on the deposit
+      11.08  out  1 666.80  to the budget, from the deposit       on the deposit
+      balance on the portal: 1 666.80 − 1 666.80 = 0.00; end of 31.07: 0 + 1 666.80"""
+    rows = [
+        raw("20260731100000", Decimal("1666.80"), None, kind="CURRENT_TO_SUB", receipt="nb"),
+        {
+            **raw("20260810100000", None, Decimal("720"), receipt="nb"),
+            "account": "CURRENT",
+            "operationType": "CURRENT_TO_SUB",
+        },
+        raw("20260811100000", None, Decimal("1666.80"), kind="SUB_TO_BUDGET", destination="BUDGET"),
+    ]
+    portal = FakeDepositPortal(as_json(rows), "0", "2026-10-26T15:18:00")
+    fetched = fetch_deposit(
+        EtaxesClient("good", send=portal), date(2026, 7, 1), date(2026, 10, 26), OWN_TIN, print
+    )
+    assert [(op.day, op.net) for op in fetched.operations] == [
+        ("2026-07-31", 166680),
+        ("2026-08-11", -166680),
+    ]
+    assert day_closings(fetched.operations, fetched.balance) == {
+        "2026-08-11": 0,
+        "2026-07-31": 166680,
+    }
+
+
 def test_only_the_period_is_loaded_and_remembered(ledger, firm):
     """02.10 alone: Alfa's 12.44 and the budget's 940.00; the later operations only count
     the balance back — the end of 02.10 is 710.00 (see the top)."""

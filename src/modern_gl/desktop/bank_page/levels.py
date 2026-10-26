@@ -47,11 +47,14 @@ def where(account: BankAccount) -> str:
     return f"{account.place.currency or 'AZN'}  ·  {account.place.account_code}"
 
 
-def period_text(s: BankStatement) -> str:
-    """ "22.10.2026, чт" or "18.10 — 20.10.2026"."""
+def period_text(s: BankStatement, weekday: bool = True) -> str:
+    """ "22.10.2026, чт" or "18.10 — 20.10.2026"; in the list of statements — the date
+    alone."""
+    if s.date_from == s.date_to and not weekday:
+        return ru_date(s.date_from)
     if s.date_from == s.date_to:
-        weekday = WEEKDAYS[date.fromisoformat(s.date_from).weekday()]
-        return f"{ru_date(s.date_from)}, {tr(weekday)}"
+        name = WEEKDAYS[date.fromisoformat(s.date_from).weekday()]
+        return f"{ru_date(s.date_from)}, {tr(name)}"
     return date_range(s.date_from, s.date_to)
 
 
@@ -136,7 +139,7 @@ def status_tone(s: BankStatement) -> str:
 
 def statement_columns() -> list[Column]:
     return [
-        Column(tr("Выписка"), period_text, width=200),
+        Column(tr("Выписка"), lambda s: period_text(s, weekday=False), width=150),
         Column(tr("На начало"), lambda s: s.opening, money=True, width=120),
         Column(tr("Приход"), lambda s: s.money_in, money=True, width=120),
         Column(tr("Расход"), lambda s: s.money_out, money=True, width=120),

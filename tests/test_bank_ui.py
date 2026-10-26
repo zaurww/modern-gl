@@ -417,7 +417,7 @@ def test_the_journal_opens_the_operation(qtbot, tmp_path):
         doc = page.doc
         assert doc is not None
         bank.open_account(bank.place.key if bank.place else (account, bank_value[0]))
-        assert [s.date_from for s in bank.model.rows] == ["2026-03-05", "2026-03-01"]
+        assert [s.date_from for s in bank.model.rows] == ["2026-03-01", "2026-03-05"]
         # the next one of the statement opens in its place: the same account and day
         following = win.stack.currentWidget()
         assert isinstance(following, BankOperationPage) and following is not page
