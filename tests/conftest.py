@@ -157,3 +157,21 @@ def build_demo(ledger: Ledger, name: str = "ООО Тест") -> Demo:
 @pytest.fixture
 def demo(ledger) -> Demo:
     return build_demo(ledger)
+
+
+@pytest.fixture
+def demo_window(qtbot, tmp_path):
+    """The main window on the demo company («ДЕМО ООО»), shown."""
+    from modern_gl.application.workspace import Workspace
+    from modern_gl.demo_data import create_demo_company
+    from modern_gl.desktop.main_window import MainWindow
+
+    conn = connect(tmp_path / "ДЕМО ООО.gl")
+    create_demo_company(Ledger(conn))
+    conn.close()
+    win = MainWindow(Workspace(tmp_path))
+    qtbot.addWidget(win)
+    win.start()
+    win.show()
+    yield win
+    win.shutdown()

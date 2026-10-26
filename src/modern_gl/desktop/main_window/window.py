@@ -47,6 +47,7 @@ from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.period_dialog import PeriodDialog
 from modern_gl.desktop.reports_page import ChartPage, OsvPage, ReportPage
 from modern_gl.desktop.reports_page.table import grid, set_grid, set_zebra, zebra
+from modern_gl.desktop.stock_count_page import StockCountPage
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.vat_payer import VAT_REPORTS, edit_vat_payer
@@ -417,6 +418,9 @@ class MainWindow(ReportPlaces):
     def new_inventory_document(self, doc_type: str) -> None:
         if self._viewing():
             return
+        if doc_type == "count":  # a count makes its documents itself
+            self.open_stock_count()
+            return
         page: InventoryDocumentPage | LandedCostPage = (
             LandedCostPage(self.open_session)
             if doc_type == "landed_cost"
@@ -425,6 +429,20 @@ class MainWindow(ReportPlaces):
         self._wire_inventory_document(page)
         self._add_page(page.key, page, open_item=True)
         self._activate(page.key)
+
+    def open_stock_count(self) -> None:
+        """«Инвентаризация»: one page; what it posts refreshes «Склад»."""
+        if StockCountPage.key not in self.pages:
+            page = StockCountPage(self.open_session)
+            page.posted.connect(self._stock_counted)
+            page.open_inventory_document.connect(self.open_inventory_document)
+            self._add_page(StockCountPage.key, page, open_item=True)
+        self._activate(StockCountPage.key)
+
+    def _stock_counted(self) -> None:
+        inventory = self._page(("inventory",), InventoryPage)
+        if inventory is not None:
+            inventory.refresh()
 
     def _wire_inventory_document(self, page: InventoryDocumentPage | LandedCostPage) -> None:
         page.saved.connect(lambda _id, p=page: self._inventory_document_saved(p))

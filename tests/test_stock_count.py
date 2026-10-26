@@ -3,9 +3,13 @@ a write-off — the numbers worked out by hand in each docstring."""
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from modern_gl.application.inventory import QUANTITY_FACTOR, CountedLine, ReceiptLine
+from modern_gl.desktop.stock_count_page import StockCountPage
+from modern_gl.desktop.stock_count_page.model import QUANTITY
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
 from tests.test_sales import Shop, make_shop
@@ -86,3 +90,23 @@ def test_count_that_agrees_or_has_no_account_posts_nothing(shop):
             None,
         )
     assert balances(shop) == {shop.item: (10, 12_000), toner: (4, 2_000)}
+
+
+def test_the_page_puts_the_books_in_and_posts_what_was_typed(demo_window):
+    """The demo's paper on 28.02: 140 for 1 400.00 (10.00 each) — put in as counted.
+    Typed 138: 2 short for 20.00, written off; «Склад» shows 138 for 1 380.00."""
+    demo_window.session.working_date = date(2026, 2, 28)
+    demo_window.show_place(("inventory",))
+    demo_window.stack.currentWidget().operation("count")
+    page = demo_window.stack.currentWidget()
+    assert isinstance(page, StockCountPage)
+    (paper,) = page.model.rows
+    assert (paper.book, paper.counted, paper.value) == (140 * Q, 140 * Q, 140_000)
+    assert not page.post_button.isEnabled()  # nothing differs yet
+    page.model.setData(page.model.index(0, page.model.columns.index(QUANTITY)), 138 * Q)
+    assert page.totals.text() == "Излишки: 0 на 0.00   ·   Недостача: 1 на 20.00"
+    page.post()
+    assert not page.open_shortage.isHidden() and page.open_surplus.isHidden()
+    assert page.model.rows[0].book == 138 * Q  # read again: the books agree now
+    (balance,) = stock_balances(demo_window.session.conn, demo_window.session.company_id)
+    assert (balance.quantity, balance.amount) == (138 * Q, 138_000)

@@ -8,13 +8,9 @@ from datetime import date
 import pytest
 
 from modern_gl.application.inventory import QUANTITY_FACTOR, SaleLine, TransferLine
-from modern_gl.application.ledger import Ledger, PostingInput
-from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
+from modern_gl.application.ledger import PostingInput
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
-from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.stock_reports import GrossProfitPage, ItemCardPage, StockStatementPage
-from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.inventory import (
     BY_CUSTOMER,
     BY_WAREHOUSE,
@@ -182,27 +178,14 @@ def test_gross_profit_by_item_and_by_customer(february):
     assert [(r.name, r.depth) for r in items] == [("Printer", 1), ("Услуги", 1)]
 
 
-@pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
-    win = MainWindow(Workspace(tmp_path))
-    qtbot.addWidget(win)
-    win.start()
-    win.show()
-    yield win
-    win.shutdown()
-
-
-def test_the_statement_opens_the_card_and_the_card_the_document(window):
+def test_the_statement_opens_the_card_and_the_card_the_document(demo_window):
     """The demo's paper: bought 120 for 1 200.00 (10.01) and 50 for 500.00 (03.02), 30
     written off at 10.00 = 300.00 (20.02): January–February ends with 140 for 1 400.00, as
     on «Склад», and the account agrees. A double click on the paper opens its card, on a
     movement — the warehouse document."""
-    window.session.working_date = date(2026, 2, 28)
-    window.open_catalog_report("stock_statement")
-    page = window.stack.currentWidget()
+    demo_window.session.working_date = date(2026, 2, 28)
+    demo_window.open_catalog_report("stock_statement")
+    page = demo_window.stack.currentWidget()
     assert isinstance(page, StockStatementPage)
     page.period.set_period(date(2026, 1, 1), date(2026, 2, 28))
     total = page.model.rows[-1]
@@ -210,19 +193,19 @@ def test_the_statement_opens_the_card_and_the_card_the_document(window):
     assert "✓" in page.footer.text()
     paper = page.model.rows[0]
     page.drill(paper)
-    card = window.stack.currentWidget()
+    card = demo_window.stack.currentWidget()
     assert isinstance(card, ItemCardPage) and card.item_id == paper.item_id
     assert card.model.rows[-1].amount_balance == 140_000
     movement = next(r for r in card.model.rows if r.document_id is not None)
     card.drill(movement)
-    assert isinstance(window.stack.currentWidget(), InventoryDocumentPage)
+    assert isinstance(demo_window.stack.currentWidget(), InventoryDocumentPage)
 
 
-def test_gross_profit_shows_the_services_sold(window):
+def test_gross_profit_shows_the_services_sold(demo_window):
     """The demo sold services only (1 000.00 without VAT): revenue without cost."""
-    window.session.working_date = date(2026, 2, 28)
-    window.open_catalog_report("gross_profit")
-    page = window.stack.currentWidget()
+    demo_window.session.working_date = date(2026, 2, 28)
+    demo_window.open_catalog_report("gross_profit")
+    page = demo_window.stack.currentWidget()
     assert isinstance(page, GrossProfitPage)
     page.period.set_period(date(2026, 1, 1), date(2026, 2, 28))
     total = page.model.rows[-1]
