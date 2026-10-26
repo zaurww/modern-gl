@@ -190,18 +190,24 @@ def test_the_warehouse_opens_the_report_and_a_row_opens_its_receipt(year_window,
     inventory = win.stack.currentWidget()
     shown: list[list[str]] = []
 
-    class FirstChosen(QMenu):  # the real menu would wait for a click
+    class LastChosen(QMenu):  # the real menu would wait for a click
         def exec(self, *_args):  # type: ignore[override]
             shown.append([a.text() for a in self.actions()])
-            self.actions()[0].trigger()
+            self.actions()[-1].trigger()
 
-    monkeypatch.setattr(widgets, "QMenu", FirstChosen)
+    monkeypatch.setattr(widgets, "QMenu", LastChosen)
     reports = next(
         b for b in inventory.findChildren(QPushButton) if b.text().startswith(tr("Отчёты"))
     )
     assert reports.isVisible()  # a report, so also when only viewing
     reports.click()
-    assert shown == [[tr("Дополнительные расходы по декларациям")]]
+    assert shown == [
+        [
+            tr("Ведомость по складу"),
+            tr("Валовая прибыль по товарам"),
+            tr("Дополнительные расходы по декларациям"),
+        ]
+    ]
     page = win.stack.currentWidget()
     assert isinstance(page, LandedCostReportPage)
     rows = page.model.rows

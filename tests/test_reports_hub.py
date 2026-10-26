@@ -137,7 +137,8 @@ def test_pinning_changes_the_sidebar_and_is_remembered(window, qtbot):
 def test_the_search_finds_the_profit_and_loss(window, query):
     page = hub(window)
     type_text(page.search, query)
-    assert [t.report.id for t in page.found()] == ["profit"]
+    found = [t.report.id for t in page.found()]  # «прибыль» — also the warehouse's, after
+    assert found in (["profit"], ["profit", "gross_profit"])
     page.search.returnPressed.emit()  # Enter: the first found
     statements = window.stack.currentWidget()
     assert isinstance(statements, StatementsPage) and statements.view == "profit"
@@ -223,7 +224,14 @@ def test_a_warehouse_only_company_has_no_reports_of_the_books(window):
     window.set_stock_only(True)
     page = hub(window)
     ids = {t.report.id for t in page.tiles}
-    assert ids == {"reconcile_purchases", "reconcile_sales", "landed", "stock"}
+    assert ids == {
+        "reconcile_purchases",
+        "reconcile_sales",
+        "landed",
+        "stock",
+        "stock_statement",
+        "gross_profit",
+    }
     keys = sidebar_keys(window)
     assert HUB in keys and ("osv",) not in keys and ("statements", "balance") not in keys
     window.open_catalog_report("osv")  # not from Ctrl+K or a pin either

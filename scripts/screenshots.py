@@ -290,11 +290,28 @@ def main() -> None:
     inventory = cast(InventoryPage, win.stack.currentWidget())
     inventory.refresh()
     shot("8c_inventory")
-    inventory.table.selectRow(1)  # an item: where its goods came from and went to
+    inventory.table.selectRow(0)  # an item: where its goods came from and went to
     shot("8c_inventory_movements")
     inventory.documents_button.click()
     shot("8c_inventory_documents")
     inventory.movements_button.click()
+    from modern_gl.desktop.stock_reports import GrossProfitPage, StockStatementPage
+
+    win.open_catalog_report("stock_statement")  # the warehouse's reports
+    statement = cast(StockStatementPage, win.stack.currentWidget())
+    statement.period.set_period(date(2026, 1, 1), date(2026, 2, 28))
+    shot("8c13_stock_statement")
+    statement.drill(statement.model.rows[0])
+    shot("8c14_stock_card")
+    win.close_current()
+    win.open_catalog_report("gross_profit")
+    cast(GrossProfitPage, win.stack.currentWidget()).period.set_period(
+        date(2026, 1, 1), date(2026, 2, 28)
+    )
+    shot("8c15_gross_profit")
+    win.close_current()
+    win.close_current()
+    win.show_place(("inventory",))
     win.new_inventory_document("incoming")  # D91: goods in without a purchase
     shot("8c1_incoming")
     win.close_current()

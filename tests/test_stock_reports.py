@@ -3,10 +3,18 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from modern_gl.application.inventory import QUANTITY_FACTOR, SaleLine, TransferLine
-from modern_gl.application.ledger import PostingInput
+from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.workspace import Workspace
+from modern_gl.demo_data import create_demo_company
+from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
+from modern_gl.desktop.main_window import MainWindow
+from modern_gl.desktop.stock_reports import GrossProfitPage, ItemCardPage, StockStatementPage
+from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.inventory import (
     BY_CUSTOMER,
     BY_WAREHOUSE,
@@ -83,7 +91,7 @@ def test_statement_at_a_date_and_by_warehouse(february):
     warehouse, so the item's row is that warehouse's and nothing is under it. By warehouse
     for February: each warehouse with its items under it; a warehouse has no quantity
     (its items may have different units)."""
-    shop, reserve = february
+    shop, _ = february
     january = stock_statement(shop.ledger.conn, shop.company_id, "2026-01-01", "2026-01-31")
     (item,) = january.rows
     assert figures(item) == (0, 0, 10, 12_000, 3, 3_600, 7, 8_400)
@@ -172,3 +180,50 @@ def test_gross_profit_by_item_and_by_customer(february):
     )
     assert (alfa.name, alfa.depth, alfa.revenue, alfa.profit) == ("Alfa", 0, 13_500, 7_250)
     assert [(r.name, r.depth) for r in items] == [("Printer", 1), ("Услуги", 1)]
+
+
+@pytest.fixture
+def window(qtbot, tmp_path):
+    conn = connect(tmp_path / "ДЕМО ООО.gl")
+    create_demo_company(Ledger(conn))
+    conn.close()
+    win = MainWindow(Workspace(tmp_path))
+    qtbot.addWidget(win)
+    win.start()
+    win.show()
+    yield win
+    win.shutdown()
+
+
+def test_the_statement_opens_the_card_and_the_card_the_document(window):
+    """The demo's paper: bought 120 for 1 200.00 (10.01) and 50 for 500.00 (03.02), 30
+    written off at 10.00 = 300.00 (20.02): January–February ends with 140 for 1 400.00, as
+    on «Склад», and the account agrees. A double click on the paper opens its card, on a
+    movement — the warehouse document."""
+    window.session.working_date = date(2026, 2, 28)
+    window.open_catalog_report("stock_statement")
+    page = window.stack.currentWidget()
+    assert isinstance(page, StockStatementPage)
+    page.period.set_period(date(2026, 1, 1), date(2026, 2, 28))
+    total = page.model.rows[-1]
+    assert total.is_total and total.closing_amount == 140_000
+    assert "✓" in page.footer.text()
+    paper = page.model.rows[0]
+    page.drill(paper)
+    card = window.stack.currentWidget()
+    assert isinstance(card, ItemCardPage) and card.item_id == paper.item_id
+    assert card.model.rows[-1].amount_balance == 140_000
+    movement = next(r for r in card.model.rows if r.document_id is not None)
+    card.drill(movement)
+    assert isinstance(window.stack.currentWidget(), InventoryDocumentPage)
+
+
+def test_gross_profit_shows_the_services_sold(window):
+    """The demo sold services only (1 000.00 without VAT): revenue without cost."""
+    window.session.working_date = date(2026, 2, 28)
+    window.open_catalog_report("gross_profit")
+    page = window.stack.currentWidget()
+    assert isinstance(page, GrossProfitPage)
+    page.period.set_period(date(2026, 1, 1), date(2026, 2, 28))
+    total = page.model.rows[-1]
+    assert (total.revenue, total.cost, total.profit) == (100_000, 0, 100_000)

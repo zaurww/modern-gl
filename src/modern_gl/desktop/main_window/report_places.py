@@ -43,6 +43,7 @@ from modern_gl.desktop.reports_page import (
     month_of,
 )
 from modern_gl.desktop.reports_page.statements import VIEW_SETTING
+from modern_gl.desktop.stock_reports import GrossProfitPage, ItemCardPage, StockStatementPage
 from modern_gl.desktop.theme import P
 from modern_gl.i18n import tr
 from modern_gl.reporting.trade import PURCHASE, SALE
@@ -134,6 +135,8 @@ class ReportPlaces(OpenPages):
             "reconcile_purchases": lambda: self.open_reconciliation(PURCHASE),
             "reconcile_sales": lambda: self.open_reconciliation(SALE),
             "landed": self.open_landed_report,
+            "stock_statement": lambda: self.open_stock_report(StockStatementPage),
+            "gross_profit": lambda: self.open_stock_report(GrossProfitPage),
             "stock": lambda: self.show_place(("inventory",)),
             "bank": lambda: self.show_place(("bank",)),
         }
@@ -255,6 +258,24 @@ class ReportPlaces(OpenPages):
             page.open_inventory_document.connect(self.open_inventory_document)
             self._add_page(key, page, open_item=True)
         self._activate(key)
+
+    def open_stock_report(self, page_class) -> None:
+        """«Ведомость по складу», «Валовая прибыль»: one page, the period on it."""
+        key = page_class.key
+        if key not in self.pages:
+            page = page_class(self.open_session)
+            page.open_stock_card.connect(self.open_stock_card)
+            self._add_page(key, page, open_item=True)
+        self._activate(key)
+
+    def open_stock_card(self, item_id: int, warehouse_id: int, params: ReportParams) -> None:
+        """An item's card on a warehouse (0 — on all) for the period it was asked from."""
+        page = ItemCardPage(self.open_session, item_id, warehouse_id or None, params)
+        if page.key in self.pages:
+            self.close_page(page.key, ask=False)
+        page.open_inventory_document.connect(self.open_inventory_document)
+        self._add_page(page.key, page, open_item=True)
+        self._activate(page.key)
 
     def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
         page = REPORTS[kind](self.open_session, account_id, params)

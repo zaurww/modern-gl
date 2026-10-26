@@ -225,6 +225,7 @@ class MainWindow(ReportPlaces):
             page.open_inventory_document.connect(self.open_inventory_document)
             page.new_inventory_document.connect(self.new_inventory_document)
             page.open_landed_report.connect(self.open_landed_report)
+            page.open_report.connect(self.open_catalog_report)
             return page
         if key in (("purchases",), ("sales",)):
             page = TradePage(s, PURCHASE if key == ("purchases",) else SALE)

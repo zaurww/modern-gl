@@ -62,6 +62,7 @@ class InventoryForm(QWidget):
     open_inventory_document = Signal(int)
     new_inventory_document = Signal(str)
     open_landed_report = Signal()
+    open_report = Signal(str)  # a warehouse report of «Все отчёты»
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -74,7 +75,11 @@ class InventoryForm(QWidget):
         self.header = PageHeader(tr("Склад"), "")
         reports = menu_button(  # the warehouse's own reports, not the sidebar's
             trailing_icon(button(tr("Отчёты"), "flatMenu")),
-            lambda: [(tr("Дополнительные расходы по декларациям"), self.open_landed_report.emit)],
+            lambda: [
+                (tr("Ведомость по складу"), lambda: self.open_report.emit("stock_statement")),
+                (tr("Валовая прибыль по товарам"), lambda: self.open_report.emit("gross_profit")),
+                (tr("Дополнительные расходы по декларациям"), self.open_landed_report.emit),
+            ],
         )
         self.header.add_action(reports)
         add_item = self.header.primary(tr("+ Товар"), self.add_item)

@@ -126,9 +126,7 @@ def stock_statement(
     and into another, so it is in both columns of the item's total as well."""
     statement = StockStatement()
     lines = _turnovers(conn, company_id, iso_date(date_from), iso_date(date_to))
-    parent_key, child_key = (
-        ("item_id", "warehouse_id") if by == BY_ITEM else ("warehouse_id", "item_id")
-    )
+    parent_key = "item_id" if by == BY_ITEM else "warehouse_id"
     parents: dict[int, tuple[StatementRow, list[StatementRow]]] = {}
     for r, turnover in lines:
         if r[parent_key] not in parents:
