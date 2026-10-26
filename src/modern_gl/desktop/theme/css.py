@@ -200,6 +200,24 @@ QHeaderView::section:vertical {{
     color: {P.tertiary}; border: none; border-bottom: 1px solid {P.hairline}; padding: 0 6px;
 }}
 QTableCornerButton::section {{ background: {P.surface}; border: none; }}
+/* a list with ticks or groups (a tree): the same sheet as every table, rows with air */
+QTreeView {{
+    background: {P.surface}; border: 1px solid {P.sheet_border}; border-radius: 12px;
+    padding: {P.sheet_padding}; selection-background-color: {P.selection};
+    selection-color: {P.text};
+}}
+QTreeView::item {{ min-height: 28px; border: none; }}
+QTreeView::item:hover {{ background: {P.subtle}; }}
+QTreeView::item:selected {{ background: {P.selection}; }}
+/* ticks in a list or a table are the check boxes of a form */
+QTreeView::indicator, QTableView::indicator {{
+    width: 12px; height: 12px;  /* + the border: as wide as the style counts the column */
+    border: 1px solid {P.scrollbar_hover}; border-radius: 4px; background: {P.surface};
+}}
+QTreeView::indicator:hover, QTableView::indicator:hover {{ border-color: {P.accent}; }}
+QTreeView::indicator:checked, QTableView::indicator:checked {{
+    background: {P.accent}; border-color: {P.accent}; image: url({_check_mark(P.on_accent)});
+}}
 
 QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; }}
 QScrollBar::handle:vertical {{ background: {P.scrollbar}; border-radius: 3px; min-height: 30px; }}

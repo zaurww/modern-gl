@@ -35,6 +35,7 @@ from modern_gl.desktop.eqaime_portal_loader import (
     changes_warning,
     fetch_invoices,
 )
+from modern_gl.desktop.import_window import say
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -63,6 +64,9 @@ class EqaimeImportDialog(EqaimeImportForm):
         self.add_parties_button.clicked.connect(self.add_parties)
         self.renames_button.clicked.connect(self.apply_renames)
         self.import_button.clicked.connect(self.create_drafts)
+        self.period_field.changed.connect(self._choice_changed)
+        for box in (self.purchases, self.sales):
+            box.toggled.connect(self._choice_changed)
         self._show_parties()
         self._show_renames()
 
@@ -125,8 +129,22 @@ class EqaimeImportDialog(EqaimeImportForm):
         self.warning.setVisible(bool(warning))
         self.show_invoices(fetched.invoices)
 
-    def show_invoices(self, invoices: list[EInvoice]) -> None:
+    def _choice_changed(self, *_args) -> None:
+        """The rows were of another period or direction: back to the first step."""
+        if not self.import_button.isVisibleTo(self):
+            return
+        self.show_invoices([], loaded=False)
+        say(self.status, tr("Период изменён — загрузите его с портала."))
+
+    def show_invoices(self, invoices: list[EInvoice], loaded: bool = True) -> None:
         self.load_button.setEnabled(True)
+        for widget, shown in (
+            (self.tree, loaded),
+            (self.spacer, not loaded),
+            (self.load_button, not loaded),
+            (self.import_button, loaded),
+        ):
+            widget.setVisible(shown)
         self.invoices = invoices
         self.plans = plan_import(self.s.conn, self.s.company_id, invoices)
         self.new_parties = new_counterparties(self.plans)
@@ -323,7 +341,9 @@ class EqaimeImportDialog(EqaimeImportForm):
                 "Загрузить: черновиков {n}, в покупки {m}", n=len(chosen) - attached, m=attached
             )
         self.import_button.setText(text)
-        if self.plans:
+        if not self.plans and self.import_button.isVisibleTo(self):
+            say(self.status, tr("На портале за этот период e-qaimə нет."))
+        elif self.plans:
             new = sum(1 for p in self.plans if p.importable)
             self.status.setText(
                 tr(

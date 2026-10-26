@@ -12,24 +12,16 @@ from datetime import date, timedelta
 
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import (
-    QDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QTreeWidget,
-    QTreeWidgetItem,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
 
 from modern_gl.application.eqaime.portal import fetch_list, read_again, rechecks, usual_span
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_portal_loader import PortalLoader, changes_warning
+from modern_gl.desktop.import_window import FiguresGrid, ImportWindow, restyle, say, signed
 from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import button, money
+from modern_gl.desktop.widgets import money
 from modern_gl.domain.dates import date_range, month_name, ru_date
 from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, status_label
 from modern_gl.domain.errors import LedgerError
@@ -76,7 +68,7 @@ class PortalLists:
     rechecked: list[PortalInvoice]  # the reconciled months read again
 
 
-class EqaimeReconciliationDialog(QDialog):
+class EqaimeReconciliationDialog(ImportWindow):
     """Period → sign in → the portal's list in every status → the books against it."""
 
     def __init__(
@@ -87,7 +79,13 @@ class EqaimeReconciliationDialog(QDialog):
         direction: str = "receipt",  # "receipt" (purchases) or "sale"
         today: date | None = None,
     ) -> None:
-        super().__init__(parent)
+        outgoing = direction == "sale"
+        title_text = tr("Сверка продаж с порталом" if outgoing else "Сверка покупок с порталом")
+        super().__init__(
+            parent,
+            title_text,
+            tr("Все e-qaimə периода с портала против проведённых документов с их номерами"),
+        )
         self.s = session
         self.sign_in = sign_in
         self.outgoing = direction == "sale"
@@ -97,103 +95,36 @@ class EqaimeReconciliationDialog(QDialog):
         self.period = (session.working_date, session.working_date)  # of the last load
         self.worker: QThread | None = None
         self.today = today or date.today()
-        title_text = tr(
-            "Сверка продаж с порталом" if self.outgoing else "Сверка покупок с порталом"
-        )
-        self.setWindowTitle(title_text)
+        self.company = self.subtitle
+        self.through = self.subtitle_note  # «Сверено по 20.10.2026»
         self.resize(1180, 760)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(28, 22, 28, 20)
-        root.setSpacing(12)
-
-        self._build_head(root, title_text)
-        self._build_bar(root)
-
-        self.warning = QLabel()
-        self.warning.setObjectName("warning")
-        self.warning.setWordWrap(True)
-        self.warning.hide()
-        root.addWidget(self.warning)
-
-        self._build_totals(root)
-        self._build_tree(root)
-
-        self.status = QLabel(
-            tr(
-                "Выберите период и нажмите «Сверить с порталом»: откроется вход через ASAN İmza. "
-                "Программа сравнит e-qaimə портала с проведёнными документами по номеру."
-            )
-        )
-        self.status.setObjectName("secondary")
-        self.status.setWordWrap(True)
-        root.addWidget(self.status)
-
-        self._build_actions(root)
-
-    def _build_head(self, root: QVBoxLayout, title_text: str) -> None:
-        title = QLabel(title_text)
-        title.setFont(fonts().title)
-        root.addWidget(title)
-        self.company = QLabel(
-            tr("Все e-qaimə периода с портала против проведённых документов с их номерами")
-        )
-        self.company.setObjectName("secondary")
-        line = QHBoxLayout()
-        line.addWidget(self.company)
-        line.addStretch(1)
-        self.through = QLabel()  # «Сверено по 20.10.2026»
-        self.through.setObjectName("secondary")
-        line.addWidget(self.through)
-        root.addLayout(line)
-
-    def _build_bar(self, root: QVBoxLayout) -> None:
-        bar = QHBoxLayout()
-        bar.setSpacing(8)
         # the usual period at a click: the one this company was last marked with
         self.period_field = portal_period(
             self.today,
             usual_span(self.s.conn, self.s.company_id, self.outgoing),
             last=self.today - timedelta(days=1),
         )
-        bar.addWidget(self.period_field)
-        bar.addStretch(1)
-        self.load_button = button(tr("Сверить с порталом"), "primary")
-        self.load_button.clicked.connect(self.load)
-        bar.addWidget(self.load_button)
-        root.addLayout(bar)
+        self.period_field.changed.connect(self._period_changed)
+        self.bar.addWidget(self.period_field)
+        self.bar.addStretch(1)
         self._show_through()
-
-    def _build_totals(self, root: QVBoxLayout) -> None:
+        self.add_notes()
+        say(
+            self.status,
+            tr(
+                "Выберите период и нажмите «Сверить с порталом»: откроется вход через ASAN "
+                "İmza. Программа сравнит e-qaimə портала с проведёнными документами по номеру."
+            ),
+        )
         # the answer first (Jon Moon): does the period agree, and the totals
-        self.verdict = QLabel()
-        self.verdict.setFont(fonts().heading)
-        root.addWidget(self.verdict)
-        totals = QGridLayout()
-        totals.setHorizontalSpacing(28)
-        totals.setVerticalSpacing(4)
-        self.totals: dict[tuple[int, int], QLabel] = {}
-        for column, caption in enumerate((tr("Без ƏDV"), tr("ƏDV"), tr("Итого")), 1):
-            head = QLabel(caption)
-            head.setObjectName("secondary")
-            head.setAlignment(Qt.AlignmentFlag.AlignRight)
-            totals.addWidget(head, 0, column)
-        for row, caption in enumerate((tr("Портал"), tr("Книга"), tr("Разница")), 1):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
-            totals.addWidget(label, row, 0)
-            for column in (1, 2, 3):
-                cell = QLabel()
-                cell.setAlignment(Qt.AlignmentFlag.AlignRight)
-                cell.setMinimumWidth(110)
-                totals.addWidget(cell, row, column)
-                self.totals[row, column] = cell
-        totals.setColumnStretch(4, 1)
-        self.totals_box = QWidget()
-        self.totals_box.setLayout(totals)
-        self.totals_box.hide()
-        root.addWidget(self.totals_box)
+        self.figures = FiguresGrid([tr("Без ƏDV"), tr("ƏDV"), tr("Итого")])
+        self.verdict, self.totals = self.figures.verdict, self.figures.cells
+        self.figures.hide()
+        self.root.addWidget(self.figures)
+        self._build_tree()
+        self._build_actions()
 
-    def _build_tree(self, root: QVBoxLayout) -> None:
+    def _build_tree(self) -> None:
         self.tree = QTreeWidget()
         self.tree.setColumnCount(len(COLUMNS))
         self.tree.setHeaderLabels([tr(c) for c in COLUMNS])
@@ -210,24 +141,33 @@ class EqaimeReconciliationDialog(QDialog):
                 column, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
             )
         self.tree.itemDoubleClicked.connect(self._open)
-        root.addWidget(self.tree, 1)
+        self.tree.hide()
+        self.spacer = QWidget()  # the air under the period while there are no rows
+        self.root.addWidget(self.tree, 1)
+        self.root.addWidget(self.spacer, 1)
 
-    def _build_actions(self, root: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
-        self.import_button = button(tr("Загрузить недостающие…"), "flat")
+    def _build_actions(self) -> None:
+        self.import_button = self.quiet(tr("Загрузить недостающие…"), self.import_missing)
         self.import_button.setToolTip(tr("Черновики из e-qaimə, которых нет в книге"))
-        self.import_button.clicked.connect(self.import_missing)
         self.import_button.hide()
-        actions.addWidget(self.import_button)
-        actions.addStretch(1)
-        close = button(tr("Закрыть"), "flat")
-        close.clicked.connect(self.reject)
-        actions.addWidget(close)
-        self.mark_button = button(tr("Сверено"), "primary")
-        self.mark_button.clicked.connect(self.toggle_reconciled)
-        self.mark_button.setEnabled(False)
-        actions.addWidget(self.mark_button)
-        root.addLayout(actions)
+        self.load_button = self.primary(tr("Сверить с порталом"), self.load)
+        self.mark_button = self.primary(tr("Сверено"), self.toggle_reconciled)
+        self.mark_button.hide()
+        self.add_footer()
+
+    def _period_changed(self) -> None:
+        """The rows were of another period: back to the first step."""
+        if self.outcome is None:
+            return
+        self.outcome = None
+        self.figures.hide()
+        self.tree.clear()
+        self.tree.hide()
+        self.spacer.show()
+        self.import_button.hide()
+        self.mark_button.hide()
+        self.load_button.show()
+        say(self.status, tr("Период изменён — сверьте его с порталом."))
 
     # ---- loading -------------------------------------------------------------------
 
@@ -306,30 +246,27 @@ class EqaimeReconciliationDialog(QDialog):
 
     def show_result(self, result: Reconciliation) -> None:
         self.outcome = result
-        if result.agrees:
-            self.verdict.setText(tr("✓  Период совпадает с порталом"))
-            self.verdict.setStyleSheet(f"color: {P.green};")
-        else:
-            self.verdict.setText(
+        verdict = tr("✓  Период совпадает с порталом")
+        if not result.agrees:
+            verdict = (
                 tr("Требуют внимания: {n}", n=result.problems)
                 if result.problems
                 else tr("Итоги не совпадают")
             )
-            self.verdict.setStyleSheet(f"color: {P.text};")
-        figures = (
-            (result.portal_total - result.portal_vat, result.portal_vat, result.portal_total),
-            (result.book_total - result.book_vat, result.book_vat, result.book_total),
+        self.figures.show_figures(
+            verdict,
+            result.agrees,
+            [result.portal_total - result.portal_vat, result.portal_vat, result.portal_total],
+            [result.book_total - result.book_vat, result.book_vat, result.book_total],
         )
-        for row, values in enumerate(figures, 1):
-            for column, value in enumerate(values, 1):
-                self.totals[row, column].setText(format_minor(value))
-        for column in (1, 2, 3):
-            difference = figures[0][column - 1] - figures[1][column - 1]
-            cell = self.totals[3, column]
-            cell.setText(_signed(difference))
-            cell.setStyleSheet(f"color: {P.red if difference else P.secondary};")
-        self.totals_box.show()
-
+        for widget, shown in (
+            (self.figures, True),
+            (self.tree, True),
+            (self.spacer, False),
+            (self.load_button, False),
+            (self.mark_button, True),
+        ):
+            widget.setVisible(shown)
         self.tree.clear()
         for group in GROUP_TITLES:
             rows = result.group(group)
@@ -370,7 +307,7 @@ class EqaimeReconciliationDialog(QDialog):
                 status_label(portal.status) if portal else "",
                 money(portal.total, blank_zero=False) if portal else "–",
                 money(book.total, blank_zero=False) if book else "–",
-                _signed(row.difference) if row.difference else "",
+                signed(row.difference) if row.difference else "",
                 self._note(row),
             ]
         )
@@ -417,7 +354,7 @@ class EqaimeReconciliationDialog(QDialog):
         elif row.group == PARTY and portal:
             notes.append(tr("VÖEN на портале {tin}", tin=portal.party_tin))
         if row.group == AMOUNTS and row.vat_difference:
-            notes.append(tr("в т.ч. ƏDV {amount}", amount=_signed(row.vat_difference)))
+            notes.append(tr("в т.ч. ƏDV {amount}", amount=signed(row.vat_difference)))
         if row.group == PENDING and portal and book is None and portal.status != ON_APPROVAL:
             notes.append(tr("нет в книге"))
         for change in row.changes:
@@ -462,7 +399,6 @@ class EqaimeReconciliationDialog(QDialog):
 
     def _show_mark(self) -> None:
         period = self._marked_period()
-        self.mark_button.setEnabled(period is not None)
         if period is None:
             return
         if self._is_marked(period):
@@ -475,8 +411,7 @@ class EqaimeReconciliationDialog(QDialog):
             self.mark_button.setToolTip(
                 tr("Если потом на портале что-то изменится, программа предупредит")
             )
-        self.mark_button.style().unpolish(self.mark_button)
-        self.mark_button.style().polish(self.mark_button)
+        restyle(self.mark_button)
 
     def toggle_reconciled(self) -> None:
         period = self._marked_period()
@@ -505,11 +440,6 @@ class EqaimeReconciliationDialog(QDialog):
         dialog.period_field.set_period(*self.period_field.period())
         if dialog.exec() and (dialog.created or dialog.attached):
             self.s.notify(dialog.outcome())
-
-
-def _signed(minor: int) -> str:
-    """A difference: negative in brackets, as the reports show it (D52)."""
-    return f"({format_minor(-minor)})" if minor < 0 else format_minor(minor)
 
 
 def period_text(date_from: str, date_to: str) -> str:

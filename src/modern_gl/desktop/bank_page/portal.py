@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
 
 from modern_gl.application.bank import BankPlace
 from modern_gl.application.bank.deposit_commands import DepositImported
@@ -26,10 +26,9 @@ from modern_gl.application.bank.imported import DRAFT, POSTED
 from modern_gl.application.bank.statement import place_balance
 from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch, reconciled_changes
 from modern_gl.desktop.bank_page.import_rows import ImportRows
+from modern_gl.desktop.import_window import ImportWindow, say
 from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
 from modern_gl.domain.dates import date_range
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
@@ -39,7 +38,7 @@ TITLE = "ƏDV depozit с портала"
 PERIOD, PREVIEW, DONE = "period", "preview", "done"  # the window's steps
 
 
-class DepositDialog(QDialog):
+class DepositDialog(ImportWindow):
     """Period → sign in → the portal's operations of the period, what each becomes →
     «Провести» (or «Создать черновики») → what became of them; `imported` — what the
     import did, `chosen_document` — the document double-clicked to open."""
@@ -52,7 +51,7 @@ class DepositDialog(QDialog):
         sign_in: Callable[..., str | None] | None = None,
         today: date | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent, tr(TITLE), place.name)
         self.s = session
         self.place = place
         self.today = today or date.today()
@@ -65,70 +64,48 @@ class DepositDialog(QDialog):
         self.chosen_document: int | None = None
         self.step = PERIOD
         self.loads = portal_loads(session.conn, session.company_id, place)
-        self.setWindowTitle(tr(TITLE))
         self.resize(860, 300)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(28, 22, 28, 20)
-        root.setSpacing(12)
-        title = QLabel(tr(TITLE))
-        title.setFont(fonts().title)
-        root.addWidget(title)
-        account = QLabel(place.name)
-        account.setObjectName("secondary")
-        root.addWidget(account)
         self.period_field = portal_period(self.today)
         self.period_field.changed.connect(self._period_changed)
-        root.addWidget(self.period_field)
+        self.bar.addWidget(self.period_field)
+        self.bar.addStretch(1)
         self.loaded = QLabel()
         self.loaded.setWordWrap(True)
-        root.addWidget(self.loaded)
-        self.changes = QLabel()  # a reconciled period changed since (D118)
-        self.changes.setObjectName("warning")
-        self.changes.setWordWrap(True)
-        root.addWidget(self.changes)
-        self._build_rows(root)
-        self._build_actions(root)
+        self.root.addWidget(self.loaded)
+        self.changes = self.warning  # a reconciled period changed since (D118)
+        self.add_notes()
+        self._build_rows()
+        self._build_actions()
         self._suggest_period()
         self._show_loaded()
         self._show_changes()
         self._show_step(PERIOD)
 
-    def _build_rows(self, root: QVBoxLayout) -> None:
-        self.status = QLabel(
+    def _build_rows(self) -> None:
+        say(
+            self.status,
             tr(
                 "Выберите период и нажмите «Загрузить с портала»: если вход на портал не "
                 "открыт, откроется его страница (ASAN İmza)."
-            )
+            ),
         )
-        self.status.setObjectName("secondary")
-        self.status.setWordWrap(True)
-        root.addWidget(self.status)
         self.rows = ImportRows()
         self.rows.itemChanged.connect(lambda *_: self._show_balances())
         self.rows.document_chosen.connect(self._open_document)
-        root.addWidget(self.rows, 1)
+        self.root.addWidget(self.rows, 1)
         self.balances = QLabel()
         self.balances.setWordWrap(True)
-        root.addWidget(self.balances)
+        self.root.addWidget(self.balances)
         self.spacer = QWidget()  # the air under the period while there are no rows
-        root.addWidget(self.spacer, 1)
+        self.root.addWidget(self.spacer, 1)
 
-    def _build_actions(self, root: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        self.close_button = button(tr("Закрыть"), "flat")
-        self.close_button.clicked.connect(self.reject)
-        actions.addWidget(self.close_button)
-        self.drafts_button = button(tr("Создать черновики"), "flat")
-        self.drafts_button.clicked.connect(lambda: self.write(post=False))
-        actions.addWidget(self.drafts_button)
-        self.post_button = button(tr("Провести"), "primary")
-        self.post_button.clicked.connect(lambda: self.write(post=True))
-        actions.addWidget(self.post_button)
-        self.load_button = button(tr("Загрузить с портала"), "primary")
-        self.load_button.clicked.connect(self.load)
-        actions.addWidget(self.load_button)
-        root.addLayout(actions)
+    def _build_actions(self) -> None:
+        self.drafts_button = self.quiet(
+            tr("Создать черновики"), lambda: self.write(post=False), right=True
+        )
+        self.post_button = self.primary(tr("Провести"), lambda: self.write(post=True))
+        self.load_button = self.primary(tr("Загрузить с портала"), self.load)
+        self.add_footer()
 
     def _show_step(self, step: str) -> None:
         """One blue button at a time (D86): load, then post, then nothing — «Готово»."""
@@ -169,8 +146,7 @@ class DepositDialog(QDialog):
     def _show_loaded(self) -> None:
         spans = loaded_spans(self.loads)
         if not self.loads:
-            self.loaded.setObjectName("secondary")
-            self.loaded.setText(tr("С портала в этот счёт ещё ничего не загружалось."))
+            say(self.loaded, tr("С портала в этот счёт ещё ничего не загружалось."))
         else:
             text = " ".join(self._loaded_texts(spans))
             first, last = self.period()
@@ -179,10 +155,7 @@ class DepositDialog(QDialog):
             )
             if again:
                 text += " " + tr("Выбранный период уже загружен.")
-            self.loaded.setObjectName("warning" if again else "secondary")
-            self.loaded.setText(text)
-        self.loaded.style().unpolish(self.loaded)
-        self.loaded.style().polish(self.loaded)
+            say(self.loaded, text, "warning" if again else "secondary")
 
     def _show_changes(self) -> None:
         """A reconciled period that changed since — in the books at once, on the portal
@@ -311,10 +284,7 @@ class DepositDialog(QDialog):
             text += tr(", после загрузки будет {after} ₼", after=format_minor(after))
         if after != portal:
             text += tr(" — разница {diff} ₼", diff=format_minor(portal - after))
-        self.balances.setText(text + ".")
-        self.balances.setObjectName("warning" if after != portal else "secondary")
-        self.balances.style().unpolish(self.balances)
-        self.balances.style().polish(self.balances)
+        say(self.balances, text + ".", "warning" if after != portal else "secondary")
 
     def _open_document(self, document_id: int) -> None:
         self.chosen_document = document_id

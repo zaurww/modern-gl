@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QWidget
 
 from modern_gl.application.bank import BankPlace
 from modern_gl.application.bank.deposit_import import DepositFetched
@@ -18,16 +18,16 @@ from modern_gl.application.bank.deposit_reconciliation import (
     PORTAL_ONLY,
     SAME,
     DepositReconciliation,
+    Figures,
     reconcile_deposit,
     reconciled_periods,
 )
 from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch, reconciled_changes
-from modern_gl.desktop.bank_page.deposit_reconcile_rows import FiguresGrid, ReconciledRows
+from modern_gl.desktop.bank_page.deposit_reconcile_rows import ReconciledRows
 from modern_gl.desktop.bank_page.portal import summary
+from modern_gl.desktop.import_window import FiguresGrid, ImportWindow, say
 from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
 from modern_gl.domain.dates import date_range, next_day
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
@@ -36,7 +36,7 @@ from modern_gl.i18n import tr
 TITLE = "Сверка ƏDV depozit с порталом"
 
 
-class DepositReconcileDialog(QDialog):
+class DepositReconcileDialog(ImportWindow):
     """Period → sign in → each operation by the portal and by the books → «Отметить
     сверенным»; `changed` — something was written, `chosen_document` — the document
     double-clicked to open."""
@@ -49,7 +49,7 @@ class DepositReconcileDialog(QDialog):
         sign_in: Callable[..., str | None] | None = None,
         today: date | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent, tr(TITLE), place.name)
         self.s = session
         self.place = place
         self.today = today or date.today()
@@ -61,60 +61,37 @@ class DepositReconcileDialog(QDialog):
         self.seen: DepositReconciliation | None = None
         self.changed = False
         self.chosen_document: int | None = None
-        self.setWindowTitle(tr(TITLE))
         self.resize(860, 300)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(28, 22, 28, 20)
-        root.setSpacing(12)
-        title = QLabel(tr(TITLE))
-        title.setFont(fonts().title)
-        root.addWidget(title)
-        account = QLabel(place.name)
-        account.setObjectName("secondary")
-        root.addWidget(account)
         self.period_field = portal_period(self.today)
         self.period_field.changed.connect(self._period_changed)
-        root.addWidget(self.period_field)
+        self.bar.addWidget(self.period_field)
+        self.bar.addStretch(1)
         self.history = QLabel()
         self.history.setWordWrap(True)
-        root.addWidget(self.history)
-        self.status = QLabel(
+        self.root.addWidget(self.history)
+        self.add_notes()
+        say(
+            self.status,
             tr(
                 "Выберите период и нажмите «Сверить с порталом»: операции портала "
                 "сравниваются с выпиской счёта."
-            )
+            ),
         )
-        self.status.setObjectName("secondary")
-        self.status.setWordWrap(True)
-        root.addWidget(self.status)
+        # the answer first (Jon Moon): the figures by both sides, then the operations
+        self.figures = FiguresGrid([tr("На начало"), tr("Приход"), tr("Расход"), tr("На конец")])
+        self.root.addWidget(self.figures)
         self.rows = ReconciledRows()
         self.rows.document_chosen.connect(self._open_document)
-        root.addWidget(self.rows, 1)
-        self.figures = FiguresGrid()
-        root.addWidget(self.figures)
+        self.root.addWidget(self.rows, 1)
         self.spacer = QWidget()  # the air under the period while there are no rows
-        root.addWidget(self.spacer, 1)
-        self._build_actions(root)
+        self.root.addWidget(self.spacer, 1)
+        self.load_missing = self.quiet(tr("Загрузить недостающие"), self.load_missing_operations)
+        self.reconcile_button = self.primary(tr("Сверить с порталом"), self.reconcile)
+        self.mark_button = self.primary(tr("Отметить сверенным"), self.mark)
+        self.add_footer()
         self._suggest_period()
         self._show_history()
         self._show(None)
-
-    def _build_actions(self, root: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        self.close_button = button(tr("Закрыть"), "flat")
-        self.close_button.clicked.connect(self.reject)
-        actions.addWidget(self.close_button)
-        self.load_missing = button(tr("Загрузить недостающие"), "flat")
-        self.load_missing.clicked.connect(self.load_missing_operations)
-        actions.addWidget(self.load_missing)
-        self.mark_button = button(tr("Отметить сверенным"), "primary")
-        self.mark_button.clicked.connect(self.mark)
-        actions.addWidget(self.mark_button)
-        self.reconcile_button = button(tr("Сверить с порталом"), "primary")
-        self.reconcile_button.clicked.connect(self.reconcile)
-        actions.addWidget(self.reconcile_button)
-        root.addLayout(actions)
 
     def _suggest_period(self) -> None:
         """From the day after the last period reconciled up to today; none — this month."""
@@ -138,11 +115,7 @@ class DepositReconcileDialog(QDialog):
             texts.append(tr("Сверено с порталом: {periods}.", periods=", ".join(names)))
         changes = reconciled_changes(self.s, self.place, self.fetched)
         texts += [f"{text}." for text in changes]
-        self.history.setText(" ".join(texts))
-        self.history.setVisible(bool(texts))
-        self.history.setObjectName("warning" if changes else "secondary")
-        self.history.style().unpolish(self.history)
-        self.history.style().polish(self.history)
+        say(self.history, " ".join(texts), "warning" if changes else "secondary")
 
     def _show(self, seen: DepositReconciliation | None) -> None:
         """One blue button at a time (D86): reconcile, then mark."""
@@ -157,8 +130,16 @@ class DepositReconcileDialog(QDialog):
             return
         self.resize(max(self.width(), 1040), max(self.height(), 620))
         self.rows.show_rows(seen.rows)
-        self.figures.show_figures(seen)
-        self.status.setText(verdict(seen))
+        problems = sum(1 for row in seen.rows if row.state != SAME)
+        heading = (
+            tr("✓  Период совпадает с порталом")
+            if seen.agreed
+            else tr("Требуют внимания: {n}", n=problems)
+            if problems
+            else tr("Итоги не совпадают")
+        )
+        self.figures.show_figures(heading, seen.agreed, figures(seen.portal), figures(seen.books))
+        say(self.status, f"{verdict(seen)} {tr('Двойной щелчок по строке — открыть документ.')}")
 
     def _period_changed(self) -> None:
         if self.seen is not None:  # the rows were of another period
@@ -252,6 +233,10 @@ class DepositReconcileDialog(QDialog):
     def _open_document(self, document_id: int) -> None:
         self.chosen_document = document_id
         self.accept()
+
+
+def figures(f: Figures) -> list[int]:
+    return [f.opening, f.money_in, f.money_out, f.closing]
 
 
 def verdict(seen: DepositReconciliation) -> str:

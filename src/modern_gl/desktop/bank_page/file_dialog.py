@@ -9,15 +9,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
-from PySide6.QtWidgets import (
-    QComboBox,
-    QDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QComboBox, QGridLayout, QLabel, QWidget
 
 from modern_gl.application.bank import BankPlace
 from modern_gl.application.bank.file_commands import FileImported
@@ -26,9 +18,8 @@ from modern_gl.application.bank.files import BankFile, read_bank_file
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
 from modern_gl.application.bank.statement import place_balance
 from modern_gl.desktop.bank_page.import_rows import ImportRows
+from modern_gl.desktop.import_window import ImportWindow, say
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
 from modern_gl.domain.dates import date_range
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
@@ -37,7 +28,7 @@ from modern_gl.i18n import tr
 TITLE = "Выписка из файла"
 
 
-class BankFileDialog(QDialog):
+class BankFileDialog(ImportWindow):
     """Files → accounts → the lines, what each becomes → «Провести» → what became of
     them; `imported` — what the import did, `chosen_document` — the one to open."""
 
@@ -48,7 +39,7 @@ class BankFileDialog(QDialog):
         place: BankPlace | None = None,
         parent: QWidget | None = None,
     ) -> None:
-        super().__init__(parent)
+        super().__init__(parent, tr(TITLE), session.company_name)
         self.s = session
         self.imported: FileImported | None = None
         self.chosen_document: int | None = None
@@ -59,36 +50,27 @@ class BankFileDialog(QDialog):
                 self.files.append(read_bank_file(path))
             except LedgerError as e:
                 errors.append(str(e))
-        self.setWindowTitle(tr(TITLE))
-        self.resize(1080, 620)
-        root = QVBoxLayout(self)
-        root.setContentsMargins(28, 22, 28, 20)
-        root.setSpacing(12)
-        title = QLabel(tr(TITLE))
-        title.setFont(fonts().title)
-        root.addWidget(title)
+        self.resize(1080, 700)
         self.accounts: dict[str, QComboBox] = {}
-        self._build_files(root, place)
-        self.errors = QLabel("\n".join(errors))
-        self.errors.setObjectName("warning")
-        self.errors.setWordWrap(True)
-        self.errors.setVisible(bool(errors))
-        root.addWidget(self.errors)
-        self.status = QLabel()
-        self.status.setObjectName("secondary")
-        self.status.setWordWrap(True)
-        root.addWidget(self.status)
+        self._build_files(place)
+        self.add_notes()
+        self.errors = self.warning  # the files not read
+        say(self.errors, "\n".join(errors), "warning")
         self.rows = ImportRows()
         self.rows.itemChanged.connect(lambda *_: self._show_balances())
         self.rows.document_chosen.connect(self._open_document)
-        root.addWidget(self.rows, 1)
+        self.root.addWidget(self.rows, 1)
         self.balances = QLabel()
         self.balances.setWordWrap(True)
-        root.addWidget(self.balances)
-        self._build_actions(root)
+        self.root.addWidget(self.balances)
+        self.drafts_button = self.quiet(
+            tr("Создать черновики"), lambda: self.write(post=False), right=True
+        )
+        self.post_button = self.primary(tr("Провести"), lambda: self.write(post=True))
+        self.add_footer()
         self.preview()
 
-    def _build_files(self, root: QVBoxLayout, place: BankPlace | None) -> None:
+    def _build_files(self, place: BankPlace | None) -> None:
         """A row per file: what it is, and the account it goes to."""
         grid = QGridLayout()
         grid.setHorizontalSpacing(16)
@@ -114,21 +96,7 @@ class BankFileDialog(QDialog):
             grid.addWidget(box, n, 1)
             self.accounts[file.iban] = box
         grid.setColumnStretch(0, 1)
-        root.addLayout(grid)
-
-    def _build_actions(self, root: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        self.close_button = button(tr("Закрыть"), "flat")
-        self.close_button.clicked.connect(self.reject)
-        actions.addWidget(self.close_button)
-        self.drafts_button = button(tr("Создать черновики"), "flat")
-        self.drafts_button.clicked.connect(lambda: self.write(post=False))
-        actions.addWidget(self.drafts_button)
-        self.post_button = button(tr("Провести"), "primary")
-        self.post_button.clicked.connect(lambda: self.write(post=True))
-        actions.addWidget(self.post_button)
-        root.addLayout(actions)
+        self.root.addLayout(grid)
 
     def places(self) -> dict[str, BankPlace]:
         """IBAN -> the account chosen for its file."""
@@ -224,10 +192,8 @@ class BankFileDialog(QDialog):
                     drafts=format_minor(drafts),
                 )
             texts.append(text)
-        self.balances.setText(".\n".join(texts) + ("." if texts else ""))
-        self.balances.setObjectName("warning" if differs else "secondary")
-        self.balances.style().unpolish(self.balances)
-        self.balances.style().polish(self.balances)
+        text = ".\n".join(texts) + ("." if texts else "")
+        say(self.balances, text, "warning" if differs else "secondary")
 
     def _open_document(self, document_id: int) -> None:
         self.chosen_document = document_id
