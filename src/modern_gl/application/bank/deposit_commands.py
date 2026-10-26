@@ -8,9 +8,7 @@ from __future__ import annotations
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field, replace
 
-from modern_gl.application.bank.account_commands import BankStatementCommands
 from modern_gl.application.bank.advances import payment_lines
-from modern_gl.application.bank.commands import BankCommands
 from modern_gl.application.bank.deposit_import import (
     DepositOperation,
     day_closings,
@@ -21,10 +19,10 @@ from modern_gl.application.bank.deposit_reconciliation import (
     DepositReconciliation,
     books_figures,
 )
+from modern_gl.application.bank.import_commands import BankImportCommands, party_key
+from modern_gl.application.bank.imported import KNOWN, LINKED, POSTED, ImportRow
 from modern_gl.application.bank.operations import (
-    CUSTOMER,
     KIND_TYPES,
-    SUPPLIER,
     TAX,
     TRANSFER,
     BankLine,
@@ -33,25 +31,10 @@ from modern_gl.application.bank.operations import (
 )
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.application.common import now
-from modern_gl.application.counterparties import known_counterparty, short_name
 from modern_gl.domain.accounts import OUTPUT_VAT
-from modern_gl.domain.errors import LedgerError, ValidationError
+from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
-
-POSTED, DRAFT, LINKED, KNOWN = "posted", "draft", "linked", "known"
-
-
-@dataclass(frozen=True)
-class DepositRow:
-    """What the import does (did) with one operation of the portal: POSTED, DRAFT (and
-    why), LINKED — entered by hand, gets the reference; KNOWN — in the books already."""
-
-    op: DepositOperation
-    state: str
-    lines: tuple[tuple[str, str, int], ...] = ()  # (account's code, e-qaimə, amount)
-    reason: str = ""
-    document_id: int | None = None  # its GL document; None in a preview
 
 
 @dataclass
@@ -64,10 +47,10 @@ class DepositImported:
     known: int = 0  # loaded before
     counterparties: int = 0  # added to the directory by VÖEN
     closings: int = 0  # days whose balance by the portal was written
-    rows: list[DepositRow] = field(default_factory=list)  # in the order of the portal
+    rows: list[ImportRow] = field(default_factory=list)  # in the order of the portal
 
 
-class VatDepositCommands(BankCommands, BankStatementCommands):
+class VatDepositCommands(BankImportCommands):
     def import_vat_deposit(
         self,
         company_id: int,
@@ -125,7 +108,7 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
             closings = {day: n for day, n in closings.items() if first <= day <= last}
         plan = plan_deposit_import(self.conn, company_id, place, operations)
         done.known = len(plan.known)
-        rows = [DepositRow(op, KNOWN) for op in plan.known]
+        rows = [ImportRow(op, KNOWN) for op in plan.known]
         taken = [x for x in plan.linked if take is None or x[0].reference in take]
         for op, operation_id in taken:
             self.conn.execute(
@@ -134,18 +117,21 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
             )
             self._audit(company_id, "bank_operation", operation_id, "update", {"reference": ""})
             document = self._bank_row(company_id, operation_id)["document_id"]
-            rows.append(DepositRow(op, LINKED, document_id=document))
+            rows.append(ImportRow(op, LINKED, document_id=document))
             done.linked += 1
         new = [op for op in plan.new if take is None or op.reference in take]
-        parties = self._deposit_parties(company_id, new, done)
+        parties, added = self._import_parties(company_id, new)
+        done.counterparties = len(added)
         rows += [
-            self._deposit_new(company_id, place, x, parties.get(x.tin), post, done) for x in new
+            self._deposit_new(company_id, place, x, parties.get(party_key(x)), post, done)
+            for x in new
         ]
         for day, amount in sorted(closings.items()):
-            done.closings += self._deposit_closing(company_id, place, day, amount)
+            done.closings += self._import_closing(company_id, place, day, amount, "api")
         if period is not None and len(taken) + len(new) == len(plan.linked) + len(plan.new):
             self._remember_load(company_id, place, period, operations)
-        done.rows = sorted(rows, key=lambda row: row.op.moment)
+        moments = {id(op): op.moment for op in operations}
+        done.rows = sorted(rows, key=lambda row: moments[id(row.op)])
         return done
 
     def _deposit_new(
@@ -156,35 +142,15 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
         counterparty: int | None,
         post: bool,
         done: DepositImported,
-    ) -> DepositRow:
+    ) -> ImportRow:
         """A new operation posted (a draft, when posting fails — and why)."""
         data = self._deposit_operation(company_id, place, op, counterparty)
-        lines = tuple(
-            (
-                self._account(company_id, x.account_id)["code"] if x.account_id else "",
-                x.invoice,
-                x.amount,
-            )
-            for x in data.lines
-        )
-        if post:
-            self.conn.execute("SAVEPOINT deposit_operation")
-            try:
-                saved = self.save_bank_operation(company_id, data, post=True)
-                self.conn.execute("RELEASE deposit_operation")
-                done.posted += 1
-                document = self._bank_row(company_id, saved)["document_id"]
-                return DepositRow(op, POSTED, lines, document_id=document)
-            except LedgerError as e:
-                self.conn.execute("ROLLBACK TO deposit_operation")
-                self.conn.execute("RELEASE deposit_operation")
-                reason = str(e)
+        state, reason, document = self._post_or_draft(company_id, data, post)
+        if state == POSTED:
+            done.posted += 1
         else:
-            reason = tr("загружено черновиком")
-        saved = self.save_bank_operation(company_id, data, post=False)
-        done.drafts.append((op, reason))
-        document = self._bank_row(company_id, saved)["document_id"]
-        return DepositRow(op, DRAFT, lines, reason, document)
+            done.drafts.append((op, reason))
+        return ImportRow(op, state, self._line_codes(company_id, data), reason, document)
 
     def mark_deposit_reconciled(
         self, company_id: int, place: BankPlace, seen: DepositReconciliation
@@ -246,26 +212,6 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
             ),
         )
 
-    def _deposit_parties(
-        self, company_id: int, operations: Sequence[DepositOperation], done: DepositImported
-    ) -> dict[str, int]:
-        """VÖEN -> counterparty; one the company does not have is added with a shorter
-        name (as the e-qaimə import suggests it) and the portal's name as the legal one."""
-        found: dict[str, int] = {}
-        kind = None
-        for op in operations:
-            if op.kind not in (SUPPLIER, CUSTOMER) or not op.tin or op.tin in found:
-                continue
-            existing = known_counterparty(self.conn, company_id, op.tin, op.name)
-            if existing is None:
-                kind = kind or self.subconto_kind_id(company_id, "counterparty")
-                existing = self.add_subconto_value(company_id, kind, short_name(op.name))
-                self.set_subconto_value_tax(company_id, existing, op.tin)
-                self.set_subconto_value_legal_name(company_id, existing, op.name)
-                done.counterparties += 1
-            found[op.tin] = existing
-        return found
-
     def _deposit_operation(
         self, company_id: int, place: BankPlace, op: DepositOperation, counterparty: int | None
     ) -> BankOperationInput:
@@ -307,25 +253,3 @@ class VatDepositCommands(BankCommands, BankStatementCommands):
             memo=op.memo or default_memo(op.direction, op.kind, name),
             reference=op.reference,
         )
-
-    def _deposit_closing(self, company_id: int, place: BankPlace, day: str, amount: int) -> int:
-        """The balance by the portal at the end of the day, on the day's statement or on
-        the period's that ends that day (a period that ends later: nothing to compare)."""
-        covering = self.conn.execute(
-            "SELECT date_from, date_to FROM bank_statements WHERE company_id = ? "
-            "AND account_id = ? AND COALESCE(value_id, 0) = ? AND date_from <= ? "
-            "AND date_to >= ?",
-            (company_id, place.account_id, place.value_id or 0, day, day),
-        ).fetchone()
-        start, end = (covering["date_from"], covering["date_to"]) if covering else (day, day)
-        if end != day:
-            return 0
-        statement_id = self.set_bank_closing(
-            company_id, place.account_id, place.value_id, start, end, amount
-        )
-        if covering is None:
-            self.conn.execute(
-                "UPDATE bank_statements SET source = 'api' WHERE company_id = ? AND id = ?",
-                (company_id, statement_id),
-            )
-        return 1
