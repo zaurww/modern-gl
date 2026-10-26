@@ -6,7 +6,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMessageBox
 
 from modern_gl.application.inventory import Inventory
@@ -24,6 +25,7 @@ from modern_gl.desktop.widgets import (
     status_icon,
 )
 from modern_gl.domain.dates import ru_date
+from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.reporting.trade import PURCHASE, SALE, TradeDocument, trade_documents
@@ -100,6 +102,9 @@ class TradePage(ReportPage):
         self.stack.addWidget(self.empty)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.selectionModel().selectionChanged.connect(lambda *_: self._show_post_button())
+        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
+        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
+        delete.activated.connect(self.delete_selected)
         self.refresh()
 
     def more_items(self) -> list[MenuItem]:
@@ -108,6 +113,8 @@ class TradePage(ReportPage):
         portal: list[MenuItem] = [
             (tr("E-qaimə с портала…"), self.import_eqaime),
             (tr("Сверка с порталом…"), self.reconcile),
+            None,
+            (tr("Удалить отмеченные…  Del"), self.delete_selected),
             None,
         ]
         return ([] if self.s.read_only else portal) + super().more_items()
@@ -186,6 +193,40 @@ class TradePage(ReportPage):
         self.refresh()
         self.imported.emit()
         self._report(result, chosen=dialog.booking is not None)
+
+    def marked(self) -> list[TradeDocument]:
+        """The rows marked (Ctrl or Shift + click), or the one under the cursor."""
+        rows = self.model.rows
+        selected = {i.row() for i in self.table.selectionModel().selectedRows()}
+        return [rows[i] for i in sorted(selected) if i < len(rows)]
+
+    def delete_selected(self) -> None:
+        """The marked documents deleted at once — drafts from the portal not needed, say:
+        all of them or none (one in the closed period or with its goods sold keeps them
+        all). A posted one leaves its full copy in the audit trail."""
+        if self.s.read_only:
+            return
+        marked = self.marked()
+        if not marked:
+            self.s.notify(tr("Отметьте документы (Ctrl или Shift + щелчок)"))
+            return
+        question = tr("Удалить отмеченные документы: {n}?", n=len(marked))
+        posted = sum(r.status == "posted" for r in marked)
+        if posted:
+            question += "\n\n" + tr(
+                "Проведённых среди них: {n} — их проводки и движение товаров уйдут.", n=posted
+            )
+        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+            return
+        inventory = Inventory(self.s.conn, actor=self.s.ledger.actor)
+        try:
+            inventory.delete_documents(self.s.company_id, [r.id for r in marked])
+        except LedgerError as e:
+            QMessageBox.warning(self, tr("Удалить"), tr("Ничего не удалено: {e}", e=str(e)))
+            return
+        self.refresh()
+        self.imported.emit()
+        self.s.notify(tr("Удалено документов: {n}", n=len(marked)))
 
     def _report(self, result: BulkPosting, chosen: bool = False) -> None:
         text = tr("Проведено: {n}", n=len(result.posted))

@@ -1,7 +1,7 @@
 """The bank page's actions (D47, D78): its one «⋯» (D86), a new statement or account, the
 ƏDV deposit from the portal and against it (D112, D118), statements from the bank's files
-(D146), a new operation, the lines moved to another account. `BankPage` builds the
-levels and shows them."""
+(D146), a new operation, the marked lines moved to another account or deleted. `BankPage`
+builds the levels and shows them."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 from datetime import date, timedelta
 
 from PySide6.QtCore import QSettings, Signal
-from PySide6.QtWidgets import QDialog, QFileDialog, QMenu
+from PySide6.QtWidgets import QDialog, QFileDialog, QMenu, QMessageBox
 
 from modern_gl.application.bank import (
     BankAccount,
@@ -32,6 +32,7 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
 ACCOUNTS, JOURNAL, STATEMENT = "accounts", "journal", "statement"
+DAYS, LINES = "days", "lines"  # an account's statements by day, or all its lines
 
 
 def next_workday(day: str) -> str:
@@ -47,6 +48,7 @@ class BankActions(ReportPage):
     new_bank_operation = Signal(object)  # BankOperationInput: what is known already
     new_conversion = Signal()
     level: str
+    view: str  # DAYS or LINES, at the account's level
     statements: list[BankStatement]
     portal_sign_in: Callable[..., str | None] | None  # tests: a token
     _amount_mode: str | None
@@ -78,8 +80,10 @@ class BankActions(ReportPage):
         items: list[MenuItem] = []
         if self.level == JOURNAL:
             items.append((tr("Выписка за период…"), self.new_period))
-        if self.level == STATEMENT:
+        if self.lines_shown():
             items.append((tr("Перенести отмеченные на другой счёт…"), self.move_selected))
+            items.append((tr("Удалить отмеченные…  Del"), self.delete_selected))
+        if self.level == STATEMENT:
             one = self.amount_mode() == ONE
             items.append(
                 (
@@ -232,15 +236,25 @@ class BankActions(ReportPage):
         self._start_entry = True
         self.refresh()
 
+    def lines_shown(self) -> bool:
+        """A statement, or all the lines of the account's period: lines to mark."""
+        return self.level == STATEMENT or (self.level == JOURNAL and self.view == LINES)
+
+    def marked(self) -> tuple[list[int], int]:
+        """The bank operations of the marked lines (Ctrl or Shift + click), and how many
+        marked lines are other documents (a conversion, a journal entry)."""
+        rows = {i.row() for i in self.table.selectionModel().selectedRows()}
+        docs = [self.model.rows[r].document_id for r in sorted(rows)]
+        owners = [document_owner(self.s.conn, self.s.company_id, d) for d in docs]
+        operations = [o.id for o in owners if o is not None and o.module == "bank"]
+        return operations, len(docs) - len(operations)
+
     def move_selected(self) -> None:
         """The marked lines entered on the wrong account go to another one of its currency,
         into the statement of the same day there."""
         place = self.place
-        rows = {i.row() for i in self.table.selectionModel().selectedRows()}
-        docs = [self.model.rows[r].document_id for r in sorted(rows)]
+        operations, _others = self.marked()
         conn, cid = self.s.conn, self.s.company_id
-        owners = [document_owner(conn, cid, d) for d in docs]
-        operations = [o.id for o in owners if o is not None and o.module == "bank"]
         if place is None or not operations:
             self.s.notify(tr("Отметьте строки банковских операций (Ctrl или Shift + щелчок)"))
             return
@@ -255,6 +269,32 @@ class BankActions(ReportPage):
             self.s.notify(str(e))
             return
         self.s.notify(tr("Перенесено на {name}: {n}", name=target.name, n=len(operations)))
+        self.refresh()
+
+    def delete_selected(self) -> None:
+        """The marked lines deleted at once — loaded twice or by mistake: all of them or
+        none (one in the closed period keeps them all). Other documents among them stay."""
+        if self.s.read_only or not self.lines_shown():
+            return
+        operations, others = self.marked()
+        if not operations:
+            self.s.notify(tr("Отметьте строки банковских операций (Ctrl или Shift + щелчок)"))
+            return
+        question = tr("Удалить отмеченные операции: {n}?", n=len(operations))
+        if others:
+            question += "\n\n" + tr(
+                "Других документов среди отмеченных: {n} — они останутся, их удаляют там, "
+                "где они сделаны.",
+                n=others,
+            )
+        if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.s.ledger.bank.delete_bank_operations(self.s.company_id, operations)
+        except LedgerError as e:
+            QMessageBox.warning(self, tr("Удалить"), tr("Ничего не удалено: {e}", e=str(e)))
+            return
+        self.s.notify(tr("Удалено операций: {n}", n=len(operations)))
         self.refresh()
 
     def choose_place(self, places: list[BankPlace]) -> BankPlace | None:

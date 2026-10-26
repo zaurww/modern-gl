@@ -4,7 +4,7 @@ month and are booked the same way. The numbers are worked out by hand in each do
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QItemSelectionModel, Qt
 from PySide6.QtWidgets import QMessageBox
 
 from modern_gl.application.catalog import Catalog
@@ -21,6 +21,7 @@ from modern_gl.desktop.trade_page import TradePage
 from modern_gl.reporting.trade import PURCHASE
 from tests.test_sale_subconto import postings_46, sales_groups
 from tests.test_sales import Shop, make_shop
+from tests.test_uniform_entry import shown
 
 
 @pytest.fixture
@@ -177,6 +178,21 @@ def test_purchases_page_posts_the_filtered_drafts(shop, conn, qtbot):
     assert [r.id for r in page.drafts_to_post()] == [bill]
     page.table.selectRow(0)  # one selected row: still the whole list
     assert [r.id for r in page.drafts_to_post()] == [bill]
+
+
+def test_purchases_page_deletes_the_marked_documents(shop, conn, qtbot):
+    """Two of the three February drafts marked: Del deletes them, the third stays."""
+    _, petrol, diesel, bill = socar_month(shop)
+    page = shown(qtbot, TradePage(session_of(shop, conn), PURCHASE))
+    marked = [i for i, r in enumerate(page.model.rows) if r.id in (petrol, diesel)]
+    flags = QItemSelectionModel.SelectionFlag
+    for i in marked:
+        page.table.selectionModel().select(page.model.index(i, 0), flags.Select | flags.Rows)
+    page.table.setFocus()
+    with qtbot.waitSignal(page.imported):
+        qtbot.keyClick(page.table, Qt.Key.Key_Delete)
+    ids = {r.id for r in page.model.rows}
+    assert bill in ids and not ids & {petrol, diesel}
 
 
 def test_sale_drafts_post_too(shop, conn):

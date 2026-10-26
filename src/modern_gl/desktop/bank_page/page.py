@@ -32,7 +32,14 @@ from modern_gl.application.bank import (
     bank_statements,
     statement,
 )
-from modern_gl.desktop.bank_page.actions import ACCOUNTS, JOURNAL, STATEMENT, BankActions
+from modern_gl.desktop.bank_page.actions import (
+    ACCOUNTS,
+    DAYS,
+    JOURNAL,
+    LINES,
+    STATEMENT,
+    BankActions,
+)
 from modern_gl.desktop.bank_page.entry import EntryLine
 from modern_gl.desktop.bank_page.levels import (
     GroupRow,
@@ -57,8 +64,6 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.periods import MONTH, span_period
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
-
-DAYS, LINES = "days", "lines"  # an account's statements by day, or all its lines
 
 
 @dataclass(frozen=True)
@@ -124,6 +129,9 @@ class BankPage(BankActions):
             shortcut = QShortcut(QKeySequence(keys), self.table)
             shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
             shortcut.activated.connect(self._drill_current)
+        delete = QShortcut(QKeySequence("Del"), self.table)  # the marked lines
+        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
+        delete.activated.connect(self.delete_selected)
         # an account or a statement opens with one click: the lists are the way in
         self.table.clicked.connect(self._clicked)
         for keys, fn in (
@@ -406,9 +414,9 @@ class BankPage(BankActions):
         self.reconcile.setVisible(level == STATEMENT)
         self.entry.setVisible(writes and level == STATEMENT)
         self.reconcile.bank.setReadOnly(not writes)
-        self.table.setSelectionMode(  # lines are marked to move them to another account
+        self.table.setSelectionMode(  # lines are marked to move or delete them
             QAbstractItemView.SelectionMode.ExtendedSelection
-            if level == STATEMENT
+            if self.lines_shown()
             else QAbstractItemView.SelectionMode.SingleSelection
         )
         self.bar_box.setVisible(level == JOURNAL)
@@ -433,7 +441,7 @@ class BankPage(BankActions):
                 (i for i in accounts if rows[i].place.key == self.account_key),
                 accounts[0] if accounts else -1,
             )
-        elif self.level == JOURNAL and self.period:
+        elif self.level == JOURNAL and self.view == DAYS and self.period:
             at = next((i for i, s in enumerate(rows) if (s.date_from, s.date_to) == self.period), 0)
         self.table.setCurrentIndex(self.model.index(at, 0) if at >= 0 else QModelIndex())
 

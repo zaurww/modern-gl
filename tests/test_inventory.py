@@ -688,6 +688,31 @@ def test_inventory_document_delete_is_atomic_and_respects_dependencies(inventory
     )
 
 
+def test_marked_documents_are_deleted_all_or_none(inventory_demo, ledger, conn):
+    """Two receipts of 10.01 (10 pcs, 100.00 each) and a draft of 20.01; closed through
+    31.01 the first receipt keeps all three. Open again, all three go: no stock left."""
+    demo = inventory_demo
+    first, second = receipt(demo), receipt(demo)
+    draft = demo.inventory.create_receipt_draft(
+        demo.company_id,
+        "2026-01-20",
+        [ReceiptLine(demo.item, demo.main, "1", "10.00")],
+        demo.payable_account,
+        [demo.supplier],
+        "Черновик",
+    )
+    ledger.set_closed_through(demo.company_id, "2026-01-31")
+    with pytest.raises(PeriodClosedError, match="складской документ №1"):
+        demo.inventory.delete_documents(demo.company_id, [draft, first, second])
+    count = "SELECT COUNT(*) FROM inventory_documents WHERE company_id = ?"
+    assert conn.execute(count, (demo.company_id,)).fetchone()[0] == 3
+    assert stock_balances(conn, demo.company_id)[0].amount == 20_000
+    ledger.set_closed_through(demo.company_id, None)
+    demo.inventory.delete_documents(demo.company_id, [draft, first, second])
+    assert conn.execute(count, (demo.company_id,)).fetchone()[0] == 0
+    assert stock_balances(conn, demo.company_id) == []
+
+
 def test_transfer_cannot_be_deleted_after_destination_stock_was_used(inventory_demo):
     demo = inventory_demo
     receipt(demo)

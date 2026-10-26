@@ -48,7 +48,7 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import DocumentOwner, document_owner, load_document
 from modern_gl.domain.accounts import ADVANCE_PAID
 from modern_gl.domain.currency import parse_rate
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.errors import PeriodClosedError, ValidationError
 from modern_gl.domain.money import to_minor
 from modern_gl.reporting.invoices import invoice_report
 from modern_gl.reporting.reports import trial_balance
@@ -266,6 +266,29 @@ def test_unpost_and_delete(ledger, firm):
     assert document_owner(ledger.conn, cid, doc_id) is None
     count = ledger.conn.execute("SELECT COUNT(*) FROM documents WHERE id = ?", (doc_id,))
     assert count.fetchone()[0] == 0
+
+
+def test_marked_operations_are_deleted_all_or_none(ledger, firm):
+    """A draft, a payment of 05.03 and one of 10.03 (1 180.00 each) marked; the period is
+    closed through 07.03: the payment of 05.03 keeps all three, the draft included.
+    Without it the draft and 10.03 go: Kapital AZN 10 000.00 − 1 180.00 = 8 820.00."""
+    f = firm
+    cid = f["cid"]
+    draft = ledger.bank.save_bank_operation(cid, pay_alfa(f, memo="черновик"), post=False)
+    early = ledger.bank.save_bank_operation(cid, pay_alfa(f), post=True)
+    late = ledger.bank.save_bank_operation(cid, pay_alfa(f, doc_date="2026-03-10"), post=True)
+    number = load_bank_operation(ledger.conn, cid, early).number
+    ledger.set_closed_through(cid, "2026-03-07")
+    with pytest.raises(PeriodClosedError, match=f"№{number} от 05.03"):
+        ledger.bank.delete_bank_operations(cid, [draft, late, early])
+    left = ledger.conn.execute("SELECT COUNT(*) FROM bank_operations WHERE company_id = ?", (cid,))
+    assert left.fetchone()[0] == 3
+    ledger.bank.delete_bank_operations(cid, [draft, late])
+    assert [load_bank_operation(ledger.conn, cid, early).id] == [early]
+    places = {pl.value_id: pl for pl in bank_places(ledger.conn, cid)}
+    assert place_balance(ledger.conn, cid, places[f["v"]["azn"]], "2026-03-31") == 882_000
+    left = ledger.conn.execute("SELECT COUNT(*) FROM bank_operations WHERE company_id = ?", (cid,))
+    assert left.fetchone()[0] == 1
 
 
 def test_the_journal_does_not_touch_its_postings(ledger, firm):

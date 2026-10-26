@@ -145,6 +145,13 @@ class BankCommands(ModuleDocumentCommands):
             self._remove_document(company_id, doc)
             self._audit(company_id, "bank_operation", operation_id, "delete", {})
 
+    def delete_bank_operations(self, company_id: int, operation_ids: list[int]) -> None:
+        """The marked lines of a statement deleted at once: all of them or none — one in
+        the closed period keeps them all, and the message names its number."""
+        with transaction(self.conn):
+            for operation_id in operation_ids:
+                self.delete_bank_operation(company_id, operation_id)
+
     def rebuild_postings(self, company_id: int, since: date | str) -> list[int]:
         """Build the GL documents of posted operations from `since` on (not in the closed
         period) again from the operations (D101); the GL documents that changed."""

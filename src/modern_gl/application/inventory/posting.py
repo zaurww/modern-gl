@@ -254,6 +254,13 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             self.conn.execute("DELETE FROM inventory_documents WHERE id = ?", (document_id,))
             self._audit(company_id, "inventory_document", document_id, "delete", snapshot)
 
+    def delete_documents(self, company_id: int, document_ids: list[int]) -> None:
+        """The marked purchases or sales deleted at once: all of them or none — one in the
+        closed period or with its stock taken keeps them all."""
+        with transaction(self.conn):
+            for document_id in document_ids:
+                self.delete_document(company_id, document_id)
+
     def _post_in_sequence(self, company_id: int, document_id: int) -> None:
         """Post a draft into its place in the date order, recalculating later documents."""
         doc = self._document(company_id, document_id)

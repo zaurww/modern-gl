@@ -181,6 +181,37 @@ def test_lines_move_to_another_account(qtbot, bank, monkeypatch):
     assert page.current is not None and page.current.closing == 1_000_000
 
 
+def test_marked_lines_are_deleted_with_del(qtbot, bank, monkeypatch):
+    """Two payments of 100.00 marked: Del deletes both, the statement is back to the
+    opening 10 000.00. In «Все операции» lines are marked too (ƏDV DH over many days)."""
+    from PySide6.QtWidgets import QAbstractItemView, QMessageBox
+
+    from modern_gl.desktop.bank_page.actions import JOURNAL, LINES
+
+    monkeypatch.setattr(
+        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
+    )
+    session = bank
+    page = statement_page(qtbot, session)
+    for _ in range(2):
+        page.entry.start()
+        enter(qtbot)
+        pick(qtbot, page.entry.account, "70")
+        enter_until(qtbot, page.entry.money_out)
+        type_text(page.entry.money_out, "100")
+        enter(qtbot)
+    assert len(operations(session)) == 2
+    page.table.setFocus()
+    page.table.selectAll()
+    qtbot.keyClick(page.table, Qt.Key.Key_Delete)
+    assert operations(session) == []
+    assert page.current is not None and page.current.closing == 1_000_000
+    page.view = LINES
+    page.go(JOURNAL)
+    mode = page.table.selectionMode()
+    assert mode == QAbstractItemView.SelectionMode.ExtendedSelection
+
+
 def owe_alfa(session, number: str, amount: str, day: str) -> None:
     """ALFA's e-qaimə for rent: Dt 26 [rent] / Ct 60.1 [ALFA, Договор 1]."""
     from modern_gl.application.ledger import PostingInput
