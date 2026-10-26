@@ -166,6 +166,9 @@ class CompanyFiles(QMainWindow):
         except backup.BackupError as e:
             self._offer_restore(Path(path), str(e))
             return
+        except LedgerError as e:  # a newer program's file, a failed update: as it was
+            QMessageBox.warning(self, tr("Открыть компанию"), str(e))
+            return
         self._use_company(conn, company_id, Path(path), read_only=False)
         if self.settings:
             self.settings.setValue("company_file", str(path))

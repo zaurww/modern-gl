@@ -25,6 +25,9 @@ from modern_gl.i18n import tr
 
 FOLDER = "Ehtiyat nüsxələri"
 KEEP = 30
+# Beyond the newest KEEP: the last copy of each of this many older schemas — the copy made
+# before an update, for a mistake of the update that shows only weeks later (D-new)
+UPGRADE_KEEP = 3
 SUFFIX = ".gl"
 STAMP = "%Y-%m-%d %H-%M-%S"
 
@@ -126,8 +129,25 @@ def _new_name(folder: Path, name: str, note: str) -> Path:
 
 
 def _drop_oldest(folder: Path, keep: int) -> None:
-    for old in list_backups(folder)[keep:]:
+    copies = list_backups(folder)
+    oldest_schema = min((_schema_of(c.path) for c in copies[:keep]), default=0)
+    extra = 0
+    for old in copies[keep:]:
+        schema = _schema_of(old.path)
+        if schema < oldest_schema and extra < UPGRADE_KEEP:
+            oldest_schema, extra = schema, extra + 1  # the newest copy of an older schema
+            continue
         old.path.unlink(missing_ok=True)
+
+
+def _schema_of(path: Path) -> int:
+    """The schema version written in a copy's header (PRAGMA user_version: bytes 60–63)."""
+    try:
+        with open(path, "rb") as file:
+            file.seek(60)
+            return int.from_bytes(file.read(4), "big")
+    except OSError:
+        return 0
 
 
 def mirror(made: Path, root: Path) -> Path:
