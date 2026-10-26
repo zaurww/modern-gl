@@ -17,7 +17,6 @@ from modern_gl.application.inventory.amounts import (
     vat_of,
 )
 from modern_gl.application.inventory.awaiting import AwaitingCommands
-from modern_gl.application.inventory.catalog import CatalogCommands
 from modern_gl.application.inventory.defaults import default_vat_rate, line_vat
 from modern_gl.application.inventory.model import (
     ACCRUED_CODE,
@@ -44,6 +43,11 @@ from modern_gl.application.inventory.model import (
     UsualUnit,
 )
 from modern_gl.application.inventory.rebuild import RebuildCommands
+from modern_gl.application.inventory.stock_count import (
+    CountedLine,
+    StockCountCommands,
+    StockCountResult,
+)
 
 __all__ = [
     "ACCRUED_CODE",
@@ -58,6 +62,7 @@ __all__ = [
     "VAT_DOCUMENTS",
     "VAT_RATE_SCALE",
     "AccrualData",
+    "CountedLine",
     "Inventory",
     "InventoryDocumentData",
     "InventoryLineData",
@@ -67,6 +72,7 @@ __all__ = [
     "LandedCostTarget",
     "ReceiptLine",
     "SaleLine",
+    "StockCountResult",
     "TransferLine",
     "UsualUnit",
     "allocate_charges",
@@ -82,6 +88,6 @@ __all__ = [
 ]
 
 
-class Inventory(CatalogCommands, AwaitingCommands, RebuildCommands):
+class Inventory(StockCountCommands, AwaitingCommands, RebuildCommands):
     """Write-side API for inventory catalogs, movements and landed cost; each group
     lives in its own module."""
