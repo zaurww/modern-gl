@@ -13,7 +13,7 @@ from datetime import date
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
 
 from modern_gl.application.bank import BankPlace
-from modern_gl.application.bank.deposit_commands import DRAFT, POSTED, DepositImported
+from modern_gl.application.bank.deposit_commands import DepositImported
 from modern_gl.application.bank.deposit_import import (
     DepositFetched,
     loaded_already,
@@ -22,9 +22,10 @@ from modern_gl.application.bank.deposit_import import (
     portal_loads,
     unfinished_days,
 )
+from modern_gl.application.bank.imported import DRAFT, POSTED
 from modern_gl.application.bank.statement import place_balance
 from modern_gl.desktop.bank_page.deposit_fetch import DepositFetch, reconciled_changes
-from modern_gl.desktop.bank_page.deposit_rows import DepositRows
+from modern_gl.desktop.bank_page.import_rows import ImportRows
 from modern_gl.desktop.period_field import portal_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
@@ -102,7 +103,7 @@ class DepositDialog(QDialog):
         self.status.setObjectName("secondary")
         self.status.setWordWrap(True)
         root.addWidget(self.status)
-        self.rows = DepositRows()
+        self.rows = ImportRows()
         self.rows.itemChanged.connect(lambda *_: self._show_balances())
         self.rows.document_chosen.connect(self._open_document)
         root.addWidget(self.rows, 1)
