@@ -756,11 +756,19 @@ def test_inventory_page_shows_balance(inventory_demo, conn, qtbot):
     )
     page = InventoryPage(session)
     qtbot.addWidget(page)
-    assert page.model.rowCount() == 1
+    assert page.model.rowCount() == 2
     assert page.model.index(0, 0).data().endswith("Товар A")
     assert page.model.index(0, 2).data() == "Покупка · 10.01.2026"  # where it came from
     assert page.model.index(0, 3).data() == "3"
     assert page.model.index(0, 6).data() == "45.00"
+    # an item with nothing in stock is listed too, without a warehouse or a quantity
+    assert page.model.index(1, 0).data().endswith("Товар B")
+    assert page.model.index(1, 1).data() == "" and page.model.index(1, 3).data() == ""
+    page._toggle_idle()  # «⋯ → Товары без остатка»: hidden, remembered
+    assert page.model.rowCount() == 1
+    page._toggle_idle()
+    page.search.setText("товар b")  # the search: by name, code, warehouse, group
+    assert page.model.rowCount() == 1 and page.model.index(0, 0).data().endswith("Товар B")
 
 
 def test_inventory_page_shows_the_chosen_items_movements(inventory_demo, conn, qtbot):
@@ -1741,7 +1749,9 @@ def test_the_empty_warehouse_says_what_to_do_next(ledger, conn, qtbot):
     assert asked == ["item", "receipt", "opening"]
 
     Inventory(conn, actor="test").add_new_item(cid, "Бумага", UsualUnit("шт", "Штука", 0), stock)
-    page.refresh()
+    page.refresh()  # the new item is listed at once, with nothing in stock
+    assert page.model.rowCount() == 1 and page.model.index(0, 0).data() == "Бумага"
+    page._toggle_idle()  # without the items with nothing in stock: what to do next
     assert page.empty.title.text() == "Остатков пока нет"
     assert shown() == ["+ Покупка", "Начальные остатки"]
 

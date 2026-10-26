@@ -25,10 +25,12 @@ from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.reports_page.report_table import ReportTable, SelectionMode
 from modern_gl.desktop.widgets import EmptyState, hide_when_viewing, money, ru_date
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import fold, sort_key, tr
 from modern_gl.reporting.inventory import (
     StockBalance,
+    StockSource,
     code_label,
+    idle_items,
     item_choices,
     last_receipts,
     stock_balances,
@@ -37,6 +39,28 @@ from modern_gl.reporting.inventory import (
 
 def row_key(row: StockBalance) -> tuple[int, int]:
     return row.item_id, row.warehouse_id
+
+
+def searched(row: StockBalance) -> str:
+    """What the search looks in: the item's code and name, the warehouse, the group."""
+    return " ".join((row.item_code or "", row.item_name, row.warehouse_name, row.group))
+
+
+def grouped(balances: list[StockBalance]) -> list[StockBalance | StockGroup]:
+    """By group, as the directory shows them (each group under its header with its
+    value), the items by name; no groups — the items alone."""
+    balances = sorted(
+        balances,
+        key=lambda b: (b.group == "", sort_key(b.group), sort_key(b.item_name), b.warehouse_name),
+    )
+    if not any(b.group for b in balances):
+        return list(balances)
+    rows: list[StockBalance | StockGroup] = []
+    for group, members in groupby(balances, key=lambda b: b.group):
+        members = list(members)
+        rows.append(StockGroup(group or tr("Без группы"), sum(b.amount for b in members)))
+        rows.extend(members)
+    return rows
 
 
 @dataclass(frozen=True)
@@ -86,16 +110,34 @@ class StockPart(InventoryForm):
     def refresh(self) -> None:
         chosen = self.chosen_balance()
         balances = stock_balances(self.s.conn, self.s.company_id)
-        sources = last_receipts(self.s.conn, self.s.company_id)
-        rows: list[StockBalance | StockGroup] = []
-        if any(b.group for b in balances):  # each group under its header with its value
-            for group, members in groupby(balances, key=lambda b: b.group):
-                members = list(members)
-                rows.append(StockGroup(group or tr("Без группы"), sum(b.amount for b in members)))
-                rows.extend(members)
-        else:
-            rows = list(balances)
+        shown = balances + (idle_items(self.s.conn, self.s.company_id) if self.idle_shown() else [])
+        needle = fold(self.search.text().strip())
+        if needle:
+            shown = [b for b in shown if needle in fold(searched(b))]
+        rows = grouped(shown)
+        self.model.set(
+            self._columns(last_receipts(self.s.conn, self.s.company_id)),
+            rows,
+            emphasis=lambda row: isinstance(row, StockGroup),
+            section=lambda row: isinstance(row, StockGroup),
+            muted=lambda row: isinstance(row, StockBalance) and not (row.quantity or row.amount),
+        )
+        self.table.layout_columns()
+        self.stack.setCurrentWidget(self.table if rows or needle else self.empty)
+        if not rows and not needle:
+            self._say_what_next()
+        self._choose(chosen)
+        self.header.subtitle.setText(
+            tr(
+                "{items} позиций · {amount}",
+                items=len(balances),
+                amount=money(sum(r.amount for r in balances), False),
+            )
+        )
+        self._show_movements()
+        self._show_documents()
 
+    def _columns(self, sources: dict[tuple[int, int], StockSource]) -> list[Column]:
         def average(row) -> int:
             if isinstance(row, StockGroup):
                 return 0
@@ -108,51 +150,25 @@ class StockPart(InventoryForm):
                 return ""
             return f"{source_text(last.source, counterparty=False)} · {ru_date(last.doc_date)}"
 
-        self.model.set(
-            [
-                Column(
-                    tr("Товар"),
-                    lambda row: (
-                        row.name
-                        if isinstance(row, StockGroup)
-                        else code_label(row.item_code, row.item_name)
-                    ),
-                    width=240,
-                ),
-                Column(tr("Склад"), lambda row: getattr(row, "warehouse_name", ""), width=170),
-                Column(tr("Источник"), lambda row: source(row), width=250),
-                Column(
-                    tr("Количество"),
-                    lambda row: (
-                        ""
-                        if isinstance(row, StockGroup)
-                        else format_quantity(row.quantity, row.precision)
-                    ),
-                    width=130,
-                    right=True,
-                ),
-                Column(tr("Ед."), lambda row: getattr(row, "unit_code", ""), width=80),
-                Column(tr("Средняя цена"), average, money=True, width=130),
-                Column(tr("Стоимость"), lambda row: row.amount, money=True, width=150),
-            ],
-            rows,
-            emphasis=lambda row: isinstance(row, StockGroup),
-            section=lambda row: isinstance(row, StockGroup),
-        )
-        self.table.layout_columns()
-        self.stack.setCurrentWidget(self.table if rows else self.empty)
-        if not rows:
-            self._say_what_next()
-        self._choose(chosen)
-        self.header.subtitle.setText(
-            tr(
-                "{items} позиций · {amount}",
-                items=len(balances),
-                amount=money(sum(r.amount for r in balances), False),
-            )
-        )
-        self._show_movements()
-        self._show_documents()
+        def quantity(row) -> str:
+            if isinstance(row, StockGroup) or not (row.quantity or row.amount):
+                return ""
+            return format_quantity(row.quantity, row.precision)
+
+        def name(row) -> str:
+            if isinstance(row, StockGroup):
+                return row.name
+            return code_label(row.item_code, row.item_name)
+
+        return [
+            Column(tr("Товар"), name, width=240),
+            Column(tr("Склад"), lambda row: getattr(row, "warehouse_name", ""), width=170),
+            Column(tr("Источник"), source, width=250),
+            Column(tr("Количество"), quantity, width=130, right=True),
+            Column(tr("Ед."), lambda row: getattr(row, "unit_code", ""), width=80),
+            Column(tr("Средняя цена"), average, money=True, width=130),
+            Column(tr("Стоимость"), lambda row: row.amount, money=True, width=150),
+        ]
 
     def _say_what_next(self) -> None:
         """No stock: with no item yet — start with one; with items — bring stock in."""

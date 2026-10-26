@@ -82,6 +82,17 @@ class MovementsPart(InventoryForm):
                 )
             self.card_stack.setCurrentWidget(self.card_empty)
             return
+        if not balance.warehouse_id:  # an item with nothing in stock
+            self.below_title.setText(balance.item_name)
+            self.card_empty.say(
+                tr("Товара нет на складе"),
+                tr(
+                    "Он появится после покупки или начальных остатков. "
+                    "Двойной щелчок — карточка товара."
+                ),
+            )
+            self.card_stack.setCurrentWidget(self.card_empty)
+            return
         self.below_title.setText(f"{balance.item_name} · {balance.warehouse_name}")
         lines = stock_card(self.s.conn, self.s.company_id, balance.item_id, balance.warehouse_id)
 

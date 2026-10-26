@@ -129,6 +129,47 @@ def stock_balances(
     return balances
 
 
+def idle_items(conn: Connection, company_id: int) -> list[StockBalance]:
+    """Active items with nothing on any warehouse: shown under the stock (with no
+    warehouse) so that an item just made is there to open."""
+    rows = conn.execute(
+        """
+        SELECT i.id AS item_id, v.code AS item_code, v.name AS item_name,
+               v.id AS item_value_id, u.code AS unit_code, u.precision
+        FROM inventory_items i
+        JOIN subconto_values v ON v.company_id = i.company_id AND v.id = i.subconto_value_id
+        JOIN inventory_units u ON u.company_id = i.company_id AND u.id = i.unit_id
+        WHERE i.company_id = ? AND v.active = 1
+          AND NOT EXISTS (
+              SELECT 1 FROM stock_movements m
+              JOIN inventory_documents d ON d.id = m.document_id AND d.status = 'posted'
+              WHERE m.company_id = i.company_id AND m.item_id = i.id
+              GROUP BY m.warehouse_id
+              HAVING SUM(m.quantity) <> 0 OR SUM(m.amount) <> 0
+          )
+        ORDER BY v.name
+        """,
+        (company_id,),
+    ).fetchall()
+    paths = group_paths(conn, company_id)
+    return [
+        StockBalance(
+            r["item_id"],
+            r["item_code"],
+            r["item_name"],
+            0,
+            "",
+            r["unit_code"],
+            r["precision"],
+            0,
+            0,
+            paths.get(r["item_value_id"], ""),
+            r["item_value_id"],
+        )
+        for r in rows
+    ]
+
+
 def group_paths(conn: Connection, company_id: int) -> dict[int, str]:
     """For each directory element in a group: its groups, outermost first (D60)."""
     rows = conn.execute(
