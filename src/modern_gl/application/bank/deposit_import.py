@@ -15,6 +15,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
+from modern_gl.application.bank.imported import ImportedOperation
 from modern_gl.application.bank.operations import (
     CUSTOMER,
     IN,
@@ -37,9 +38,10 @@ from modern_gl.infrastructure.etaxes import EtaxesClient
 DONE = "SUCCESS"  # «Əməliyyat icra olundu»; another status did not move the money
 TAXPAYER, BANK = "TAXPAYER", "BANK"  # where the money came from or went: anything else
 # (BUDGET, the customs) is a tax
-# an e-qaimə number in a purpose of payment (the bank breaks the purpose into lines of 35
-# characters anywhere, a person types a space after the month: read without spaces)
-INVOICE_IN_TEXT = re.compile(r"MT\d{12}", re.IGNORECASE)
+# an e-qaimə number in a purpose of payment — MT, or AA of an advance e-qaimə (the bank
+# breaks the purpose into lines of 35 characters anywhere, a person types a space after
+# the month: read without spaces)
+INVOICE_IN_TEXT = re.compile(r"(?:MT|AA)\d{12}", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -304,11 +306,12 @@ def previous_lines(
     conn: Connection,
     company_id: int,
     place: BankPlace,
-    op: DepositOperation,
+    op: ImportedOperation,
     counterparty_id: int | None,
 ) -> list[BankLine]:
     """What this kind of money went to (came from) last time: the counterparty's last
-    operation; for a tax — the last tax paid from the deposit account (68.2 ƏDV)."""
+    operation; without one — the last of the kind on the account (a tax from the deposit
+    account: 68.2 ƏDV; salary to the cards)."""
     if counterparty_id is not None:
         return last_lines(conn, company_id, op.direction, counterparty_id)
     row = conn.execute(
