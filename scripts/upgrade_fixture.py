@@ -1,4 +1,4 @@
-"""A company file of this program's schema, kept for the upgrade test (D-new).
+"""A company file of this program's schema, kept for the upgrade test (D-new1).
 
     uv run python scripts/upgrade_fixture.py tests/fixtures/upgrade
 

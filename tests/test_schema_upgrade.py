@@ -1,4 +1,4 @@
-"""Updating a company file to a newer program (D-new): the update is all or nothing, an
+"""Updating a company file to a newer program (D-new1): the update is all or nothing, an
 older program refuses a newer file without touching it, a failed update is a message
 with the copy made before it, and that copy outlives the usual rotation of backups."""
 
