@@ -29,6 +29,7 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
     InventoryLinesDelegate,
 )
 from modern_gl.desktop.inventory_document_page.new_values import NewValuesPart
+from modern_gl.desktop.inventory_document_page.party import PartyPart
 from modern_gl.desktop.inventory_document_page.splits import SplitPart
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
@@ -42,8 +43,10 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.invoice import EQAIME
 from modern_gl.i18n import tr
 
+PARTY_MISSING = {"receipt": "Укажите поставщика", "sale": "Укажите покупателя"}
 
-class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart, SplitPart):
+
+class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart):
     def __init__(
         self,
         session: Session,
@@ -144,6 +147,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart, SplitPart)
         self._show_reason(None)
         if self.doc_type == "incoming":  # the first reason's account on the first line
             self._reason_changed()
+        self._show_party()
         self.dirty = False  # showing the defaults is not an edit
         self._show_totals()
 
@@ -206,6 +210,7 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart, SplitPart)
         self._apply_mode(read_only)
         self._show_currency(self.doc.currency_id, self.doc.currency_rate)
         self._show_basis(self.doc.invoice_kind, self.doc.invoice, self.doc.awaits_invoice)
+        self._show_party()
         self.dirty = False
         self._show_totals()
         self.title_changed.emit()
@@ -265,6 +270,8 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart, SplitPart)
         self._finish_editing()
         self.table.setFocus()
         self.error.hide()
+        if post and self._party_missing():
+            return False
         try:
             if self.doc is not None and self.doc.status == "posted":
                 # edited in place: posted again at once, later documents recalculated
@@ -290,6 +297,17 @@ class InventoryDocumentPage(HeaderPart, ClipboardPart, NewValuesPart, SplitPart)
             )
         )
         self.saved.emit(document_id)
+        return True
+
+    def _party_missing(self) -> bool:
+        """Posting without the header's supplier (customer): say so at its field."""
+        party, _contract = self._positions()
+        if not self.model.party_in_header() or party is None:
+            return False
+        if self.model.party_subconto[party] is not None:
+            return False
+        self.show_error(tr(PARTY_MISSING[self.doc_type]))
+        self.party.setFocus()
         return True
 
     def _save_draft(self, inputs) -> int:

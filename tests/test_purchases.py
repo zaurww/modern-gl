@@ -232,7 +232,7 @@ def test_a_purchase_posts_without_a_contract(shop, conn, qtbot):
     put(AMOUNT, 5_000)
     put(ACCOUNT, shop.acc["60"])
     assert not page.save(post=True)
-    assert "Kontragent" in page.error.text() or "Контрагент" in page.error.text()
+    assert page.error.text() == "Укажите поставщика"  # at the header's field
     put(SC1, shop.supplier[0])  # the contract (SC2) stays empty
     assert page.save(post=True), page.error.text()
     assert page.doc is not None

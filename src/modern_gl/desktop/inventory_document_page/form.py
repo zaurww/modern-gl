@@ -80,6 +80,7 @@ class InventoryDocumentForm(QWidget):
         root.setSpacing(14)
         self._build_head(root)
         self._build_meta(root)
+        self._build_party(root)
 
         self._show_vat_rate(default_vat_rate(session.ledger, session.company_id, doc_type))
         self.model = InventoryLinesModel(
@@ -309,8 +310,16 @@ class InventoryDocumentForm(QWidget):
         reason = self._chosen_reason()
         return self.inventory.incoming_account(self.s.company_id, reason) if reason else None
 
-    def _expense_columns(self) -> tuple[bool, set[int], bool]:
-        return self.model.has_expenses(), self.model.expense_positions(), self.model.has_goods()
+    def _expense_columns(self) -> tuple[bool, set[int], bool, bool]:
+        """What decides the columns shown: a service line, its subconto, goods, the
+        supplier (customer) of every line in the header."""
+        model = self.model
+        return (
+            model.has_expenses(),
+            model.expense_positions(),
+            model.has_goods(),
+            model.party_in_header(),
+        )
 
     def show_error(self, message: str) -> None:
         self.error.setText(message)
@@ -322,4 +331,7 @@ class InventoryDocumentForm(QWidget):
         raise NotImplementedError
 
     def _split_months(self, index: QPersistentModelIndex) -> None:  # the splits
+        raise NotImplementedError
+
+    def _build_party(self, root: QVBoxLayout) -> None:  # the party
         raise NotImplementedError

@@ -291,6 +291,7 @@ class InventoryLinesTable(QTableView):
         expenses = model.has_expenses()
         goods = model.has_goods()
         expense_positions = model.expense_positions()
+        in_header = model.party_in_header()  # the supplier (customer) is the header's
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
         self._widths = {
@@ -300,13 +301,13 @@ class InventoryLinesTable(QTableView):
             self.setColumnWidth(column, self._widths[key])
             self.setColumnHidden(column, False)  # a column of the previous model may be hidden
             if key in SC_KEYS:
-                self.setColumnHidden(column, int(key[-1]) not in used)
+                self.setColumnHidden(column, int(key[-1]) not in used or in_header)
             if key in {WAREHOUSE, UNIT}:
                 self.setColumnHidden(column, not goods)
             if key in {EXPENSE, EXPENSE_MONTH}:
                 self.setColumnHidden(column, not expenses)
             if key == ACCOUNT:
-                self.setColumnHidden(column, model.accounts_hidden)
+                self.setColumnHidden(column, model.accounts_hidden or in_header)
             if key in ESC_KEYS:
                 self.setColumnHidden(column, not expenses or int(key[-1]) not in expense_positions)
             if key in SALE_KEYS:

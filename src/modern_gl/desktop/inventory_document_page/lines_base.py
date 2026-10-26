@@ -82,6 +82,7 @@ def by_sale_kinds(catalog, kinds: list[int], values) -> list[int | None]:
 
 # the account a new line's offset starts with, by the document (debt 11: by type, not 60/62/46)
 OFFSET_PURPOSE = {"opening": SUPPLIER, "receipt": SUPPLIER, "sale": CUSTOMER}
+PARTY_DOCUMENTS = {"receipt", "sale"}  # the documents with a supplier or customer
 
 
 class InventoryLinesBase(QAbstractTableModel):
@@ -113,7 +114,13 @@ class InventoryLinesBase(QAbstractTableModel):
         # the kinds a sale line is asked for (D61), one column each
         self.sale_kinds = sale_kinds(session) if doc_type == "sale" else []
         self.stock_only = session.stock_only  # a warehouse only (D90)
+        # a purchase's supplier, a sale's customer, chosen in the header for every line;
+        # `by_lines` — the lines have their own and show them
+        self.party_account: int | None = None
+        self.party_subconto: list[int | None] = [None, None, None]
+        self.by_lines = False
         self.rows = rows or [self.default_row()]
+        self._take_party()
         # a company kept as a warehouse only (D90): the offset account is put in by itself
         # and not shown — unless the chart has none to put in
         self.accounts_hidden = self._accounts_hidden()
@@ -223,7 +230,59 @@ class InventoryLinesBase(QAbstractTableModel):
             return row.sale_subconto
         return row.expense_subconto if key in ESC_KEYS else row.offset_subconto
 
+    def has_party(self) -> bool:
+        """A purchase or a sale names its supplier or customer once, in the header."""
+        return self.doc_type in PARTY_DOCUMENTS
+
+    def _take_party(self) -> None:
+        """The header's party from the lines: the one they share; none — the default
+        account; lines with different ones show their own (`by_lines`)."""
+        if not self.has_party():
+            return
+        offsets = {
+            (row.offset_account_id, tuple(row.offset_subconto))
+            for row in self.rows
+            if not row.is_empty()
+        }
+        if len(offsets) > 1:  # the header still offers one for every line
+            self.by_lines = True
+            self.party_account = self.default_row().offset_account_id
+            return
+        account, subconto = offsets.pop() if offsets else (self.default_row().offset_account_id, ())
+        self.party_account = account
+        self.party_subconto = list(subconto) or [None, None, None]
+
+    def party_in_header(self) -> bool:
+        """Every line has the header's party: its account and subconto are not shown."""
+        if not self.has_party() or self.by_lines or self.party_account is None:
+            return False
+        party = (self.party_account, self.party_subconto)
+        return all(
+            (row.offset_account_id, row.offset_subconto) == party
+            for row in self.rows
+            if not row.is_empty()
+        )
+
+    def set_party(self, account_id: int | None, subconto: list[int | None]) -> None:
+        """The header's supplier or customer for every line: the lines that had the old
+        one (or none) — and all of them when they had their own."""
+        old = (self.party_account, self.party_subconto)
+        for row in self.rows:
+            same = (row.offset_account_id, row.offset_subconto) == old
+            if self.by_lines or same or row.is_empty() or not any(row.offset_subconto):
+                row.offset_account_id = account_id
+                row.offset_subconto = list(subconto)
+        self.party_account, self.party_subconto = account_id, list(subconto)
+        self.by_lines = False
+        self.beginResetModel()
+        self.endResetModel()
+        self.changed.emit()
+
     def default_row(self) -> InventoryGridRow:
+        if self.has_party() and self.party_account is not None:  # the header's party
+            return InventoryGridRow(
+                offset_account_id=self.party_account, offset_subconto=list(self.party_subconto)
+            )
         if self.doc_type == "incoming":
             return InventoryGridRow(offset_account_id=self.incoming_account)
         if self.doc_type in {"transfer", "landed_cost"}:
