@@ -80,7 +80,7 @@ class StockCountPage(QWidget):
         bar = QHBoxLayout()
         bar.setSpacing(8)
         self.warehouse = PickBox()
-        self.warehouse.setFixedWidth(220)
+        self.warehouse.setFixedWidth(200)
         for choice in warehouse_choices(self.s.conn, self.s.company_id):
             self.warehouse.addItem(choice.label, choice.id)
         remembered = QSettings().value(WAREHOUSE_SETTING, -1, type=int)
@@ -88,7 +88,7 @@ class StockCountPage(QWidget):
         self.date = date_edit(self.s.working_date)
         self.date.setFixedWidth(130)
         self.account = PickBox()
-        self.account.setFixedWidth(260)
+        self.account.setFixedWidth(230)
         for account in self.s.catalog.leaf_accounts:
             self.account.addItem(account.label, account.id)
         shortage = default_account(self.s.ledger, self.s.company_id, COST_OF_GOODS)
@@ -98,7 +98,7 @@ class StockCountPage(QWidget):
         self.add_item.setToolTip(tr("Товар, которого по учёту на складе нет, а нашёлся"))
         for item in item_choices(self.s.conn, self.s.company_id):
             self.add_item.addItem(item.label, item.id)
-        account_caption = self._caption(tr("Недостачу — на счёт"))
+        account_caption = self._caption(tr("Недостача — на счёт"))
         for widget in (
             self._caption(tr("Склад")),
             self.warehouse,
@@ -108,8 +108,6 @@ class StockCountPage(QWidget):
             self.account,
         ):
             bar.addWidget(widget)
-        bar.addSpacing(8)
-        bar.addWidget(self.add_item)
         bar.addStretch(1)
         root.addLayout(bar)
         # a warehouse-only company does not see its books (D90): the account goes by itself
@@ -127,6 +125,8 @@ class StockCountPage(QWidget):
 
     def _build_footer(self, root: QVBoxLayout) -> None:
         footer = QHBoxLayout()
+        footer.addWidget(self.add_item)  # under the lines: one more line
+        footer.addSpacing(16)
         self.totals = QLabel()
         self.totals.setObjectName("secondary")
         footer.addWidget(self.totals, 1)

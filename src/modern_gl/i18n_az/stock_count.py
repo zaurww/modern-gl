@@ -25,7 +25,7 @@ AZ: dict[str, str] = {
     "Провести разницу": "Fərqi keçir",
     "Добавить товар…": "Mal əlavə et…",
     "Товар, которого по учёту на складе нет, а нашёлся": "Uçotda anbarda olmayan, amma tapılan mal",
-    "Недостачу — на счёт": "Çatışmazlıq — hesaba",
+    "Недостача — на счёт": "Çatışmazlıq — hesaba",
     "Разница инвентаризации проведена": "İnventarizasiya fərqi keçirildi",
     "Факт совпадает с учётом": "Fakt uçotla eynidir",
     "Излишки: {n} на {sum}": "Artıq: {n}, {sum}",
