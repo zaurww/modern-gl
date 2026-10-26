@@ -83,7 +83,7 @@ class ValueDialog(QDialog):
             form.addRow(tr("Валюта"), self.currency)
             notes.append(tr("С валютой строка сама берёт её, и проводка проверяется по ней."))
         self.tags = TagPicker(session, value.tags if value else frozenset())
-        form.addRow(tr("Метки"), self.tags)
+        form.addRow(tr("Теги"), self.tags)
         lay.addLayout(form)
         for text in notes:
             note = QLabel(text)

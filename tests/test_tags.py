@@ -194,7 +194,7 @@ def test_tag_is_made_in_the_counterparty_window_and_filters_the_report(session, 
     )
 
     def tag_it(dialog: ValueDialog) -> int:
-        dialog.tags.new_tag()  # «+ Метка»: made and put on at once
+        dialog.tags.new_tag()  # «+ Тег»: made and put on at once
         return QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(ValueDialog, "exec", tag_it)
@@ -204,9 +204,9 @@ def test_tag_is_made_in_the_counterparty_window_and_filters_the_report(session, 
     headers = [
         page.model.headerData(c, Qt.Orientation.Horizontal) for c in range(page.model.columnCount())
     ]
-    assert "Метки" in headers
+    assert "Теги" in headers
     row = next(r for r in range(page.model.rowCount()) if page.model.index(r, 0).data() == "Альфа")
-    assert page.model.index(row, headers.index("Метки")).data() == "Связанная сторона"
+    assert page.model.index(row, headers.index("Теги")).data() == "Связанная сторона"
 
     report = SubcontoPage(s, acc["60"].id, ReportParams(date(2026, 3, 1), date(2026, 3, 31)))
     qtbot.addWidget(report)
@@ -221,7 +221,7 @@ def test_tag_is_made_in_the_counterparty_window_and_filters_the_report(session, 
     assert names == ["Альфа", "Итого"]
     total = report.model.rows[-1]
     assert (total.turnover_ct, total.closing_ct) == (400_00, 400_00)
-    assert report.footer.text() == "Только с меткой «Связанная сторона»"
+    assert report.footer.text() == "Только с тегом «Связанная сторона»"
 
 
 def test_report_has_no_tag_filter_while_nobody_has_a_tag(session, qtbot):

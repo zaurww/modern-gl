@@ -388,7 +388,7 @@ class SubcontoCommands(LedgerBase):
         with transaction(self.conn):
             value = self._subconto_value(company_id, value_id)
             if value["is_group"] and wanted:
-                raise ValidationError(tr("у группы не бывает меток — только у элементов"))
+                raise ValidationError(tr("у группы не бывает тегов — только у элементов"))
             for tag_id in wanted:
                 self._tag(company_id, tag_id)
             old = {
@@ -421,7 +421,7 @@ class SubcontoCommands(LedgerBase):
             "SELECT * FROM tags WHERE company_id = ? AND id = ?", (company_id, tag_id)
         ).fetchone()
         if row is None:
-            raise NotFoundError(tr("метка не найдена"))
+            raise NotFoundError(tr("тег не найден"))
         return row
 
     def _check_tag_name(self, company_id: int, name: str, tag_id: int | None = None) -> None:
@@ -430,7 +430,7 @@ class SubcontoCommands(LedgerBase):
             raise ValidationError(tr("название не может быть пустым"))
         for r in self.conn.execute("SELECT id, name FROM tags WHERE company_id = ?", (company_id,)):
             if r["id"] != tag_id and fold(r["name"]) == fold(name):
-                raise ValidationError(tr("метка «{name}» уже есть", name=r["name"]))
+                raise ValidationError(tr("тег «{name}» уже есть", name=r["name"]))
 
     def _check_owner(self, company_id: int, kind_id: int, owner_id: int | None) -> int | None:
         """The owner must be an element of the directory that owns `kind_id`.
