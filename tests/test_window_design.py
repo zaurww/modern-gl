@@ -1,4 +1,4 @@
-"""Every window looks as DESIGN.md says (D-new1): a new window is not done until it is
+"""Every window looks as DESIGN.md says (D147): a new window is not done until it is
 here. A window that loads from outside — the portal's e-qaimə and ƏDV DH, their
 reconciliations, a bank's files — is an `ImportWindow` (DESIGN.md §7) and is checked
 live, at its first step and with rows: one title, the bar without buttons, one blue
