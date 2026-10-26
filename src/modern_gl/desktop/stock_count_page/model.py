@@ -113,8 +113,9 @@ class CountModel(QAbstractTableModel):
         key = self.columns[section]
         if role == Qt.ItemDataRole.DisplayRole:
             return tr(HEADERS[key])
-        if role == Qt.ItemDataRole.TextAlignmentRole and key in NUMBERS:
-            return int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        if role == Qt.ItemDataRole.TextAlignmentRole:
+            side = Qt.AlignmentFlag.AlignRight if key in NUMBERS else Qt.AlignmentFlag.AlignLeft
+            return int(side | Qt.AlignmentFlag.AlignVCenter)
         return None
 
     def flags(self, index):

@@ -104,7 +104,7 @@ def test_the_page_puts_the_books_in_and_posts_what_was_typed(demo_window):
     assert (paper.book, paper.counted, paper.value) == (140 * Q, 140 * Q, 140_000)
     assert not page.post_button.isEnabled()  # nothing differs yet
     page.model.setData(page.model.index(0, page.model.columns.index(QUANTITY)), 138 * Q)
-    assert page.totals.text() == "Излишки: 0 на 0.00   ·   Недостача: 1 на 20.00"
+    assert page.totals.text() == "Недостача: 1 на 20.00"
     page.post()
     assert not page.open_shortage.isHidden() and page.open_surplus.isHidden()
     assert page.model.rows[0].book == 138 * Q  # read again: the books agree now

@@ -28,9 +28,8 @@ AZ: dict[str, str] = {
     "Недостачу — на счёт": "Çatışmazlıq — hesaba",
     "Разница инвентаризации проведена": "İnventarizasiya fərqi keçirildi",
     "Факт совпадает с учётом": "Fakt uçotla eynidir",
-    "Излишки: {n} на {sum}   ·   Недостача: {m} на {short}": (
-        "Artıq: {n}, {sum}   ·   Çatışmazlıq: {m}, {short}"
-    ),
+    "Излишки: {n} на {sum}": "Artıq: {n}, {sum}",
+    "Недостача: {n} на {sum}": "Çatışmazlıq: {n}, {sum}",
     "По учёту": "Uçot üzrə",
     "Факт": "Fakt",
     "Сумма разницы": "Fərqin məbləği",

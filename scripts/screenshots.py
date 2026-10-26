@@ -312,6 +312,14 @@ def main() -> None:
     win.close_current()
     win.close_current()
     win.show_place(("inventory",))
+    win.new_inventory_document("count")  # «Инвентаризация»: 2 sheets short
+    from modern_gl.desktop.stock_count_page import StockCountPage
+
+    count = cast(StockCountPage, win.stack.currentWidget())
+    count.model.setData(count.model.index(0, 3), 138 * 10**6)
+    shot("8c16_stock_count")
+    win.close_current()
+    win.show_place(("inventory",))
     win.new_inventory_document("incoming")  # D91: goods in without a purchase
     shot("8c1_incoming")
     win.close_current()

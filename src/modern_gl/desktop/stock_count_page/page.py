@@ -151,7 +151,8 @@ class StockCountPage(QWidget):
         return tr("Инвентаризация")
 
     def is_dirty(self) -> bool:
-        return any(r.difference for r in self.model.rows)
+        """A count is not kept as a draft: there is nothing to save on closing."""
+        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()
@@ -203,18 +204,12 @@ class StockCountPage(QWidget):
 
     def _show_totals(self) -> None:
         surplus, surplus_value, short, short_value = self.model.totals()
-        if not surplus and not short:
-            self.totals.setText(tr("Факт совпадает с учётом"))
-        else:
-            self.totals.setText(
-                tr(
-                    "Излишки: {n} на {sum}   ·   Недостача: {m} на {short}",
-                    n=surplus,
-                    sum=money(surplus_value, blank_zero=False),
-                    m=short,
-                    short=money(short_value, blank_zero=False),
-                )
-            )
+        parts = []
+        if surplus:
+            parts.append(tr("Излишки: {n} на {sum}", n=surplus, sum=money(surplus_value)))
+        if short:
+            parts.append(tr("Недостача: {n} на {sum}", n=short, sum=money(short_value)))
+        self.totals.setText("   ·   ".join(parts) or tr("Факт совпадает с учётом"))
         self.post_button.setEnabled(bool(surplus or short) and not self.s.read_only)
 
     def _show_error(self, text: str) -> None:
