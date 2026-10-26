@@ -25,7 +25,7 @@ from modern_gl.i18n import tr
 
 
 class TagPicker(QWidget):
-    """The tags of an element as pills: a click puts one on or off; «+ Метка» makes a new
+    """The tags of an element as pills: a click puts one on or off; «+ Тег» makes a new
     one (it is on at once); the menu of a pill renames or deletes it for the company."""
 
     def __init__(self, session: Session, chosen: frozenset[int] = frozenset()) -> None:
@@ -34,7 +34,7 @@ class TagPicker(QWidget):
         self._chosen = set(chosen)
         self.flow = FlowLayout(self)
         self.pills: dict[int, QPushButton] = {}
-        self.add = button(tr("+ Метка"), "flat", tr("Новая метка, например «Связанная сторона»"))
+        self.add = button(tr("+ Тег"), "flat", tr("Новый тег, например «Связанная сторона»"))
         self.add.clicked.connect(self.new_tag)
         self._fill()
 
@@ -62,11 +62,11 @@ class TagPicker(QWidget):
         self.updateGeometry()
 
     def _ask(self, title: str, text: str = "") -> str | None:
-        name, ok = QInputDialog.getText(self, title, tr("Название метки:"), text=text)
+        name, ok = QInputDialog.getText(self, title, tr("Название тега:"), text=text)
         return name.strip() if ok and name.strip() else None
 
     def new_tag(self) -> None:
-        name = self._ask(tr("Новая метка"))
+        name = self._ask(tr("Новый тег"))
         if name is None:
             return
         try:
@@ -81,7 +81,7 @@ class TagPicker(QWidget):
     def _menu(self, tag_id: int, pill: QPushButton, pos) -> None:
         menu = QMenu(self)
         menu.addAction(tr("Переименовать…")).triggered.connect(lambda: self._rename(tag_id))
-        menu.addAction(tr("Удалить метку…")).triggered.connect(lambda: self._delete(tag_id))
+        menu.addAction(tr("Удалить тег…")).triggered.connect(lambda: self._delete(tag_id))
         menu.exec(pill.mapToGlobal(pos))
 
     def _rename(self, tag_id: int) -> None:
@@ -92,7 +92,7 @@ class TagPicker(QWidget):
 
     def _delete(self, tag_id: int) -> None:
         name = self.s.catalog.tags[tag_id]
-        question = tr("Удалить метку «{name}»? Она снимется со всех элементов.", name=name)
+        question = tr("Удалить тег «{name}»? Он снимется со всех элементов.", name=name)
         if QMessageBox.question(self, tr("Удалить"), question) != QMessageBox.StandardButton.Yes:
             return
         self._change(lambda: self.s.ledger.delete_tag(self.s.company_id, tag_id))
@@ -113,7 +113,7 @@ class TagsDialog(QDialog):
 
     def __init__(self, session: Session, value: SubcontoInfo, parent: QWidget | None) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Метки"))
+        self.setWindowTitle(tr("Теги"))
         self.setMinimumWidth(420)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(28, 24, 28, 20)
@@ -123,7 +123,7 @@ class TagsDialog(QDialog):
         lay.addWidget(heading)
         self.picker = TagPicker(session, value.tags)
         lay.addWidget(self.picker)
-        note = QLabel(tr("По метке отбирается ОСВ по субконто: например, все связанные стороны."))
+        note = QLabel(tr("По тегу отбирается ОСВ по субконто: например, все связанные стороны."))
         note.setObjectName("secondary")
         note.setWordWrap(True)
         lay.addWidget(note)

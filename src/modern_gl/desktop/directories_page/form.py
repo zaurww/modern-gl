@@ -174,7 +174,7 @@ class DirectoriesForm(QWidget):
         if any(a.currency for a in accounts):
             columns.append(Column(tr("Валюта"), self._currency_code, width=120))
         if any(v.tags for v in values):
-            columns.append(Column(tr("Метки"), cat.tag_text, width=260))
+            columns.append(Column(tr("Теги"), cat.tag_text, width=260))
         if grouped:  # each group followed by what it holds
             values = [value for _, value in tree]
         self.model.set(columns, values, emphasis=lambda v: v.is_group, muted=lambda v: not v.active)

@@ -232,7 +232,7 @@ class DirectoriesPage(DirectoriesForm):
             return
         self._apply(
             lambda: self.s.ledger.set_subconto_value_tags(self.s.company_id, value.id, chosen),
-            tr("Метки «{name}» сохранены", name=value.name),
+            tr("Теги «{name}» сохранены", name=value.name),
             value.id,
         )
 
@@ -288,7 +288,7 @@ class DirectoriesPage(DirectoriesForm):
             (tr("Удалить"), lambda: self.delete_value(value)),
         ]
         if not value.is_group:
-            actions.insert(1, (tr("Метки…"), lambda: self.edit_tags(value)))
+            actions.insert(1, (tr("Теги…"), lambda: self.edit_tags(value)))
         if any(a.currency for a in self.s.catalog.accounts_using(value.kind_id)):
             actions.append((tr("Валюта…"), lambda: self.choose_currency(value)))
         for owned, owner in self.s.catalog.owner_kinds.items():  # a counterparty

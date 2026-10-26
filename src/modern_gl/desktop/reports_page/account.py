@@ -189,13 +189,13 @@ class SubcontoPage(AccountReportPage):
     kind, caption = "subconto", "ОСВ по субконто"
 
     def add_filters(self) -> None:
-        """«Метка»: only the elements with it — the related parties, the landlords (D64).
+        """«Тег»: only the elements with it — the related parties, the landlords (D64).
         Shown when some element of the directory has a tag. «Детализация»: counterparties,
         or counterparties and their contracts under them — when the account has both;
         an account of settlements — down to the e-qaimə (D110). The choice is remembered."""
         self.tag = QComboBox()
         self.tag.setMinimumWidth(190)
-        self.tag_label = QLabel(tr("Метка"))
+        self.tag_label = QLabel(tr("Тег"))
         self.tag_label.setObjectName("secondary")
         self.levels = QComboBox()
         self.levels.setMinimumWidth(190)
@@ -312,7 +312,7 @@ class SubcontoPage(AccountReportPage):
             total=lambda r: r is total,
         )
         self.footer.setText(
-            tr("Только с меткой «{name}»", name=self.tag.currentText())
+            tr("Только с тегом «{name}»", name=self.tag.currentText())
             if self.tag.currentData()
             else ""
         )
