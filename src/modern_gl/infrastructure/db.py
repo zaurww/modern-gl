@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from modern_gl.domain.errors import ReadOnlyError
+from modern_gl.domain.errors import LedgerError, ReadOnlyError
 from modern_gl.i18n import tr
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -28,6 +28,11 @@ DatabaseError = sqlite3.DatabaseError
 IntegrityError = sqlite3.IntegrityError
 
 
+class NewerFileError(LedgerError):
+    """The file was updated by a newer program: this one does not know its schema and
+    leaves it untouched (D148)."""
+
+
 def connect(path: str | Path) -> sqlite3.Connection:
     """Open a ledger database and bring its schema up to date."""
     # isolation_level=None: no implicit transactions, we open them explicitly.
@@ -35,6 +40,7 @@ def connect(path: str | Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     try:
         _check_application_id(conn)  # before anything touches another program's file
+        _check_not_newer(conn, path)  # before WAL or a migration writes to it
         conn.execute("PRAGMA foreign_keys = ON")
         conn.execute("PRAGMA journal_mode = WAL")
         conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
@@ -49,6 +55,22 @@ def _check_application_id(conn: sqlite3.Connection) -> None:
     found = conn.execute("PRAGMA application_id").fetchone()[0]
     if found not in (0, APPLICATION_ID):
         raise sqlite3.DatabaseError(tr("это не файл компании Modern GL"))
+
+
+def _check_not_newer(conn: sqlite3.Connection, path: str | Path) -> None:
+    """An older program never writes to a newer file: it would leave out what the newer
+    one keeps (new columns, new rules) and the file would no longer be true."""
+    found, known = schema_version(conn), latest_version()
+    if found > known:
+        raise NewerFileError(
+            tr(
+                "Файл «{file}» обновлён более новой версией Modern GL (схема {found}, эта "
+                "программа знает до {known}). Обновите программу — файл не изменён",
+                file=Path(path).name,
+                found=found,
+                known=known,
+            )
+        )
 
 
 def close(conn: sqlite3.Connection) -> None:
@@ -86,6 +108,7 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
         if found != ["ok"]:
             raise sqlite3.DatabaseError("; ".join(found))
         conn.row_factory = sqlite3.Row
+        _check_not_newer(conn, path)
         conn.execute("PRAGMA foreign_keys = ON")
         migrate(conn)
     except BaseException:
@@ -165,9 +188,10 @@ def latest_version() -> int:
 
 
 def migrate(conn: sqlite3.Connection) -> None:
-    """Apply pending migrations. Foreign keys are off meanwhile, so a migration may
-    rebuild a referenced table (the SQLite way to change a column); dangling
-    references are checked before each migration commits."""
+    """Apply pending migrations, all in one transaction: the file is either brought fully
+    up to date or left exactly as the older program wrote it, which can still open it.
+    Foreign keys are off meanwhile, so a migration may rebuild a referenced table (the
+    SQLite way to change a column); dangling references are checked after each one."""
     current = schema_version(conn)
     pending = [
         (version, path)
@@ -178,19 +202,44 @@ def migrate(conn: sqlite3.Connection) -> None:
         return
     conn.execute("PRAGMA foreign_keys = OFF")  # no effect inside a transaction
     try:
-        for version, path in pending:
-            sql = path.read_text(encoding="utf-8")
-            try:
-                conn.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {version};")
-                broken = conn.execute("PRAGMA foreign_key_check").fetchall()
-                if broken:
-                    raise sqlite3.IntegrityError(
-                        f"{path.name}: broken references {[tuple(r) for r in broken]}"
-                    )
-                conn.execute("COMMIT")
-            except BaseException:
-                if conn.in_transaction:
-                    conn.execute("ROLLBACK")
-                raise
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for version, path in pending:
+                _apply(conn, version, path)
+            conn.execute("COMMIT")
+        except BaseException:
+            if conn.in_transaction:
+                conn.execute("ROLLBACK")
+            raise
     finally:
         conn.execute("PRAGMA foreign_keys = ON")
+
+
+def _apply(conn: sqlite3.Connection, version: int, path: Path) -> None:
+    """One migration inside the update's transaction (executescript would commit it:
+    statements run one by one)."""
+    script = f"{path.read_text(encoding='utf-8')}\nPRAGMA user_version = {version};"
+    for statement in _statements(script):
+        conn.execute(statement)
+    broken = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if broken:
+        raise sqlite3.IntegrityError(f"{path.name}: broken references {[tuple(r) for r in broken]}")
+
+
+def _statements(script: str) -> Iterator[str]:
+    """The statements of a script, in order. A semicolon ends a statement only where
+    SQLite's own tokenizer says so: not inside a string, a comment or a trigger's body."""
+    pending = ""
+    for piece in script.split(";")[:-1]:
+        pending += piece + ";"
+        if sqlite3.complete_statement(pending):
+            if not _only_comments(pending.replace(";", "")):
+                yield pending
+            pending = ""
+    rest = pending + script.rsplit(";", 1)[-1]
+    if not _only_comments(rest):
+        raise sqlite3.OperationalError(f"incomplete statement: {rest.strip()[:80]}")
+
+
+def _only_comments(text: str) -> bool:
+    return all(not line.strip() or line.strip().startswith("--") for line in text.splitlines())

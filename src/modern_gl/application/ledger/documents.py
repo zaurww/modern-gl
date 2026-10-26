@@ -240,6 +240,14 @@ class DocumentCommands(PostingChecks):
             self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
             self._audit(company_id, "document", doc_id, "delete", with_reason(snapshot, reason))
 
+    def require_changeable(self, company_id: int, doc_id: int) -> None:
+        """Refuse, with the user's words, what deleting or unposting this document would
+        refuse: a module asks before it changes the rows it built the document from (the
+        file refuses those rows of a closed period too, in words for nobody — 0053)."""
+        doc = self._document(company_id, doc_id)
+        if doc["status"] == "posted":
+            self._require_changeable(company_id, doc)
+
     def _require_changeable(self, company_id: int, doc: Row) -> None:
         self._require_open_period(
             company_id, doc, ". " + tr("Исправьте его сторно в открытом периоде.")

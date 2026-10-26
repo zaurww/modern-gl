@@ -19,6 +19,7 @@ from pathlib import Path
 from modern_gl.application.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.company import FULL
+from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.company_file import (
@@ -42,6 +43,10 @@ from modern_gl.infrastructure.db import (
 
 SUFFIX = ".gl"
 TRASH = "Silinmiş"
+
+
+class UpgradeError(LedgerError):
+    """A company file could not be brought up to this program's schema; it is unchanged."""
 
 
 @dataclass(frozen=True)
@@ -153,13 +158,27 @@ class Workspace:
         return backup.folder_for(self.folder, company_file)
 
     def open(self, path: Path) -> tuple[Connection, int]:
-        """Open a company file; a file about to get a newer schema is backed up first,
-        and a damaged file is refused (backup.BackupError) so it can be restored."""
+        """Open a company file; a file about to get a newer schema is backed up first
+        (a failed update: UpgradeError, the file as it was), a file of a newer program is
+        refused untouched (NewerFileError), and a damaged file is refused
+        (backup.BackupError) so it can be restored."""
         path = Path(path)
         backup.check(path)
-        if file_version(path) < latest_version():
-            backup.make_backup_of_file(path, self.backup_folder(path), tr("до обновления"))
-        return open_company(path)
+        if file_version(path) >= latest_version():  # a newer file: NewerFileError
+            return open_company(path)
+        made = backup.make_backup_of_file(path, self.backup_folder(path), tr("до обновления"))
+        try:
+            return open_company(path)
+        except DatabaseError as e:  # the update is one transaction: nothing was written
+            raise UpgradeError(
+                tr(
+                    "Файл «{file}» не удалось обновить для этой версии программы: {error}. "
+                    "Файл не изменён, его копия до обновления — {copy}",
+                    file=path.name,
+                    error=e,
+                    copy=made,
+                )
+            ) from e
 
     def view(self, path: Path) -> tuple[Connection, int]:
         """A company file for viewing only (D80): a snapshot in memory; the file is not

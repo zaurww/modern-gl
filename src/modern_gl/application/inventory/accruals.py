@@ -145,5 +145,6 @@ class AccrualCommands(InventoryBase):
             self._drop_accrual(company_id, row)
 
     def _drop_accrual(self, company_id: int, row: Row) -> None:
+        self.ledger.require_changeable(company_id, row["gl_document_id"])
         self.conn.execute("DELETE FROM inventory_accruals WHERE id = ?", (row["id"],))
         self.ledger.delete_document(company_id, row["gl_document_id"])

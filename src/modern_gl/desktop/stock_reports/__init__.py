@@ -1,4 +1,4 @@
-"""The warehouse's reports (D-new): the statement of a period, an item's card, the gross
+"""The warehouse's reports (D150): the statement of a period, an item's card, the gross
 profit by item — on the common report table, opened from «Все отчёты» and from «Склад»."""
 
 from modern_gl.desktop.stock_reports.card import ItemCardPage
