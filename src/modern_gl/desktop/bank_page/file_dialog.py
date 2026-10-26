@@ -1,4 +1,4 @@
-"""«Загрузить выписку из файла» (D-new1): the bank's statement files read, each matched to
+"""«Загрузить выписку из файла» (D146): the bank's statement files read, each matched to
 a bank account by its IBAN (an account not known — chosen once, it keeps the IBAN), then
 shown with what each line becomes before anything is written: the lines to check first,
 with why; «Провести» (or «Создать черновики») writes the lines ticked, the window shows

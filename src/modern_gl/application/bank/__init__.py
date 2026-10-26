@@ -77,7 +77,7 @@ from modern_gl.application.bank.statements import (
 
 
 class BankModule(VatDepositCommands, BankFileCommands):
-    """The bank's write scenarios (D47, D78, D112, D-new1): one object per ledger,
+    """The bank's write scenarios (D47, D78, D112, D146): one object per ledger,
     `ledger.bank`."""
 
 

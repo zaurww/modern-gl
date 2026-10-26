@@ -1,4 +1,4 @@
-"""Bank statement files (D-new1): the forms of the banks read, the lines loaded into the
+"""Bank statement files (D146): the forms of the banks read, the lines loaded into the
 bank, the window of the load."""
 
 AZ: dict[str, str] = {

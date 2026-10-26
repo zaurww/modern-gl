@@ -1,4 +1,4 @@
-"""Bank statement files (D-new1): Kapital Bank's form read, its lines loaded into the bank.
+"""Bank statement files (D146): Kapital Bank's form read, its lines loaded into the bank.
 
 Two files of one company (VÖEN 1400000001), as the internet bank gives them. Hand-calculated:
 

@@ -1,6 +1,6 @@
 """The bank page's actions (D47, D78): its one «⋯» (D86), a new statement or account, the
 ƏDV deposit from the portal and against it (D112, D118), statements from the bank's files
-(D-new1), a new operation, the lines moved to another account. `BankPage` builds the
+(D146), a new operation, the lines moved to another account. `BankPage` builds the
 levels and shows them."""
 
 from __future__ import annotations
