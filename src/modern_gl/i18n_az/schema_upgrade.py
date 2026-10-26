@@ -1,4 +1,4 @@
-"""Updating a company file to a newer program (D-new1)."""
+"""Updating a company file to a newer program (D148)."""
 
 AZ: dict[str, str] = {
     "Файл «{file}» обновлён более новой версией Modern GL (схема {found}, эта "

@@ -1,4 +1,4 @@
-"""The file keeps the rules of the code (migration 0053, D-new2): money is never a fraction,
+"""The file keeps the rules of the code (migration 0053, D149): money is never a fraction,
 the closed period is not changed, and the rows a module built a closed document from stay.
 Written straight to the file — as a mistake of the code, an import or a tool would."""
 

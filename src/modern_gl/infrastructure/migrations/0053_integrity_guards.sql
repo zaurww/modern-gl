@@ -1,4 +1,4 @@
--- The rules the code keeps, kept by the file too (D-new2): a mistake of the code, an
+-- The rules the code keeps, kept by the file too (D149): a mistake of the code, an
 -- import or a tool that writes to the file directly is refused, not stored.
 --
 -- 1. An INTEGER column holds an integer (or NULL): SQLite would keep 12.5 or '12,5' there

@@ -30,7 +30,7 @@ IntegrityError = sqlite3.IntegrityError
 
 class NewerFileError(LedgerError):
     """The file was updated by a newer program: this one does not know its schema and
-    leaves it untouched (D-new1)."""
+    leaves it untouched (D148)."""
 
 
 def connect(path: str | Path) -> sqlite3.Connection:

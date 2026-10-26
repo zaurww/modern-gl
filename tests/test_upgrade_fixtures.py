@@ -1,4 +1,4 @@
-"""Files of earlier releases, updated by this program (D-new1): each `schema_NNNN.gl.xz` in
+"""Files of earlier releases, updated by this program (D148): each `schema_NNNN.gl.xz` in
 tests/fixtures/upgrade was written by the program of that schema
 (`scripts/upgrade_fixture.py`) with the year demo, every module; with it is what that
 program reported. After the update the file is whole, reports the same numbers, and every

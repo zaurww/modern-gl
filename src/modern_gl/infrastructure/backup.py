@@ -26,7 +26,7 @@ from modern_gl.i18n import tr
 FOLDER = "Ehtiyat nüsxələri"
 KEEP = 30
 # Beyond the newest KEEP: the last copy of each of this many older schemas — the copy made
-# before an update, for a mistake of the update that shows only weeks later (D-new1)
+# before an update, for a mistake of the update that shows only weeks later (D148)
 UPGRADE_KEEP = 3
 SUFFIX = ".gl"
 STAMP = "%Y-%m-%d %H-%M-%S"
