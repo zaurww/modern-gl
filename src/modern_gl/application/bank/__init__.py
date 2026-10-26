@@ -1,9 +1,11 @@
 """The bank (D47, D78): bank accounts and their statements, operations in and out, advances,
-the ƏDV deposit account from the portal (D112). Reading — `accounts`, `operations`,
-`statement(s)`, `places`, `advances`, `deposit_*`; writing — `BankModule`, one object over
-the ledger's connection (`ledger.bank`), assembled from `commands`, `account_commands`,
-`deposit_commands`. Amounts are minor units of the operation's currency (None = manat);
-the statement is read from postings, so every document on the account is in it."""
+the ƏDV deposit account from the portal (D112), bank statement files (`files` — a module
+per bank's form). Reading — `accounts`, `operations`, `statement(s)`, `places`,
+`advances`, `deposit_*`, `file_import`; writing — `BankModule`, one object over the
+ledger's connection (`ledger.bank`), assembled from `commands`, `account_commands`,
+`import_commands`, `deposit_commands`, `file_commands`. Amounts are minor units of the
+operation's currency (None = manat); the statement is read from postings, so every
+document on the account is in it."""
 
 from __future__ import annotations
 
@@ -24,6 +26,7 @@ from modern_gl.application.bank.advances import (
     payment_lines,
 )
 from modern_gl.application.bank.deposit_commands import VatDepositCommands
+from modern_gl.application.bank.file_commands import BankFileCommands
 from modern_gl.application.bank.operations import (
     BANK_TYPES,
     CUSTOMER,
@@ -73,8 +76,9 @@ from modern_gl.application.bank.statements import (
 )
 
 
-class BankModule(VatDepositCommands):
-    """The bank's write scenarios (D47, D78, D112): one object per ledger, `ledger.bank`."""
+class BankModule(VatDepositCommands, BankFileCommands):
+    """The bank's write scenarios (D47, D78, D112, D146): one object per ledger,
+    `ledger.bank`."""
 
 
 __all__ = [

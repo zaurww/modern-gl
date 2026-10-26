@@ -1,14 +1,15 @@
 """The bank page's actions (D47, D78): its one «⋯» (D86), a new statement or account, the
-ƏDV deposit from the portal and against it (D112, D118), a new operation, the lines moved
-to another account. `BankPage` builds the levels and shows them."""
+ƏDV deposit from the portal and against it (D112, D118), statements from the bank's files
+(D146), a new operation, the lines moved to another account. `BankPage` builds the
+levels and shows them."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import date, timedelta
 
 from PySide6.QtCore import QSettings, Signal
-from PySide6.QtWidgets import QDialog, QMenu
+from PySide6.QtWidgets import QDialog, QFileDialog, QMenu
 
 from modern_gl.application.bank import (
     BankAccount,
@@ -21,6 +22,7 @@ from modern_gl.application.queries import document_owner
 from modern_gl.desktop.bank_page.deposit_reconcile import DepositReconcileDialog
 from modern_gl.desktop.bank_page.dialogs import BankAccountDialog, PeriodDialog
 from modern_gl.desktop.bank_page.entry import ONE, TWO
+from modern_gl.desktop.bank_page.file_dialog import BankFileDialog
 from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
 from modern_gl.desktop.bank_page.portal import DepositDialog
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
@@ -89,6 +91,8 @@ class BankActions(ReportPage):
         if place is not None and place.account_type == "vat_deposit":
             items.append((tr("Загрузить с портала…"), self.load_from_portal))
             items.append((tr("Сверить с порталом…"), self.reconcile_with_portal))
+        else:
+            items.append((tr("Загрузить выписку из файла…"), self.load_bank_files))
         if self.level != ACCOUNTS:
             items.append((tr("Реквизиты счёта…"), self.edit_account))
         else:
@@ -148,6 +152,22 @@ class BankActions(ReportPage):
         if place is None:
             return
         dialog = DepositDialog(self.s, place, self, self.portal_sign_in)
+        dialog.exec()
+        if dialog.imported is not None:
+            self.refresh()
+        if dialog.chosen_document is not None:
+            self.open_document.emit(dialog.chosen_document)
+
+    def load_bank_files(self, paths: Sequence[str] | None = None) -> None:
+        """The bank's statement files (several at once — each finds its account by the
+        IBAN): what became of the lines — in the window, a double click opens a document."""
+        if paths is None:
+            paths, _ = QFileDialog.getOpenFileNames(
+                self, tr("Выписка из файла"), "", tr("Выписки банка (*.xlsx)")
+            )
+        if not paths:
+            return
+        dialog = BankFileDialog(self.s, paths, self.place, self)
         dialog.exec()
         if dialog.imported is not None:
             self.refresh()

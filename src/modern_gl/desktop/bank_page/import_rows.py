@@ -1,6 +1,7 @@
-"""The portal's ƏDV deposit operations in the window before they are written (what each
-becomes, ticked to load) and after (what became of each, a double click opens it) — as the
-e-qaimə window shows its lines."""
+"""Operations loaded from outside — the portal's ƏDV deposit (D112), a bank's statement
+files — in the window before they are written (what each becomes, ticked to load) and
+after (what became of each, a double click opens it), as the e-qaimə window shows its
+lines; with files of several accounts — whose each line is."""
 
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
 
 from modern_gl.application.bank import IN
-from modern_gl.application.bank.deposit_commands import DRAFT, KNOWN, LINKED, POSTED, DepositRow
+from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED, ImportRow
 from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import money
@@ -21,7 +22,7 @@ BECOMES, STATE = COLUMNS.index("Станет"), COLUMNS.index("Состояни�
 CHOICES = (POSTED, DRAFT, LINKED)  # what can be left out; KNOWN is in the books already
 
 
-def becomes(row: DepositRow) -> str:
+def becomes(row: ImportRow) -> str:
     """'62.1 · MT260411000001 540.00; 62.1 · MT260812000002 54.00' — the account, the
     e-qaimə the money closes, the amount when there is more than one line."""
     parts = []
@@ -33,7 +34,7 @@ def becomes(row: DepositRow) -> str:
     return "; ".join(parts)
 
 
-def state(row: DepositRow, written: bool) -> str:
+def state(row: ImportRow, written: bool) -> str:
     """What the import does with the operation — or, `written`, what it did."""
     if row.state == KNOWN:
         return tr("уже есть")
@@ -44,7 +45,7 @@ def state(row: DepositRow, written: bool) -> str:
     return tr("черновик: {why}", why=row.reason)
 
 
-class DepositRows(QTreeWidget):
+class ImportRows(QTreeWidget):
     """The rows of a preview (ticked, the ones in the books greyed) or of an import done
     (`document_chosen` — the GL document of the row double-clicked)."""
 
@@ -61,12 +62,12 @@ class DepositRows(QTreeWidget):
             self.headerItem().setTextAlignment(column, Qt.AlignmentFlag.AlignRight)
         self.itemDoubleClicked.connect(self._open)
 
-    def show_rows(self, rows: list[DepositRow], written: bool) -> None:
+    def show_rows(self, rows: list[ImportRow], written: bool) -> None:
         self.clear()
         for row in rows:
             self.addTopLevelItem(self._item(row, written))
 
-    def _item(self, row: DepositRow, written: bool) -> QTreeWidgetItem:
+    def _item(self, row: ImportRow, written: bool) -> QTreeWidgetItem:
         op = row.op
         item = QTreeWidgetItem(
             [
@@ -99,13 +100,13 @@ class DepositRows(QTreeWidget):
             item.setToolTip(STATE, f"{item.text(STATE)}\n{hint}")
         return item
 
-    def rows(self, ticked_only: bool = False) -> list[DepositRow]:
+    def rows(self, ticked_only: bool = False) -> list[ImportRow]:
         found = []
         for n in range(self.topLevelItemCount()):
             item = self.topLevelItem(n)
             if item is None:
                 continue
-            row: DepositRow = item.data(0, Qt.ItemDataRole.UserRole)
+            row: ImportRow = item.data(0, Qt.ItemDataRole.UserRole)
             checkable = bool(item.flags() & Qt.ItemFlag.ItemIsUserCheckable)
             if ticked_only and checkable and item.checkState(0) != Qt.CheckState.Checked:
                 continue
@@ -117,6 +118,6 @@ class DepositRows(QTreeWidget):
         return {row.op.reference for row in self.rows(ticked_only=True) if row.state in CHOICES}
 
     def _open(self, item: QTreeWidgetItem, _column: int) -> None:
-        row: DepositRow = item.data(0, Qt.ItemDataRole.UserRole)
+        row: ImportRow = item.data(0, Qt.ItemDataRole.UserRole)
         if row.document_id is not None:
             self.document_chosen.emit(row.document_id)
