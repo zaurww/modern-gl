@@ -302,7 +302,7 @@ class InventoryDocumentPage(
                 inputs = self.model.to_inputs(complete=post)
                 document_id = self._save_draft(inputs)
                 if post:
-                    self.inventory.post_document(self.s.company_id, document_id)
+                    self._post_saved(document_id)
         except (LedgerError, ValueError, TypeError) as exc:
             self.show_error(str(exc))
             return False
@@ -390,6 +390,18 @@ class InventoryDocumentPage(
             return self.inventory.create_transfer_draft(company_id, document_date, inputs, memo)
         self.inventory.update_transfer_draft(company_id, self.doc.id, document_date, inputs, memo)
         return self.doc.id
+
+    def _post_saved(self, document_id: int) -> None:
+        """Post the draft just saved; when it does not post, the page holds that draft
+        (a second «Провести» must not save another one) and says why."""
+        try:
+            self.inventory.post_document(self.s.company_id, document_id)
+        except LedgerError:
+            fresh = self.doc is None
+            self.load(document_id)
+            if fresh:
+                self.saved.emit(document_id)  # a new draft: the lists show it
+            raise
 
     def _save_return(self, inputs, document_date, memo: str) -> int:
         first = inputs[0]
