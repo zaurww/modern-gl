@@ -113,12 +113,11 @@ class Year(Imports, Money):
         e-qaimə, posted at once; after the first January the expense account is filled like last
         time. The electricity is the previous month's expense (D65)."""
         drafts = []
-        for supplier, what, amount, account, item in SERVICES:
+        for supplier, what, fixed, account, item in SERVICES:
             first = (d.year, d.month) == (self.first, 1)
-            if supplier == "power":
-                if first:
-                    continue
-                amount = 30_000 + self.rng.randrange(0, 30_000)
+            if supplier == "power" and first:
+                continue
+            amount = 30_000 + self.rng.randrange(0, 30_000) if supplier == "power" else fixed
             known = first or (supplier == "power" and (d.year, d.month) == (self.first, 2))
             line = ReceiptLine(
                 None,

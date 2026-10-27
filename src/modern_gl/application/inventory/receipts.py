@@ -21,6 +21,7 @@ from modern_gl.application.inventory.model import (
     INCOMING_TYPES,
     ReceiptHeader,
     ReceiptLine,
+    StoredLine,
 )
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.domain.currency import to_base, unit_rate
@@ -36,7 +37,7 @@ def check_reason(reason: str | None) -> None:
 
 
 class ReceiptDraftCommands(StockCommands):
-    def create_receipt_draft(
+    def create_receipt_draft(  # noqa: PLR0913 the public form of ReceiptHeader
         self,
         company_id: int,
         doc_date: date | str,
@@ -109,7 +110,7 @@ class ReceiptDraftCommands(StockCommands):
             )
         return document_id
 
-    def update_receipt_draft(
+    def update_receipt_draft(  # noqa: PLR0913 the public form of ReceiptHeader
         self,
         company_id: int,
         document_id: int,
@@ -283,24 +284,24 @@ class ReceiptDraftCommands(StockCommands):
             self._insert_line(
                 document_id,
                 company_id,
-                line_no,
-                source.item_id,
-                warehouse_id,
-                None,
-                quantity,
-                amount,
-                amount if stock else 0,
-                0 if stock else amount,
-                line_credit_account,
-                line_credit_sc,
-                None,
-                source.memo.strip(),
-                line_id=source.line_id,
-                vat_amount=vat,
-                currency_amount=currency_amount,
-                cost_account_id=expense[0],
-                cost_subconto=expense[1],
-                expense_date=expense_date,
+                StoredLine(
+                    line_no,
+                    source.item_id,
+                    warehouse_id,
+                    quantity,
+                    source.memo.strip(),
+                    amount=amount,
+                    inventory_amount=amount if stock else 0,
+                    expense_amount=0 if stock else amount,
+                    offset_account_id=line_credit_account,
+                    offset_subconto=line_credit_sc,
+                    line_id=source.line_id,
+                    vat_amount=vat,
+                    currency_amount=currency_amount,
+                    cost_account_id=expense[0],
+                    cost_subconto=expense[1],
+                    expense_date=expense_date,
+                ),
             )
 
     @staticmethod

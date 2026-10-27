@@ -256,7 +256,7 @@ class TemplatePage(GridEditing, PageWidget):
         root.addLayout(actions)
 
     def _connect(self) -> None:
-        self.btn_save.clicked.connect(lambda: self.save())
+        self.btn_save.clicked.connect(lambda: self.save())  # noqa: PLW0108 clicked(bool) would be `post`
         self.btn_delete.clicked.connect(self.delete)
         self.delegate.error.connect(self.show_error)
         self.delegate.add_value = partial(add_typed_value, self.s)

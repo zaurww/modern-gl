@@ -56,7 +56,7 @@ class ImportPage(PageWidget):
             tr("Скопируйте строки вместе с заголовком и нажмите Ctrl+V, или откройте файл"),
         )
         paste = button(tr("Вставить"), "flat", "Ctrl+V")
-        paste.clicked.connect(lambda: self.paste())
+        paste.clicked.connect(lambda: self.paste())  # noqa: PLW0108 clicked(bool) would be the text
         self.header.add_action(paste)
         self.header.primary(tr("Открыть файл…"), self.open_file, tr("Excel (.xlsx) или CSV"))
         root.addWidget(self.header)
@@ -102,7 +102,7 @@ class ImportPage(PageWidget):
         bottom.addWidget(self.run_button)
         root.addLayout(bottom)
 
-        bind(self, "paste", lambda: self.paste())
+        bind(self, "paste", self.paste)
         self.rebuild()
 
     def title(self) -> str:

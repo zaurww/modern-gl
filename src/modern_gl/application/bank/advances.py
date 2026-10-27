@@ -25,7 +25,7 @@ def counterparty_balance(
     return account_balance(conn, company_id, account_id, counterparty_id, day)
 
 
-def payment_lines(
+def payment_lines(  # noqa: PLR0913 one payment's facts, keyword-only
     conn: Connection,
     company_id: int,
     *,

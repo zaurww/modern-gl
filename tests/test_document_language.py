@@ -72,7 +72,9 @@ def test_the_setting_is_kept_and_audited(ledger):
         ledger.set_document_language(company_id, "en")
 
 
-@pytest.mark.parametrize("written, interface, found", [("az", "ru", "az"), ("ru", "az", "ru")])
+@pytest.mark.parametrize(
+    ("written", "interface", "found"), [("az", "ru", "az"), ("ru", "az", "ru")]
+)
 def test_an_older_file_keeps_the_language_its_texts_are_in(tmp_path, written, interface, found):
     """A file of an older program has no setting: its texts tell which language they were
     written in, whatever the interface is now."""

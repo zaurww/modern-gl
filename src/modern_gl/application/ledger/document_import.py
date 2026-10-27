@@ -13,7 +13,7 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 
-class _Discard(Exception):
+class _DiscardError(Exception):
     """Rolls back an import that had problems or was only a check."""
 
 
@@ -43,9 +43,8 @@ class DocumentImportCommands(DocumentCommands):
         try:
             with transaction(self.conn):
                 created: list[int] = []
-                for kind_id, name, owner in new_values:
-                    if owner is not None and owner < 0:
-                        owner = created[-owner - 1]
+                for kind_id, name, ref in new_values:
+                    owner = created[-ref - 1] if ref is not None and ref < 0 else ref
                     created.append(
                         self.add_subconto_value(company_id, kind_id, name, owner_id=owner)
                     )
@@ -76,8 +75,8 @@ class DocumentImportCommands(DocumentCommands):
                     if doc_id is not None and sourced:
                         self._mark_source(company_id, doc_id, source, doc.external_id)
                 if outcome.errors or check_only:
-                    raise _Discard
-        except _Discard:
+                    raise _DiscardError
+        except _DiscardError:
             outcome.ids = []
         return outcome
 

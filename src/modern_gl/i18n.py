@@ -23,7 +23,7 @@ _document: str | None = None  # the open company's language of documents; None �
 
 
 def set_language(code: str) -> None:
-    global _current
+    global _current  # noqa: PLW0603 the interface language is the process's state
     if code not in LANGUAGES:
         raise ValueError(f"unknown language {code!r}")
     _current = code
@@ -33,7 +33,7 @@ def language() -> str:
     return _current
 
 
-def N_(source: str, /) -> str:  # the gettext name, known to translators
+def N_(source: str, /) -> str:  # noqa: N802 the gettext name, known to translators
     """A translation key kept for later: `NAMES = [N_("Журнал")]`, then `tr(NAMES[0])`.
     It changes nothing; tests/test_i18n.py reads these as it reads tr("…")."""
     return source
@@ -45,7 +45,7 @@ def tr(source: str, /, **values) -> str:
 
 def set_document_language(code: str | None) -> None:
     """The open company's language of documents (application.document_language)."""
-    global _document
+    global _document  # noqa: PLW0603 the open company's language, like _current
     if code is not None and code not in LANGUAGES:
         raise ValueError(f"unknown language {code!r}")
     _document = code

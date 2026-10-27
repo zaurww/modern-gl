@@ -58,10 +58,10 @@ class DirectoriesForm(PageWidget):
         self.kind_title.setFont(fonts().heading)
         top.addWidget(self.kind_title, 1)
         add_group = button(tr("+ Группа"), "flat")
-        add_group.clicked.connect(lambda: self.add_group())
+        add_group.clicked.connect(self.add_group)
         top.addWidget(add_group)
         add = button(tr("+ Новый элемент"), "primary", "Ins")
-        add.clicked.connect(lambda: self.add_value())
+        add.clicked.connect(lambda: self.add_value())  # noqa: PLW0108 clicked(bool) would be kind_id
         top.addWidget(add)
         hide_when_viewing(session.read_only, add_kind, add_group, add)
         right.addLayout(top)
@@ -86,7 +86,7 @@ class DirectoriesForm(PageWidget):
         body.addLayout(right, 1)
         root.addLayout(body, 1)
 
-        bind(self, "insert", lambda: self.add_value())
+        bind(self, "insert", self.add_value)
         bind(self, "edit", lambda: self.rename_value(self._current_value()))
         bind(self.table, "delete", lambda: self.delete_value(self._current_value()))
         self.refresh()

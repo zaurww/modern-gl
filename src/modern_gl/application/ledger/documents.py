@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import date
 
-from modern_gl.application.common import insert, now, with_reason
+from modern_gl.application.common import now, with_reason
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.posting_record import INSERT_POSTING, PostingRecord
 from modern_gl.application.ledger.validation import PostingChecks
@@ -17,7 +17,7 @@ from modern_gl.domain.errors import (
     ValidationError,
 )
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import IntegrityError, Row, transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, insert, transaction
 
 # What a module tells the user when the journal refuses one of its GL documents:
 # (role, the GL document's number, the module document's number or None) -> text. A module

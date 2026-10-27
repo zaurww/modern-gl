@@ -171,4 +171,5 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D-new | Протокол страницы | принято | [D-new-page-protocol.md](D-new-page-protocol.md) |
 | D-new | Проводка как значение — PostingRecord | принято | [D-new-posting-record.md](D-new-posting-record.md) |
 | D-new | Настройки пользователя — Preferences | принято | [D-new-preferences.md](D-new-preferences.md) |
+| D-new | Ruff строже: bandit, имена, pytest, без print и закомментированного кода | принято | [D-new-ruff-strict.md](D-new-ruff-strict.md) |
 | D-new | Реестр горячих клавиш | принято | [D-new-shortcuts-registry.md](D-new-shortcuts-registry.md) |

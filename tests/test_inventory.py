@@ -1135,7 +1135,7 @@ def test_posted_receipt_is_edited_in_place_and_later_documents_follow(inventory_
     edited = demo.inventory.load_document(demo.company_id, inv_doc)
     assert edited.status == "posted"
     assert edited.lines[0].id == line.id
-    # issue: 150.00 * 4 / 10 = 60.00
+    # the issue costs 150.00 × 4 / 10 = 60.00
     assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 6_000
     # landed cost 20.00: 6 of 10 still in stock -> 12.00 to stock, 8.00 to expense
     lc_line = demo.inventory.load_document(demo.company_id, landed).lines[0]

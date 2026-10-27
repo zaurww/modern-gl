@@ -51,14 +51,35 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP", "C90", "SIM", "RUF", "PIE", "PERF"]
+select = [
+    "E", "F", "I", "B", "UP", "C90", "SIM", "RUF", "PIE", "PERF",
+    "S",  # bandit (D-new-ruff-strict)
+    "T20",  # no print() in src: logging (infrastructure/logs.py)
+    "ERA",  # no commented-out code
+    "PT",  # pytest style
+    "N",  # pep8 naming
+    "PLW",  # pylint warnings
+    "PLC0414", "PLC0206", "PLC0207",  # useless alias, dict items, maxsplit
+    "PLR0913",  # too many arguments (max-args below)
+]
 ignore = [
     "RUF001", "RUF002", "RUF003",  # Cyrillic and Azerbaijani text is intended
     "SIM118",  # `key in row.keys()` is required: iterating a sqlite3.Row yields values
+    # S608: SQL is built only from constant identifiers (tables, columns, CTE pieces);
+    # values always go as parameters. Checked by the audit; tests/test_architecture.py
+    # guards that function parameters are not interpolated into SQL f-strings.
+    "S608",
+    "PT018",  # composite asserts in tests read as one business fact; splitting adds noise
+    # Not selected on purpose: PLR2004 (magic numbers are report codes and columns),
+    # PLC0415 (lazy module imports are the D123 rule), PLR0911/0912/0915 (complexity is
+    # already bounded by C90 <= 12 and tests/test_code_size.py), D/ANN (types: pyright).
 ]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 12
+
+[tool.ruff.lint.pylint]
+max-args = 8
 
 [project.gui-scripts]
 modern-gl = "modern_gl.desktop.app:main"
@@ -69,3 +90,25 @@ modern-gl-cli = "modern_gl.api.cli:cli"
 
 [tool.ruff.lint.per-file-ignores]
 "src/modern_gl/i18n_az/*.py" = ["E501"]  # translation strings are kept on one line
+# Tests: assert is the tool; fake passwords/tokens and random data are fixtures;
+# helpers take a scenario's fields as keyword arguments, like the scenario itself.
+"tests/**" = ["S101", "S105", "S106", "S107", "S311", "PLR0913"]
+# Run as scripts, these tests print their report (`uv run python tests/test_code_size.py`).
+"tests/test_code_size.py" = ["T201"]
+"tests/test_docs_size.py" = ["T201"]
+"tests/test_decisions.py" = ["T201"]
+# Checks the journal with an installed hledger (skipped without it).
+"tests/test_plaintext.py" = ["S603", "S607"]
+# Scripts are console tools: print is their output, assert stops a broken run;
+# random only fills sample data.
+"scripts/**" = ["T201", "S311", "S101"]
+# Demo data: random picks amounts and dates, not cryptography.
+"src/modern_gl/demo_year/**" = ["S311"]
+"src/modern_gl/demo_data.py" = ["S311"]
+# Qt names: overrides and signals (keyPressEvent, logicalIndex, dateChanged).
+# assert in widgets only narrows a type for pyright (a loaded document, a Qt layout);
+# input is checked by the application layer's errors, not by assert.
+"src/modern_gl/desktop/**" = ["N802", "N803", "N815", "S101"]
+# временно, правит ветка claude/audit-window — убрать при слиянии
+"src/modern_gl/desktop/main_window/window.py" = ["PLW0108"]
+"src/modern_gl/desktop/main_window/company_files.py" = ["S603", "S607"]

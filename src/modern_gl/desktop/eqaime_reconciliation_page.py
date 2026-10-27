@@ -273,11 +273,11 @@ class EqaimeReconciliationDialog(ImportWindow):
         ):
             widget.setVisible(shown)
         self.tree.clear()
-        for group in GROUP_TITLES:
+        for group, title in GROUP_TITLES.items():
             rows = result.group(group)
             if not rows:
                 continue
-            head = QTreeWidgetItem([f"{tr(GROUP_TITLES[group])}  {len(rows)}"])
+            head = QTreeWidgetItem([f"{tr(title)}  {len(rows)}"])
             head.setFirstColumnSpanned(True)
             head.setFont(0, fonts().heading)
             head.setFlags(Qt.ItemFlag.ItemIsEnabled)

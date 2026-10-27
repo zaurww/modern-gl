@@ -14,22 +14,32 @@ def names(conn) -> list[str]:
     return [r["name"] for r in conn.execute("SELECT name FROM companies ORDER BY id")]
 
 
+def create_and_fail(ledger: Ledger, conn, name: str) -> None:
+    """A block that writes a company and then fails."""
+    with transaction(conn):
+        ledger.create_company(name)
+        raise LedgerError("no")
+
+
 def test_a_failed_inner_block_is_undone_alone(ledger: Ledger, conn):
     with transaction(conn):
         ledger.create_company("A")
-        with pytest.raises(LedgerError), transaction(conn):
-            ledger.create_company("B")
-            raise LedgerError("no")
+        with pytest.raises(LedgerError, match="no"):
+            create_and_fail(ledger, conn, "B")
         ledger.create_company("C")
     assert names(conn) == ["A", "C"]
     assert not conn.in_transaction
 
 
 def test_a_failed_outer_block_takes_the_inner_with_it(ledger: Ledger, conn):
-    with pytest.raises(LedgerError), transaction(conn):
+    def outer() -> None:
         with transaction(conn):
-            ledger.create_company("B")
-        raise LedgerError("no")
+            with transaction(conn):
+                ledger.create_company("B")
+            raise LedgerError("no")
+
+    with pytest.raises(LedgerError, match="no"):
+        outer()
     assert names(conn) == []
 
 

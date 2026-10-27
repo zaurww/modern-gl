@@ -50,7 +50,7 @@ class PickBox(QLineEdit):
         self._completer.activated[QModelIndex].connect(  # pyright: ignore[reportIndexIssue]
             lambda index: self._clicked(index.row())
         )
-        self.textEdited.connect(lambda text: self._open(text))
+        self.textEdited.connect(self._open)
         self.editingFinished.connect(self._typed)
 
     # ---- QComboBox's interface -------------------------------------------------------

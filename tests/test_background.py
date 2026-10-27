@@ -63,7 +63,7 @@ def test_the_last_refresh_wins_and_a_closed_page_gets_nothing(window, qtbot):
     window.show_place(("osv",))
     osv = window.stack.currentWidget()
     shown: list = []
-    osv.present = lambda data: shown.append(data)  # type: ignore[method-assign]
+    osv.present = shown.append  # type: ignore[method-assign]
     osv.refresh()
     osv.refresh()
     window.session.background.wait()
@@ -79,7 +79,7 @@ def test_a_read_queued_before_the_company_closes_is_not_shown(window, qtbot):
     window.show_place(("osv",))
     osv = window.stack.currentWidget()
     shown: list = []
-    osv.present = lambda data: shown.append(data)  # type: ignore[method-assign]
+    osv.present = shown.append  # type: ignore[method-assign]
     session = window.session
     osv.refresh()
     window._close_company()  # waits for the worker, drops the pages, closes the file

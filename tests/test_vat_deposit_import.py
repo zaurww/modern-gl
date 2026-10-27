@@ -46,7 +46,7 @@ from modern_gl.application.bank.deposit_import import (
 )
 from modern_gl.application.bank.imported import DRAFT, POSTED
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.etaxes import EtaxesClient, TokenExpired
+from modern_gl.infrastructure.etaxes import EtaxesClient, TokenExpiredError
 from tests.helpers.vat_deposit import OWN_TIN, PORTAL, FakeDepositPortal, as_json, operations, raw
 
 
@@ -242,7 +242,7 @@ def test_the_client_pages_the_operations():
         "2026-10-23",
     )
     assert client.vat_deposit_balance() == (Decimal("1000.0"), "2026-10-03T23:00:00.123456789")
-    with pytest.raises(TokenExpired):
+    with pytest.raises(TokenExpiredError):
         EtaxesClient("old", send=portal).vat_deposit_balance()
 
 

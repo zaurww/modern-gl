@@ -15,7 +15,7 @@ from modern_gl.infrastructure.etaxes import (
     APPROVED,
     EtaxesClient,
     PortalError,
-    TokenExpired,
+    TokenExpiredError,
 )
 from tests.helpers.eqaime import SUPPLIER_TIN, FakePortal, fake_token, received
 from tests.helpers.sales import Shop, make_shop
@@ -197,7 +197,7 @@ def test_client_pages_statuses_and_reads_details():
     assert client.detail("7", "avis") == {"id": "7"}
     with pytest.raises(PortalError, match="портал ответил 500"):
         client.detail("8", "avis")
-    with pytest.raises(TokenExpired):
+    with pytest.raises(TokenExpiredError):
         list(EtaxesClient("old", send=portal).invoices(True, date(2026, 3, 1), date(2026, 3, 2)))
 
 

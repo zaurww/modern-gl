@@ -69,7 +69,7 @@ FONTS: Fonts | None = None
 
 
 def fonts() -> Fonts:
-    global FONTS
+    global FONTS  # noqa: PLW0603 one set of fonts per process, made on first use
     if FONTS is None:
         FONTS = Fonts()
     return FONTS

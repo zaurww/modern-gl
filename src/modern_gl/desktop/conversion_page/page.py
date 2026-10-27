@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.conversion import (
     ConversionInput,
-    MissingAccountRole,
+    MissingAccountRoleError,
     bank_rate,
     calculate,
     load_conversion,
@@ -352,7 +352,7 @@ class ConversionPage(ConversionForm):
             conversion_id = self.s.ledger.conversion.save_conversion(
                 self.s.company_id, data, self.doc.id if self.doc else None, post=post
             )
-        except MissingAccountRole as e:
+        except MissingAccountRoleError as e:
             # a chart without the accounts: choose them now and post again
             chosen = self.edit_accounts(missing=e.role)
             if chosen and self.s.ledger.account_role(self.s.company_id, e.role) is not None:

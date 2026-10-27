@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from modern_gl.application.common import insert, now, with_reason
+from modern_gl.application.common import now, with_reason
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.application.ledger.inputs import DEFAULT_LAYERS
 from modern_gl.domain.company import COMPANY_MODES
@@ -13,7 +13,7 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import LANGUAGES, tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import insert, transaction
 
 
 class CompanyCommands(LedgerBase):

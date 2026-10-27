@@ -21,7 +21,7 @@ from modern_gl.domain.eqaime import TURNOVER
 from modern_gl.i18n import language, tr
 
 BASE_URL = "https://new.e-taxes.gov.az"
-PORTAL_TOKEN_KEY = "aztax-jwt"  # where the portal page keeps the token
+PORTAL_TOKEN_KEY = "aztax-jwt"  # noqa: S105 the key's name in the page's storage, not a token
 INBOX = "/api/po/invoice/public/v2/invoice/find.inbox"  # received: purchases
 OUTBOX = "/api/po/invoice/public/v2/invoice/find.outbox"  # sent: sales
 DETAIL = "/api/po/invoice/public/v2/invoice/"
@@ -39,7 +39,7 @@ class PortalError(Exception):
         self.code = code  # the HTTP status, 0 if the portal was not reached
 
 
-class TokenExpired(PortalError):
+class TokenExpiredError(PortalError):
     pass
 
 
@@ -54,9 +54,12 @@ Send = Callable[[str, str, dict[str, str], bytes | None], Response]
 
 
 def urllib_send(method: str, url: str, headers: dict[str, str], body: bytes | None) -> Response:
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    if not url.startswith("https://"):
+        raise ValueError(f"the portal is reached only over https: {url}")
+    # S310: the scheme is checked just above
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=90) as answer:
+        with urllib.request.urlopen(request, timeout=90) as answer:  # noqa: S310
             return Response(answer.status, answer.read())
     except urllib.error.HTTPError as exc:
         return Response(exc.code, exc.read())
@@ -98,7 +101,7 @@ class EtaxesClient:
         except OSError as exc:
             raise PortalError(tr("портал недоступен: {error}", error=exc)) from exc
         if answer.status == 401:
-            raise TokenExpired(tr("вход на портал истёк — войдите ещё раз"))
+            raise TokenExpiredError(tr("вход на портал истёк — войдите ещё раз"))
         if answer.status >= 400:
             raise PortalError(
                 tr("портал ответил {code}: {text}", code=answer.status, text=_said(answer.body)),

@@ -12,6 +12,7 @@ for the hand-picked ones of `test_money.py`.
 
 from __future__ import annotations
 
+import re
 from decimal import ROUND_HALF_UP, Decimal
 from fractions import Fraction
 
@@ -74,8 +75,9 @@ def test_a_float_is_never_an_amount(value: float) -> None:
 
 @given(MINOR, st.integers(min_value=1, max_value=9))
 def test_a_third_decimal_is_refused_not_rounded(minor: int, digit: int) -> None:
-    with pytest.raises(ValueError):
-        to_minor(f"{from_minor(minor)}{digit}")
+    text = f"{from_minor(minor)}{digit}"
+    with pytest.raises(ValueError, match=re.escape(text)):
+        to_minor(text)
 
 
 @given(st.integers(min_value=-(10**13), max_value=10**13), st.integers(min_value=0, max_value=9999))

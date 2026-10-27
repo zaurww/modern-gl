@@ -12,7 +12,6 @@ from modern_gl.domain.errors import NotFoundError, PeriodClosedError, Validation
 from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure import db
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.infrastructure.db import insert as insert  # used by the write services
 
 MAX_SUBCONTO = 3
 

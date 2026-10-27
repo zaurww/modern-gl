@@ -66,7 +66,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             self._require_inventory_draft(company_id, document_id)
             self._post_in_sequence(company_id, document_id)
 
-    def post_receipt(
+    def post_receipt(  # noqa: PLR0913 the public form of ReceiptHeader, by keyword
         self,
         company_id: int,
         doc_date: date | str,
@@ -173,7 +173,7 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             self._post_in_sequence(company_id, inv_id)
         return inv_id
 
-    def post_landed_cost(
+    def post_landed_cost(  # noqa: PLR0913 one charge: a short form of the landed cost draft
         self,
         company_id: int,
         doc_date: date | str,
