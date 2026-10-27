@@ -247,6 +247,8 @@ class CompanyFiles(QMainWindow):
         """Drop all pages of the current company and close its file."""
         if self.session is not None:
             self.session.background.wait()  # a worker's read of this file ends first
+            # its result may still wait in the event loop: not shown on a closed company
+            self.session.closed = True
         self._drop_pages()
         if self.conn is not None:
             try:
