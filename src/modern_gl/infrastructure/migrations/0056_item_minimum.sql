@@ -1,4 +1,4 @@
--- The minimum stock of an item (D-new): below it on all warehouses together, «Bu gün» and
+-- The minimum stock of an item (D154): below it on all warehouses together, «Bu gün» and
 -- «Склад» say so and offer a purchase of what is missing. In millionths of the item's
 -- unit, as every quantity; NULL — no minimum.
 

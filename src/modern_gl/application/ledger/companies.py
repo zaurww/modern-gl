@@ -12,7 +12,7 @@ from modern_gl.domain.currency import DEFAULT_CURRENCIES, currency_name
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.tax_id import resident_tax_id
-from modern_gl.i18n import tr
+from modern_gl.i18n import LANGUAGES, tr
 from modern_gl.infrastructure.db import transaction
 
 
@@ -105,6 +105,26 @@ class CompanyCommands(LedgerBase):
                 return
             self.conn.execute("UPDATE companies SET mode = ? WHERE id = ?", (mode, company_id))
             self._audit(company_id, "company", company_id, "set_mode", {"from": old, "to": mode})
+
+    def set_document_language(self, company_id: int, code: str) -> None:
+        """The language the program writes its own texts into the company's documents in
+        (D152): later documents only — what is written stays. Audited."""
+        if code not in LANGUAGES:
+            raise ValidationError(tr("неизвестный язык документов: {code}", code=code))
+        with transaction(self.conn):
+            old = self._company(company_id)["document_language"]
+            if old == code:
+                return
+            self.conn.execute(
+                "UPDATE companies SET document_language = ? WHERE id = ?", (code, company_id)
+            )
+            self._audit(
+                company_id,
+                "company",
+                company_id,
+                "set_document_language",
+                {"from": old, "to": code},
+            )
 
     def set_vat_payer_from(self, company_id: int, day: date | str | None) -> None:
         """Since when the company pays ƏDV (D145); None — all along. Before that day the

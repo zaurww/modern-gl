@@ -46,7 +46,7 @@ INCOMING_REASONS = {
 # documents whose lines bring goods in at their amount: Dt stock / Kt the line's account
 INCOMING_TYPES = {"opening", "receipt", "incoming"}
 INCOMING_SQL = "(" + ", ".join(f"'{t}'" for t in sorted(INCOMING_TYPES)) + ")"  # for IN
-# returns (D-new): goods back to the supplier, goods back from a customer; each returns
+# returns (D153): goods back to the supplier, goods back from a customer; each returns
 # lines of its document type
 PURCHASE_RETURN, SALE_RETURN = "purchase_return", "sale_return"
 RETURN_TYPES = {PURCHASE_RETURN: "receipt", SALE_RETURN: "sale"}

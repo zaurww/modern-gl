@@ -12,16 +12,18 @@ from modern_gl.i18n import fold, set_language, tr, upper
 from modern_gl.i18n_az import AZ, PARTS
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
+TR = ("tr", "trd")  # the interface's and the documents' language (D152)
 CYRILLIC = set("абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")
 
 
 def tr_keys() -> dict[str, str]:
-    """All literal first arguments of tr(...) calls in the source, with their location."""
+    """All literal first arguments of tr(...) and trd(...) calls, with their location."""
     keys = {}
     for path in SRC.rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "tr" and node.args:
+            called = getattr(node, "func", None)
+            if isinstance(node, ast.Call) and getattr(called, "id", None) in TR and node.args:
                 arg = node.args[0]
                 candidates = [arg.body, arg.orelse] if isinstance(arg, ast.IfExp) else [arg]
                 for c in candidates:

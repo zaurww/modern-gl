@@ -1,5 +1,5 @@
 """What a document takes that the warehouse does not have on its day — the goods came
-before their papers (D-new). The page offers a purchase «ждёт e-qaimə» of it: at the last
+before their papers (D154). The page offers a purchase «ждёт e-qaimə» of it: at the last
 price, from the last supplier; stock never goes below zero."""
 
 from __future__ import annotations

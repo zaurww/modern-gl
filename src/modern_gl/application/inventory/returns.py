@@ -1,4 +1,4 @@
-"""Returns (D-new): goods back to the supplier and goods back from a customer — posted the
+"""Returns (D153): goods back to the supplier and goods back from a customer — posted the
 other way round from their purchase or sale, with the number of the return e-qaimə
 («malların geri qaytarılması»), so the ƏDV reports and the portal see the same.
 

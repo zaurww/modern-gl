@@ -36,7 +36,7 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import from_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, transaction
 
 # (the settlement account's type, the advance's role, the company owes the e-qaimə)
@@ -300,7 +300,7 @@ class BankCommands(ModuleDocumentCommands):
             )
             for number, amount in parts
         ]
-        return self.post_new(company_id, day, postings, tr("Зачёт аванса: {name}", name=name))
+        return self.post_new(company_id, day, postings, trd("Зачёт аванса: {name}", name=name))
 
     def _partner_subconto(
         self, company_id: int, account: Row, counterparty_id: int, contract_id: int | None

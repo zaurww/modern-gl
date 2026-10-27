@@ -14,13 +14,13 @@ from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import round_ratio
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row
 
 
 class StockShortage(ValidationError):
     """Not enough of an item on a warehouse for what a document takes — the goods came,
-    their papers did not (D-new): the page offers to bring them in («ждёт e-qaimə»)."""
+    their papers did not (D154): the page offers to bring them in («ждёт e-qaimə»)."""
 
     def __init__(self, message: str, item_id: int, warehouse_id: int) -> None:
         super().__init__(message)
@@ -262,7 +262,7 @@ class StockCommands(DraftCommands):
                     money(amount),
                     tuple(None if kind is None else by_kind.get(kind) for kind in vat_kinds),
                     offset_sc,
-                    tr("НДС"),
+                    trd("НДС"),
                     invoice=invoice[0],
                     invoice_kind=invoice[1],
                 )

@@ -1,4 +1,4 @@
--- Returns (D-new): goods back to the supplier, goods back from a customer — each a document
+-- Returns (D153): goods back to the supplier, goods back from a customer — each a document
 -- type of its own, posted the other way round from its purchase or sale (Dt 60 / Ct 41 and
 -- the input ƏDV; Dt 46 / Ct 62, the ƏDV and the cost back to stock), with the number of the
 -- return e-qaimə («malların geri qaytarılması»). A return line may name the line of the

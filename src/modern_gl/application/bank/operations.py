@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from modern_gl.domain.errors import NotFoundError
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Connection
 
 IN, OUT = "in", "out"  # mədaxil: money comes to the bank account; məxaric: it leaves
@@ -215,28 +215,28 @@ def default_memo(direction: str, kind: str, counterparty: str = "") -> str:
     out, name = direction == OUT, counterparty
     if kind == SUPPLIER:
         text = (
-            tr("Оплата поставщику {name}", name=name)
+            trd("Оплата поставщику {name}", name=name)
             if out
-            else tr("Возврат от поставщика {name}", name=name)
+            else trd("Возврат от поставщика {name}", name=name)
         )
     elif kind == CUSTOMER:
         text = (
-            tr("Возврат покупателю {name}", name=name)
+            trd("Возврат покупателю {name}", name=name)
             if out
-            else tr("Оплата от покупателя {name}", name=name)
+            else trd("Оплата от покупателя {name}", name=name)
         )
     elif kind == TAX:
-        text = tr("Уплата налогов") if out else tr("Возврат налогов")
+        text = trd("Уплата налогов") if out else trd("Возврат налогов")
     elif kind == SALARY:
-        text = tr("Выплата зарплаты") if out else tr("Возврат зарплаты")
+        text = trd("Выплата зарплаты") if out else trd("Возврат зарплаты")
     elif kind == FEE:
-        text = tr("Комиссия банка") if out else tr("Возврат комиссии банка")
+        text = trd("Комиссия банка") if out else trd("Возврат комиссии банка")
     elif kind == TRANSFER:
-        text = tr("Перевод между своими счетами")
+        text = trd("Перевод между своими счетами")
     elif name:
-        text = tr("Платёж {name}", name=name) if out else tr("Поступление от {name}", name=name)
+        text = trd("Платёж {name}", name=name) if out else trd("Поступление от {name}", name=name)
     else:
-        text = tr("Прочий расход") if out else tr("Прочий приход")
+        text = trd("Прочий расход") if out else trd("Прочий приход")
     return text.strip()
 
 

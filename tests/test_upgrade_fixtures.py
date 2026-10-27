@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
+from modern_gl.application.document_language import open_in
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.rebuild import module_rebuilders
 from modern_gl.application.workspace import Workspace
-from modern_gl.i18n import DEFAULT, language, set_language
 from modern_gl.infrastructure.db import close, latest_version, schema_version
 
 FIXTURES = Path(__file__).parent / "fixtures" / "upgrade"
@@ -82,10 +82,8 @@ def test_every_module_builds_the_postings_it_holds(updated):
     _ws, _path, conn, company_id, _stored = updated
     ledger = Ledger(conn)
     ledger.set_closed_through(company_id, None)
-    was = language()
-    set_language(DEFAULT)  # the texts of the postings are in the file's language
-    try:
-        for name, module in module_rebuilders(ledger).items():
-            assert module.rebuild_postings(company_id, "2026-01-01") == [], name
-    finally:
-        set_language(was)
+    # the interface is Russian, the file's texts Azerbaijani: written in its language (D152;
+    # set on opening — again here, as each test starts without it)
+    assert open_in(conn, company_id, write=False) == "az"
+    for name, module in module_rebuilders(ledger).items():
+        assert module.rebuild_postings(company_id, "2026-01-01") == [], name

@@ -12,7 +12,7 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import ACCRUED_EXPENSES
 from modern_gl.domain.dates import month_name
 from modern_gl.domain.errors import ValidationError
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, insert
 
 
@@ -112,7 +112,7 @@ class AccrualCommands(InventoryBase):
         for expense_date, row in existing.items():
             if expense_date not in by_month:
                 self._drop_accrual(company_id, row)
-        memo = tr("Начисление расхода по поступлению №{n}", n=doc["number"])
+        memo = trd("Начисление расхода по поступлению №{n}", n=doc["number"])
         for expense_date, postings in by_month.items():
             if expense_date in existing:
                 gl_id = existing[expense_date]["gl_document_id"]

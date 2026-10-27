@@ -39,7 +39,7 @@ from modern_gl.application.bank.operations import (
 )
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED, BANK_FEE
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import transaction
 
 
@@ -215,7 +215,7 @@ class BankFileCommands(FileConversionCommands):
                 return unknown, tr("не задан счёт комиссий банка")
             subconto = before[0].subconto if before else ()
             if not any(subconto):
-                subconto = self.named_subconto(company_id, fee, tr("Комиссия банка"))
+                subconto = self.named_subconto(company_id, fee, trd("Комиссия банка"))
             return [BankLine(fee, op.amount, subconto)], ""
         if op.kind == TRANSFER:
             if op.target is None:

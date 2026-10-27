@@ -310,7 +310,7 @@ class InventoryDocumentPage(
                     self._post_saved(document_id)
         except (LedgerError, ValueError, TypeError) as exc:
             self.show_error(str(exc))
-            # goods short: brought in as a purchase that waits for its e-qaimə (D-new)
+            # goods short: brought in as a purchase that waits for its e-qaimə (D154)
             self.btn_shortage.setVisible(isinstance(exc, StockShortage) and self.doc is not None)
             return False
         self.s.working_date = edited_date(self.date)

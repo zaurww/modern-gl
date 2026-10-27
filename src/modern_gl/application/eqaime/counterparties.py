@@ -10,7 +10,7 @@ from modern_gl.application.counterparties import known_counterparty, short_name
 from modern_gl.application.eqaime.parsing import EInvoice
 from modern_gl.application.eqaime.planning import InvoicePlan
 from modern_gl.application.ledger import Ledger
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import fold, trd
 from modern_gl.infrastructure.db import Connection, transaction
 
 
@@ -69,7 +69,7 @@ def add_counterparties(
                 ids[party.key] = existing
                 continue
             name = " ".join(party.name.split()) or party.portal_name or party.tax_id
-            value_id = ledger.add_subconto_value(company_id, kind, name or tr("Без названия"))
+            value_id = ledger.add_subconto_value(company_id, kind, name or trd("Без названия"))
             if party.tax_id:
                 ledger.set_subconto_value_tax(company_id, value_id, party.tax_id)
             if party.portal_name:

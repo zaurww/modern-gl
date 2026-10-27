@@ -46,7 +46,7 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
 from modern_gl.reporting.inventory import item_name
 
-# what an e-qaimə becomes (a return e-qaimə — a return, D-new)
+# what an e-qaimə becomes (a return e-qaimə — a return, D153)
 KIND_NAMES = {
     "receipt": "Покупка",
     "sale": "Продажа",

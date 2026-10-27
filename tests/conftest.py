@@ -34,7 +34,7 @@ if sys.platform == "win32":
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["WINDIR"], "Fonts"))
 
 from modern_gl.application.ledger import Ledger, PostingInput
-from modern_gl.i18n import set_language
+from modern_gl.i18n import set_document_language, set_language
 from modern_gl.infrastructure.db import connect
 
 
@@ -106,8 +106,10 @@ REASON: dict[str, str | None] = {"text": ""}
 def russian_interface():
     """Tests assert Russian messages; test_i18n covers the Azerbaijani catalog."""
     set_language("ru")
+    set_document_language(None)
     yield
     set_language("ru")
+    set_document_language(None)
 
 
 @pytest.fixture
