@@ -19,6 +19,7 @@ from modern_gl.desktop.reports_page.table import (
 
 SelectionMode = QAbstractItemView.SelectionMode
 NAME_MIN = 180  # px an account name keeps before it is cut in a narrow window
+SAMPLE = 200  # rows measured for a column's width, besides the totals and the headers
 
 
 class ReportTable(QTableView):
@@ -44,6 +45,15 @@ class ReportTable(QTableView):
         self.verticalHeader().hide()
         self.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
         self.widths: dict[int, int] = {}
+        self._measured: dict[int, int] = {}  # content_width of a column, for these rows
+        for signal in (
+            model.modelReset,
+            model.layoutChanged,
+            model.dataChanged,
+            model.rowsInserted,
+            model.rowsRemoved,
+        ):
+            signal.connect(lambda *_: self._measured.clear())
         # a narrow window: amounts give up some width
         self.viewport().installEventFilter(self)
 
@@ -79,16 +89,33 @@ class ReportTable(QTableView):
                 self.widths[i] += max(0, short) // len(members) + 1
 
     def content_width(self, column: int) -> int:
-        """The widest text of a column (bold totals included) or its caption."""
+        """The widest text of a column (bold totals included) or its caption. Measured
+        on the rows that set it — the first SAMPLE, the totals and the headers — not on
+        every row: a year's card has thousands, and they were all measured on each
+        refresh. Kept per column until the model changes."""
+        if column in self._measured:
+            return self._measured[column]
         bold = self.font()
         bold.setBold(True)
         metrics = QFontMetrics(bold)
         widest = self.horizontalHeader().fontMetrics().horizontalAdvance(self.report.title(column))
         icon = self.report.columns[column].icon is not None
-        for r in range(min(self.report.rowCount(), 2000)):
+        for r in self._sample_rows():
             text = self.report.data(self.report.index(r, column), Qt.ItemDataRole.DisplayRole)
             widest = max(widest, metrics.horizontalAdvance(str(text or "")))
-        return widest + 28 + (24 if icon else 0)  # the cell padding of the theme
+        width = widest + 28 + (24 if icon else 0)  # the cell padding of the theme
+        self._measured[column] = width
+        return width
+
+    def _sample_rows(self) -> list[int]:
+        model = self.report
+        first = list(range(min(model.rowCount(), SAMPLE)))
+        marked = [
+            r
+            for r, row in enumerate(model.rows[SAMPLE:], SAMPLE)
+            if model.total(row) or model.section(row)
+        ]
+        return first + marked
 
     def fit_columns(self) -> None:
         """In a narrow window the names give up width first (cut with "…"), down to
