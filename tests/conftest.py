@@ -33,9 +33,16 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 if sys.platform == "win32":
     os.environ.setdefault("QT_QPA_FONTDIR", os.path.join(os.environ["WINDIR"], "Fonts"))
 
+from hypothesis import settings as hypothesis_settings
+
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.i18n import set_document_language, set_language
 from modern_gl.infrastructure.db import connect
+
+# property tests (test_*_properties.py): more examples than the default, no time limit
+# on one example — a busy CI machine is not a failure
+hypothesis_settings.register_profile("modern_gl", max_examples=200, deadline=None)
+hypothesis_settings.load_profile("modern_gl")
 
 
 @dataclass
