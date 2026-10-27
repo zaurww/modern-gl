@@ -64,6 +64,7 @@ GLYPHS: dict[str, str] = {
     "archive": "archive",
     "reconcile": "file-check",
     "landed": "ship",
+    "history": "history",
     "star": "star",
     "pinned": "star",  # filled: a pinned report
 }

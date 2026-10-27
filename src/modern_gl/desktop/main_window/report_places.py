@@ -28,6 +28,7 @@ from modern_gl.desktop.reports_hub import (
 )
 from modern_gl.desktop.reports_page import (
     REPORTS,
+    ActionLogPage,
     BooksPage,
     ChartPage,
     OsvPage,
@@ -130,6 +131,7 @@ class ReportPlaces(QObject):
             "books": self.open_books,
             "subconto_analysis": self.open_subconto_analysis,
             "handover": self.company.hand_over,
+            "action_log": lambda: self.open_single(ActionLogPage),
             "invoices": lambda: self.nav.show_place(("invoices",)),
             "vat_credit": self.open_vat_credit,
             "vat_liability": lambda: self.open_single(VatLiabilityPage),

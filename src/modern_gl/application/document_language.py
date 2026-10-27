@@ -40,11 +40,12 @@ def resolve(conn: Connection, company_id: int) -> str:
     return stored(conn, company_id) or guess(conn, company_id)
 
 
-def open_in(conn: Connection, company_id: int, write: bool) -> str:
+def open_in(conn: Connection, company_id: int, write: bool, actor: str = "local") -> str:
     """Make a company's language the one documents are written in; a file without the
-    setting (`write`: not a snapshot for viewing) keeps what its texts tell, once."""
+    setting (`write`: not a snapshot for viewing) keeps what its texts tell, once —
+    in the name of `actor` (who opened it)."""
     code = resolve(conn, company_id)
     if write and stored(conn, company_id) is None:
-        Ledger(conn).set_document_language(company_id, code)
+        Ledger(conn, actor=actor).set_document_language(company_id, code)
     set_document_language(code)
     return code

@@ -100,6 +100,14 @@ REPORTS = (
         "archive",
     ),
     Report(
+        "action_log",
+        GROUPS[1],
+        N_("Журнал действий"),
+        N_("Кто открывал компанию, что вводил, проводил, исправлял и удалял"),
+        "history",
+        books=False,
+    ),
+    Report(
         "invoices",
         GROUPS[2],
         "E-qaimələr",

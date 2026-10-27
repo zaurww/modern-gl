@@ -95,12 +95,13 @@ class Workspace:
         path: Path | None = None,
         mode: str = FULL,
         tax_id: str | None = None,
+        actor: str = "local",
     ) -> Path:
         """New company file with the chart template (in the interface language); in the
         folder unless `path` is given (then it is remembered). The file is built aside and
         put in place only when complete, so a failure leaves nothing half-made. `mode`:
         how it is kept (D90) — a warehouse only still gets the chart, unseen; `tax_id` —
-        its VÖEN (D113)."""
+        its VÖEN (D113); `actor` — who makes it, for the audit trail."""
         path = self._free_path(name) if path is None else Path(path)
         partial = path.with_name(path.name + ".part")
         for leftover in (partial, *sidecars(partial)):
@@ -108,7 +109,7 @@ class Workspace:
         try:
             conn = connect(partial)
             try:
-                ledger = Ledger(conn)
+                ledger = Ledger(conn, actor=actor)
                 company_id = ledger.create_company(name)
                 ledger.set_document_language(company_id, DEFAULT_LANGUAGE)  # D152
                 if chart:
@@ -163,7 +164,9 @@ class Workspace:
     def backup_folder(self, company_file: Path) -> Path:
         return backup.folder_for(self.folder, company_file)
 
-    def open(self, path: Path, *, lock: bool = True) -> tuple[Connection, int]:
+    def open(
+        self, path: Path, *, lock: bool = True, actor: str = "local"
+    ) -> tuple[Connection, int]:
         """Open a company file; a file about to get a newer schema is backed up first
         (a failed update: UpgradeError, the file as it was), a file of a newer program is
         refused untouched (NewerFileError), and a damaged file is refused
@@ -171,7 +174,7 @@ class Workspace:
         language of documents from now on (D152). `lock`: the program's own open — a file
         another copy of the program holds is refused (FileInUseError), and holds it until
         closed (D169); a brief write beside it (AI drafts, the API)
-        takes no lock."""
+        takes no lock. `actor` — who opens it, should the file be written on opening."""
         path = Path(path)
         held = take_lock(path) if lock else None
         try:
@@ -183,7 +186,7 @@ class Workspace:
         if held is not None:
             hold_while_open(conn, held)
         try:
-            open_in(conn, company_id, write=True)
+            open_in(conn, company_id, write=True, actor=actor)
         except BaseException:
             conn.close()
             raise

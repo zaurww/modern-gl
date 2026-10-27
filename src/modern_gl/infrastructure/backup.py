@@ -219,8 +219,12 @@ def restore(backup: Path, company_file: Path, folder: Path) -> Path:
 
 
 def _last_audit(conn: sqlite3.Connection) -> int:
+    """The last change of the company: the company opened or closed (a session of
+    «Журнал действий») is no change — else every closing would make a backup."""
     try:
-        return conn.execute("SELECT COALESCE(MAX(id), 0) FROM audit_events").fetchone()[0]
+        return conn.execute(
+            "SELECT COALESCE(MAX(id), 0) FROM audit_events WHERE entity <> 'session'"
+        ).fetchone()[0]
     except sqlite3.DatabaseError:
         return -1
 

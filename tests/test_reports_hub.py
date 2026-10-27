@@ -219,6 +219,7 @@ def test_a_warehouse_only_company_has_no_reports_of_the_books(window):
         "stock",
         "stock_statement",
         "gross_profit",
+        "action_log",  # who did what: of the company, not of the books
     }
     keys = sidebar_keys(window)
     assert HUB in keys and ("osv",) not in keys and ("statements", "balance") not in keys

@@ -37,6 +37,9 @@ def company_menu(win: MainWindow) -> None:
             menu.addAction(tr("Перечитать файл")).triggered.connect(company.reread)
         menu.addAction(tr("Показать файл компании")).triggered.connect(company.show_company_file)
         menu.addAction(tr("Передача дел…")).triggered.connect(company.hand_over)
+        menu.addAction(tr("Журнал действий")).triggered.connect(
+            lambda: win.reports.open_catalog_report("action_log")
+        )
         if not company.session.stock_only:
             menu.addAction(tr("Проверка книги…")).triggered.connect(win.verify_books)
         if not viewing and not company.session.stock_only:

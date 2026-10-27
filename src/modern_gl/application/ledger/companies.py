@@ -13,7 +13,10 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import LANGUAGES, tr
+from modern_gl.infrastructure.company_file import Holder
 from modern_gl.infrastructure.db import insert, transaction
+
+SESSION_ACTIONS = ("open", "close")  # the session in «Журнал действий»
 
 
 class CompanyCommands(LedgerBase):
@@ -162,4 +165,17 @@ class CompanyCommands(LedgerBase):
                 company_id,
                 "set_closed_through",
                 with_reason({"from": old, "to": value}, reason),
+            )
+
+    def log_session(self, company_id: int, action: str) -> None:
+        """The company opened or closed (`SESSION_ACTIONS`) — who (the name, the computer's
+        user) and on which computer: the session in «Журнал действий». Nothing else changes;
+        a company only viewed (D80) writes nothing, it is not called then."""
+        if action not in SESSION_ACTIONS:
+            raise ValidationError(tr("неизвестное событие сеанса: {action}", action=action))
+        me = Holder.me()
+        with transaction(self.conn):
+            self._company(company_id)
+            self._audit(
+                company_id, "session", company_id, action, {"machine": me.host, "user": me.user}
             )

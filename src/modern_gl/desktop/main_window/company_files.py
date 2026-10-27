@@ -4,6 +4,7 @@ restored from a backup, deleted; what is kept in it (VÖEN, books, the documents
 from __future__ import annotations
 
 import getpass
+import logging
 import shutil
 import sys
 from collections.abc import Callable
@@ -160,7 +161,9 @@ class CompanySession(QObject):
         if not self.confirm_close():
             return False
         try:
-            path = self.workspace.create(name.strip(), path=target, mode=mode, tax_id=tax_id)
+            path = self.workspace.create(
+                name.strip(), path=target, mode=mode, tax_id=tax_id, actor=self.user_name()
+            )
         except (LedgerError, OSError, Error) as e:
             QMessageBox.warning(self.owner, tr("Новая компания"), str(e))
             return False
@@ -184,7 +187,7 @@ class CompanySession(QObject):
         if not self.confirm_close():
             return
         try:
-            conn, company_id = self.workspace.open(path)
+            conn, company_id = self.workspace.open(path, actor=self.user_name())
         except backup.BackupError as e:
             self._offer_restore(Path(path), str(e))
             return
@@ -254,7 +257,19 @@ class CompanySession(QObject):
         self.session.last_backup = lambda: self._last_backup(path)
         if old_date:
             self.session.working_date = old_date
+        if not read_only:  # a snapshot viewed writes nothing (D80)
+            self._log_session("open")
         self.opened.emit(name)
+
+    def _log_session(self, action: str) -> None:
+        """«Журнал действий»: the company opened or closed here. A file that cannot take
+        it (full, gone) must not keep the company from opening or closing."""
+        if self.session is None or self.ledger is None:
+            return
+        try:
+            self.ledger.log_session(self.session.company_id, action)
+        except (LedgerError, Error):
+            logging.getLogger(__name__).exception("session event %s not written", action)
 
     def _last_backup(self, path: Path) -> datetime | None:
         made = self.workspace.backups(path)
@@ -268,6 +283,8 @@ class CompanySession(QObject):
             self.session.closed = True
         self.closing.emit()  # the pages go before the file
         if self.conn is not None:
+            if self.session is not None and not self.session.read_only:
+                self._log_session("close")  # before the backup: the copy has it too
             try:
                 viewed = self.session is not None and self.session.read_only
                 if self.company_path is not None and not viewed:
