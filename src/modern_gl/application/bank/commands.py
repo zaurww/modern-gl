@@ -10,6 +10,7 @@ amount in the currency kept on the posting.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import fields, replace
 from datetime import date
 
@@ -20,20 +21,21 @@ from modern_gl.application.bank.operations import (
     OUT,
     VAT_DEPOSIT_KINDS,
     BankLine,
+    BankOperation,
     BankOperationInput,
     allocate,
-    load_bank_operation,
+    load_bank_operations,
 )
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto, pad_subconto
 from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.invoices import open_invoices
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
-from modern_gl.application.ledger.module import ModuleDocumentCommands
+from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr, trd
@@ -50,7 +52,7 @@ explain_owner(
 )
 
 
-class BankCommands(ModuleDocumentCommands):
+class BankCommands(ModuleBase):
     def save_bank_payment(
         self,
         company_id: int,
@@ -83,7 +85,7 @@ class BankCommands(ModuleDocumentCommands):
         self._check_bank_input(company_id, data)
         with transaction(self.conn):
             if operation_id is None:
-                doc_id = self._insert_document(company_id, data.doc_date, data.memo, "common")
+                doc_id = self.documents.new(company_id, data.doc_date, data.memo)
                 saved: int = self.conn.execute(
                     "INSERT INTO bank_operations (company_id, document_id, direction) "
                     "VALUES (?, ?, ?) RETURNING id",
@@ -93,7 +95,7 @@ class BankCommands(ModuleDocumentCommands):
             else:
                 saved = operation_id
                 row = self._bank_row(company_id, saved)
-                doc = self._document(company_id, row["document_id"])
+                doc = self.documents.get(company_id, row["document_id"])
                 if doc["status"] == "posted":
                     if not post:
                         raise ValidationError(
@@ -103,19 +105,16 @@ class BankCommands(ModuleDocumentCommands):
                                 n=doc["number"],
                             )
                         )
-                    self._require_changeable(company_id, doc)
+                    self.documents.require_changeable(company_id, doc)
                 doc_id = row["document_id"]
                 action = "update"
             self._store_bank(company_id, saved, data)
             if post:
                 postings = self._bank_postings(company_id, data)
-                self._write_module_document(company_id, doc_id, data.doc_date, postings, data.memo)
+                self.documents.write(company_id, doc_id, data.doc_date, postings, data.memo)
                 action = "post"
             else:
-                self.conn.execute(
-                    "UPDATE documents SET doc_date = ?, memo = ? WHERE id = ?",
-                    (iso_date(data.doc_date), data.memo, doc_id),
-                )
+                self.documents.set_header(company_id, doc_id, data.doc_date, data.memo)
             self._audit(company_id, "bank_operation", saved, action, {})
         return saved
 
@@ -123,26 +122,17 @@ class BankCommands(ModuleDocumentCommands):
         """Back to a draft: its postings go (the audit trail keeps them)."""
         with transaction(self.conn):
             row = self._bank_row(company_id, operation_id)
-            doc = self._document(company_id, row["document_id"])
-            if doc["status"] != "posted":
-                raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
-            self._require_changeable(company_id, doc)
-            snapshot = self._snapshot(doc)
-            self.conn.execute(
-                "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc["id"],)
-            )
-            self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc["id"],))
-            self._audit(company_id, "document", doc["id"], "unpost", snapshot)
+            self.documents.unpost(company_id, self.documents.get(company_id, row["document_id"]))
             self._audit(company_id, "bank_operation", operation_id, "unpost", {})
 
     def delete_bank_operation(self, company_id: int, operation_id: int) -> None:
         with transaction(self.conn):
             row = self._bank_row(company_id, operation_id)
-            doc = self._document(company_id, row["document_id"])
+            doc = self.documents.get(company_id, row["document_id"])
             if doc["status"] == "posted":
-                self._require_changeable(company_id, doc)
+                self.documents.require_changeable(company_id, doc)
             self.conn.execute("DELETE FROM bank_operations WHERE id = ?", (operation_id,))
-            self._remove_document(company_id, doc)
+            self.documents.remove(company_id, doc)
             self._audit(company_id, "bank_operation", operation_id, "delete", {})
 
     def delete_bank_operations(self, company_id: int, operation_ids: list[int]) -> None:
@@ -155,22 +145,20 @@ class BankCommands(ModuleDocumentCommands):
     def rebuild_postings(self, company_id: int, since: date | str) -> list[int]:
         """Build the GL documents of posted operations from `since` on (not in the closed
         period) again from the operations (D101); the GL documents that changed."""
-        return self._rebuild_each(
+        return self.documents.rebuild_each(
             company_id,
             since,
             "bank_operations",
-            lambda operation_id: self._rebuild_bank_operation(company_id, operation_id),
+            lambda ids: load_bank_operations(self.conn, company_id, ids),
+            lambda op: self._rebuild_bank_operation(company_id, op),
             lambda n, day, error: tr(
                 "банковская операция №{n} от {date}: {error}", n=n, date=day, error=error
             ),
         )
 
-    def _rebuild_bank_operation(self, company_id: int, operation_id: int) -> list[int]:
-        op = load_bank_operation(self.conn, company_id, operation_id)
+    def _rebuild_bank_operation(self, company_id: int, op: BankOperation) -> list[int]:
         postings = self._bank_postings(company_id, op)
-        changed = self._rebuild_module_document(
-            company_id, op.document_id, op.doc_date, postings, op.memo
-        )
+        changed = self.documents.rebuild(company_id, op.document_id, op.doc_date, postings, op.memo)
         return [op.document_id] if changed else []
 
     def move_bank_operations(
@@ -185,9 +173,12 @@ class BankCommands(ModuleDocumentCommands):
         A transfer does not go onto the account it transfers to."""
         target = pad_subconto(subconto)
         with transaction(self.conn):
+            currency = self._place_currency(company_id, target)
+            operations = load_bank_operations(self.conn, company_id, operation_ids)
             for operation_id in operation_ids:
-                op = load_bank_operation(self.conn, company_id, operation_id)
-                currency = self._place_currency(company_id, target)
+                op = operations.get(operation_id)
+                if op is None:
+                    raise NotFoundError(tr("документ {id} не найден", id=operation_id))
                 if currency != op.currency_id:
                     raise ValidationError(
                         tr(
@@ -214,7 +205,7 @@ class BankCommands(ModuleDocumentCommands):
         paid to it (60.2) or by it (62.2) — against its unpaid e-qaimə, oldest first."""
         offsets = []
         for settlement_type, role, payable in OFFSET_SIDES:
-            advance = self.account_role(company_id, role)
+            advance = self.ledger.account_role(company_id, role)
             settlement = self._first_account_of_type(company_id, settlement_type)
             if advance is None or settlement is None:
                 continue
@@ -300,7 +291,9 @@ class BankCommands(ModuleDocumentCommands):
             )
             for number, amount in parts
         ]
-        return self.post_new(company_id, day, postings, trd("Зачёт аванса: {name}", name=name))
+        return self.ledger.post_new(
+            company_id, day, postings, trd("Зачёт аванса: {name}", name=name)
+        )
 
     def _partner_subconto(
         self, company_id: int, account: Row, counterparty_id: int, contract_id: int | None
@@ -309,7 +302,7 @@ class BankCommands(ModuleDocumentCommands):
         kinds = {self._subconto_value(company_id, counterparty_id)["kind_id"]: counterparty_id}
         if contract_id is not None:
             kinds[self._subconto_value(company_id, contract_id)["kind_id"]] = contract_id
-        return tuple(kinds.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3))
+        return fill_subconto(account, kinds)
 
     def _place_currency(self, company_id: int, subconto: tuple[int | None, ...]) -> int | None:
         """The currency of a bank account: of its element of the directory (D47)."""
@@ -334,13 +327,12 @@ class BankCommands(ModuleDocumentCommands):
             self._currency(company_id, data.currency_id)
         if data.counterparty_id is not None:
             self._subconto_value(company_id, data.counterparty_id)
+        self._require_accounts(company_id, [x.account_id for x in data.lines])
         for line_no, line in enumerate(data.lines, start=1):
             if line.amount < 0:
                 raise ValidationError(
                     tr("строка {line}: сумма должна быть больше нуля", line=line_no)
                 )
-            if line.account_id is not None:
-                self._account(company_id, line.account_id)
             pad_subconto(line.subconto, line_no)
             try:
                 normalize_invoice(line.invoice)
@@ -350,6 +342,22 @@ class BankCommands(ModuleDocumentCommands):
                 raise ValidationError(
                     tr("строка {line}: ƏDV на депозит поставщика — только расход", line=line_no)
                 )
+
+    def _require_accounts(self, company_id: int, account_ids: Sequence[int | None]) -> None:
+        """Every account of the lines is the company's: one query, not one a line."""
+        wanted = {a for a in account_ids if a is not None}
+        if not wanted:
+            return
+        marks = ", ".join("?" * len(wanted))
+        known = {
+            r["id"]
+            for r in self.conn.execute(
+                f"SELECT id FROM accounts WHERE company_id = ? AND id IN ({marks})",
+                (company_id, *wanted),
+            )
+        }
+        if wanted - known:
+            raise NotFoundError(tr("счёт не найден"))
 
     def _store_bank(self, company_id: int, operation_id: int, data: BankOperationInput) -> None:
         self.conn.execute(
@@ -395,15 +403,11 @@ class BankCommands(ModuleDocumentCommands):
     ) -> tuple[int | None, int | None, int | None]:
         """The line's subconto with the operation's counterparty in the account's
         counterparty position, when the line leaves it empty."""
-        values = list(pad_subconto(line.subconto))
         if counterparty_id is None or line.account_id is None:
-            return values[0], values[1], values[2]
+            return pad_subconto(line.subconto)
         kind_id = self._subconto_value(company_id, counterparty_id)["kind_id"]
         account = self._account(company_id, line.account_id)
-        for i in range(3):
-            if account[f"sc{i + 1}_kind_id"] == kind_id and values[i] is None:
-                values[i] = counterparty_id
-        return values[0], values[1], values[2]
+        return fill_subconto(account, {kind_id: counterparty_id}, keep=line.subconto)
 
     def _bank_postings(self, company_id: int, data: BankOperationInput) -> list[PostingInput]:
         if data.account_id is None:
@@ -473,5 +477,5 @@ class BankCommands(ModuleDocumentCommands):
             (company_id, operation_id),
         ).fetchone()
         if row is None:
-            raise ValidationError(tr("документ {id} не найден", id=operation_id))
+            raise NotFoundError(tr("документ {id} не найден", id=operation_id))
         return row

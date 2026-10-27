@@ -209,6 +209,40 @@ def test_ledger_is_the_core_and_modules_are_objects_of_their_own():
     assert ledger.bank is ledger.bank  # one object per ledger
 
 
+def test_a_module_calls_the_core_and_is_not_the_core():
+    """D-new: a module's write object holds the ledger (`self.ledger`) and calls it; it
+    inherits none of the core's scenarios (`ledger.bank.add_account` is no call), and it
+    reaches the ledger's internals only through `ledger/module.py`."""
+    from modern_gl.application.bank import BankModule
+    from modern_gl.application.conversion import ConversionModule
+    from modern_gl.application.eqaime import EqaimeModule
+    from modern_gl.application.inventory import Inventory
+    from modern_gl.application.ledger import Ledger
+    from modern_gl.infrastructure.db import connect
+
+    core = {name for name in dir(Ledger) if not name.startswith("_")}
+    for module in (BankModule, ConversionModule, EqaimeModule, Inventory):
+        public = {name for name in dir(module) if not name.startswith("_")}
+        shared = {
+            name
+            for name in public & core
+            if getattr(module, name) is getattr(Ledger, name)  # the same function
+        }
+        assert not shared, f"{module.__name__} наследует ядро: {sorted(shared)}"
+        assert not any(cls is Ledger for cls in module.__mro__)
+    ledger = Ledger(connect(":memory:"))
+    assert ledger.bank.ledger is ledger and ledger.conversion.ledger is ledger
+    assert Inventory(ledger.conn, ledger.actor).ledger is not ledger  # its own, the same base
+    bad = [
+        rel(path)
+        for path in files()
+        if "/application/" in path.as_posix()
+        and "/application/ledger/" not in path.as_posix()
+        and ("ledger._" in path.read_text(encoding="utf-8"))
+    ]
+    assert not bad, f"модуль лезет внутрь Ledger: {bad} — только через ledger/module.py"
+
+
 def test_the_counterparty_of_a_line_has_one_rule():
     """Who the counterparty of a purchase or sale line is — the view
     inventory_line_counterparties (migration 0045, debt 12): no query picks it out of

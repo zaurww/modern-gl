@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.common import fill_subconto
 from modern_gl.application.inventory.amounts import format_quantity, money
 from modern_gl.application.inventory.drafts import DraftCommands
 from modern_gl.application.inventory.model import INCOMING_SQL
@@ -236,7 +237,7 @@ class StockCommands(DraftCommands):
             raise ValidationError(
                 tr("не указан счёт НДС к возмещению — выберите его в настройках склада")
             )
-        vat_kinds = self._account_kind_ids(self._account(company_id, vat_account_id))
+        vat_account = self._account(company_id, vat_account_id)
         result = []
         for (account_id, offset_sc), amount in totals.items():
             by_kind = {
@@ -249,7 +250,7 @@ class StockCommands(DraftCommands):
                     vat_account_id,
                     account_id,
                     money(amount),
-                    tuple(None if kind is None else by_kind.get(kind) for kind in vat_kinds),
+                    fill_subconto(vat_account, by_kind),
                     offset_sc,
                     trd("НДС"),
                     invoice=invoice[0],

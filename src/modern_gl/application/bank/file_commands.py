@@ -205,7 +205,7 @@ class BankFileCommands(FileConversionCommands):
             return self._payment_lines(company_id, op, counterparty, new_party)
         if op.kind == FEE:  # as the last fee, else the settings' account, item «Комиссия банка»
             before = previous_lines(self.conn, company_id, op.place, op, None)
-            fee = before[0].account_id if before else self.account_role(company_id, BANK_FEE)
+            fee = before[0].account_id if before else self.ledger.account_role(company_id, BANK_FEE)
             if fee is None:
                 return unknown, tr("не задан счёт комиссий банка")
             subconto = before[0].subconto if before else ()
@@ -267,7 +267,7 @@ class BankFileCommands(FileConversionCommands):
             day=op.day,
             invoices=invoices,
             # the ƏDV paid ahead stays on the settlement account (D145)
-            advance_account=None if op.pays_vat else self.account_role(company_id, role),
+            advance_account=None if op.pays_vat else self.ledger.account_role(company_id, role),
         )
         if op.pays_vat:
             lines = [replace(line, pays_vat=True) for line in lines]

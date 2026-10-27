@@ -217,7 +217,7 @@ class VatDepositCommands(BankImportCommands):
         before = previous_lines(self.conn, company_id, place, op, counterparty)
         account, subconto = (before[0].account_id, before[0].subconto) if before else (None, ())
         if account is None and op.kind == TAX:  # the deposit pays the budget only ƏDV
-            account = self.account_role(company_id, OUTPUT_VAT)
+            account = self.ledger.account_role(company_id, OUTPUT_VAT)
         if account is None and op.kind != TRANSFER:
             account = self._first_account_of_type(company_id, KIND_TYPES[op.kind])
         if account is None:

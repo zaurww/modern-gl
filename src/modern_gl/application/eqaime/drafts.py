@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto
 from modern_gl.application.eqaime.counterparties import (
     add_counterparties,
     new_counterparties,
@@ -20,6 +20,7 @@ from modern_gl.application.inventory import (
     SaleLine,
 )
 from modern_gl.application.queries import remembered_sale_subconto
+from modern_gl.domain.errors import NotFoundError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, transaction
@@ -56,7 +57,8 @@ def import_drafts(
                     company_id, plan.attach_to.document_id, invoice.number, vat
                 )
                 continue
-            assert plan.counterparty_id is not None  # added above
+            if plan.counterparty_id is None:  # added above, by its VÖEN
+                raise NotFoundError(tr("e-qaimə {n}: контрагент не найден", n=invoice.number))
             account = _settlement_account(conn, company_id, invoice.outgoing)
             subconto = _place(conn, company_id, account, kind, plan.counterparty_id)
             vat_rate = STANDARD_VAT_RATE if invoice.vat else None
@@ -195,4 +197,4 @@ def _place(
         "WHERE company_id = ? AND id = ?",
         (company_id, account_id),
     ).fetchone()
-    return pad_subconto([value_id if k == kind_id else None for k in tuple(account)])
+    return fill_subconto(account, {kind_id: value_id})

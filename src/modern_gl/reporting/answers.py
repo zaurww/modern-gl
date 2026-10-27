@@ -1,4 +1,5 @@
-"""What the assistant's tools answer: the reports and the books as plain JSON (D83).
+"""The reports and the books as plain JSON (D83, D130): what the assistant's tools answer
+and the API gives — built over the reports, so neither depends on the other.
 
 Amounts are strings in manat with two decimals ("1234.50") — exact, never floats; a
 debit/credit pair is written once as {"debit", "credit"}. Long lists are cut at LIMIT and

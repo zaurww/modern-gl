@@ -54,7 +54,7 @@ LINE_COLUMNS = (
 class DraftCommands(InventoryBase):
     def load_document(self, company_id: int, document_id: int) -> InventoryDocumentData:
         """Load a warehouse document with its source and calculated line fields."""
-        doc = self._document(company_id, document_id)
+        doc = self._inventory_document(company_id, document_id)
         rows = self.conn.execute(
             "SELECT * FROM inventory_lines WHERE company_id = ? AND document_id = ? "
             "ORDER BY line_no",
@@ -184,7 +184,7 @@ class DraftCommands(InventoryBase):
                 (document_id,),
             )
             return
-        if self._document(company_id, document_id)["doc_type"] != "receipt":
+        if self._inventory_document(company_id, document_id)["doc_type"] != "receipt":
             raise ValidationError(tr("в валюте может быть только поступление"))
         self.conn.execute(
             "UPDATE inventory_documents SET currency_id = ?, currency_rate = ? WHERE id = ?",

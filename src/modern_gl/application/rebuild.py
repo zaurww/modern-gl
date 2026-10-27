@@ -25,7 +25,7 @@ def module_rebuilders(ledger: Ledger) -> dict[str, Rebuilder]:
     return {
         "bank": ledger.bank,
         "conversion": ledger.conversion,
-        "inventory": Inventory(ledger.conn, ledger.actor),
+        "inventory": Inventory(ledger.conn, ledger.actor, ledger=ledger),
     }
 
 

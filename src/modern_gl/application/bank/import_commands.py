@@ -39,11 +39,11 @@ class BankImportCommands(BankCommands, BankStatementCommands):
                 continue
             existing = known_counterparty(self.conn, company_id, op.tin, op.name)
             if existing is None:
-                kind = kind or self.subconto_kind_id(company_id, "counterparty")
-                existing = self.add_subconto_value(company_id, kind, short_name(op.name))
+                kind = kind or self.ledger.subconto_kind_id(company_id, "counterparty")
+                existing = self.ledger.add_subconto_value(company_id, kind, short_name(op.name))
                 if op.tin:
-                    self.set_subconto_value_tax(company_id, existing, op.tin)
-                self.set_subconto_value_legal_name(company_id, existing, op.name)
+                    self.ledger.set_subconto_value_tax(company_id, existing, op.tin)
+                self.ledger.set_subconto_value_legal_name(company_id, existing, op.name)
                 added.add(existing)
             found[key] = existing
         return found, added

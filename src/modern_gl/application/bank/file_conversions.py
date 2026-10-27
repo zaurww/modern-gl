@@ -89,9 +89,7 @@ class FileConversionCommands(BankImportCommands):
         self, company_id: int, data: ConversionInput, existing: int | None, post: bool
     ) -> tuple[str, str, int]:
         """Saved: posted when both sides are known and `post`, else a draft (and why)."""
-        from modern_gl.application.conversion import ConversionModule
-
-        conversions = ConversionModule(self.conn, self.actor)
+        conversions = self.ledger.conversion
         why = ""
         if data.source is None or data.target is None:
             why = tr("вторая сторона — в выписке другого счёта")

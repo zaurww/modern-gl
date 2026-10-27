@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto, pad_subconto
 from modern_gl.application.inventory.amounts import (
     blank,
     draft_quantity,
@@ -16,7 +16,12 @@ from modern_gl.application.inventory.amounts import (
     positive_amount,
     service_quantity,
 )
-from modern_gl.application.inventory.model import INCOMING_REASONS, INCOMING_TYPES, ReceiptLine
+from modern_gl.application.inventory.model import (
+    INCOMING_REASONS,
+    INCOMING_TYPES,
+    ReceiptHeader,
+    ReceiptLine,
+)
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.domain.currency import to_base, unit_rate
 from modern_gl.domain.dates import month_end
@@ -50,28 +55,50 @@ class ReceiptDraftCommands(StockCommands):
         awaits_invoice: bool = False,
     ) -> int:
         """Save an editable receipt/opening document — or, with `incoming_reason`, a mədaxil
-        without a purchase (D91) — without affecting stock or GL.
+        without a purchase (D91) — without affecting stock or GL (`ReceiptHeader`)."""
+        header = ReceiptHeader(
+            doc_date,
+            credit_account_id,
+            credit_subconto,
+            memo,
+            opening,
+            incoming_reason,
+            vat_rate,
+            currency_id,
+            currency_rate,
+            invoice,
+            invoice_kind,
+            awaits_invoice,
+        )
+        return self.save_receipt_draft(company_id, header, lines)
 
-        A draft may be unfinished: only the item of each line is required. Line amounts
-        are without VAT; each line's VAT is given (`vat_rate` only remembers the rate).
-        `awaits_invoice`: a purchase whose goods came before their e-qaimə (D119)."""
-        check_reason(incoming_reason)
-        doc_type = "incoming" if incoming_reason else "opening" if opening else "receipt"
+    def save_receipt_draft(
+        self, company_id: int, header: ReceiptHeader, lines: Sequence[ReceiptLine]
+    ) -> int:
+        """A new receipt draft. A draft may be unfinished: only the item of each line is
+        required. Line amounts are without VAT; each line's VAT is given (`vat_rate` only
+        remembers the rate)."""
+        check_reason(header.incoming_reason)
+        doc_type = header.doc_type
         purchase = doc_type == "receipt"
         with transaction(self.conn):
             document_id = self._insert_document(
-                company_id, doc_date, doc_type, memo, incoming_reason=incoming_reason
+                company_id,
+                header.doc_date,
+                doc_type,
+                header.memo,
+                incoming_reason=header.incoming_reason,
             )
-            self._set_vat_rate(document_id, vat_rate if purchase else None)
-            self._set_currency(company_id, document_id, currency_id, currency_rate)
+            self._set_vat_rate(document_id, header.vat_rate if purchase else None)
+            self._set_currency(company_id, document_id, header.currency_id, header.currency_rate)
             self._set_invoice(
                 document_id,
-                invoice if purchase else "",
-                invoice_kind,
-                awaits=purchase and awaits_invoice,
+                header.invoice if purchase else "",
+                header.invoice_kind,
+                awaits=purchase and header.awaits_invoice,
             )
             self._write_receipt_draft(
-                company_id, document_id, lines, credit_account_id, credit_subconto
+                company_id, document_id, lines, header.credit_account_id, header.credit_subconto
             )
             self._audit(
                 company_id,
@@ -100,27 +127,52 @@ class ReceiptDraftCommands(StockCommands):
         invoice_kind: str = "",
         awaits_invoice: bool = False,
     ) -> None:
-        check_reason(incoming_reason)
+        header = ReceiptHeader(
+            doc_date,
+            credit_account_id,
+            credit_subconto,
+            memo,
+            incoming_reason=incoming_reason,
+            vat_rate=vat_rate,
+            currency_id=currency_id,
+            currency_rate=currency_rate,
+            invoice=invoice,
+            invoice_kind=invoice_kind,
+            awaits_invoice=awaits_invoice,
+        )
+        self.change_receipt_draft(company_id, document_id, header, lines)
+
+    def change_receipt_draft(
+        self,
+        company_id: int,
+        document_id: int,
+        header: ReceiptHeader,
+        lines: Sequence[ReceiptLine],
+    ) -> None:
+        """The draft saved again; its kind (receipt, opening, mədaxil) stays."""
+        check_reason(header.incoming_reason)
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
             incoming = doc["doc_type"] == "incoming"
-            if doc["doc_type"] not in INCOMING_TYPES or incoming != (incoming_reason is not None):
+            if doc["doc_type"] not in INCOMING_TYPES or incoming != (
+                header.incoming_reason is not None
+            ):
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
             if incoming:
-                self._set_incoming_reason(document_id, incoming_reason)
-            self._update_draft_header(company_id, document_id, doc_date, memo)
-            self._set_vat_rate(document_id, vat_rate if doc["doc_type"] == "receipt" else None)
-            self._set_currency(company_id, document_id, currency_id, currency_rate)
+                self._set_incoming_reason(document_id, header.incoming_reason)
+            self._update_draft_header(company_id, document_id, header.doc_date, header.memo)
             receipt = doc["doc_type"] == "receipt"
+            self._set_vat_rate(document_id, header.vat_rate if receipt else None)
+            self._set_currency(company_id, document_id, header.currency_id, header.currency_rate)
             self._set_invoice(
                 document_id,
-                invoice if receipt else "",
-                invoice_kind,
-                awaits=receipt and awaits_invoice,
+                header.invoice if receipt else "",
+                header.invoice_kind,
+                awaits=receipt and header.awaits_invoice,
             )
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(
-                company_id, document_id, lines, credit_account_id, credit_subconto
+                company_id, document_id, lines, header.credit_account_id, header.credit_subconto
             )
             self._audit(company_id, "inventory_document", document_id, "update_draft", {})
 
@@ -182,7 +234,7 @@ class ReceiptDraftCommands(StockCommands):
         for value_id in (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]):
             if value_id is not None:
                 had[self._subconto_value(company_id, value_id)["kind_id"]] = value_id
-        sc = [had.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3)]
+        sc = fill_subconto(account, had)
         self.conn.execute(
             "UPDATE inventory_lines SET offset_account_id = ?, offset_sc1 = ?, offset_sc2 = ?, "
             "offset_sc3 = ? WHERE company_id = ? AND document_id = ? AND id = ?",
@@ -199,7 +251,7 @@ class ReceiptDraftCommands(StockCommands):
     ) -> None:
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
-        doc = self._document(company_id, document_id)
+        doc = self._inventory_document(company_id, document_id)
         doc_type = doc["doc_type"]
         for line_no, source in enumerate(lines, 1):
             expense = self._expense_of(company_id, doc_type, source, line_no)
