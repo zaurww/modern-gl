@@ -49,6 +49,30 @@ INCOMING_SQL = "(" + ", ".join(f"'{t}'" for t in sorted(INCOMING_TYPES)) + ")"  
 
 
 @dataclass(frozen=True)
+class ReceiptHeader:
+    """What a receipt, an opening balance or a mədaxil (D91) says besides its lines: the
+    account it is owed on, its kind and its terms — one value instead of a dozen
+    arguments passed from method to method."""
+
+    doc_date: date | str
+    credit_account_id: int | None
+    credit_subconto: Sequence[int | None] = ()
+    memo: str = ""
+    opening: bool = False
+    incoming_reason: str | None = None  # a mədaxil without a purchase (D91)
+    vat_rate: int | None = None  # remembered for a purchase only
+    currency_id: int | None = None
+    currency_rate: str | int | Decimal | None = None
+    invoice: str = ""
+    invoice_kind: str = ""
+    awaits_invoice: bool = False  # the goods came before their e-qaimə (D119)
+
+    @property
+    def doc_type(self) -> str:
+        return "incoming" if self.incoming_reason else "opening" if self.opening else "receipt"
+
+
+@dataclass(frozen=True)
 class ReceiptLine:
     """Receipt/opening line. In a draft, everything except the item may be left empty.
 

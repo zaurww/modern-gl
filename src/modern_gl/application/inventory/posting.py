@@ -16,6 +16,7 @@ from modern_gl.application.inventory.model import (
     IssueLine,
     LandedCostCharge,
     LandedCostTarget,
+    ReceiptHeader,
     ReceiptLine,
     SaleLine,
     TransferLine,
@@ -82,27 +83,33 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
         invoice: str = "",
         invoice_kind: str = "",
     ) -> int:
-        """Post a receipt/opening balance (or a mədaxil, D91) and its Dr inventory / Cr
-        offset entries (and Dr input VAT / Cr offset for the lines' VAT). A line without an
-        item with an `expense_date` is an expense of that earlier month (D65)."""
+        """Post a receipt/opening balance (or a mədaxil, D91): `post_new_receipt` with
+        its `ReceiptHeader`."""
+        header = ReceiptHeader(
+            doc_date,
+            credit_account_id,
+            credit_subconto,
+            memo,
+            opening,
+            incoming_reason,
+            vat_rate,
+            currency_id,
+            currency_rate,
+            invoice,
+            invoice_kind,
+        )
+        return self.post_new_receipt(company_id, header, lines)
+
+    def post_new_receipt(
+        self, company_id: int, header: ReceiptHeader, lines: Sequence[ReceiptLine]
+    ) -> int:
+        """A receipt posted at once: Dr inventory / Cr offset (and Dr input VAT / Cr offset
+        for the lines' VAT). A line without an item with an `expense_date` is an expense of
+        that earlier month (D65)."""
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
         with transaction(self.conn):
-            inv_id = self.create_receipt_draft(
-                company_id,
-                doc_date,
-                lines,
-                credit_account_id,
-                credit_subconto,
-                memo,
-                opening=opening,
-                incoming_reason=incoming_reason,
-                vat_rate=vat_rate,
-                currency_id=currency_id,
-                currency_rate=currency_rate,
-                invoice=invoice,
-                invoice_kind=invoice_kind,
-            )
+            inv_id = self.save_receipt_draft(company_id, header, lines)
             self._post_in_sequence(company_id, inv_id)
         return inv_id
 

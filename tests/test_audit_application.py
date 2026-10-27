@@ -242,3 +242,49 @@ def test_an_operation_on_an_unknown_account_or_moved_unknown_is_not_found(demo):
         led.bank.save_bank_operation(cid, data, post=False)
     with pytest.raises(NotFoundError, match="документ 999 не найден"):
         led.bank.move_bank_operations(cid, [999], demo.acc["222"], ())
+
+
+# ---- a receipt's header is one value ----------------------------------------------------------
+
+
+def test_a_receipt_posted_from_its_header_posts_as_with_the_arguments(ledger, conn):
+    """10 pcs for 120.00 with 18% VAT 21.60: Dr 41 120.00 and Dr 18 21.60 / Cr 60 —
+    the same whether the header is one value or a dozen arguments."""
+    from modern_gl.application.inventory import Inventory, ReceiptHeader, ReceiptLine
+
+    cid = ledger.create_company("Склад")
+    item_kind = ledger.add_subconto_kind(cid, "item", "Товары")
+    warehouse_kind = ledger.add_subconto_kind(cid, "warehouse", "Склады")
+    stock = ledger.add_account(cid, "41", "Товары", subconto=[item_kind, warehouse_kind])
+    payable = ledger.add_account(cid, "60", "Поставщики", account_class="liability")
+    vat = ledger.add_account(cid, "18", "НДС к возмещению", account_class="asset")
+    from modern_gl.domain.accounts import INPUT_VAT
+
+    ledger.set_account_role(cid, INPUT_VAT, vat)
+    inventory = Inventory(conn, actor="test", ledger=ledger)
+    unit = inventory.add_unit(cid, "шт", "Штука", precision=0)
+    item = inventory.add_item(cid, "Бумага", unit, stock)
+    main = inventory.add_warehouse(cid, "Основной")
+    line = ReceiptLine(item, main, "10", "120.00", vat_amount="21.60")
+    header = ReceiptHeader("2026-01-10", payable, (), "Покупка", vat_rate=1800, invoice="MT1")
+    assert header.doc_type == "receipt"
+    by_header = inventory.post_new_receipt(cid, header, [line])
+    by_arguments = inventory.post_receipt(
+        cid, "2026-01-10", [line], payable, (), "Покупка", vat_rate=1800, invoice="MT1"
+    )
+
+    def postings(inventory_id: int) -> list[tuple]:
+        gl = conn.execute(
+            "SELECT gl_document_id FROM inventory_documents WHERE id = ?", (inventory_id,)
+        ).fetchone()[0]
+        return [
+            (r["debit_account_id"], r["credit_account_id"], r["amount"], r["invoice"])
+            for r in conn.execute(
+                "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (gl,)
+            )
+        ]
+
+    assert postings(by_header) == [(stock, payable, 12_000, "MT1"), (vat, payable, 2_160, "MT1")]
+    assert postings(by_arguments) == postings(by_header)
+    assert ReceiptHeader("2026-01-10", payable, opening=True).doc_type == "opening"
+    assert ReceiptHeader("2026-01-10", None, incoming_reason="gift").doc_type == "incoming"
