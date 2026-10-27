@@ -1,4 +1,5 @@
-"""The running Qt application, typed for pyright."""
+"""Qt widgets the tests reach for, typed for pyright: each helper checks what Qt types as
+optional or as a base class (the focus widget, a completer's list, a table's cell)."""
 
 from __future__ import annotations
 

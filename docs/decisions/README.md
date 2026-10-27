@@ -163,3 +163,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D151 | Ввод склада: контрагент в шапке, инвентаризация, все товары на «Склад» | принято | [D151-inventory-entry-party-stock-count.md](D151-inventory-entry-party-stock-count.md) |
 | D152 | Язык документов — настройка компании, а не интерфейса | принято | [D152-document-language-company.md](D152-document-language-company.md) |
 | D-new | Решения — файл на решение в формате ADR | принято | [D-new-adr-decision-files.md](D-new-adr-decision-files.md) |
+| D-new | Типы: тесты под pyright, ядро — strict, докстринги ядра обязательны | принято | [D-new-pyright-strict-core.md](D-new-pyright-strict-core.md) |
