@@ -32,6 +32,8 @@ from modern_gl.infrastructure.company_file import (
 )
 from modern_gl.infrastructure.db import connect
 
+POSIX = pytest.mark.skipif(sys.platform == "win32", reason="/proc/mounts: the POSIX branch")
+
 
 @pytest.fixture
 def mounts(tmp_path, monkeypatch):
@@ -47,10 +49,10 @@ def mounts(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setattr(company_file, "MOUNTS", table)
-    monkeypatch.setattr(sys, "platform", "linux")
     return share
 
 
+@POSIX
 def test_a_network_file_system_is_known_by_its_mount(mounts, tmp_path):
     assert place_of(mounts / "Firma.gl") == NETWORK
     assert place_of(mounts / "usb" / "Firma.gl") == LOCAL  # the longest mount point wins
@@ -75,6 +77,7 @@ def test_windows_shares_and_network_drives(monkeypatch):
     assert not remote(r"C:\Users\aynur\Documents\Firma.gl")
 
 
+@POSIX
 def test_a_file_on_a_network_folder_has_no_wal(mounts, tmp_path):
     conn = connect(mounts / "Firma.gl")
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "delete"
@@ -186,6 +189,7 @@ def test_a_failed_open_leaves_no_lock(company, monkeypatch):
     assert not lock_path(path).exists()
 
 
+@POSIX
 def test_a_network_file_open_by_its_owner_is_viewed_under_the_engines_locks(mounts):
     ws = Workspace(mounts)
     path = ws.create("Firma")

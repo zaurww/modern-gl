@@ -295,7 +295,7 @@ def _alive(pid: int) -> bool:
         kernel = ctypes.windll.kernel32
         handle = kernel.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
         if not handle:
-            return ctypes.get_last_error() == 5  # access denied: it runs, as another user
+            return ctypes.GetLastError() == 5  # access denied: it runs, as another user
         try:
             code = ctypes.c_ulong()
             kernel.GetExitCodeProcess(handle, ctypes.byref(code))
