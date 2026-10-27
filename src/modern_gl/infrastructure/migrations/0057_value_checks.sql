@@ -1,4 +1,4 @@
--- Values the file refuses (D-new), as 0053 did for integers: a mistake of the code, an
+-- Values the file refuses (D155), as 0053 did for integers: a mistake of the code, an
 -- import or a tool is refused, not stored. On an update only a changed value is checked,
 -- so a row written before stays editable.
 --

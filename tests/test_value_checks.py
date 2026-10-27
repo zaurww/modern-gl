@@ -1,4 +1,4 @@
-"""Values the file refuses (migration 0057, D-new): a day that is not in the calendar, a
+"""Values the file refuses (migration 0057, D155): a day that is not in the calendar, a
 time that is not a time, a flag that is neither 0 nor 1, an account whose class is not its
 type's. Written straight to the file — as a mistake of the code, an import or a tool would."""
 
