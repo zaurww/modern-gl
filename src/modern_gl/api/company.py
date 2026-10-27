@@ -7,8 +7,8 @@ from datetime import date
 from modern_gl.application import queries
 from modern_gl.application.exchange import Imported, import_batch, parse_batch
 from modern_gl.application.ledger import Ledger
-from modern_gl.assistant import answers
 from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting import answers
 from modern_gl.reporting.exchange import documents_file
 
 API = "API · "  # the author of what the API writes, as «AI · » of the assistant (D82)

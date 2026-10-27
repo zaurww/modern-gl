@@ -18,10 +18,10 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.exchange.lines import posting_lines
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import document_by_number, load_document
-from modern_gl.assistant import answers
 from modern_gl.assistant.companies import Companies
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
+from modern_gl.reporting import answers
 
 AI = "AI · "  # an actor starting so is the assistant
 
