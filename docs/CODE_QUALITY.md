@@ -17,6 +17,8 @@
 
 Всё сразу: `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest -q`
 
+Ruff ловит и `S`, `N`, `PT`, `T20`, `ERA`, `PLW`, > 8 аргументов; `noqa` — с причиной (D-new-ruff-strict).
+
 ## 2. Размеры кода — `tests/test_code_size.py`
 
 | Что | Предел, строк |
