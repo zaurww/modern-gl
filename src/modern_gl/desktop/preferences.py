@@ -1,4 +1,4 @@
-"""What the program remembers for the user between runs (D-new3): one object over QSettings
+"""What the program remembers for the user between runs (D162): one object over QSettings
 with a typed method for each key, instead of `QSettings().value("bank/amounts", …)` in
 fourteen files. A key is named once, here; its type and default are here too. Nothing of a
 company is kept here — that lives in its file.

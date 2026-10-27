@@ -43,7 +43,7 @@ fail_under = 87
 include = ["src", "tests", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
-# the core under strict (D-new-pyright-strict-core): no Unknown in parameters and answers;
+# the core under strict (D166): no Unknown in parameters and answers;
 # application/ — later, package by package (ledger → modules)
 strict = [
     "src/modern_gl/domain",
@@ -60,7 +60,7 @@ target-version = "py312"
 [tool.ruff.lint]
 select = [
     "E", "F", "I", "B", "UP", "C90", "SIM", "RUF", "PIE", "PERF",
-    "S",  # bandit (D-new-ruff-strict)
+    "S",  # bandit (D163)
     "T20",  # no print() in src: logging (infrastructure/logs.py)
     "ERA",  # no commented-out code
     "PT",  # pytest style

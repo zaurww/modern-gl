@@ -83,7 +83,7 @@ i18n                       тексты: tr(), переводы
 
 ## 6. Интерфейс
 - **Окно:** `MainWindow` держит части полями и связывает сигналами, без крючков
-  (D-new-main-window-composition): `CompanySession` (файл компании), `PageStack` (страницы,
+  (D167): `CompanySession` (файл компании), `PageStack` (страницы,
   Esc — назад), `Navigator` + `ReportPlaces` (что где открывается).
 - **Страница читает в два шага:** `fetch(conn)` — только SQL, `present(data)` — заполнить;
   через `Session.read` — у большой компании в фоновом потоке (`desktop/background.py`).

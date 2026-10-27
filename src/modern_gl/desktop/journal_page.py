@@ -89,7 +89,7 @@ class JournalData:
 
 
 class JournalModel(QAbstractTableModel):
-    """The documents read so far, in the journal's order (D-new-journal-paging): a page of
+    """The documents read so far, in the journal's order (D164): a page of
     them around the one shown; older ones come in as the list is scrolled up, newer ones
     (canFetchMore / fetchMore) as it is scrolled down. `fetch(older)` — the page's reader."""
 

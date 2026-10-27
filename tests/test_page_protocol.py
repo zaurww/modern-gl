@@ -1,4 +1,4 @@
-"""Every page the window shows speaks the page protocol (D-new1): the window asks nothing
+"""Every page the window shows speaks the page protocol (D160): the window asks nothing
 else of a page, so a page missing a method would fail here, not on closing."""
 
 from modern_gl.application.queries import list_documents

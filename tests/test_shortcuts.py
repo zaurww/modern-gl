@@ -1,4 +1,4 @@
-"""The table of keys (desktop/shortcuts.py, D-new2): no two actions share keys in one
+"""The table of keys (desktop/shortcuts.py, D161): no two actions share keys in one
 scope, every description is translated, and the legends are made from it."""
 
 from collections import Counter

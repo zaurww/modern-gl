@@ -1,4 +1,4 @@
-"""One posting as the table `postings` stores it (D-new): the value object every path
+"""One posting as the table `postings` stores it (D159): the value object every path
 goes through — a line typed in (`from_input`), a stored row (`from_row`), the row written
 (`params`), the storno (`negated`), the snapshot for the audit trail (`as_dict`), and
 what two documents are compared by (dataclass equality). A new column of a posting is

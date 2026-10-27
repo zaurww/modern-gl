@@ -162,18 +162,18 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D150 | Склад: отчёты — ведомость, карточка товара, валовая прибыль; операции — после решения | принято | [D150-inventory-reports.md](D150-inventory-reports.md) |
 | D151 | Ввод склада: контрагент в шапке, инвентаризация, все товары на «Склад» | принято | [D151-inventory-entry-party-stock-count.md](D151-inventory-entry-party-stock-count.md) |
 | D152 | Язык документов — настройка компании, а не интерфейса | принято | [D152-document-language-company.md](D152-document-language-company.md) |
-| D-new | Решения — файл на решение в формате ADR | принято | [D-new-adr-decision-files.md](D-new-adr-decision-files.md) |
-| D-new | Обработчик падений и журнал программы | принято | [D-new-crash-log.md](D-new-crash-log.md) |
-| D-new | Инструменты разработки: CI на Windows, покрытие, свойства, снимки, релиз | принято | [D-new-dev-tooling.md](D-new-dev-tooling.md) |
-| D-new | Чужой SQLite-файл не принимается; WAL после миграций; «файл занят» | принято | [D-new-foreign-file.md](D-new-foreign-file.md) |
-| D-new | Журнал читается порциями, поиск — в запросе | принято | [D-new-journal-paging.md](D-new-journal-paging.md) |
-| D-new | Главное окно — композиция частей, а не цепочка наследования | принято | [D-new-main-window-composition.md](D-new-main-window-composition.md) |
-| D-new | Модули — композиция, не наследование ядра (уточняет D123) | принято | [D-new-module-composition.md](D-new-module-composition.md) |
-| D-new | Вложенная транзакция — savepoint | принято | [D-new-nested-savepoint.md](D-new-nested-savepoint.md) |
-| D-new | Сетевая или облачная папка: без WAL, предупреждение и замок файла | принято | [D-new-network-folder-lock.md](D-new-network-folder-lock.md) |
-| D-new | Протокол страницы | принято | [D-new-page-protocol.md](D-new-page-protocol.md) |
-| D-new | Проводка как значение — PostingRecord | принято | [D-new-posting-record.md](D-new-posting-record.md) |
-| D-new | Настройки пользователя — Preferences | принято | [D-new-preferences.md](D-new-preferences.md) |
-| D-new | Типы: тесты под pyright, ядро — strict, докстринги ядра обязательны | принято | [D-new-pyright-strict-core.md](D-new-pyright-strict-core.md) |
-| D-new | Ruff строже: bandit, имена, pytest, без print и закомментированного кода | принято | [D-new-ruff-strict.md](D-new-ruff-strict.md) |
-| D-new | Реестр горячих клавиш | принято | [D-new-shortcuts-registry.md](D-new-shortcuts-registry.md) |
+| D153 | Решения — файл на решение в формате ADR | принято | [D153-adr-decision-files.md](D153-adr-decision-files.md) |
+| D154 | Обработчик падений и журнал программы | принято | [D154-crash-log.md](D154-crash-log.md) |
+| D155 | Чужой SQLite-файл не принимается; WAL после миграций; «файл занят» | принято | [D155-foreign-file.md](D155-foreign-file.md) |
+| D156 | Вложенная транзакция — savepoint | принято | [D156-nested-savepoint.md](D156-nested-savepoint.md) |
+| D157 | Инструменты разработки: CI на Windows, покрытие, свойства, снимки, релиз | принято | [D157-dev-tooling.md](D157-dev-tooling.md) |
+| D158 | Модули — композиция, не наследование ядра (уточняет D123) | принято | [D158-module-composition.md](D158-module-composition.md) |
+| D159 | Проводка как значение — PostingRecord | принято | [D159-posting-record.md](D159-posting-record.md) |
+| D160 | Протокол страницы | принято | [D160-page-protocol.md](D160-page-protocol.md) |
+| D161 | Реестр горячих клавиш | принято | [D161-shortcuts-registry.md](D161-shortcuts-registry.md) |
+| D162 | Настройки пользователя — Preferences | принято | [D162-preferences.md](D162-preferences.md) |
+| D163 | Ruff строже: bandit, имена, pytest, без print и закомментированного кода | принято | [D163-ruff-strict.md](D163-ruff-strict.md) |
+| D164 | Журнал читается порциями, поиск — в запросе | принято | [D164-journal-paging.md](D164-journal-paging.md) |
+| D165 | Сетевая или облачная папка: без WAL, предупреждение и замок файла | принято | [D165-network-folder-lock.md](D165-network-folder-lock.md) |
+| D166 | Типы: тесты под pyright, ядро — strict, докстринги ядра обязательны | принято | [D166-pyright-strict-core.md](D166-pyright-strict-core.md) |
+| D167 | Главное окно — композиция частей, а не цепочка наследования | принято | [D167-main-window-composition.md](D167-main-window-composition.md) |

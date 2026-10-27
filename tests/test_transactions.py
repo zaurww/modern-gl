@@ -1,4 +1,4 @@
-"""`db.transaction` inside an open transaction is a savepoint (D-new): a block that fails
+"""`db.transaction` inside an open transaction is a savepoint (D156): a block that fails
 is undone alone, the outer transaction goes on. `dry_run` undoes a block that succeeded."""
 
 from __future__ import annotations
@@ -81,3 +81,27 @@ def test_posting_all_drafts_keeps_the_ones_that_posted(demo, conn, monkeypatch):
         for r in conn.execute("SELECT id, status FROM documents WHERE company_id = ?", (cid,))
     }
     assert (status[good], status[bad], status[later]) == ("posted", "draft", "posted")
+
+
+def test_a_failed_commit_leaves_no_transaction_open(conn):
+    """A commit the database refuses (here: a deferred reference checked only at COMMIT;
+    in life also a file another program keeps locked) must not leave the transaction
+    open: the next `transaction()` would join it as a savepoint and never be saved."""
+    conn.execute("CREATE TABLE t_parent (id INTEGER PRIMARY KEY)")
+    conn.execute(
+        "CREATE TABLE t_child (parent_id INTEGER"
+        " REFERENCES t_parent (id) DEFERRABLE INITIALLY DEFERRED)"
+    )
+
+    def orphan() -> None:
+        with transaction(conn):
+            conn.execute("INSERT INTO t_child (parent_id) VALUES (99)")
+
+    with pytest.raises(Exception, match="FOREIGN KEY"):
+        orphan()
+    assert not conn.in_transaction
+    with transaction(conn):
+        conn.execute("INSERT INTO t_parent (id) VALUES (1)")
+    assert not conn.in_transaction
+    assert conn.execute("SELECT COUNT(*) FROM t_parent").fetchone()[0] == 1
+    assert conn.execute("SELECT COUNT(*) FROM t_child").fetchone()[0] == 0

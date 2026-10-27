@@ -1,6 +1,6 @@
 """What the modules share (bank, currency conversion, e-qaimə, the warehouse): a module's
 write object is built on `ModuleBase` — it holds the ledger and calls it (`self.ledger`,
-composition, D-new); it is not the ledger, so none of the core's scenarios appear on it.
+composition, D158); it is not the ledger, so none of the core's scenarios appear on it.
 Its GL documents go through `ModuleDocuments` (`self.documents`): written, built again
 and removed only by the module, never by the journal.
 

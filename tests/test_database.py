@@ -352,7 +352,7 @@ def test_demo_company_is_consistent(ledger):
 
 def test_a_locked_file_is_told_in_the_users_words(tmp_path):
     """Another connection (another program) keeps the write lock: after the timeout the
-    write is refused with a message for the user, not with a traceback (D-new)."""
+    write is refused with a message for the user, not with a traceback (D155)."""
     path = tmp_path / "shared.gl"
     first = connect(path)
     second = connect(path, timeout=0.2)

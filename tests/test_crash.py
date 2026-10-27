@@ -1,4 +1,4 @@
-"""A failure of the program (D-new): the traceback goes to the log and to the «Ошибка»
+"""A failure of the program (D154): the traceback goes to the log and to the «Ошибка»
 window; a failure in a worker thread does not take the window down."""
 
 from __future__ import annotations

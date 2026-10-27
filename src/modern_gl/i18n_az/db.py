@@ -1,4 +1,4 @@
-"""The database engine's own words to the user: a locked file (D-new)."""
+"""The database engine's own words to the user: a locked file (D155)."""
 
 AZ: dict[str, str] = {
     "Файл компании занят другой программой — закройте её и повторите": (
