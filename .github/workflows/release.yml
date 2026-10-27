@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Python
+        run: uv python install
+      - name: Install
+        run: uv sync --locked
+      - name: Build
+        run: uv run pyinstaller --clean --noconfirm packaging/modern-gl.spec
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist/modern-gl -DestinationPath "modern-gl-${{ github.ref_name }}-windows.zip"
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: modern-gl-${{ github.ref_name }}-windows.zip
+          generate_release_notes: false
+          body: "Сборка для Windows: распаковать и запустить modern-gl.exe. Изменения — CHANGELOG.md."
