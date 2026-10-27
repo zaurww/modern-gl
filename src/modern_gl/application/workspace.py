@@ -107,7 +107,7 @@ class Workspace:
             try:
                 ledger = Ledger(conn)
                 company_id = ledger.create_company(name)
-                ledger.set_document_language(company_id, DEFAULT_LANGUAGE)  # D-new
+                ledger.set_document_language(company_id, DEFAULT_LANGUAGE)  # D152
                 if chart:
                     apply_chart_template(ledger, company_id, chart)
                 if mode != FULL:
@@ -165,7 +165,7 @@ class Workspace:
         (a failed update: UpgradeError, the file as it was), a file of a newer program is
         refused untouched (NewerFileError), and a damaged file is refused
         (backup.BackupError) so it can be restored. Its documents are written in its
-        language of documents from now on (D-new)."""
+        language of documents from now on (D152)."""
         conn, company_id = self._updated(Path(path))
         try:
             open_in(conn, company_id, write=True)

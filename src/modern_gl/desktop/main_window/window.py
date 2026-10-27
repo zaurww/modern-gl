@@ -169,7 +169,7 @@ class MainWindow(ReportPlaces):
         menu.addSeparator()
         menu.addAction(tr("VÖEN компании…")).triggered.connect(self.edit_tax_id)
         menu.addAction(tr("Плательщик ƏDV с…")).triggered.connect(self.edit_vat_payer)
-        written = menu.addMenu(tr("Язык документов"))  # D-new: the texts the program writes
+        written = menu.addMenu(tr("Язык документов"))  # D152: the texts the program writes
         for code, title in LANGUAGES.items():
             act = written.addAction(("✓  " if code == document_language() else "    ") + title)
             act.triggered.connect(lambda _=False, c=code: self.set_document_language(c))

@@ -1,4 +1,4 @@
-"""The language of the texts the program writes into a company's documents (D-new): a
+"""The language of the texts the program writes into a company's documents (D152): a
 setting of the company, not of the interface. Switching the interface leaves the texts and
 the documents as they are; a rebuild finds nothing to change."""
 

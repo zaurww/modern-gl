@@ -463,7 +463,7 @@ class CompanyFiles(QMainWindow):
 
     def set_document_language(self, code: str) -> None:
         """The language the program writes its texts into this company's documents in
-        (D-new): the next documents; what is written stays."""
+        (D152): the next documents; what is written stays."""
         if self.session is None:
             return
         self.session.ledger.set_document_language(self.session.company_id, code)

@@ -1,4 +1,4 @@
-"""The language a company's documents are written in (D-new): the texts the program puts
+"""The language a company's documents are written in (D152): the texts the program puts
 into postings itself («Bank komissiyası» / «Комиссия банка») are `i18n.trd`, in this
 language whatever the interface is. A new company writes in Azerbaijani; a file of an older
 program has no setting — the texts it holds tell which language they were written in."""

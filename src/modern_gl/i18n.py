@@ -3,7 +3,7 @@
     tr("строка {line}: нулевая сумма", line=3)
 
 A text the program writes into a company's documents (a posting's «Комиссия банка») is
-`trd(...)`: in the company's language of documents (D-new), whatever the interface is —
+`trd(...)`: in the company's language of documents (D152), whatever the interface is —
 switched, it would make every document of a module look changed to a rebuild.
 
 Missing translations fall back to Russian; tests/test_i18n.py checks none are missing.

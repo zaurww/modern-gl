@@ -12,7 +12,7 @@ from modern_gl.i18n import fold, set_language, tr, upper
 from modern_gl.i18n_az import AZ, PARTS
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
-TR = ("tr", "trd")  # the interface's and the documents' language (D-new)
+TR = ("tr", "trd")  # the interface's and the documents' language (D152)
 CYRILLIC = set("абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")
 
 

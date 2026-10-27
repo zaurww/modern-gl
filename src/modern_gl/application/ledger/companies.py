@@ -108,7 +108,7 @@ class CompanyCommands(LedgerBase):
 
     def set_document_language(self, company_id: int, code: str) -> None:
         """The language the program writes its own texts into the company's documents in
-        (D-new): later documents only — what is written stays. Audited."""
+        (D152): later documents only — what is written stays. Audited."""
         if code not in LANGUAGES:
             raise ValidationError(tr("неизвестный язык документов: {code}", code=code))
         with transaction(self.conn):

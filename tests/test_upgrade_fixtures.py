@@ -82,7 +82,7 @@ def test_every_module_builds_the_postings_it_holds(updated):
     _ws, _path, conn, company_id, _stored = updated
     ledger = Ledger(conn)
     ledger.set_closed_through(company_id, None)
-    # the interface is Russian, the file's texts Azerbaijani: written in its language (D-new;
+    # the interface is Russian, the file's texts Azerbaijani: written in its language (D152;
     # set on opening — again here, as each test starts without it)
     assert open_in(conn, company_id, write=False) == "az"
     for name, module in module_rebuilders(ledger).items():
