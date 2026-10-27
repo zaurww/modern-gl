@@ -152,7 +152,9 @@ class ImportedDocument:
 class ImportOutcome:
     """What `import_documents` did: created ids, problems by document, or ones there already."""
 
-    ids: list[int] = field(default_factory=list)  # created documents (empty if discarded)
-    errors: list[tuple[int, str]] = field(default_factory=list)  # (document index, message)
+    ids: list[int] = field(default_factory=list[int])  # created documents (empty if discarded)
+    errors: list[tuple[int, str]] = field(
+        default_factory=list[tuple[int, str]]
+    )  # (document index, message)
     # (document index, its id): imported before from the same source, left as it is
-    existing: list[tuple[int, int]] = field(default_factory=list)
+    existing: list[tuple[int, int]] = field(default_factory=list[tuple[int, int]])

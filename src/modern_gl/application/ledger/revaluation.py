@@ -48,7 +48,7 @@ class RevaluationCommands(DocumentCommands):
                             code=account_label(acc),
                         )
                     )
-            postings = []
+            postings: list[PostingInput] = []
             for b in self._currency_balances(company_id, day):
                 rate = rate_on(self.conn, company_id, b["currency_id"], day)
                 if rate is None:

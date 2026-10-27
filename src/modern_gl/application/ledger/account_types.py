@@ -97,7 +97,7 @@ class AccountTypeCommands(LedgerBase):
             )
 
     def _with_followers(
-        self, company_id: int, account_id: int, same: str, values: tuple
+        self, company_id: int, account_id: int, same: str, values: tuple[object, ...]
     ) -> list[int]:
         """The account and its subaccounts, at any depth, that are like it (`same` — an SQL
         condition): these follow a change of its class or type. A subaccount set otherwise

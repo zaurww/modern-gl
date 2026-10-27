@@ -19,7 +19,7 @@
   `--demo-year` — «Xəzər Ofis MMC (demo 2026)», целый год во всех модулях; `--demo-years` —
   она же за 2025 и 2026. Программа открыта — `uv run --no-sync …`.
 - Тесты `uv run pytest -q -n auto` (Linux — `QT_QPA_PLATFORM=offscreen`),
-  `ruff check`, `ruff format --check`, `pyright` (0 ошибок; ядро — strict, D170); CI —
+  `ruff check`, `ruff format --check`, `pyright` (0 ошибок; ядро и `ledger` — strict, D170); CI —
   ubuntu и windows, покрытие 90 % (D161). Скриншоты: `scripts/screenshots.py <папка> az`.
 - Замеры: `uv run python scripts/benchmark.py <папка> --postings 100000` (`--stock`).
 
@@ -126,7 +126,7 @@
 5. «Bu gün» на большой базе: строка банка — 0,75 с на 100 000 проводок (`bank_attention`),
    выписка за всю историю — 0,75–1,1 с (подзапросы на каждый документ; ENGINEERING).
 6. Аудит схемы — к серверу пп. 7–8 (`2026-10-26-schema-safety`).
-8. Разбор `erp-practices`: вход человека, эталонные компании, ƏDV/ДДС в SQL, strict `ledger`.
+8. Разбор `erp-practices`: вход человека, эталоны, ƏDV/ДДС в SQL, strict модулей.
 7. Турагентство / проекты (D124–D126): зачёт авансов с третьим субконто — план по
    (контрагент, заказ), не по контрагенту (`plan_advance_offsets`, `_partner_subconto`);
    валюта в карточке субконто.

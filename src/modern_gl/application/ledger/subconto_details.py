@@ -77,7 +77,7 @@ class SubcontoDetailCommands(SubcontoCommands):
                 (company_id, kind_id),
             )
         }
-        result = []
+        result: list[int] = []
         with transaction(self.conn):
             for name in names:
                 key = fold(name.strip())

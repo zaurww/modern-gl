@@ -273,7 +273,7 @@ class DocumentCommands(PostingChecks):
         if owner is not None:
             raise ValidationError(_owner_text("made", doc["number"], owner))
 
-    def _snapshot(self, doc: Row) -> dict:
+    def _snapshot(self, doc: Row) -> dict[str, object]:
         """Everything needed to see later what a removed / unposted document contained."""
         postings = [
             {"line_no": p["line_no"], **PostingRecord.from_row(p).as_dict()}
@@ -312,7 +312,8 @@ class DocumentCommands(PostingChecks):
         """«Провести все» (D86): the journal's drafts dated up to the day, each in its own
         transaction; one that does not post stays a draft. Returns the ids posted, and
         (number, why) of those left."""
-        posted, left = [], []
+        posted: list[int] = []
+        left: list[tuple[int, str]] = []
         for doc_id in journal_drafts(self.conn, company_id, day):
             try:
                 self.post(company_id, doc_id)

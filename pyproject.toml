@@ -44,11 +44,12 @@ include = ["src", "tests", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 # the core under strict (D170): no Unknown in parameters and answers;
-# application/ — later, package by package (ledger → modules)
+# application/ — package by package: ledger is in, the modules next
 strict = [
     "src/modern_gl/domain",
     "src/modern_gl/api",
     "src/modern_gl/infrastructure",
+    "src/modern_gl/application/ledger",
 ]
 venvPath = "."
 venv = ".venv"

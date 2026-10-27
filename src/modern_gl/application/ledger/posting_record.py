@@ -101,7 +101,7 @@ class PostingRecord:
             int(p.pays_vat),
         )
 
-    def params(self) -> tuple:
+    def params(self) -> tuple[object, ...]:
         """The values in the order of `COLUMNS`."""
         return tuple(getattr(self, column) for column in self.COLUMNS)
 
@@ -113,7 +113,7 @@ class PostingRecord:
             currency_amount=None if self.currency_amount is None else -self.currency_amount,
         )
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> dict[str, object]:
         """The record as plain data for the audit trail's snapshot."""
         return asdict(self)
 

@@ -8,6 +8,11 @@ Every module that makes GL documents can build them again from its own documents
 day on (`rebuild_postings`, D101): after a rule is fixed, the books follow the documents.
 """
 
+# `ModuleDocuments` is the core's own door for the modules: it writes a GL document through
+# the core's protected steps (`_insert_document`, `_rewrite`, `_post`…) so that no page can
+# call them — opening them would let the journal rewrite a posted document past the rules.
+# pyright: reportPrivateUsage=false
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
@@ -41,10 +46,14 @@ def rebuild_start(company: Row, since: date | str) -> str:
     return next_day(company["closed_through"]) if closed_on(company, day) else day
 
 
-def document_contents(rows: Iterable[Row]) -> dict[int, tuple]:
+# (date, memo, postings) of a GL document: what a rebuild compares
+Contents = tuple[str, str, list[tuple[object, ...]]]
+
+
+def document_contents(rows: Iterable[Row]) -> dict[int, Contents]:
     """(date, memo, postings) of each GL document, from rows whose columns are
     `document_id`, `doc_date`, `doc_memo`, then `POSTING_CONTENT`, ordered by line."""
-    contents: dict[int, tuple] = {}
+    contents: dict[int, Contents] = {}
     for row in rows:
         doc_id = row["document_id"]
         _, _, postings = contents.setdefault(doc_id, (row["doc_date"], row["doc_memo"], []))
@@ -52,7 +61,7 @@ def document_contents(rows: Iterable[Row]) -> dict[int, tuple]:
     return contents
 
 
-def changed_documents(before: dict[int, tuple], after: dict[int, tuple]) -> list[int]:
+def changed_documents(before: dict[int, Contents], after: dict[int, Contents]) -> list[int]:
     """GL documents whose date, memo or postings differ (made or removed ones too)."""
     return sorted(i for i in before.keys() | after.keys() if before.get(i) != after.get(i))
 
@@ -227,5 +236,7 @@ class ModuleDocuments:
         )
         self._audit(company_id, doc["id"], "delete", snapshot)
 
-    def _audit(self, company_id: int, doc_id: int, action: str, details: dict) -> None:
+    def _audit(
+        self, company_id: int, doc_id: int, action: str, details: Mapping[str, object]
+    ) -> None:
         write_audit(self.conn, company_id, self.ledger.actor, "document", doc_id, action, details)

@@ -25,7 +25,7 @@ class AccountForm:
     contra: bool = False
     two_sided: bool = False
     currency: int | None = None
-    optional: frozenset[int] = field(default_factory=frozenset)  # subconto positions
+    optional: frozenset[int] = field(default_factory=frozenset[int])  # subconto positions
 
 
 class AccountFormCommands(ChartCommands, SubcontoCommands):

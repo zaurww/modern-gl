@@ -126,7 +126,7 @@ class ChartCommands(AccountTypeCommands):
             )
         return parent_row
 
-    def _insert_account(self, label: str, values: tuple) -> int:
+    def _insert_account(self, label: str, values: tuple[object, ...]) -> int:
         """The new row of accounts; a code already taken is told as such."""
         try:
             return insert(

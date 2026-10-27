@@ -100,10 +100,10 @@ def group_path(parent_id: int | None, node: Callable[[int], tuple[str, int | Non
     return " / ".join(reversed(names))
 
 
-def with_reason(details: dict, reason: str) -> dict:
+def with_reason(details: Mapping[str, object], reason: str) -> dict[str, object]:
     """An audit event's details with why the change was made, when it was told."""
     reason = reason.strip()
-    return {**details, "reason": reason} if reason else details
+    return {**details, "reason": reason} if reason else dict(details)
 
 
 def company_row(conn: Connection, company_id: int) -> Row:
@@ -120,7 +120,7 @@ def write_audit(
     entity: str,
     entity_id: int,
     action: str,
-    details: dict,
+    details: Mapping[str, object],
 ) -> None:
     """Append an event to the audit trail (it is never updated or deleted)."""
     conn.execute(

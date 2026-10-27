@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from modern_gl.application.common import company_row, write_audit
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
@@ -72,6 +74,11 @@ class LedgerBase:
         return row["id"]
 
     def _audit(
-        self, company_id: int | None, entity: str, entity_id: int, action: str, details: dict
+        self,
+        company_id: int | None,
+        entity: str,
+        entity_id: int,
+        action: str,
+        details: Mapping[str, object],
     ) -> None:
         write_audit(self.conn, company_id, self.actor, entity, entity_id, action, details)
