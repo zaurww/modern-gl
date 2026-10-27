@@ -57,6 +57,7 @@ class DocumentCommands(PostingChecks):
         with transaction(self.conn):
             doc_id = self._insert_document(company_id, doc_date, memo, layer)
             self._insert_postings(company_id, doc_id, postings)
+            self._show_books_for(company_id, layer)
             self._audit(company_id, "document", doc_id, "create_draft", {})
         return doc_id
 
@@ -77,6 +78,7 @@ class DocumentCommands(PostingChecks):
             )
             self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
             self._insert_postings(company_id, doc_id, postings)
+            self._show_books_for(company_id, layer)
             self._audit(company_id, "document", doc_id, "update_draft", {})
 
     def delete_draft(self, company_id: int, doc_id: int) -> None:
@@ -130,6 +132,7 @@ class DocumentCommands(PostingChecks):
             self._require_changeable(company_id, doc)
             snapshot = self._snapshot(doc)
             self._rewrite(company_id, doc_id, doc_date, postings, memo, layer)
+            self._show_books_for(company_id, layer)
             self._audit(company_id, "document", doc_id, "repost", snapshot)
 
     def rewrite_linked(
@@ -345,6 +348,7 @@ class DocumentCommands(PostingChecks):
         with transaction(self.conn):
             doc_id = self._insert_document(company_id, doc_date, memo, layer)
             self._insert_postings(company_id, doc_id, postings)
+            self._show_books_for(company_id, layer)
             self._post(company_id, doc_id)
         return doc_id
 
@@ -507,9 +511,13 @@ class DocumentCommands(PostingChecks):
         ).fetchone()
         if row is None:
             raise NotFoundError(tr("слой {code} не найден", code=code))
-        if code != "common":  # a document in an adjustment layer shows the books (D63)
-            self.conn.execute("UPDATE companies SET parallel_books = 1 WHERE id = ?", (company_id,))
         return row["id"]
+
+    def _show_books_for(self, company_id: int, layer: str) -> None:
+        """A document entered in an adjustment layer turns the parallel books on (D63):
+        the scenario that creates or changes such a document says so, nothing else does."""
+        if layer != "common":
+            self.conn.execute("UPDATE companies SET parallel_books = 1 WHERE id = ?", (company_id,))
 
 
 def _invoice_kind(p: PostingInput) -> str | None:
