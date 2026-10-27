@@ -280,12 +280,11 @@ def test_ctrl_enter_opens_the_form(bar, qtbot):
 
 
 def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
-    qtbot, tmp_path, monkeypatch
+    qtbot, tmp_path, monkeypatch, make_demo
 ):
     from PySide6.QtWidgets import QMessageBox
 
     from modern_gl.application.workspace import Workspace
-    from modern_gl.demo_data import create_demo_company
     from modern_gl.desktop.main_window import MainWindow
 
     monkeypatch.setattr(
@@ -293,9 +292,7 @@ def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
     )
     ws = Workspace(tmp_path / "data")
     path = ws.new_path("Demo")
-    c = connect(path)
-    create_demo_company(Ledger(c))
-    c.close()
+    make_demo(path)
     theme.apply(QApplication.instance())
     win = MainWindow(ws)
     qtbot.addWidget(win)

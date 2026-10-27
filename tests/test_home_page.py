@@ -81,10 +81,8 @@ def test_post_drafts_posts_and_leaves_what_cannot_post(ledger):
 
 
 @pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
+def window(qtbot, tmp_path, make_demo):
+    make_demo(tmp_path / "ДЕМО ООО.gl")
     theme.apply(QApplication.instance())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)

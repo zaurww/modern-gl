@@ -5,14 +5,11 @@ from datetime import date
 import pytest
 from PySide6.QtWidgets import QApplication, QPushButton
 
-from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import list_documents
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.trade import PURCHASE, SALE, trade_documents
 
 # what changes a company: none of it is shown while viewing
@@ -36,12 +33,10 @@ WRITES = [
 
 
 @pytest.fixture
-def company(tmp_path):
+def company(tmp_path, make_demo):
     ws = Workspace(tmp_path / "data")
     path = ws.new_path("ДЕМО ООО")
-    conn = connect(path)
-    create_demo_company(Ledger(conn))
-    conn.close()
+    make_demo(path)
     return ws, path
 
 

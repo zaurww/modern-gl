@@ -9,22 +9,17 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
-from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import find_documents, list_documents
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.command_palette import CommandPalette
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.main_window import MainWindow
-from modern_gl.infrastructure.db import connect
 
 
 @pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
+def window(qtbot, tmp_path, make_demo):
+    make_demo(tmp_path / "ДЕМО ООО.gl")
     theme.apply(QApplication.instance())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)

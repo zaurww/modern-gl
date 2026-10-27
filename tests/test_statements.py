@@ -323,21 +323,17 @@ def test_a_cost_written_straight_to_the_sales_account_is_cost_of_sales(classic):
 
 
 @pytest.fixture
-def window(qtbot, tmp_path, monkeypatch):
+def window(qtbot, tmp_path, monkeypatch, make_demo):
     from datetime import date
 
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     from modern_gl.application.workspace import Workspace
-    from modern_gl.demo_data import create_demo_company
     from modern_gl.desktop import theme
     from modern_gl.desktop.main_window import MainWindow
-    from modern_gl.infrastructure.db import connect
 
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
+    make_demo(tmp_path / "ДЕМО ООО.gl")
     theme.apply(QApplication.instance())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)

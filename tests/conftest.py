@@ -23,8 +23,11 @@ Expected ОСВ for February 2026 (hand-calculated):
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -84,6 +87,17 @@ def no_modal_dialogs(monkeypatch, request):
     monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: answer))
     for name in ("warning", "information", "critical"):
         monkeypatch.setattr(QMessageBox, name, staticmethod(lambda *a, **k: None))
+
+
+@pytest.fixture(autouse=True)
+def windows_are_deleted(qapp):
+    """What a test closed is deleted when it ends. `deleteLater` waits for an event loop
+    the tests do not run: windows piled up (220 widgets a test), and every theme.apply
+    restyled all of them — a test's setup grew from 0.1 to 3 s along test_desktop."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    yield
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -182,16 +196,40 @@ def demo(ledger) -> Demo:
     return build_demo(ledger)
 
 
-@pytest.fixture
-def demo_window(qtbot, tmp_path):
-    """The main window on the demo company («ДЕМО ООО»), shown."""
-    from modern_gl.application.workspace import Workspace
+@pytest.fixture(scope="session")
+def demo_file(tmp_path_factory) -> Path:
+    """The demo company («ДЕМО ООО») made once per test process (it takes ~3 s), in
+    Russian as the tests read it; each test takes a copy (`make_demo`)."""
     from modern_gl.demo_data import create_demo_company
-    from modern_gl.desktop.main_window import MainWindow
 
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
+    path = tmp_path_factory.mktemp("golden") / "ДЕМО ООО.gl"
+    set_language("ru")
+    set_document_language(None)
+    conn = connect(path)
     create_demo_company(Ledger(conn))
     conn.close()
+    return path
+
+
+@pytest.fixture
+def make_demo(demo_file) -> Callable[[Path], Path]:
+    """`make_demo(path)`: the demo company's file as created, at `path` (a copy)."""
+
+    def copy(path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(demo_file, path)
+        return path
+
+    return copy
+
+
+@pytest.fixture
+def demo_window(qtbot, tmp_path, make_demo):
+    """The main window on the demo company («ДЕМО ООО»), shown."""
+    from modern_gl.application.workspace import Workspace
+    from modern_gl.desktop.main_window import MainWindow
+
+    make_demo(tmp_path / "ДЕМО ООО.gl")
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
