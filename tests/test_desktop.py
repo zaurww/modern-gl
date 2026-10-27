@@ -291,7 +291,7 @@ def test_closing_dirty_document_asks(window, monkeypatch):
     page.memo.textEdited.emit("x")
     assert page.is_dirty()
     asked = []
-    monkeypatch.setattr(window, "_confirm_close", lambda p: asked.append(p) or False)
+    monkeypatch.setattr(window.page_stack, "_confirm_close", lambda p: asked.append(p) or False)
     window.close_current()
     assert asked == [page]
     assert current_page(window) is page
@@ -1112,7 +1112,7 @@ def test_sidebar_shows_the_last_open_pages_and_all_under_a_menu(window):
     assert all_item is not None and "7" in all_item.text()
     assert items[-1] is all_item
     # an old page shown again comes back among the visible ones
-    window._activate(oldest)
+    window.page_stack.activate(oldest)
     assert not window.sidebar.item_for(oldest).isHidden()
     # closing down to the limit removes «All»
     for key in window.recent[OPEN_SHOWN:]:
@@ -1161,5 +1161,5 @@ def test_closing_a_page_opens_only_the_page_it_came_from(window):
     finally:
         MainWindow._make_place = original
     assert made == []
-    assert window._key_of(window.stack.currentWidget()) == ("osv",)
+    assert window.page_stack.key_of(window.stack.currentWidget()) == ("osv",)
     assert set(window.pages) <= before

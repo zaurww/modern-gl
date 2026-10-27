@@ -126,7 +126,7 @@ class MainWindow(ReportPlaces):
     def close_period(self) -> None:
         """«Закрытие периода» (D95): the pages are built again — what is closed now opens
         read-only, what is opened again can be changed."""
-        if self._viewing() or not self._confirm_close_all():
+        if self._viewing() or not self.page_stack.confirm_close_all():
             return
         if PeriodDialog(self.open_session, self).exec():
             self._reopen()
@@ -194,7 +194,7 @@ class MainWindow(ReportPlaces):
                 page = OpeningBalancesPage(s)
             except NotFoundError as e:  # viewing a company that has none (D80)
                 return EmptyPage(key, tr("Начальные остатки"), str(e))
-            page.saved.connect(self._postings_changed)
+            page.saved.connect(self.page_stack.postings_changed)
             return page
         if key == ("currencies",):
             page = CurrenciesPage(s)
@@ -233,12 +233,12 @@ class MainWindow(ReportPlaces):
         if key not in self.pages:
             page = ImportPage(self.open_session)
             page.imported.connect(self._imported)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def _imported(self, ids: list) -> None:
         self.show_place(("journal",))
-        journal = self._page(("journal",), JournalPage)
+        journal = self.page_stack.page(("journal",), JournalPage)
         if journal is not None:
             journal.refresh(select_id=ids[-1])
 
@@ -247,7 +247,7 @@ class MainWindow(ReportPlaces):
         if self.session is None or self._viewing() or self.session.stock_only:
             return
         self.show_place(("journal",))
-        journal = self._page(("journal",), JournalPage)
+        journal = self.page_stack.page(("journal",), JournalPage)
         if journal is not None:
             journal.focus_quick_entry()
 
@@ -293,16 +293,16 @@ class MainWindow(ReportPlaces):
         if key not in self.pages:
             page = DocumentPage(self.open_session, doc_id=doc_id)
             self._wire_document(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def new_document(self, template=None, entry=None) -> None:
         if self._viewing() or (self.session is not None and self.session.stock_only):
             return  # a journal document: not in a company kept as a warehouse only (D90)
         page = DocumentPage(self.open_session, template=template, entry=entry)
         self._wire_document(page)
-        self._add_page(page.key, page, open_item=True)
-        self._activate(page.key)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
 
     def _wire_document(self, page: DocumentPage) -> None:
         page.saved.connect(lambda _id, p=page: self._document_saved(p))
@@ -311,64 +311,68 @@ class MainWindow(ReportPlaces):
         page.open_inventory_document.connect(self.open_inventory_document)
         page.new_requested.connect(self.new_document)
         page.template_saved.connect(self.open_template)
-        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
-        page.title_changed.connect(lambda p=page: self._retitle(p))
+        page.close_requested.connect(lambda p=page: self.close_page(self.page_stack.key_of(p)))
+        page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
 
     def open_conversion(self, conversion_id: int) -> None:
         key = ("conversion", conversion_id)
         if key not in self.pages:
             page = ConversionPage(self.open_session, conversion_id)
             self._wire_conversion(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def new_conversion(self, prefill=None) -> None:
         if self._viewing():
             return
         page = ConversionPage(self.open_session, prefill=prefill)
         self._wire_conversion(page)
-        self._add_page(page.key, page, open_item=True)
-        self._activate(page.key)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
 
     def _wire_conversion(self, page: ConversionPage) -> None:
         page.saved.connect(lambda doc_id, p=page: self._conversion_saved(p, doc_id))
         page.open_gl_document.connect(self.show_document)
         page.copy_requested.connect(self.new_conversion)
-        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
-        page.title_changed.connect(lambda p=page: self._retitle(p))
+        page.close_requested.connect(
+            lambda p=page: self.close_page(self.page_stack.key_of(p), ask=False)
+        )
+        page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
 
     def _conversion_saved(self, page: ConversionPage | BankOperationPage, doc_id: int) -> None:
-        self._rekey(page)
-        self._retitle(page)
-        self._postings_changed(doc_id)
+        self.page_stack.rekey(page)
+        self.page_stack.retitle(page)
+        self.page_stack.postings_changed(doc_id)
 
     def open_bank_operation(self, operation_id: int) -> None:
         key = ("bank_op", operation_id)
         if key not in self.pages:
             page = BankOperationPage(self.open_session, operation_id)
             self._wire_bank_operation(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def new_bank_operation(self, prefill=None) -> None:
         if self._viewing():
             return
         page = BankOperationPage(self.open_session, prefill=prefill)
         self._wire_bank_operation(page)
-        self._add_page(page.key, page, open_item=True)
-        self._activate(page.key)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
 
     def _wire_bank_operation(self, page: BankOperationPage) -> None:
         page.saved.connect(lambda doc_id, p=page: self._conversion_saved(p, doc_id))
         page.open_gl_document.connect(self.show_document)
         page.copy_requested.connect(self.new_bank_operation)
         page.next_requested.connect(lambda data, p=page: self._next_bank_operation(p, data))
-        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
-        page.title_changed.connect(lambda p=page: self._retitle(p))
+        page.close_requested.connect(
+            lambda p=page: self.close_page(self.page_stack.key_of(p), ask=False)
+        )
+        page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
 
     def _next_bank_operation(self, page: BankOperationPage, data) -> None:
         """A new operation posted: it is in the statement; the next one opens in its place."""
-        self.close_page(self._key_of(page), ask=False)
+        self.close_page(self.page_stack.key_of(page), ask=False)
         self.new_bank_operation(data)
 
     def open_inventory_document(self, document_id: int) -> None:
@@ -382,8 +386,8 @@ class MainWindow(ReportPlaces):
                 else InventoryDocumentPage(session, document_id=document_id)
             )
             self._wire_inventory_document(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def new_inventory_document(self, doc_type: str) -> None:
         if self._viewing():
@@ -397,8 +401,8 @@ class MainWindow(ReportPlaces):
             else InventoryDocumentPage(self.open_session, doc_type=doc_type)
         )
         self._wire_inventory_document(page)
-        self._add_page(page.key, page, open_item=True)
-        self._activate(page.key)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
 
     def open_stock_count(self) -> None:
         """«Инвентаризация»: one page; what it posts refreshes «Склад»."""
@@ -406,27 +410,29 @@ class MainWindow(ReportPlaces):
             page = StockCountPage(self.open_session)
             page.posted.connect(self._stock_counted)
             page.open_inventory_document.connect(self.open_inventory_document)
-            self._add_page(StockCountPage.key, page, open_item=True)
-        self._activate(StockCountPage.key)
+            self.page_stack.add(StockCountPage.key, page, open_item=True)
+        self.page_stack.activate(StockCountPage.key)
 
     def _stock_counted(self) -> None:
-        inventory = self._page(("inventory",), InventoryPage)
+        inventory = self.page_stack.page(("inventory",), InventoryPage)
         if inventory is not None:
             inventory.refresh()
 
     def _wire_inventory_document(self, page: InventoryDocumentPage | LandedCostPage) -> None:
         page.saved.connect(lambda _id, p=page: self._inventory_document_saved(p))
         page.open_gl_document.connect(self.show_document)
-        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
-        page.title_changed.connect(lambda p=page: self._retitle(p))
+        page.close_requested.connect(
+            lambda p=page: self.close_page(self.page_stack.key_of(p), ask=False)
+        )
+        page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
 
     def _inventory_document_saved(self, page: InventoryDocumentPage | LandedCostPage) -> None:
-        self._rekey(page)
-        self._retitle(page)
-        inventory = self._page(("inventory",), InventoryPage)
+        self.page_stack.rekey(page)
+        self.page_stack.retitle(page)
+        inventory = self.page_stack.page(("inventory",), InventoryPage)
         if inventory is not None:
             inventory.refresh()
-        report = self._page(LandedCostReportPage.key, LandedCostReportPage)
+        report = self.page_stack.page(LandedCostReportPage.key, LandedCostReportPage)
         if report is not None:
             report.refresh()
         self._refresh_trade()
@@ -442,7 +448,7 @@ class MainWindow(ReportPlaces):
 
     def _refresh_trade(self) -> None:
         for key in (("purchases",), ("sales",)):
-            trade = self._page(key, TradePage)
+            trade = self.page_stack.page(key, TradePage)
             if trade is not None:
                 trade.refresh()
 
@@ -450,28 +456,30 @@ class MainWindow(ReportPlaces):
         """The template editor; a saved (or deleted) template returns to the list."""
         key = ("template", template_id)
         if template_id is not None and key in self.pages:
-            self._activate(key)
+            self.page_stack.activate(key)
             return
         if template_id is None and self._viewing():
             return
         page = TemplatePage(self.open_session, template_id)
         key = page.key
         page.saved.connect(lambda tid, p=page: self._template_saved(p, tid))
-        page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p), ask=False))
-        page.title_changed.connect(lambda p=page: self._retitle(p))
-        self._add_page(key, page, open_item=True)
-        self._activate(key)
+        page.close_requested.connect(
+            lambda p=page: self.close_page(self.page_stack.key_of(p), ask=False)
+        )
+        page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
+        self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def _template_saved(self, page: TemplatePage, template_id: int) -> None:
-        templates = self._page(("templates",), TemplatesPage)
+        templates = self.page_stack.page(("templates",), TemplatesPage)
         if templates is not None:
             templates.refresh(select_id=template_id)
-        self.close_page(self._key_of(page), ask=False)
+        self.close_page(self.page_stack.key_of(page), ask=False)
         self.show_place(("templates",))
 
     def _document_saved(self, page: DocumentPage) -> None:
-        self._rekey(page)
-        self._retitle(page)
-        journal = self._page(("journal",), JournalPage)
+        self.page_stack.rekey(page)
+        self.page_stack.retitle(page)
+        journal = self.page_stack.page(("journal",), JournalPage)
         if journal is not None:
             journal.refresh(select_id=page.doc_id)

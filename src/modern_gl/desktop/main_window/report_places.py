@@ -6,13 +6,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtWidgets import QListWidgetItem, QMenu
+from PySide6.QtCore import QSettings
 
+from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import icons
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
-from modern_gl.desktop.main_window.open_pages import OpenPages
-from modern_gl.desktop.main_window.sidebar import KEY_ROLE
+from modern_gl.desktop.main_window.company_window import CompanyFiles
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.preferences import STATEMENTS_VIEW, prefs
 from modern_gl.desktop.reports_hub import (
@@ -51,7 +51,11 @@ from modern_gl.reporting.trade import PURCHASE, SALE
 ACCOUNT_REPORTS = ("subconto", "card", "analysis")  # they ask the account first
 
 
-class ReportPlaces(OpenPages):
+class ReportPlaces(CompanyFiles):
+    def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
+        super().__init__(workspace, settings)
+        self.page_stack.unpin_wanted.connect(self.unpin)
+
     def _report_place(self, key) -> PageWidget:
         """ОСВ, the statements, the chart of accounts or «Все отчёты»."""
         s = self.open_session
@@ -67,7 +71,7 @@ class ReportPlaces(OpenPages):
             return osv
         if key == ("statements",):
             statements = StatementsPage(s)
-            statements.view_changed.connect(lambda p=statements: self._select_nav(key, p))
+            statements.view_changed.connect(lambda p=statements: self.page_stack.select_nav(key, p))
             self._wire_report(statements)
             return statements
         chart = ChartPage(s)
@@ -95,9 +99,7 @@ class ReportPlaces(OpenPages):
                 if i in offered
             ]
         )
-        current = self.current_page()
-        if current is not None:
-            self._select_nav(self._key_of(current), current)
+        self.page_stack.select_current()
         hub = self.pages.get(HUB)
         if isinstance(hub, ReportsPage):
             hub.show_pins()
@@ -171,29 +173,14 @@ class ReportPlaces(OpenPages):
         if dialog.chosen_document is not None:
             self.open_document(dialog.chosen_document)
 
-    def _on_nav(self, current: QListWidgetItem | None, previous) -> None:
+    def _go(self, key) -> None:
         """A pinned report opens as from «Все отчёты» (a card asks the account first), and
         the sidebar keeps the item of the page shown."""
-        key = current.data(KEY_ROLE) if current is not None else None
         if key not in PIN_KEYS:
-            super()._on_nav(current, previous)
+            super()._go(key)
             return
         self.open_catalog_report(PIN_KEYS[key])
-        page = self.current_page()
-        if page is not None:
-            self._select_nav(self._key_of(page), page)
-
-    def _nav_menu(self, pos) -> None:
-        item = self.sidebar.nav.itemAt(pos)
-        key = item.data(KEY_ROLE) if item else None
-        if key not in PIN_KEYS:
-            super()._nav_menu(pos)
-            return
-        menu = QMenu(self)
-        menu.addAction(tr("Убрать из боковой панели")).triggered.connect(
-            lambda: self.unpin(PIN_KEYS[key])
-        )
-        menu.exec(self.sidebar.nav.viewport().mapToGlobal(pos))
+        self.page_stack.select_current()
 
     def unpin(self, report_id: str) -> None:
         set_pinned(report_id, False)
@@ -207,8 +194,8 @@ class ReportPlaces(OpenPages):
         if key not in self.pages:
             page = BooksPage(self.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_vat_credit(self) -> None:
         """«ƏDV к зачёту»: one page, the period on it."""
@@ -216,8 +203,8 @@ class ReportPlaces(OpenPages):
         if key not in self.pages:
             page = VatCreditPage(self.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_vat_register(self) -> None:
         """«Реестр e-qaimə»: one page, the period on it."""
@@ -225,8 +212,8 @@ class ReportPlaces(OpenPages):
         if key not in self.pages:
             page = VatRegisterPage(self.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_single(self, page_class) -> None:
         """A report of one page, the period on it («ƏDV продаж к уплате»)."""
@@ -234,8 +221,8 @@ class ReportPlaces(OpenPages):
         if key not in self.pages:
             page = page_class(self.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_subconto_analysis(self) -> None:
         """«Анализ субконто» (D125): one page, the directory is chosen on it."""
@@ -243,8 +230,8 @@ class ReportPlaces(OpenPages):
         if key not in self.pages:
             page = SubcontoAnalysisPage(self.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def _wire_report(self, page) -> None:
         page.open_document.connect(self.open_document)
@@ -256,8 +243,8 @@ class ReportPlaces(OpenPages):
         if key not in self.pages:
             page = LandedCostReportPage(self.open_session)
             page.open_inventory_document.connect(self.open_inventory_document)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_stock_report(self, page_class) -> None:
         """«Ведомость по складу», «Валовая прибыль»: one page, the period on it."""
@@ -265,8 +252,8 @@ class ReportPlaces(OpenPages):
         if key not in self.pages:
             page = page_class(self.open_session)
             page.open_stock_card.connect(self.open_stock_card)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_stock_card(self, item_id: int, warehouse_id: int, params: ReportParams) -> None:
         """An item's card on a warehouse (0 — on all) for the period it was asked from."""
@@ -274,8 +261,8 @@ class ReportPlaces(OpenPages):
         if page.key in self.pages:
             self.close_page(page.key, ask=False)
         page.open_inventory_document.connect(self.open_inventory_document)
-        self._add_page(page.key, page, open_item=True)
-        self._activate(page.key)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
 
     def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
         page = REPORTS[kind](self.open_session, account_id, params)
@@ -283,8 +270,8 @@ class ReportPlaces(OpenPages):
         if key in self.pages:
             self.close_page(key, ask=False)
         self._wire_report(page)
-        self._add_page(key, page, open_item=True)
-        self._activate(key)
+        self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     # ---- made by the window ----------------------------------------------------------
 
