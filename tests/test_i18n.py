@@ -37,6 +37,21 @@ def tr_keys() -> dict[str, str]:
     return keys
 
 
+def script_keys() -> set[str]:
+    """What scripts/ translates: the screenshots build their company in the language shown
+    (`i18n.tr("Холдинг")`)."""
+    found = set()
+    for path in (SRC.parent.parent / "scripts").rglob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            called = getattr(node, "func", None)
+            name = getattr(called, "id", None) or getattr(called, "attr", None)
+            if isinstance(node, ast.Call) and name in TR and node.args:
+                arg = node.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    found.add(arg.value)
+    return found
+
+
 def constants_not_marked_yet() -> set[str]:
     found = set()
     for layer in NOT_MARKED_YET:
@@ -72,7 +87,7 @@ def test_every_tr_string_has_azerbaijani_translation():
 def test_every_azerbaijani_key_is_used():
     """A key with no tr/trd/N_ in the code is dead (its text was changed or removed) — or
     a constant later given to tr(VAR) without N_, which this test could not check."""
-    used = set(tr_keys()) | constants_not_marked_yet()
+    used = set(tr_keys()) | script_keys() | constants_not_marked_yet()
     unused = sorted(k for k in AZ if k not in used)
     assert not unused, unused
 
