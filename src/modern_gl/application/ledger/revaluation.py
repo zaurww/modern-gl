@@ -19,6 +19,8 @@ from modern_gl.infrastructure.db import Row, transaction
 
 
 class RevaluationCommands(DocumentCommands):
+    """Use case of revaluing currency balances at the rate of a day (курсовые разницы)."""
+
     def revalue(
         self,
         company_id: int,

@@ -18,6 +18,8 @@ class _Discard(Exception):
 
 
 class DocumentImportCommands(DocumentCommands):
+    """Use case of importing many documents at once (Excel, the exchange file)."""
+
     def import_documents(
         self,
         company_id: int,

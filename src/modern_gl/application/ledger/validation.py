@@ -19,6 +19,9 @@ from modern_gl.infrastructure.db import Row
 
 
 class PostingChecks(SubcontoCommands):
+    """What a document must satisfy to be posted; each check raises ValidationError or
+    PeriodClosedError with a message for the user."""
+
     def _validate_for_posting(self, company_id: int, doc: Row) -> None:
         self._require_open_period(company_id, doc)
         postings = self.conn.execute(

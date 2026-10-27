@@ -42,6 +42,7 @@ _LABELS = {
 
 
 def status_label(status: str) -> str:
+    """The portal status of an e-qaimə in the interface language; an unknown one as is."""
     return tr(_LABELS[status]) if status in _LABELS else status
 
 

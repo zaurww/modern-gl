@@ -27,7 +27,7 @@ METALS = {"XAU", "XAG", "XPT", "XPD"}  # quoted per troy ounce, not currencies o
 
 
 class RatesUnavailable(LedgerError):
-    pass
+    """The CBAR rates could not be had (no connection, no rates for the day)."""
 
 
 def parse(xml: bytes) -> dict[str, tuple[int, int]]:

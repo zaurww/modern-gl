@@ -14,6 +14,8 @@ KEY = r"Software\ModernGL\Modern GL"
 
 @dataclass(frozen=True)
 class AppSettings:
+    """What the program remembers between runs (the Windows registry; empty elsewhere)."""
+
     data_dir: Path | None = None  # None: the default folder
     company_files: list[Path] = field(default_factory=list[Path])  # kept outside the folder
     language: str = ""
@@ -25,6 +27,7 @@ def default_folder() -> Path:
 
 
 def read_settings() -> AppSettings:
+    """The remembered settings; defaults when there are none or off Windows. Never raises."""
     if sys.platform != "win32":
         return AppSettings()
     import winreg

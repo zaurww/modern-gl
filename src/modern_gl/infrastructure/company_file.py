@@ -45,6 +45,8 @@ def open_company(path: Path) -> tuple[Connection, int]:
 
 
 def first_company(conn: Connection, path: Path) -> int:
+    """The id of the oldest company in an open file; closes the connection and raises
+    DatabaseError when the file has none."""
     row = conn.execute("SELECT id FROM companies ORDER BY id LIMIT 1").fetchone()
     if row is None:
         conn.close()

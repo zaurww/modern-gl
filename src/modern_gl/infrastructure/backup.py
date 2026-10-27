@@ -33,17 +33,20 @@ STAMP = "%Y-%m-%d %H-%M-%S"
 
 
 class BackupError(LedgerError):
-    pass
+    """A backup could not be made or restored; the message is for the user."""
 
 
 @dataclass(frozen=True)
 class Backup:
+    """One backup file: when it was made (from its name) and its size in bytes."""
+
     path: Path
     made_at: datetime
     size: int
 
 
 def folder_for(workspace_folder: Path, company_file: Path) -> Path:
+    """Where the backups of a company file are kept: a folder of its own in the workspace."""
     return Path(workspace_folder) / FOLDER / Path(company_file).stem
 
 

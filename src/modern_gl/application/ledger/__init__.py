@@ -70,18 +70,21 @@ class Ledger(
 
     @cached_property
     def bank(self) -> BankModule:
+        """The bank module (statements, operations, ƏDV deposit) over this ledger."""
         from modern_gl.application.bank import BankModule
 
         return BankModule(self.conn, self.actor, ledger=self)
 
     @cached_property
     def conversion(self) -> ConversionModule:
+        """The currency conversion module over this ledger."""
         from modern_gl.application.conversion import ConversionModule
 
         return ConversionModule(self.conn, self.actor, ledger=self)
 
     @cached_property
     def eqaime(self) -> EqaimeModule:
+        """The e-qaimə module (portal drafts, invoices) over this ledger."""
         from modern_gl.application.eqaime import EqaimeModule
 
         return EqaimeModule(self.conn, self.actor, ledger=self)

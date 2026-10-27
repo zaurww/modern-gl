@@ -74,6 +74,8 @@ ignore = [
     "RUF001", "RUF002", "RUF003",  # Cyrillic and Azerbaijani text is intended
     "SIM118",  # `key in row.keys()` is required: iterating a sqlite3.Row yields values
 ]
+# docstrings of the public core (claude/audit-types): only their presence, no convention
+extend-select = ["D100", "D101", "D102", "D103", "D104", "D105"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 12
@@ -87,3 +89,9 @@ modern-gl-cli = "modern_gl.api.cli:cli"
 
 [tool.ruff.lint.per-file-ignores]
 "src/modern_gl/i18n_az/*.py" = ["E501"]  # translation strings are kept on one line
+# docstrings of the public core (claude/audit-types): required in domain, infrastructure,
+# api and application/ledger only
+"!src/modern_gl/{domain,infrastructure,api,application/ledger}/**" = [
+    "D100", "D101", "D102", "D103", "D104", "D105",
+]
+"src/modern_gl/infrastructure/db.py" = ["D103"]  # temporarily: claude/audit-journal edits it

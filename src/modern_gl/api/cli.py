@@ -21,6 +21,8 @@ from modern_gl.infrastructure.app_settings import read_settings
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one command; JSON to stdout. Returns the exit code: 0 done, 1 a problem with
+    the data (the JSON then has "error"); argparse exits with 2 on a wrong command."""
     args = _parser().parse_args(argv)
     language = args.lang or read_settings().language
     i18n.set_language(language if language in i18n.LANGUAGES else i18n.DEFAULT)
@@ -74,6 +76,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def cli() -> None:
+    """The `modern-gl-cli` entry point."""
     sys.exit(main())
 
 

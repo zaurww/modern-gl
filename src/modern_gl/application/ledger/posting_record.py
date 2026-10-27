@@ -23,6 +23,9 @@ KEY_COLUMNS = ("id", "company_id", "document_id", "line_no")
 
 @dataclass(frozen=True)
 class PostingRecord:
+    """A posting as stored: amounts in minor units, subconto by column, the e-qaimə
+    number normalized. Immutable; equal records are the same posting."""
+
     debit_account_id: int
     credit_account_id: int
     amount: int  # minor units
@@ -60,6 +63,7 @@ class PostingRecord:
 
     @classmethod
     def from_row(cls, row: Row) -> PostingRecord:
+        """The record of a row read from `postings` (any row with its COLUMNS)."""
         return cls(*(row[column] for column in cls.COLUMNS))
 
     @classmethod
@@ -110,6 +114,7 @@ class PostingRecord:
         )
 
     def as_dict(self) -> dict:
+        """The record as plain data for the audit trail's snapshot."""
         return asdict(self)
 
 

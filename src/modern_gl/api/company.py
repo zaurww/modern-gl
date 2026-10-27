@@ -40,6 +40,9 @@ class ImportAnswer(TypedDict):
 
 
 class Company:
+    """One open company (from `open_company`): reading answers plain data ready for JSON,
+    writing goes through the program's rules with the API's actor as the author."""
+
     def __init__(self, conn: Connection, company_id: int, actor: str, read_only: bool) -> None:
         self._conn = conn
         self._company_id = company_id
@@ -48,6 +51,7 @@ class Company:
 
     @property
     def name(self) -> str:
+        """The company's name."""
         return queries.company_name(self._conn, self._company_id)
 
     def chart_of_accounts(self) -> dict[str, Any]:

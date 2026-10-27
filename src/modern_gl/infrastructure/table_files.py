@@ -18,7 +18,7 @@ TEXT_SUFFIXES = {".csv", ".txt", ".tsv"}
 
 
 class TableFileError(LedgerError):
-    pass
+    """A table file that cannot be read; the message is for the user."""
 
 
 def from_clipboard(text: str) -> list[list[str]]:
@@ -30,6 +30,8 @@ def from_clipboard(text: str) -> list[list[str]]:
 
 
 def read_rows(path: str | Path) -> list[list[str]]:
+    """The cells of an Excel (.xlsx) or CSV/text file as text, row by row;
+    TableFileError for another kind of file."""
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix in (".xlsx", ".xlsm"):

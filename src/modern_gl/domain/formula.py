@@ -131,6 +131,7 @@ def parse(text: str) -> _Node:
 
 
 def variables(node: _Node) -> set[str]:
+    """The names a formula uses: "S" and "L<n>"."""
     match node:
         case _Var(name):
             return {name}
@@ -177,6 +178,7 @@ def check(formulas: Sequence[str]) -> None:
 
 
 def uses_amount(formulas: Sequence[str]) -> bool:
+    """Whether any of the template's formulas uses S (the amount typed once)."""
     return any(f.strip() and "S" in variables(parse(f)) for f in formulas)
 
 

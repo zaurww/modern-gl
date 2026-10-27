@@ -35,6 +35,8 @@ def opening_posting(line: PostingInput, on_credit: bool) -> PostingInput:
 
 
 class OpeningBalanceCommands(ChartCommands, DocumentCommands):
+    """Use cases of opening balances: one balanced document against account "00" (D39)."""
+
     def opening_account(self, company_id: int, create: bool = True) -> int:
         """The counter-account of opening balances ("00", as in 1C), created on first use;
         `create=False` (a company open for viewing, D80) only finds it, or NotFoundError.

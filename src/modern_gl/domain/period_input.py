@@ -48,14 +48,17 @@ QUARTER_WORDS = ("кв", "квартал", "q", "r", "rub")
 
 
 def month_bounds(year: int, month: int) -> Period:
+    """The first and the last day of a month."""
     return month_days(year, month)
 
 
 def quarter_bounds(year: int, quarter: int) -> Period:
+    """The first and the last day of a quarter (1..4)."""
     return month_bounds(year, 3 * quarter - 2)[0], month_bounds(year, 3 * quarter)[1]
 
 
 def quarter_of(day: date) -> int:
+    """The quarter (1..4) of a day."""
     return (day.month - 1) // 3 + 1
 
 

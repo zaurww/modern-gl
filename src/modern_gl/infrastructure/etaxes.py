@@ -40,11 +40,13 @@ class PortalError(Exception):
 
 
 class TokenExpired(PortalError):
-    pass
+    """The portal no longer accepts the token: the user signs in again."""
 
 
 @dataclass(frozen=True)
 class Response:
+    """What the portal answered: the HTTP status and the raw body."""
+
     status: int
     body: bytes
 
@@ -55,6 +57,8 @@ JsonObject = dict[str, Any]  # an object of the portal's JSON, as `json.loads` g
 
 
 def urllib_send(method: str, url: str, headers: dict[str, str], body: bytes | None) -> Response:
+    """Send a request with urllib; an HTTP error is an answer (status, body), not raised.
+    No connection — OSError."""
     request = urllib.request.Request(url, data=body, headers=headers, method=method)
     try:
         with urllib.request.urlopen(request, timeout=90) as answer:
@@ -84,6 +88,9 @@ def _said(body: bytes) -> str:
 
 
 class EtaxesClient:
+    """The e-taxes.gov.az portal with a signed-in token: e-qaimə lists and details, the ƏDV
+    deposit. Raises TokenExpired (401) and PortalError (other errors, no connection)."""
+
     def __init__(self, token: str, send: Send = urllib_send) -> None:
         self.token = token
         self.send = send
