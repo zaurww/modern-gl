@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import FlowLayout, button
+from modern_gl.desktop.widgets import FlowLayout, button, caption
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -123,8 +123,7 @@ class TagsDialog(QDialog):
         lay.addWidget(heading)
         self.picker = TagPicker(session, value.tags)
         lay.addWidget(self.picker)
-        note = QLabel(tr("По тегу отбирается ОСВ по субконто: например, все связанные стороны."))
-        note.setObjectName("secondary")
+        note = caption(tr("По тегу отбирается ОСВ по субконто: например, все связанные стороны."))
         note.setWordWrap(True)
         lay.addWidget(note)
         buttons = QHBoxLayout()

@@ -33,6 +33,7 @@ from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
     button,
+    caption,
     date_edit,
 )
 from modern_gl.i18n import tr
@@ -95,9 +96,8 @@ class LandedCostForm(PageWidget):
         for method, title in METHODS:
             self.method.addItem(tr(title), method)
         self.method.setCurrentIndex(0)
-        for caption, widget in ((tr("Дата"), self.date), (tr("Распределение"), self.method)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
+        for text, widget in ((tr("Дата"), self.date), (tr("Распределение"), self.method)):
+            label = caption(text)
             meta.addWidget(label)
             meta.addWidget(widget)
             meta.addSpacing(12)
@@ -141,13 +141,12 @@ class LandedCostForm(PageWidget):
         summary.addWidget(self.hint, 1)
         summary.addSpacing(24)
         self.totals: dict[str, QLabel] = {}
-        for key, caption in (
+        for key, text in (
             ("vat", "НДС"),
             ("allocated", "Распределено"),
             ("total", "Расходы"),
         ):
-            label = QLabel(tr(caption))
-            label.setObjectName("secondary")
+            label = caption(tr(text))
             value = QLabel()
             value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             value.setMinimumWidth(90)

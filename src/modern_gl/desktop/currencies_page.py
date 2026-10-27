@@ -43,6 +43,7 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
     button,
+    caption,
     date_edit,
     edited_date,
     hide_when_viewing,
@@ -131,8 +132,7 @@ class CurrenciesPage(PageWidget):
         top.addWidget(add)
         hide_when_viewing(session.read_only, rates, more, add)
         right.addLayout(top)
-        self.latest = QLabel()
-        self.latest.setObjectName("secondary")
+        self.latest = caption()
         right.addWidget(self.latest)
 
         self._build_table()
@@ -373,13 +373,12 @@ class CurrenciesPage(PageWidget):
         end = date_edit(self.s.working_date, dlg)
         form.addRow(tr("С"), start)
         form.addRow(tr("по"), end)
-        note = QLabel(
+        note = caption(
             tr(
                 "Официальные курсы Центрального банка Азербайджана (cbar.az) "
                 "для валют компании. Нужен интернет."
             )
         )
-        note.setObjectName("secondary")
         note.setWordWrap(True)
         lay.addWidget(note)
         _buttons(dlg, lay)
@@ -437,13 +436,12 @@ class CurrenciesPage(PageWidget):
         form.addRow(tr("На дату"), day)
         form.addRow(tr("Положительные разницы (Кт)"), gain)
         form.addRow(tr("Отрицательные разницы (Дт)"), loss)
-        note = QLabel(
+        note = caption(
             tr(
                 "Остатки валютных счетов пересчитываются по курсу на дату; разница "
                 "проводится одним документом."
             )
         )
-        note.setObjectName("secondary")
         note.setWordWrap(True)
         lay.addWidget(note)
         _buttons(dlg, lay)

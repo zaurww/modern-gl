@@ -26,6 +26,7 @@ from modern_gl.desktop.stock_count_page.model import (
 from modern_gl.desktop.widgets import (
     PageHeader,
     button,
+    caption,
     date_edit,
     edited_date,
     enter_goes_on,
@@ -98,11 +99,11 @@ class StockCountPage(PageWidget):
         self.add_item.setToolTip(tr("Товар, которого по учёту на складе нет, а нашёлся"))
         for item in item_choices(self.s.conn, self.s.company_id):
             self.add_item.addItem(item.label, item.id)
-        account_caption = self._caption(tr("Недостача — на счёт"))
+        account_caption = caption(tr("Недостача — на счёт"))
         for widget in (
-            self._caption(tr("Склад")),
+            caption(tr("Склад")),
             self.warehouse,
-            self._caption(tr("Дата")),
+            caption(tr("Дата")),
             self.date,
             account_caption,
             self.account,
@@ -117,18 +118,11 @@ class StockCountPage(PageWidget):
         self.date.dateChanged.connect(lambda _d: self.refresh())
         self.add_item.activated.connect(lambda _i: self._add_item())
 
-    @staticmethod
-    def _caption(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setObjectName("secondary")
-        return label
-
     def _build_footer(self, root: QVBoxLayout) -> None:
         footer = QHBoxLayout()
         footer.addWidget(self.add_item)  # under the lines: one more line
         footer.addSpacing(16)
-        self.totals = QLabel()
-        self.totals.setObjectName("secondary")
+        self.totals = caption()
         footer.addWidget(self.totals, 1)
         # the documents the last count made: quiet links to them
         self.made: dict[str, int | None] = {"surplus": None, "shortage": None}

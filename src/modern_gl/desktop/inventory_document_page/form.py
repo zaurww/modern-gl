@@ -47,6 +47,7 @@ from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
     button,
+    caption,
     date_edit,
     edited_date,
 )
@@ -131,8 +132,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
         meta.setSpacing(8)  # a caption by its field; the groups part by GAP
-        date_caption = QLabel(tr("Дата"))
-        date_caption.setObjectName("secondary")
+        date_caption = caption(tr("Дата"))
         meta.addWidget(date_caption)
         self.date = date_edit(self.s.working_date)
         self.date.setFixedWidth(130)
@@ -143,8 +143,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         self.type_label.setFont(fonts().heading)
         meta.addWidget(self.type_label)
         meta.addSpacing(GAP)
-        self.vat_caption = QLabel(tr("НДС"))
-        self.vat_caption.setObjectName("secondary")
+        self.vat_caption = caption(tr("НДС"))
         meta.addWidget(self.vat_caption)
         self.vat_rate = PickBox()
         self.vat_rate.setFixedWidth(110)
@@ -173,8 +172,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
             )
         )
         meta.addWidget(self.basis)
-        self.invoice_caption = QLabel(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
-        self.invoice_caption.setObjectName("secondary")
+        self.invoice_caption = caption(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
         meta.addWidget(self.invoice_caption)
         self.invoice = QLineEdit()
         self.invoice.setFixedWidth(140)  # «MT2601001842» and room to spare
@@ -188,8 +186,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
 
     def _build_reason(self, meta: QHBoxLayout) -> None:
         # why goods come in without a purchase (D91): it chooses the account credited
-        self.reason_caption = QLabel(tr("Причина"))
-        self.reason_caption.setObjectName("secondary")
+        self.reason_caption = caption(tr("Причина"))
         meta.addWidget(self.reason_caption)
         self.reason = PickBox()
         self.reason.setFixedWidth(260)
@@ -199,8 +196,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         meta.addSpacing(GAP)
 
     def _build_currency(self, meta: QHBoxLayout) -> None:
-        self.currency_caption = QLabel(tr("Валюта"))
-        self.currency_caption.setObjectName("secondary")
+        self.currency_caption = caption(tr("Валюта"))
         meta.addWidget(self.currency_caption)
         self.currency = PickBox()
         self.currency.setFixedWidth(80)
@@ -209,8 +205,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
             self.currency.addItem(currency.code, currency.id)
         self.currency.setCurrentIndex(0)
         meta.addWidget(self.currency)
-        self.rate_caption = QLabel(tr("Курс"))
-        self.rate_caption.setObjectName("secondary")
+        self.rate_caption = caption(tr("Курс"))
         meta.addWidget(self.rate_caption)
         self.rate = QLineEdit()
         self.rate.setFixedWidth(90)
@@ -228,20 +223,17 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         self.hint.setWordWrap(True)  # never widens the window
         summary.addWidget(self.hint, 1)
         summary.addSpacing(24)
-        self.currency_total = QLabel()
-        self.currency_total.setObjectName("secondary")
+        self.currency_total = caption()
         summary.addWidget(self.currency_total)
         summary.addSpacing(16)
-        self.vat_total_caption = QLabel(tr("НДС"))
-        self.vat_total_caption.setObjectName("secondary")
+        self.vat_total_caption = caption(tr("НДС"))
         summary.addWidget(self.vat_total_caption)
         self.vat_total = QLabel()
         self.vat_total.setMinimumWidth(90)
         self.vat_total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         summary.addWidget(self.vat_total)
         summary.addSpacing(16)
-        total_caption = QLabel(tr("Итого"))
-        total_caption.setObjectName("secondary")
+        total_caption = caption(tr("Итого"))
         summary.addWidget(total_caption)
         self.total = QLabel()
         self.total.setMinimumWidth(130)

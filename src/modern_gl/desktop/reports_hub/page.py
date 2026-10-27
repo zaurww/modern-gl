@@ -10,7 +10,6 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QScrollArea,
     QVBoxLayout,
@@ -23,7 +22,7 @@ from modern_gl.desktop.reports_hub import catalog
 from modern_gl.desktop.reports_hub.catalog import Report
 from modern_gl.desktop.reports_hub.tiles import ReportTile
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import PageHeader
+from modern_gl.desktop.widgets import PageHeader, caption
 from modern_gl.i18n import tr
 
 COLUMNS = 2  # tiles side by side in a group
@@ -99,8 +98,7 @@ class ReportsPage(PageWidget):
             reports = [r for r in self.reports if r.group == group]
             if reports:
                 lay.addWidget(self._group(group, reports, pinned))
-        self.nothing = QLabel(tr("Такого отчёта нет — попробуйте другое слово"))
-        self.nothing.setObjectName("secondary")
+        self.nothing = caption(tr("Такого отчёта нет — попробуйте другое слово"))
         self.nothing.setContentsMargins(0, 24, 0, 0)
         self.nothing.hide()
         lay.addWidget(self.nothing)

@@ -12,7 +12,7 @@ from modern_gl.application.period import closed_through, drafts_through, period_
 from modern_gl.desktop.reason_dialog import ask_reason
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button, date_edit, edited_date, ru_date, to_qdate
+from modern_gl.desktop.widgets import button, caption, date_edit, edited_date, ru_date, to_qdate
 from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -38,13 +38,12 @@ class PeriodDialog(QDialog):
         title = QLabel(period_text(self.closed))
         title.setFont(fonts().heading)
         root.addWidget(title)
-        why = QLabel(
+        why = caption(
             tr(
                 "В закрытом периоде проведённые документы не меняются и не удаляются: "
                 "исправление — только сторно датой открытого периода."
             )
         )
-        why.setObjectName("secondary")
         why.setWordWrap(True)
         root.addWidget(why)
         root.addSpacing(6)

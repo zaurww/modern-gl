@@ -3,7 +3,7 @@ only the accounts where they differ. A double click opens the account's card."""
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QVBoxLayout
 
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
@@ -11,6 +11,7 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     balance_text,
     button,
+    caption,
     date_edit,
     edited_date,
     ru_date,
@@ -49,8 +50,7 @@ class BooksPage(ReportPage):
     def _build_period_bar(self, root: QVBoxLayout) -> None:
         bar = QHBoxLayout()
         bar.setSpacing(8)
-        label = QLabel(tr("На дату"))
-        label.setObjectName("secondary")
+        label = caption(tr("На дату"))
         self.day = date_edit(self.params.date_to)
         self.day.setFixedWidth(130)
         self.day.dateChanged.connect(lambda _day: self.refresh())  # shown at once (D105)

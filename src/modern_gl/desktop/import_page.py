@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
-    QLabel,
     QStackedLayout,
     QVBoxLayout,
 )
@@ -29,7 +28,7 @@ from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money
+from modern_gl.desktop.widgets import EmptyState, PageHeader, button, caption, money
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
@@ -94,8 +93,7 @@ class ImportPage(PageWidget):
         root.addLayout(self.stack, 1)
 
         bottom = QHBoxLayout()
-        self.summary = QLabel()
-        self.summary.setObjectName("secondary")
+        self.summary = caption()
         self.summary.setWordWrap(True)
         bottom.addWidget(self.summary, 1)
         self.run_button = button(tr("Импортировать"), "primary")

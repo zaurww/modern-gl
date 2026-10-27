@@ -8,7 +8,6 @@ from dataclasses import dataclass, replace
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (
     QComboBox,
-    QLabel,
 )
 
 from modern_gl.desktop.reports_page.view import (
@@ -20,6 +19,7 @@ from modern_gl.desktop.reports_page.view import (
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     balance_text,
+    caption,
     money,
     ru_date,
 )
@@ -195,8 +195,7 @@ class SubcontoPage(AccountReportPage):
         an account of settlements — down to the e-qaimə (D110). The choice is remembered."""
         self.tag = QComboBox()
         self.tag.setMinimumWidth(190)
-        self.tag_label = QLabel(tr("Тег"))
-        self.tag_label.setObjectName("secondary")
+        self.tag_label = caption(tr("Тег"))
         self.levels = QComboBox()
         self.levels.setMinimumWidth(190)
         kinds = self._kinds()
@@ -210,8 +209,7 @@ class SubcontoPage(AccountReportPage):
         chosen = QSettings().value(LEVELS_SETTING, -1, type=int)
         chosen = chosen if isinstance(chosen, int) else -1
         self.levels.setCurrentIndex(deepest if chosen < 0 else min(chosen, deepest))
-        levels_label = QLabel(tr("Детализация"))
-        levels_label.setObjectName("secondary")
+        levels_label = caption(tr("Детализация"))
         self.add_to_bar(levels_label, gap=0)
         self.add_to_bar(self.levels)
         self.add_to_bar(self.tag_label, gap=0)

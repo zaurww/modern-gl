@@ -82,6 +82,13 @@ def enter_goes_on(page: QWidget, event) -> bool:
     return True
 
 
+def caption(text: str = "") -> QLabel:
+    """A quiet label: a field's caption, an explanation, a date (P.secondary, D86)."""
+    label = QLabel(text)
+    label.setObjectName("secondary")
+    return label
+
+
 def button(text: str, kind: str = "", tooltip: str = "") -> QPushButton:
     b = QPushButton(text)
     if kind:

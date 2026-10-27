@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QLabel, QVBoxLa
 
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.i18n import tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import Connection, Error
@@ -58,8 +58,7 @@ class BackupsDialog(QDialog):
         self.update_texts()
 
     def _note(self, root: QVBoxLayout) -> QLabel:
-        label = QLabel()
-        label.setObjectName("secondary")
+        label = caption()
         label.setWordWrap(True)
         root.addWidget(label)
         return label

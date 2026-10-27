@@ -57,6 +57,7 @@ from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     EmptyState,
     button,
+    caption,
     icon_button,
     ru_date,
     segments,
@@ -167,9 +168,8 @@ class BankPage(BankActions):
         bar = QHBoxLayout(self.bar_box)
         bar.setContentsMargins(0, 0, 0, 0)
         bar.setSpacing(8)
-        caption = QLabel(tr("Период"))
-        caption.setObjectName("secondary")
-        for widget in (caption, self.period_field, box):
+        label = caption(tr("Период"))
+        for widget in (label, self.period_field, box):
             bar.addWidget(widget)
         bar.addStretch(1)
         root = self.layout()
@@ -207,8 +207,7 @@ class BankPage(BankActions):
             return
         for i, (text, level) in enumerate(steps):
             if i == len(steps) - 1:
-                label = QLabel(text)
-                label.setObjectName("secondary")
+                label = caption(text)
                 self.crumbs.addWidget(label)
                 continue
             link = button(text, "crumb")

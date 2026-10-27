@@ -11,7 +11,7 @@ from modern_gl.application.bank import BankPlace
 from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import date_edit
+from modern_gl.desktop.widgets import caption, date_edit
 from modern_gl.i18n import tr
 
 TWO, ONE = "two", "one"  # money in two columns, or one with its sign
@@ -67,8 +67,7 @@ class EntryFields(QWidget):
         self.money_in = amount_edit(tr("Приход"))
         self.money_out = amount_edit(tr("Расход"))
         self.amount = amount_edit("0.00")
-        self.sign = QLabel()
-        self.sign.setObjectName("secondary")
+        self.sign = caption()
         self.sign.setFixedWidth(64)
         self.memo = QLineEdit()
         self.memo.setPlaceholderText(tr("Назначение"))

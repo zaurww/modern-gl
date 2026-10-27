@@ -25,6 +25,7 @@ from modern_gl.desktop.widgets import (
     Chip,
     MenuItem,
     button,
+    caption,
     more_button,
 )
 from modern_gl.i18n import tr
@@ -103,8 +104,7 @@ class ConversionForm(PageWidget):
     def _build_fees(self, root: QVBoxLayout) -> None:
         """Bank fees: any number, each from any money account in its own currency."""
         fees_head = QHBoxLayout()
-        fees_caption = QLabel(tr("Комиссии банка"))
-        fees_caption.setObjectName("secondary")
+        fees_caption = caption(tr("Комиссии банка"))
         fees_head.addWidget(fees_caption)
         self.btn_add_fee = button(tr("+ Комиссия"), "flat", tr("Комиссия, которую удержал банк"))
         fees_head.addWidget(self.btn_add_fee)

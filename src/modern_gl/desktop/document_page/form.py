@@ -40,6 +40,7 @@ from modern_gl.desktop.widgets import (
     Chip,
     MenuItem,
     button,
+    caption,
     date_edit,
     edited_date,
     money,
@@ -135,14 +136,13 @@ class DocumentForm(GridEditing, PageWidget):
         self.amount.setPlaceholderText("0.00")
         self.amount_caption = QLabel(tr("Сумма операции"))
         for label, w in ((tr("Дата"), self.date), (tr("Книга"), self.layer)):
-            caption = QLabel(label)
-            caption.setObjectName("secondary")
-            meta.addWidget(caption)
+            title = caption(label)
+            meta.addWidget(title)
             meta.addWidget(w)
             meta.addSpacing(10)
             # one book until parallel books are turned on (D63): no field to pass by
             if w is self.layer and not self.s.parallel_books:
-                caption.hide()
+                title.hide()
                 w.hide()
         self.amount_caption.setObjectName("secondary")
         meta.addWidget(self.amount_caption)
@@ -192,8 +192,7 @@ class DocumentForm(GridEditing, PageWidget):
         keep.setRetainSizeWhenHidden(True)  # a posted document: "Итого" stays by the total
         self.hint.setSizePolicy(keep)
         bottom.addWidget(self.hint, 1)
-        total_caption = QLabel(tr("Итого"))
-        total_caption.setObjectName("secondary")
+        total_caption = caption(tr("Итого"))
         bottom.addWidget(total_caption)
         self.total = QLabel()
         self.total.setFont(fonts().total)

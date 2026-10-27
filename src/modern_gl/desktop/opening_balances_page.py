@@ -37,6 +37,7 @@ from modern_gl.desktop.widgets import (
     Chip,
     PageHeader,
     button,
+    caption,
     date_edit,
     edited_date,
     enter_goes_on,
@@ -103,9 +104,8 @@ class OpeningBalancesPage(GridEditing, PageWidget):
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
-        caption = QLabel(tr("Остатки на начало дня"))
-        caption.setObjectName("secondary")
-        meta.addWidget(caption)
+        title = caption(tr("Остатки на начало дня"))
+        meta.addWidget(title)
         self.date = date_edit(date(self.s.working_date.year, 1, 1))
         self.date.setFixedWidth(130)
         meta.addWidget(self.date)

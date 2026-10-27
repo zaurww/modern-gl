@@ -7,12 +7,12 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QLabel,
     QMessageBox,
     QVBoxLayout,
 )
 
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.widgets import caption
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -35,23 +35,22 @@ class ConversionAccountsDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(24, 20, 24, 16)
         lay.setSpacing(14)
-        hint = QLabel(
+        hint = caption(
             tr("Сюда конвертация относит деньги в пути, курсовую разницу и комиссию банка.")
         )
-        hint.setObjectName("secondary")
         hint.setWordWrap(True)
         lay.addWidget(hint)
         form = QFormLayout()
         form.setSpacing(10)
         self.boxes: dict[str, QComboBox] = {}
-        for role, caption in self.ROLES:
+        for role, title in self.ROLES:
             box = QComboBox()
             box.addItem(tr("— не указан —"), None)
             for account in session.catalog.leaf_accounts:
                 box.addItem(account.label, account.id)
             current = session.ledger.account_role(session.company_id, role)
             box.setCurrentIndex(max(box.findData(current), 0))
-            form.addRow(tr(caption), box)
+            form.addRow(tr(title), box)
             self.boxes[role] = box
         lay.addLayout(form)
         if missing in self.boxes:  # opened because this account is not chosen yet

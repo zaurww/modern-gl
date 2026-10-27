@@ -35,6 +35,7 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
     button,
+    caption,
     enter_goes_on,
     hide_when_viewing,
     money,
@@ -189,9 +190,8 @@ class TemplatePage(GridEditing, PageWidget):
         root.addWidget(self.name)
 
         meta = QHBoxLayout()
-        caption = QLabel(tr("Содержание документа"))
-        caption.setObjectName("secondary")
-        meta.addWidget(caption)
+        title = caption(tr("Содержание документа"))
+        meta.addWidget(title)
         self.memo = QLineEdit(t.memo if t else "")
         self.memo.setPlaceholderText(tr("как у шаблона"))
         meta.addWidget(self.memo, 1)
@@ -199,8 +199,7 @@ class TemplatePage(GridEditing, PageWidget):
 
         self._build_table(root, t)
 
-        self.preview = QLabel()
-        self.preview.setObjectName("secondary")
+        self.preview = caption()
         root.addWidget(self.preview)
         self.error = QLabel()
         self.error.setObjectName("error")

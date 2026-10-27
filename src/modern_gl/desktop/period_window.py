@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.date_field import DateEdit, edited_date, to_qdate
 from modern_gl.desktop.day_calendar import DayCalendar
-from modern_gl.desktop.widgets import button, icon_button
+from modern_gl.desktop.widgets import button, caption, icon_button
 from modern_gl.domain.dates import month_short
 from modern_gl.domain.period_input import (
     Period,
@@ -136,8 +136,8 @@ class PeriodWindow(QFrame):
         column = QVBoxLayout()
         column.setSpacing(2)
         self.preset_buttons: dict[str, QPushButton] = {}
-        for key, caption, period in self.presets:
-            b = self._cell(tr(caption), "periodPreset")
+        for key, text, period in self.presets:
+            b = self._cell(tr(text), "periodPreset")
             b.setChecked(period == self.period)
             b.clicked.connect(lambda _=False, p=period: self.choose(p))
             column.addWidget(b)
@@ -193,9 +193,8 @@ class PeriodWindow(QFrame):
             DateEdit(to_qdate(self.dates[0])),
             DateEdit(to_qdate(self.dates[1])),
         )
-        for caption, field in ((tr("С"), self.first), (tr("по"), self.last)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
+        for text, field in ((tr("С"), self.first), (tr("по"), self.last)):
+            label = caption(text)
             field.setFixedWidth(140)
             field.dateChanged.connect(lambda _d: self._show_typed())
             row.addWidget(label)

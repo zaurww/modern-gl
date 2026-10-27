@@ -16,7 +16,6 @@ from PySide6.QtGui import QAction, QCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
-    QLabel,
     QMenu,
     QStackedLayout,
     QVBoxLayout,
@@ -38,6 +37,7 @@ from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
     PageHeader,
+    caption,
     class_name,
     ru_date,
     type_choices,
@@ -139,8 +139,7 @@ class ReportPage(PageWidget):
         self.stack.addWidget(self.empty)
 
         # a report's message (totals, "Dt and Kt agree") is read before its detail
-        self.footer = QLabel()
-        self.footer.setObjectName("secondary")
+        self.footer = caption()
         self.footer.setWordWrap(True)  # a long hint must not keep the window wide
         if self.summary_on_top:
             root.addWidget(self.footer)
@@ -170,9 +169,8 @@ class ReportPage(PageWidget):
             self.book.setCurrentIndex(self.params.book)
             self.book.setFixedWidth(170)
             self.book.currentIndexChanged.connect(lambda _i: self.refresh())
-            for caption, w in ((tr("Период"), self.period), (tr("Книга"), self.book)):
-                label = QLabel(caption)
-                label.setObjectName("secondary")
+            for text, w in ((tr("Период"), self.period), (tr("Книга"), self.book)):
+                label = caption(text)
                 bar.addWidget(label)
                 bar.addWidget(w)
                 bar.addSpacing(6)
