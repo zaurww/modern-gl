@@ -14,16 +14,13 @@ from modern_gl.application.common import account_kinds, closed_on, fill_subconto
 from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
+from modern_gl.application.ledger.posting_record import PostingRecord
 from modern_gl.domain.dates import iso_date, next_day, ru_date
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.infrastructure.db import Row, transaction
 
 # what a GL document says, posting by posting — as `DocumentCommands._same_content` compares
-POSTING_CONTENT = (
-    "p.debit_account_id, p.credit_account_id, p.amount, p.dt_sc1, p.dt_sc2, p.dt_sc3, "
-    "p.ct_sc1, p.ct_sc2, p.ct_sc3, p.memo, p.currency_id, p.currency_amount, p.invoice, "
-    "p.invoice_kind, p.pays_vat"
-)
+POSTING_CONTENT = ", ".join(f"p.{column}" for column in PostingRecord.COLUMNS)
 
 
 def rebuild_start(company: Row, since: date | str) -> str:
