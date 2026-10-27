@@ -41,8 +41,9 @@ class TradeDocument:
 def trade_documents(
     conn: Connection, company_id: int, doc_type: str | None = None, limit: int = 500
 ) -> list[TradeDocument]:
-    """Receipts and sales (one kind, or both) with their returns, newest first, with the
-    counterparties of their settlement lines and their totals (a return's negative)."""
+    """Receipts and sales (one kind, or both) with their returns — the latest `limit`,
+    listed oldest first (checked one by one from the top), with the counterparties of
+    their settlement lines and their totals (a return's negative)."""
     kinds = (doc_type,) if doc_type else (PURCHASE, SALE)
     types = (*kinds, *(RETURNS_OF[k] for k in kinds))
     marks = ", ".join("?" * len(types))
@@ -76,7 +77,7 @@ def trade_documents(
         """,
         (company_id, *types, limit),
     )
-    return [TradeDocument(**dict(r)) for r in rows]
+    return [TradeDocument(**dict(r)) for r in reversed(rows.fetchall())]
 
 
 @attention_source

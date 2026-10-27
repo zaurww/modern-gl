@@ -145,6 +145,8 @@ class TradePage(ReportPage):
                 for r in rows
                 if needle in fold(f"{r.counterparties} {r.tax_ids} {self._invoice(r)}")
             ]
+        at = self.table.currentIndex()  # read again, the cursor stays on its document
+        was = self.model.rows[at.row()].id if at.isValid() else None
         self.model.set(
             [
                 Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100),
@@ -171,6 +173,9 @@ class TradePage(ReportPage):
             ],
             rows,
         )
+        row = next((i for i, r in enumerate(rows) if r.id == was), None)
+        if row is not None:
+            self.table.setCurrentIndex(self.model.index(row, at.column()))
         self.header.subtitle.setText(tr("Документов: {n}", n=len(rows)))
         total = sum(r.total for r in rows if r.status == "posted")
         self.footer.setText(tr(self.kind.footer, total=format_minor(total)))
