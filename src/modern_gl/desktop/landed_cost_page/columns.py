@@ -55,11 +55,8 @@ METHODS = [
     ("manual", "Вручную"),
 ]
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   "
-    "Ins — расход   ·   Del — удалить строку   ·   "
-    "Сумма «30 USD» — в валюте   ·   НДС «18%» — посчитать   ·   Ctrl+Enter — провести"
-)
+HINT = ("next_field", "previous_field", "add_charge", "delete")  # the keys (desktop/shortcuts.py)…
+HINT_TYPED = ("Сумма «30 USD» — в валюте", "НДС «18%» — посчитать")  # …and what is typed
 
 
 @dataclass

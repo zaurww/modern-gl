@@ -7,7 +7,6 @@ from fractions import Fraction
 from functools import partial
 
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
@@ -32,6 +31,7 @@ from modern_gl.desktop.postings import (
     PostingsTable,
 )
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind, legend
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
     Chip,
@@ -47,10 +47,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr, trd
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия   ·   "
-    "Del — удалить   ·   Ctrl+V — вставить из Excel   ·   Ctrl+Enter — провести"
-)
+HINT = ("next_field", "previous_field", "insert", "duplicate_row", "delete", "paste_rows", "post")
 
 
 class OpeningBalancesPage(PageWidget):
@@ -134,25 +131,16 @@ class OpeningBalancesPage(PageWidget):
         for column in range(CT, CT + 4):  # the counter-account is always the same
             self.table.setColumnHidden(column, True)
         self.table.setColumnWidth(CREDIT_AMOUNT, self.table.columnWidth(AMOUNT))
-        for keys, fn, editing in (
-            ("Ins", self._insert_row, True),
-            ("F9", self._duplicate_row, True),
-            ("Del", self._remove_row, False),
-            ("Ctrl+V", self.paste, False),
-            ("Ctrl+C", self.copy, False),
-        ):
-            shortcut = QShortcut(QKeySequence(keys), self.table)
-            shortcut.setContext(
-                Qt.ShortcutContext.WidgetWithChildrenShortcut
-                if editing
-                else Qt.ShortcutContext.WidgetShortcut
-            )
-            shortcut.activated.connect(fn)
+        bind(self.table, "insert", self._insert_row)
+        bind(self.table, "duplicate_row", self._duplicate_row)
+        bind(self.table, "delete", self._remove_row)
+        bind(self.table, "paste_rows", self.paste)
+        bind(self.table, "copy_rows", self.copy)
         root.addWidget(self.table, 1)
 
     def _build_totals(self, root: QVBoxLayout, control_code: str) -> None:
         totals = QHBoxLayout()
-        hint = QLabel(tr(HINT))
+        hint = QLabel(legend(*HINT))
         hint.setObjectName("tertiary")
         hint.setFont(fonts().small)
         hint.setWordWrap(True)
@@ -198,9 +186,8 @@ class OpeningBalancesPage(PageWidget):
         self.date.dateChanged.connect(self._changed)
         self.date.dateChanged.connect(self._date_changed)
         self.model.changed.connect(self._changed)
-        self._shortcut("Ctrl+S", lambda: self.save(post=False))
-        self._shortcut("Ctrl+Return", lambda: self.save(post=True))
-        self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
+        bind(self, "save", lambda: self.save(post=False))
+        bind(self, "post", lambda: self.save(post=True))
 
     def title(self) -> str:
         return tr("Начальные остатки")
@@ -219,11 +206,6 @@ class OpeningBalancesPage(PageWidget):
         """Enter in the date goes on as Tab does: into the table."""
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
-
-    def _shortcut(self, keys: str, fn) -> None:
-        shortcut = QShortcut(QKeySequence(keys), self)
-        shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        shortcut.activated.connect(fn)
 
     def _rate_for(self, currency_id: int) -> Fraction | None:
         day = edited_date(self.date) - timedelta(days=1)  # the day of the GL document

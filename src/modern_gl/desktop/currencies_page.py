@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -37,6 +37,7 @@ from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
     EmptyState,
@@ -151,13 +152,10 @@ class CurrenciesPage(PageWidget):
         body.addLayout(right, 1)
         root.addLayout(body, 1)
 
-        for keys, fn in (
-            ("Ins", self.add_rate),
-            ("Del", lambda: self.delete_rate(self._rate_at(self.table.currentIndex()))),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
+        bind(self, "insert", self.add_rate)
+        bind(
+            self.table, "delete", lambda: self.delete_rate(self._rate_at(self.table.currentIndex()))
+        )
         self.refresh()
 
     def _build_table(self) -> None:

@@ -5,8 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import (
     QGuiApplication,
-    QKeySequence,
-    QShortcut,
 )
 from PySide6.QtWidgets import QMenu
 
@@ -45,6 +43,7 @@ from modern_gl.desktop.page import EmptyPage, PageWidget
 from modern_gl.desktop.period_dialog import PeriodDialog
 from modern_gl.desktop.reports_page import ReportPage
 from modern_gl.desktop.reports_page.table import grid, set_grid, set_zebra, zebra
+from modern_gl.desktop.shortcuts import PLACES_BY_KEY, bind
 from modern_gl.desktop.stock_count_page import StockCountPage
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
@@ -58,26 +57,12 @@ class MainWindow(ReportPlaces):
     def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
         super().__init__(workspace, settings)
         self.sidebar.company.clicked.connect(self._company_menu)
-        for keys, fn in (
-            ("Ctrl+N", self.new_document),
-            ("Ctrl+W", self.close_current),
-            ("Ctrl+F4", self.close_current),
-            ("Ctrl+1", lambda: self.show_place(("journal",))),
-            ("Ctrl+2", lambda: self.show_place(("osv",))),
-            ("Ctrl+3", lambda: self.show_place(("chart",))),
-            ("Ctrl+4", lambda: self.show_place(("directories",))),
-            ("Ctrl+5", lambda: self.show_place(("templates",))),
-            ("Ctrl+6", lambda: self.show_place(("inventory",))),
-            ("Ctrl+7", lambda: self.show_place(("currencies",))),
-            ("Ctrl+8", lambda: self.show_place(("invoices",))),
-            ("Ctrl+9", lambda: self.show_place(("opening",))),
-            ("Ctrl+0", lambda: self.show_place(("purchases",))),
-            ("Ctrl+-", lambda: self.show_place(("sales",))),
-            ("Ctrl+B", lambda: self.show_place(("bank",))),
-            ("Ctrl+L", self.quick_entry),
-            ("Ctrl+K", self.command_palette),
-        ):
-            QShortcut(QKeySequence(keys), self).activated.connect(fn)
+        bind(self, "new_document", self.new_document)
+        bind(self, "close_page", self.close_current)
+        bind(self, "quick_entry", self.quick_entry)
+        bind(self, "palette", self.command_palette)
+        for place in PLACES_BY_KEY:  # Ctrl+1… — the places of the sidebar
+            bind(self, f"go_{place}", lambda p=place: self.show_place((p,)))
         hints = QGuiApplication.styleHints()
         if hints is not None:
             hints.colorSchemeChanged.connect(lambda _scheme: self.follow_system_theme())

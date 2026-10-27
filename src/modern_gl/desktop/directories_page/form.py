@@ -4,7 +4,6 @@ what the commands ask of them (page.py has the commands)."""
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -21,6 +20,7 @@ from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, hide_when_viewing
 from modern_gl.domain.errors import LedgerError
@@ -87,16 +87,9 @@ class DirectoriesForm(PageWidget):
         body.addLayout(right, 1)
         root.addLayout(body, 1)
 
-        for keys, fn in (
-            ("Ins", lambda: self.add_value()),
-            ("F2", lambda: self.rename_value(self._current_value())),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(lambda: self.delete_value(self._current_value()))
+        bind(self, "insert", lambda: self.add_value())
+        bind(self, "edit", lambda: self.rename_value(self._current_value()))
+        bind(self.table, "delete", lambda: self.delete_value(self._current_value()))
         self.refresh()
 
     def _build_table(self) -> None:

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop import icons
 from modern_gl.desktop.reports_hub.catalog import HUB, PIN_KEYS
+from modern_gl.desktop.shortcuts import key_line
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, trailing_icon
 from modern_gl.i18n import tr
@@ -207,8 +208,8 @@ class Sidebar(QWidget):
         self.viewing.setText(tr("Только просмотр"))
         self.viewing.setVisible(read_only)
         journal = not (read_only or stock_only)  # Ctrl+N is a new journal document
-        new = tr("Ctrl+N  новый документ") + "\n" if journal else ""
-        self.hint.setText(tr("Ctrl+K  поиск и команды") + "\n" + new + tr("Ctrl+W  закрыть"))
+        keys = ["palette", "new_document" if journal else None, "close_page"]
+        self.hint.setText("\n".join(key_line(k) for k in keys if k))
 
     def add_section(self, title: str) -> QListWidgetItem:
         """A heading as in Things: in words, not capitals, of the items' size but bold, with

@@ -102,10 +102,16 @@ DOCUMENT_TYPES = {
     "landed_cost": "Дополнительные расходы",
 }
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "F8 — разделить строку   ·   Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
-    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
+HINT = (  # the keys of the page (desktop/shortcuts.py), under its table
+    "next_field",
+    "previous_field",
+    "insert",
+    "duplicate_row",
+    "split_row",
+    "delete",
+    "paste_rows",
+    "save",
+    "post",
 )
 
 

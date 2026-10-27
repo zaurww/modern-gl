@@ -12,7 +12,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QAction, QCursor, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -33,6 +33,7 @@ from modern_gl.desktop.reports_page.table import (
     ReportModel,
 )
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
@@ -148,15 +149,9 @@ class ReportPage(PageWidget):
             root.addLayout(self.stack, 1)
             root.addWidget(self.footer)
 
-        for keys, fn in (
-            ("F5", self.refresh),
-            ("Ctrl+C", lambda: copy_to_clipboard(self)),
-            ("Return", self._drill_current),
-            ("Enter", self._drill_current),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
+        bind(self, "refresh", self.refresh)
+        bind(self, "copy_report", lambda: copy_to_clipboard(self))
+        self._bind_open()
 
     def _build_period_bar(self, root: QVBoxLayout) -> None:
         """Period and book, for the reports that have them."""
@@ -231,6 +226,11 @@ class ReportPage(PageWidget):
 
     def drill(self, row: Any) -> None:
         pass
+
+    def _bind_open(self) -> None:
+        """Enter anywhere on the page opens the current row; a page with an entry line
+        (the bank) binds it to the table only."""
+        bind(self, "open", self._drill_current)
 
     def menu_actions(self, row: Any) -> list[MenuAction | None]:
         return []

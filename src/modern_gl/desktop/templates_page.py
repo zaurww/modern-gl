@@ -10,7 +10,6 @@ from __future__ import annotations
 from functools import partial
 
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -28,6 +27,7 @@ from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import PostingRow, PostingsDelegate, PostingsModel, PostingsTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     EmptyState,
@@ -86,16 +86,10 @@ class TemplatesPage(PageWidget):
         hint.setFont(fonts().small)
         root.addWidget(hint)
 
-        for keys, fn in (
-            ("Return", lambda: self._use(self._current())),
-            ("Enter", lambda: self._use(self._current())),
-            ("F2", lambda: self._edit(self._current())),
-            ("Ins", lambda: self.edit_template.emit(None)),
-            ("Del", lambda: self.delete(self._current())),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
+        bind(self, "open", lambda: self._use(self._current()))
+        bind(self, "edit", lambda: self._edit(self._current()))
+        bind(self, "insert", lambda: self.edit_template.emit(None))
+        bind(self.table, "delete", lambda: self.delete(self._current()))
         self.refresh()
 
     def title(self) -> str:
@@ -267,17 +261,10 @@ class TemplatePage(PageWidget):
         self.model.changed.connect(self._changed)
         self.name.textEdited.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
-        for keys, fn in (
-            ("Ctrl+S", self.save),
-            ("Ins", self._insert_row),
-            ("F9", self._duplicate_row),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        del_row = QShortcut(QKeySequence("Del"), self.table)
-        del_row.setContext(Qt.ShortcutContext.WidgetShortcut)
-        del_row.activated.connect(self._remove_row)
+        bind(self, "save", self.save)
+        bind(self.table, "insert", self._insert_row)
+        bind(self.table, "duplicate_row", self._duplicate_row)
+        bind(self.table, "delete", self._remove_row)
 
     @property
     def key(self):

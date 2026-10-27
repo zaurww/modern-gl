@@ -11,7 +11,6 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
@@ -44,6 +43,7 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import legend
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
@@ -215,7 +215,7 @@ class InventoryDocumentForm(PageWidget):
 
     def _build_summary(self, root: QVBoxLayout) -> None:
         summary = QHBoxLayout()
-        self.hint = QLabel(tr(HINT))
+        self.hint = QLabel(legend(*HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window
@@ -263,19 +263,6 @@ class InventoryDocumentForm(PageWidget):
         root.addLayout(actions)
 
     # ---- what the parts ask of the fields --------------------------------------------
-
-    def _shortcut(self, keys: str, callback) -> None:
-        shortcut = QShortcut(QKeySequence(keys), self)
-        shortcut.activated.connect(callback)
-
-    def _grid_shortcut(self, keys: str, callback, *, while_editing: bool = False) -> None:
-        shortcut = QShortcut(QKeySequence(keys), self.table)
-        shortcut.setContext(
-            Qt.ShortcutContext.WidgetWithChildrenShortcut
-            if while_editing
-            else Qt.ShortcutContext.WidgetShortcut
-        )
-        shortcut.activated.connect(callback)
 
     def _finish_editing(self) -> None:
         editor = QApplication.focusWidget()

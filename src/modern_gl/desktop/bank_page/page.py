@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import date
 
 from PySide6.QtCore import QModelIndex, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -54,6 +53,7 @@ from modern_gl.desktop.bank_page.levels import (
 from modern_gl.desktop.bank_page.reconcile import ReconcileBar
 from modern_gl.desktop.period_field import PeriodField
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     EmptyState,
     button,
@@ -121,28 +121,12 @@ class BankPage(BankActions):
         }
         for empty in self.empty_states.values():
             self.stack.addWidget(empty)
-        # Enter opens a row of the table only: in the entry line it goes on through it
-        for shortcut in self.findChildren(QShortcut):
-            if shortcut.key().toString() in ("Return", "Enter"):
-                shortcut.setEnabled(False)
-        for keys in ("Return", "Enter"):
-            shortcut = QShortcut(QKeySequence(keys), self.table)
-            shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
-            shortcut.activated.connect(self._drill_current)
-        delete = QShortcut(QKeySequence("Del"), self.table)  # the marked lines
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(self.delete_selected)
+        bind(self.table, "delete", self.delete_selected)  # the marked lines
         # an account or a statement opens with one click: the lists are the way in
         self.table.clicked.connect(self._clicked)
-        for keys, fn in (
-            ("Backspace", self.up),
-            ("Alt+Up", self.up),
-            ("Alt+Left", lambda: self.step(-1)),
-            ("Alt+Right", lambda: self.step(1)),
-        ):
-            shortcut = QShortcut(QKeySequence(keys), self)
-            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            shortcut.activated.connect(fn)
+        bind(self, "up", self.up)
+        bind(self, "previous", lambda: self.step(-1))
+        bind(self, "next", lambda: self.step(1))
         self.refresh()
 
     # ---- building ---------------------------------------------------------------------
@@ -305,6 +289,10 @@ class BankPage(BankActions):
 
     def title(self) -> str:
         return tr("Банк")
+
+    def _bind_open(self) -> None:
+        """Enter opens a row of the table only: in the entry line it goes on through it."""
+        bind(self.table, "open_row", self._drill_current)
 
     def activated(self) -> None:
         self.refresh()

@@ -7,8 +7,7 @@ from datetime import date
 from fractions import Fraction
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -28,6 +27,7 @@ from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money
 from modern_gl.domain.errors import LedgerError
@@ -104,9 +104,7 @@ class ImportPage(PageWidget):
         bottom.addWidget(self.run_button)
         root.addLayout(bottom)
 
-        sc = QShortcut(QKeySequence("Ctrl+V"), self)
-        sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        sc.activated.connect(lambda: self.paste())
+        bind(self, "paste", lambda: self.paste())
         self.rebuild()
 
     def title(self) -> str:

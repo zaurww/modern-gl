@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import (
     Qt,
 )
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHeaderView,
     QMessageBox,
@@ -22,6 +21,7 @@ from modern_gl.desktop.reports_page.view import (
     month_of,
 )
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     class_icon,
     hide_when_viewing,
@@ -95,16 +95,9 @@ class ChartPage(ReportPage):
         self.model.bands = False
         add = self.header.primary(tr("+ Новый счёт"), lambda: self.edit_account(None), "Ins")
         hide_when_viewing(session.read_only, add)
-        for keys, fn in (
-            ("Ins", lambda: self.edit_account(None)),
-            ("F2", lambda: self.edit_account(self._current())),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(lambda: self.delete_account(self._current()))
+        bind(self, "insert", lambda: self.edit_account(None))
+        bind(self, "edit", lambda: self.edit_account(self._current()))
+        bind(self.table, "delete", lambda: self.delete_account(self._current()))
         self.refresh()
 
     def title(self) -> str:

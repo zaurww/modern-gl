@@ -22,6 +22,7 @@ from modern_gl.application.inventory import (
 )
 from modern_gl.desktop.landed_cost_page.columns import (
     HINT,
+    HINT_TYPED,
     METHODS,
 )
 from modern_gl.desktop.landed_cost_page.models import ChargesModel, TargetsModel
@@ -29,6 +30,7 @@ from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import SEPARATOR, legend
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
@@ -132,7 +134,9 @@ class LandedCostForm(PageWidget):
 
     def _build_summary(self, root: QVBoxLayout) -> None:
         summary = QHBoxLayout()
-        self.hint = QLabel(tr(HINT))
+        self.hint = QLabel(
+            SEPARATOR.join([legend(*HINT), *(tr(t) for t in HINT_TYPED), legend("post")])
+        )
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window

@@ -12,7 +12,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
@@ -32,6 +32,7 @@ from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.reason_dialog import confirm_delete
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     EmptyState,
@@ -213,23 +214,13 @@ class JournalPage(PageWidget):
         self.table.doubleClicked.connect(self._open_current)
 
     def _bind_keys(self) -> None:
-        for keys, fn in (
-            ("Ins", self.new_document.emit),
-            ("F5", self.refresh),
-            ("Ctrl+F", self.search.setFocus),  # Ctrl+L (quick entry): the main window's
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        for keys, fn in (  # only on the list: in the text fields these keys type
-            ("Return", self._open_current),
-            ("Enter", self._open_current),
-            ("F9", self._copy_current),
-            ("Del", self._delete_current),
-        ):
-            sc = QShortcut(QKeySequence(keys), self.table)
-            sc.setContext(Qt.ShortcutContext.WidgetShortcut)
-            sc.activated.connect(fn)
+        bind(self, "insert", self.new_document.emit)
+        bind(self, "refresh", self.refresh)
+        bind(self, "find", self.search.setFocus)  # Ctrl+L (quick entry): the main window's
+        # only on the list: in the text fields these keys type
+        bind(self.table, "open_row", self._open_current)
+        bind(self.table, "copy_document", self._copy_current)
+        bind(self.table, "delete", self._delete_current)
 
     def title(self) -> str:
         return tr("Журнал")

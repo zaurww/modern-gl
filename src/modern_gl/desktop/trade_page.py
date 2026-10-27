@@ -6,8 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMessageBox
 
 from modern_gl.application.inventory import Inventory
@@ -17,6 +16,7 @@ from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
@@ -102,9 +102,7 @@ class TradePage(ReportPage):
         self.stack.addWidget(self.empty)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.selectionModel().selectionChanged.connect(lambda *_: self._show_post_button())
-        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(self.delete_selected)
+        bind(self.table, "delete", self.delete_selected)  # not while typing a search
         self.refresh()
 
     def more_items(self) -> list[MenuItem]:

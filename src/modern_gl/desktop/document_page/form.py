@@ -7,7 +7,6 @@ from __future__ import annotations
 from fractions import Fraction
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
@@ -36,6 +35,7 @@ from modern_gl.desktop.postings import (
 )
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import legend
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
@@ -48,11 +48,17 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.i18n import tr
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   "
-    "Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   # — шаблон   ·   Ctrl+V — вставить из Excel   ·   "
-    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести   ·   Ctrl+Shift+Enter — провести и новый"
+HINT = (  # the keys of the page, under its table
+    "next_field",
+    "previous_field",
+    "insert",
+    "duplicate_row",
+    "delete",
+    "template",
+    "paste_rows",
+    "save",
+    "post",
+    "post_and_new",
 )
 
 
@@ -170,7 +176,7 @@ class DocumentForm(PageWidget):
 
     def _build_total(self, root: QVBoxLayout) -> None:
         bottom = QHBoxLayout()
-        self.hint = QLabel(tr(HINT))
+        self.hint = QLabel(legend(*HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window
@@ -218,20 +224,6 @@ class DocumentForm(PageWidget):
         edit.setFont(fonts().title)
         edit.setPlaceholderText(tr("Содержание операции"))
         return edit
-
-    def _shortcut(self, keys: str, fn) -> None:
-        sc = QShortcut(QKeySequence(keys), self)
-        sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        sc.activated.connect(fn)
-
-    def _grid_shortcut(self, keys: str, fn, while_editing: bool = False) -> None:
-        sc = QShortcut(QKeySequence(keys), self.table)
-        sc.setContext(
-            Qt.ShortcutContext.WidgetWithChildrenShortcut
-            if while_editing
-            else Qt.ShortcutContext.WidgetShortcut
-        )
-        sc.activated.connect(fn)
 
     def _finish_editing(self) -> None:
         """Commit and close an open cell editor, so a row action sees what was typed."""

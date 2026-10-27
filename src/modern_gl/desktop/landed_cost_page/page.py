@@ -6,10 +6,6 @@ from datetime import date
 from fractions import Fraction
 from functools import partial
 
-from PySide6.QtCore import (
-    Qt,
-)
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog,
     QMessageBox,
@@ -47,6 +43,7 @@ from modern_gl.desktop.landed_cost_page.pickers import (
 )
 from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     edited_date,
     enter_goes_on,
@@ -90,17 +87,11 @@ class LandedCostPage(LandedCostForm):
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._date_changed)
         self.method.activated.connect(self._changed)
-        for keys, callback in (
-            ("Ctrl+S", lambda: self.save(post=False)),
-            ("Ctrl+Return", lambda: self.save(post=True)),
-            ("Ctrl+Enter", lambda: self.save(post=True)),
-        ):
-            QShortcut(QKeySequence(keys), self).activated.connect(callback)
+        bind(self, "save", lambda: self.save(post=False))
+        bind(self, "post", lambda: self.save(post=True))
         for table in (self.charges_table, self.targets_table):
-            for keys, callback in (("Ins", self.add_charge), ("Del", self._remove_row)):
-                shortcut = QShortcut(QKeySequence(keys), table)
-                shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
-                shortcut.activated.connect(callback)
+            bind(table, "add_charge", self.add_charge)
+            bind(table, "delete", self._remove_row)
 
     # ---- page protocol -----------------------------------------------------------------
 

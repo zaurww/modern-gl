@@ -4,7 +4,6 @@ as counted; the user types what differs and posts the difference with one button
 from __future__ import annotations
 
 from PySide6.QtCore import QSettings, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
 from modern_gl.application.default_accounts import COST_OF_GOODS, default_account
@@ -13,6 +12,7 @@ from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.stock_count_page.model import (
     AMOUNT,
     BOOK,
@@ -73,8 +73,7 @@ class StockCountPage(PageWidget):
         root.addWidget(self.error)
         self._build_footer(root)
         self.model.changed.connect(self._show_totals)
-        for keys in ("Ctrl+Return", "Ctrl+Enter"):
-            QShortcut(QKeySequence(keys), self).activated.connect(self.post)
+        bind(self, "post", self.post)
         self.refresh()
 
     def _build_bar(self, root: QVBoxLayout) -> None:
