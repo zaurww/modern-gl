@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QListWidgetItem, QMenu
 
 from modern_gl.desktop import icons
@@ -15,6 +14,7 @@ from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
 from modern_gl.desktop.main_window.open_pages import OpenPages
 from modern_gl.desktop.main_window.sidebar import KEY_ROLE
 from modern_gl.desktop.page import PageWidget
+from modern_gl.desktop.preferences import STATEMENTS_VIEW, prefs
 from modern_gl.desktop.reports_hub import (
     BY_ID,
     HUB,
@@ -43,7 +43,6 @@ from modern_gl.desktop.reports_page import (
     VatRegisterPage,
     month_of,
 )
-from modern_gl.desktop.reports_page.statements import VIEW_SETTING
 from modern_gl.desktop.stock_reports import GrossProfitPage, ItemCardPage, StockStatementPage
 from modern_gl.desktop.theme import P
 from modern_gl.i18n import tr
@@ -161,7 +160,7 @@ class ReportPlaces(OpenPages):
         if isinstance(page, StatementsPage):
             page.show_view(view)
         else:  # the page opens on it at once, without reading another view first
-            QSettings().setValue(VIEW_SETTING, view)
+            prefs().set_view(STATEMENTS_VIEW, view)
         self.show_place(("statements",))
 
     def open_reconciliation(self, direction: str) -> None:

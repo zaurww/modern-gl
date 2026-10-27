@@ -8,6 +8,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Signal
 
+from modern_gl.desktop.preferences import STOCK_STATEMENT_VIEW
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.stock_reports.common import INDENT, quantity_column, view_switch
@@ -23,7 +24,7 @@ from modern_gl.reporting.inventory import (
     stock_statement,
 )
 
-VIEW_SETTING = "reports/stock_statement_view"
+VIEW_SETTING = STOCK_STATEMENT_VIEW
 GROUPS = (
     ("Начало", "opening"),
     ("Приход", "in"),

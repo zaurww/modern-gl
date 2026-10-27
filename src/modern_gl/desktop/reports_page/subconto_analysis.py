@@ -8,10 +8,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
-from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QCheckBox, QComboBox
 
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.preferences import SUBCONTO_ANALYSIS_KIND, prefs
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams, turnover_columns
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import balance_text, caption
@@ -20,7 +20,6 @@ from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import SubcontoAnalysisRow
 
-KIND_SETTING = "reports/subconto_analysis_kind"  # the directory asked last
 INDENT = "      "
 
 
@@ -47,7 +46,7 @@ class SubcontoAnalysisPage(ReportPage):
         )
         for k in offered:
             self.kind.addItem(cat.kinds[k], k)
-        remembered = QSettings().value(KIND_SETTING, -1, type=int)
+        remembered = prefs().chosen_id(SUBCONTO_ANALYSIS_KIND)
         counterparties = [k for k in offered if cat.kind_codes.get(k) == "counterparty"]
         for wanted in (kind_id, remembered, *counterparties):  # asked, last time, 60 / 62
             if wanted is not None and (at := self.kind.findData(wanted)) >= 0:
@@ -68,7 +67,7 @@ class SubcontoAnalysisPage(ReportPage):
         self.only_open.toggled.connect(self.refresh)
 
     def _choose_kind(self, _index: int) -> None:
-        QSettings().setValue(KIND_SETTING, self.kind_id)
+        prefs().set_chosen_id(SUBCONTO_ANALYSIS_KIND, self.kind_id)
         self._fill_elements()
         self.refresh()
 

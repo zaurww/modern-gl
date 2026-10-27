@@ -8,12 +8,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QSettings
-
+from modern_gl.desktop.preferences import PINNED_REPORTS, RECENT_REPORTS, prefs
 from modern_gl.i18n import fold
 from modern_gl.i18n_az import AZ
 
-PINNED_SETTING, RECENT_SETTING = "reports/pinned", "reports/recent"
 # what the sidebar showed before the catalog: kept there until the user changes it
 DEFAULT_PINNED = ("osv", "balance", "profit")
 RECENT_SHOWN = 5
@@ -246,27 +244,25 @@ def matches(report: Report, query: str) -> bool:
 
 
 def _ids(key: str, default: tuple[str, ...]) -> list[str]:
-    value = QSettings().value(key)
-    if value is None:
-        return list(default)
-    return [i for i in str(value).split(",") if i in BY_ID]
+    ids = prefs().report_ids(key)
+    return list(default) if ids is None else [i for i in ids if i in BY_ID]
 
 
 def pinned() -> list[str]:
     """The pinned reports in the order they were pinned (the sidebar shows them so)."""
-    return list(dict.fromkeys(_ids(PINNED_SETTING, DEFAULT_PINNED)))
+    return list(dict.fromkeys(_ids(PINNED_REPORTS, DEFAULT_PINNED)))
 
 
 def set_pinned(report_id: str, on: bool) -> None:
     ids = [i for i in pinned() if i != report_id] + ([report_id] if on else [])
-    QSettings().setValue(PINNED_SETTING, ",".join(ids))
+    prefs().set_report_ids(PINNED_REPORTS, ids)
 
 
 def recent() -> list[str]:
     """The reports opened lately, the last first."""
-    return _ids(RECENT_SETTING, ())[:RECENT_SHOWN]
+    return _ids(RECENT_REPORTS, ())[:RECENT_SHOWN]
 
 
 def remember(report_id: str) -> None:
     ids = [report_id] + [i for i in recent() if i != report_id]
-    QSettings().setValue(RECENT_SETTING, ",".join(ids[:RECENT_SHOWN]))
+    prefs().set_report_ids(RECENT_REPORTS, ids[:RECENT_SHOWN])

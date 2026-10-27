@@ -5,7 +5,7 @@ so purchases and sales are typed from this page too, and the postings make thems
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.inventory import Inventory
 from modern_gl.desktop.page import PageWidget
+from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
@@ -29,8 +30,6 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import StockBalance
-
-IDLE_SETTING = "inventory/idle_items"  # items with nothing in stock listed too
 
 # what each operation does, in one phrase for a beginner
 OPERATIONS = (
@@ -192,13 +191,13 @@ class InventoryForm(PageWidget):
     def idle_shown(self) -> bool:
         """Items with nothing in stock are listed too (muted) — a new item is seen at once;
         «⋯» hides them, remembered (D106)."""
-        return bool(QSettings().value(IDLE_SETTING, True, type=bool))
+        return prefs().idle_items_shown()
 
     def _idle_mark(self) -> str:
         return "✓  " if self.idle_shown() else "    "
 
     def _toggle_idle(self) -> None:
-        QSettings().setValue(IDLE_SETTING, not self.idle_shown())
+        prefs().set_idle_items_shown(not self.idle_shown())
         self.refresh()
 
     # ---- made by the groups of the page; each group may call the others --------------

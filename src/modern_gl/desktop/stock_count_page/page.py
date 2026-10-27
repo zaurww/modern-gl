@@ -3,7 +3,7 @@ as counted; the user types what differs and posts the difference with one button
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
 from modern_gl.application.default_accounts import COST_OF_GOODS, default_account
@@ -11,6 +11,7 @@ from modern_gl.application.inventory import Inventory, StockCountResult
 from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.preferences import STOCK_COUNT_WAREHOUSE, prefs
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.stock_count_page.model import (
@@ -36,7 +37,6 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import item_choices, stock_balances, warehouse_choices
 
-WAREHOUSE_SETTING = "stock_count/warehouse"  # the warehouse counted last
 WIDTHS = {ITEM: 320, UNIT: 70, BOOK: 120, QUANTITY: 120, DIFFERENCE: 120, AMOUNT: 140}
 
 
@@ -84,7 +84,7 @@ class StockCountPage(PageWidget):
         self.warehouse.setFixedWidth(200)
         for choice in warehouse_choices(self.s.conn, self.s.company_id):
             self.warehouse.addItem(choice.label, choice.id)
-        remembered = QSettings().value(WAREHOUSE_SETTING, -1, type=int)
+        remembered = prefs().chosen_id(STOCK_COUNT_WAREHOUSE)
         self.warehouse.setCurrentIndex(max(self.warehouse.findData(remembered), 0))
         self.date = date_edit(self.s.working_date)
         self.date.setFixedWidth(130)
@@ -154,7 +154,7 @@ class StockCountPage(PageWidget):
     # ---- the count ---------------------------------------------------------------------
 
     def _warehouse_chosen(self) -> None:
-        QSettings().setValue(WAREHOUSE_SETTING, self.warehouse.currentData())
+        prefs().set_chosen_id(STOCK_COUNT_WAREHOUSE, self.warehouse.currentData())
         self.refresh()
 
     def refresh(self) -> None:

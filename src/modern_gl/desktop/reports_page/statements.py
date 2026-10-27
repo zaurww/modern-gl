@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PySide6.QtCore import QSettings, Signal
+from PySide6.QtCore import Signal
 
+from modern_gl.desktop.preferences import STATEMENTS_DETAIL, STATEMENTS_VIEW, prefs
 from modern_gl.desktop.reports_page.statement_columns import (
     ColumnsChoice,
     amount_columns,
@@ -34,7 +35,6 @@ from modern_gl.reporting.statements import (
 )
 
 BALANCE, PROFIT, CASH = "balance", "profit", "cash"
-VIEW_SETTING, DETAIL_SETTING = "reports/statements_view", "reports/statements_detail"
 # the parts of the balance sheet: their subtotal reads «Итого: …»
 SECTIONS = (
     "Оборотные активы",
@@ -63,9 +63,9 @@ class StatementsPage(ReportPage):
         details, self.detail_buttons = segments(
             [(TYPES, "Кратко"), (ACCOUNTS, "По счетам"), (ITEMS, "По статьям")], self.refresh
         )
-        settings = QSettings()
-        view = str(settings.value(VIEW_SETTING, BALANCE))
-        detail = str(settings.value(DETAIL_SETTING, ACCOUNTS))
+        remembered = prefs()
+        view = remembered.view(STATEMENTS_VIEW, BALANCE)
+        detail = remembered.view(STATEMENTS_DETAIL, ACCOUNTS)
         self.view_buttons.get(view, self.balance_button).setChecked(True)
         self.detail_buttons.get(detail, self.detail_buttons[ACCOUNTS]).setChecked(True)
         self.columns = ColumnsChoice(self.refresh)  # months side by side, a comparison (D107)
@@ -102,12 +102,12 @@ class StatementsPage(ReportPage):
     def refresh(self) -> None:
         if hasattr(self, "detail_buttons"):  # the first refresh comes from ReportPage
             self.detail_buttons[ITEMS].setVisible(self.view == PROFIT)
-            settings = QSettings()
-            if settings.value(VIEW_SETTING) != self.view:
+            remembered = prefs()
+            if remembered.view(STATEMENTS_VIEW, "") != self.view:
                 self.view_changed.emit()
-            settings.setValue(VIEW_SETTING, self.view)
+            remembered.set_view(STATEMENTS_VIEW, self.view)
             chosen = next(k for k, b in self.detail_buttons.items() if b.isChecked())
-            settings.setValue(DETAIL_SETTING, chosen)
+            remembered.set_view(STATEMENTS_DETAIL, chosen)
         super().refresh()
 
     @property

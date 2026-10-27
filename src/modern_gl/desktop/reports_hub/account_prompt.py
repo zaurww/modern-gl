@@ -4,16 +4,15 @@ account asked last is offered again (`QSettings`)."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from modern_gl.application.catalog import AccountInfo, Catalog
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
 from modern_gl.i18n import tr
-
-LAST_SETTING = "reports/last_account"
 
 
 def offered(catalog: Catalog, kind: str) -> list[AccountInfo]:
@@ -44,9 +43,9 @@ class AccountPrompt(QDialog):
         self.account = PickBox(tr("Код или название"))
         for a in offered(catalog, kind):
             self.account.addItem(a.label, a.id)
-        last = QSettings().value(LAST_SETTING)
+        last = prefs().last_account()
         if last is not None:
-            self.account.setCurrentIndex(self.account.findData(int(str(last))))
+            self.account.setCurrentIndex(self.account.findData(last))
         self.account.activated.connect(lambda _i: self.take())
         root.addWidget(self.account)
         row = QHBoxLayout()
@@ -68,7 +67,7 @@ class AccountPrompt(QDialog):
         if self.chosen() is None:
             self.account.setFocus()
             return
-        QSettings().setValue(LAST_SETTING, self.chosen())
+        prefs().set_last_account(self.chosen())
         self.accept()
 
 
