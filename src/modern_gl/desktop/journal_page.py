@@ -296,12 +296,13 @@ class JournalPage(PageWidget):
         current = select_id or self._current_id()
         cid, wanted, every = self.s.company_id, self.year, self.all_years
         working_year, text = self.s.working_date.year, self.search.text()
+        books = tuple(self.model.layer_names.items())
 
         def read(conn: Connection) -> JournalData:
             years = document_years(conn, cid)
             asked = document_year(conn, cid, select_id) if select_id else None
             year = None if every else shown_year(years, asked or wanted, working_year)
-            f = JournalFilter(cid, *year_bounds(year), text)
+            f = JournalFilter(cid, *year_bounds(year), text, books)
             key = document_key(conn, cid, current) if current else None
             before = documents_before(conn, f, key, including=True)
             after = documents_after(conn, f, key) if key else Rows([], False)

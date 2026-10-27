@@ -74,6 +74,35 @@ def test_the_search_is_over_the_whole_year(big):
     assert nothing.docs == []  # % and _ are letters, not patterns
 
 
+def test_the_search_finds_what_the_other_columns_show(demo):
+    """Before the journal was read in pages, the search filtered every column: the sum,
+    the book and the status are found as well, by the query. The golden example
+    (conftest): №2 is 1 200.00, №6 is 300.00; added here — №7 of two lines 100.00 + 50.00,
+    №8 a draft, №9 in the IFRS book."""
+    from modern_gl.application.queries import list_layers
+
+    led, cid, conn = demo.ledger, demo.company_id, demo.ledger.conn
+    two_lines = led.post_new(
+        cid, date(2026, 3, 1), [demo.p("721", "221", "100.00"), demo.p("721", "221", "50.00")]
+    )
+    draft = led.create_draft(cid, date(2026, 3, 2), [demo.p("721", "221", "7.00")], "Taslaq")
+    ifrs = led.post_new(cid, date(2026, 3, 3), [demo.p("721", "221", "9.00")], layer="ifrs_adj")
+    books = tuple(list_layers(conn, cid))
+
+    def found(text: str) -> list[int]:
+        f = JournalFilter(cid, *YEAR, text, books)
+        return [d.id for d in documents_before(conn, f, None).docs]
+
+    assert found("1 200,00") == [demo.docs[1]]  # the sum as it is typed
+    assert found("1200.00") == [demo.docs[1]]
+    assert found("150") == [two_lines]  # the total the journal shows
+    assert found("50,00") == [two_lines]  # one line of it
+    assert found("черновик") == [draft]
+    ifrs_name = dict(books)["ifrs_adj"]
+    assert ifrs in found(ifrs_name.lower()) and two_lines not in found(ifrs_name)
+    assert found("сторно") == []  # nothing was reversed
+
+
 @pytest.fixture
 def page(qtbot, big):
     theme.apply(QApplication.instance())

@@ -184,7 +184,7 @@ def test_a_failed_open_leaves_no_lock(company, monkeypatch):
         raise OSError("disk")
 
     monkeypatch.setattr(ws, "_updated", broken)
-    with pytest.raises(OSError):
+    with pytest.raises(OSError, match="disk"):
         ws.open(path)
     assert not lock_path(path).exists()
 
