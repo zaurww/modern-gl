@@ -17,6 +17,7 @@ from modern_gl.domain.accounts import (
     SALES_REVENUE,
     SALES_VAT,
 )
+from modern_gl.i18n import N_
 
 QUANTITY_SCALE = 6
 QUANTITY_FACTOR = 10**QUANTITY_SCALE
@@ -31,17 +32,17 @@ ACCRUED_CODE = "76H"
 SALE_ROLE_NAMES = {
     SALES_REVENUE: "Выручка",
     COST_OF_SALES: "Себестоимость продаж",
-    OUTPUT_VAT: "НДС к уплате",
-    SALES_VAT: "НДС начисляется со счёта",
+    OUTPUT_VAT: N_("НДС к уплате"),
+    SALES_VAT: N_("НДС начисляется со счёта"),
 }
 
 
 # «Mədaxil» (D91): why goods come in without a purchase, its name and the account role
 INCOMING_REASONS = {
-    "surplus": ("Излишки (инвентаризация)", INCOMING_SURPLUS),
-    "contribution": ("Вклад учредителя", INCOMING_CONTRIBUTION),
-    "production": ("Собственное производство", INCOMING_PRODUCTION),
-    "gift": ("Безвозмездное получение (подарок)", INCOMING_GIFT),
+    "surplus": (N_("Излишки (инвентаризация)"), INCOMING_SURPLUS),
+    "contribution": (N_("Вклад учредителя"), INCOMING_CONTRIBUTION),
+    "production": (N_("Собственное производство"), INCOMING_PRODUCTION),
+    "gift": (N_("Безвозмездное получение (подарок)"), INCOMING_GIFT),
 }
 # documents whose lines bring goods in at their amount: Dt stock / Kt the line's account
 INCOMING_TYPES = {"opening", "receipt", "incoming"}
@@ -140,11 +141,11 @@ class UsualUnit:
 
 # offered by the item dialog (in Russian, translated there): a first item needs no setup
 USUAL_UNITS = (
-    UsualUnit("шт", "Штука", 0),
-    UsualUnit("кг", "Килограмм"),
-    UsualUnit("л", "Литр"),
-    UsualUnit("м", "Метр"),
-    UsualUnit("м²", "Квадратный метр"),
+    UsualUnit("шт", N_("Штука"), 0),
+    UsualUnit(N_("кг"), N_("Килограмм")),
+    UsualUnit(N_("л"), N_("Литр")),
+    UsualUnit("м", N_("Метр")),
+    UsualUnit(N_("м²"), N_("Квадратный метр")),
     UsualUnit("уп.", "Упаковка", 0),
 )
 

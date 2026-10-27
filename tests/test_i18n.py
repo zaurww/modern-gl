@@ -15,10 +15,6 @@ from tests.helpers.texts import CYRILLIC
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
 # the interface's and the documents' language (D152); N_ — a key kept for a later tr()
 TR = ("tr", "trd", "N_")
-# layers another session works in now: their keys in constants are marked N_ when the
-# branches meet (docs/history/sessions/2026-10-27-audit-desktop.md); until then a string
-# constant there counts as the key's use
-NOT_MARKED_YET = ("application", "reporting")
 
 
 def tr_keys() -> dict[str, str]:
@@ -52,16 +48,6 @@ def script_keys() -> set[str]:
     return found
 
 
-def constants_not_marked_yet() -> set[str]:
-    found = set()
-    for layer in NOT_MARKED_YET:
-        for path in (SRC / layer).rglob("*.py"):
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-                if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                    found.add(node.value)
-    return found
-
-
 def placeholders(s: str) -> set[str]:
     return {name for _, name, _, _ in string.Formatter().parse(s) if name}
 
@@ -87,7 +73,7 @@ def test_every_tr_string_has_azerbaijani_translation():
 def test_every_azerbaijani_key_is_used():
     """A key with no tr/trd/N_ in the code is dead (its text was changed or removed) — or
     a constant later given to tr(VAR) without N_, which this test could not check."""
-    used = set(tr_keys()) | script_keys() | constants_not_marked_yet()
+    used = set(tr_keys()) | script_keys()
     unused = sorted(k for k in AZ if k not in used)
     assert not unused, unused
 

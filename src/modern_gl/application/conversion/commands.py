@@ -34,10 +34,10 @@ from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.money import from_minor
-from modern_gl.i18n import tr, trd
+from modern_gl.i18n import N_, tr, trd
 from modern_gl.infrastructure.db import Row, transaction
 
-EXCHANGE_DIFFERENCE = "Курсовая разница при конвертации"
+EXCHANGE_DIFFERENCE = N_("Курсовая разница при конвертации")
 BANK_FEE_ITEM = "Комиссия банка"
 
 

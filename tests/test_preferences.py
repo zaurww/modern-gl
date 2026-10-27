@@ -15,10 +15,8 @@ from modern_gl.desktop.preferences import (
 )
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
-# app.py starts the program and reads the language, the theme and the folder before the
-# window exists; it is the infrastructure session's file now — to move onto Preferences
-# when the branches meet (docs/history/sessions/2026-10-27-audit-desktop.md)
-NOT_YET = {"desktop/preferences.py", "desktop/app.py"}
+# the one module that makes QSettings; everything else asks it
+MAKER = {"desktop/preferences.py"}
 
 
 def made_in(path: Path) -> list[int]:
@@ -36,7 +34,7 @@ def settings_made() -> list[str]:
     found = []
     for path in SRC.rglob("*.py"):
         where = path.relative_to(SRC).as_posix()
-        if where not in NOT_YET:
+        if where not in MAKER:
             found += [f"{where}:{line}" for line in made_in(path)]
     return found
 

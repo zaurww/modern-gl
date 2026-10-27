@@ -6,13 +6,13 @@ program has no setting — the texts it holds tell which language they were writ
 from __future__ import annotations
 
 from modern_gl.application.ledger import Ledger
-from modern_gl.i18n import language, set_document_language
+from modern_gl.i18n import N_, language, set_document_language
 from modern_gl.i18n_az import AZ
 from modern_gl.infrastructure.db import Connection
 
 # Texts an older program wrote in the interface language: which of them a file holds more
 # of tells its language
-_WRITTEN = ("НДС", "Комиссия банка", "Курсовая разница при конвертации")
+_WRITTEN = ("НДС", "Комиссия банка", N_("Курсовая разница при конвертации"))
 
 
 def stored(conn: Connection, company_id: int) -> str | None:

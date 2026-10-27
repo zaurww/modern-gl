@@ -12,9 +12,10 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
-from modern_gl.desktop.backups_dialog import MIRROR_SETTING, BackupsDialog
+from modern_gl.desktop.backups_dialog import BackupsDialog
 from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.main_window import MainWindow
+from modern_gl.desktop.preferences import MIRROR_SETTING
 from modern_gl.infrastructure import backup
 from tests.helpers.backup import company, documents
 

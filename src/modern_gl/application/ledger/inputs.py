@@ -10,12 +10,12 @@ from typing import Protocol
 
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 DEFAULT_LAYERS = (
     ("common", "Общий учёт"),
-    ("ifrs_adj", "Корректировки МСФО"),
-    ("tax_adj", "Налоговые корректировки"),
+    ("ifrs_adj", N_("Корректировки МСФО")),
+    ("tax_adj", N_("Налоговые корректировки")),
 )
 
 SIDES = (("debit", "dt"), ("credit", "ct"))

@@ -10,10 +10,8 @@ from PySide6.QtCore import QSettings, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-from modern_gl.desktop.preferences import MIRROR_SETTING, Preferences
-
-__all__ = ["MIRROR_SETTING", "BackupsDialog"]  # app.py takes the key from here
 from modern_gl.application.workspace import Workspace
+from modern_gl.desktop.preferences import Preferences
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, caption
 from modern_gl.i18n import tr

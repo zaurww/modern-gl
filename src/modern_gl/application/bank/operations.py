@@ -8,7 +8,7 @@ from dataclasses import dataclass, replace
 
 from modern_gl.application.common import batches
 from modern_gl.domain.errors import NotFoundError
-from modern_gl.i18n import tr, trd
+from modern_gl.i18n import N_, tr, trd
 from modern_gl.infrastructure.db import Connection
 
 IN, OUT = "in", "out"  # mədaxil: money comes to the bank account; məxaric: it leaves
@@ -25,11 +25,11 @@ SUPPLIER, CUSTOMER, TAX, SALARY, FEE, TRANSFER, OTHER = (
 KINDS = (
     (SUPPLIER, "Поставщик"),
     (CUSTOMER, "Покупатель"),
-    (TAX, "Налоги"),
-    (SALARY, "Зарплата"),
+    (TAX, N_("Налоги")),
+    (SALARY, N_("Зарплата")),
     (FEE, "Комиссия банка"),
     (TRANSFER, "Перевод между своими счетами"),
-    (OTHER, "Прочее"),
+    (OTHER, N_("Прочее")),
 )
 KIND_NAMES = dict(KINDS)
 # A line's account when nothing was paid to the counterparty before: the first account

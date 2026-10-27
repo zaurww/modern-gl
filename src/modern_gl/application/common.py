@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure import db
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.infrastructure.db import insert as insert  # used by the write services
@@ -135,18 +135,18 @@ UNCHECKED_REFERENCES: dict[str, list[tuple[str, str]]] = {
 }
 # where a row is used, told by the table that refers to it ({n}: a document number)
 USAGE_TEXTS: dict[str, str] = {
-    "postings": "есть проводки в документе №{n}",
-    "entry_template_lines": "он есть в шаблоне «{name}»",
-    "inventory_lines": "он есть в складском документе №{n}",
-    "inventory_items": "это товар склада или счёт запасов товара",
-    "warehouses": "это склад",
-    "stock_movements": "по нему есть движения на складе",
-    "account_roles": "он выбран в настройках склада (роль счёта)",
-    "bank_operations": "он есть в банковской операции",
-    "bank_operation_lines": "он есть в банковской операции",
-    "currency_conversions": "он есть в конвертации валюты",
-    "conversion_fees": "он есть в конвертации валюты",
-    "landed_cost_charges": "он есть в документе «Дополнительные расходы»",
+    "postings": N_("есть проводки в документе №{n}"),
+    "entry_template_lines": N_("он есть в шаблоне «{name}»"),
+    "inventory_lines": N_("он есть в складском документе №{n}"),
+    "inventory_items": N_("это товар склада или счёт запасов товара"),
+    "warehouses": N_("это склад"),
+    "stock_movements": N_("по нему есть движения на складе"),
+    "account_roles": N_("он выбран в настройках склада (роль счёта)"),
+    "bank_operations": N_("он есть в банковской операции"),
+    "bank_operation_lines": N_("он есть в банковской операции"),
+    "currency_conversions": N_("он есть в конвертации валюты"),
+    "conversion_fees": N_("он есть в конвертации валюты"),
+    "landed_cost_charges": N_("он есть в документе «Дополнительные расходы»"),
 }
 
 

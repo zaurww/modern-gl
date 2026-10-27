@@ -21,7 +21,7 @@ from datetime import date
 from modern_gl.application.books import COMMON, FROM, book_params, docs_cte
 from modern_gl.domain.accounts import DEFERRED_TAX_TYPES
 from modern_gl.domain.period_input import Period
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.columns import Amounts, total
 from modern_gl.reporting.report_common import _accounts
@@ -44,11 +44,11 @@ FX_LOANS = "fx_loans"  # on a loan: financing
 DEFERRED_TAX = "deferred_tax"
 # the lines of a key that is no account type
 TITLES = {
-    FX_MONEY: "Курсовые разницы по денежным средствам",
-    FX_LOANS: "Курсовые разницы по кредитам",
-    DEFERRED_TAX: "Отложенный налог на прибыль",
-    f"{UNTYPED}:revenue": "Доходы без типа",
-    f"{UNTYPED}:expense": "Расходы без типа",
+    FX_MONEY: N_("Курсовые разницы по денежным средствам"),
+    FX_LOANS: N_("Курсовые разницы по кредитам"),
+    DEFERRED_TAX: N_("Отложенный налог на прибыль"),
+    f"{UNTYPED}:revenue": N_("Доходы без типа"),
+    f"{UNTYPED}:expense": N_("Расходы без типа"),
 }
 # on a sales account only these are the buyer's side (a sale, a return); anything else
 # written there — goods, a carrier (Dt 46 Kt 60), wages — is the cost of the sales
@@ -104,9 +104,9 @@ class _Lines:
 
     def build(self) -> list[Line]:
         gross = self.revenue() + self.add("cost_of_sales")
-        self.subtotal("Валовая прибыль", gross)
+        self.subtotal(N_("Валовая прибыль"), gross)
         operating = gross + sum((self.add(k) for k in OPERATING), Amounts())
-        self.subtotal("Операционная прибыль", operating)
+        self.subtotal(N_("Операционная прибыль"), operating)
         investing = sum((self.add(k) for k in INVESTING), Amounts())
         before_financing = operating + investing
         mark = len(self.lines)
@@ -114,12 +114,16 @@ class _Lines:
         if len(self.lines) > mark:  # IFRS 18: the subtotal before the financing
             self.lines.insert(
                 mark,
-                Line("Прибыль до финансирования и налога на прибыль", before_financing, "subtotal"),
+                Line(
+                    N_("Прибыль до финансирования и налога на прибыль"),
+                    before_financing,
+                    "subtotal",
+                ),
             )
         before_tax = before_financing + financing
-        self.subtotal("Прибыль до налогообложения", before_tax)
+        self.subtotal(N_("Прибыль до налогообложения"), before_tax)
         net = before_tax + self.add("income_tax") + self.add(DEFERRED_TAX)
-        self.lines.append(Line("Чистая прибыль (убыток)", net, "total"))
+        self.lines.append(Line(N_("Чистая прибыль (убыток)"), net, "total"))
         return self.lines
 
     def subtotal(self, title: str, amount: Amounts) -> None:

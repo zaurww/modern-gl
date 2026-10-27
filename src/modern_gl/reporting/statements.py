@@ -15,6 +15,7 @@ from datetime import date
 from modern_gl.application.books import AFTER, COMMON, book_params, docs_cte
 from modern_gl.domain.accounts import ACCOUNT_TYPES, NONCURRENT_TYPES, TYPE_CLASS
 from modern_gl.domain.dates import iso_date
+from modern_gl.i18n import N_
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.columns import Amounts, total
 from modern_gl.reporting.report_common import _accounts
@@ -78,13 +79,13 @@ def balance_sheet(
     current = section("Оборотные активы", "asset", True)
     long_term = section("Долгосрочные активы", "asset", False)
     assets = current + long_term
-    lines.append(Line("Итого активы", assets, "total"))
-    lines.append(Line("Обязательства и капитал", kind="heading"))
+    lines.append(Line(N_("Итого активы"), assets, "total"))
+    lines.append(Line(N_("Обязательства и капитал"), kind="heading"))
     short = section("Краткосрочные обязательства", "liability", True, -1)
     long_debt = section("Долгосрочные обязательства", "liability", False, -1)
     equity = section("Капитал", "equity", None, -1, profit)
     sources = short + long_debt + equity
-    lines.append(Line("Итого обязательства и капитал", sources, "total"))
+    lines.append(Line(N_("Итого обязательства и капитал"), sources, "total"))
     return Statement(lines, assets - sources)
 
 
@@ -174,10 +175,10 @@ def _section(
             result += amount
     untyped = by_type.get(f"{UNTYPED}:{cls}", Amounts()) * sign
     if untyped and current is not False:  # untyped assets and debts count as current
-        lines.append(Line("Счета без типа", untyped, account_type=UNTYPED))
+        lines.append(Line(N_("Счета без типа"), untyped, account_type=UNTYPED))
         result += untyped
     if profit:
-        lines.append(Line("Прибыль (убыток) текущего периода", profit))
+        lines.append(Line(N_("Прибыль (убыток) текущего периода"), profit))
         result += profit
     if lines[-1].kind == "heading":  # nothing in it: not shown at all
         lines.pop()

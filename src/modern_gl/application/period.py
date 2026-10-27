@@ -9,6 +9,7 @@ from datetime import date, timedelta
 
 from modern_gl.application.common import company_row
 from modern_gl.domain.dates import iso_date
+from modern_gl.i18n import N_
 from modern_gl.infrastructure.db import Connection
 
 
@@ -41,9 +42,9 @@ def period_ends(working: date) -> list[PeriodEnd]:
     year = date(working.year - 1, 12, 31)
     ends: list[PeriodEnd] = []
     for title, day in (
-        ("Конец прошлого месяца", month),
-        ("Конец прошлого квартала", quarter),
-        ("Конец прошлого года", year),
+        (N_("Конец прошлого месяца"), month),
+        (N_("Конец прошлого квартала"), quarter),
+        (N_("Конец прошлого года"), year),
     ):
         if all(e.day != day for e in ends):
             ends.append(PeriodEnd(title, day))

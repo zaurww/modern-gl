@@ -6,17 +6,18 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
+from modern_gl.i18n import N_
 from modern_gl.infrastructure.db import Connection
 
 # audit action -> what the user reads (Russian, for tr())
 ACTIONS: dict[str, str] = {
-    "create_draft": "Создан черновик",
-    "update_draft": "Черновик изменён",
+    "create_draft": N_("Создан черновик"),
+    "update_draft": N_("Черновик изменён"),
     "post": "Проведён",
-    "repost": "Исправлен и проведён",
-    "reverse": "Проведено сторно",
-    "unpost": "Проведение отменено",
-    "delete": "Удалён",
+    "repost": N_("Исправлен и проведён"),
+    "reverse": N_("Проведено сторно"),
+    "unpost": N_("Проведение отменено"),
+    "delete": N_("Удалён"),
 }
 
 
