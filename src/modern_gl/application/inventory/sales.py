@@ -55,8 +55,8 @@ class SaleCommands(StockCommands):
         a line needs only an item or, for a service, an amount or a memo."""
         with transaction(self.conn):
             document_id = self._insert_document(company_id, doc_date, "sale", memo)
-            self._set_vat_rate(document_id, vat_rate)
-            self._set_invoice(document_id, invoice)
+            self._set_vat_rate(company_id, document_id, vat_rate)
+            self._set_invoice(company_id, document_id, invoice)
             self._write_sale_draft(
                 company_id, document_id, lines, customer_account_id, customer_subconto
             )
@@ -83,8 +83,8 @@ class SaleCommands(StockCommands):
             if doc["doc_type"] != "sale":
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
             self._update_draft_header(company_id, document_id, doc_date, memo)
-            self._set_vat_rate(document_id, vat_rate)
-            self._set_invoice(document_id, invoice)
+            self._set_vat_rate(company_id, document_id, vat_rate)
+            self._set_invoice(company_id, document_id, invoice)
             self._release_lines(company_id, document_id, lines)
             self._write_sale_draft(
                 company_id, document_id, lines, customer_account_id, customer_subconto
@@ -269,8 +269,9 @@ class SaleCommands(StockCommands):
         cost_id = self._sale_account(company_id, COST_OF_SALES)
         amount = self._cost(company_id, item, warehouse, line["quantity"], doc["id"])
         self.conn.execute(
-            "UPDATE inventory_lines SET expense_amount = ?, cost_account_id = ? WHERE id = ?",
-            (amount, cost_id, line["id"]),
+            "UPDATE inventory_lines SET expense_amount = ?, cost_account_id = ? "
+            "WHERE company_id = ? AND id = ?",
+            (amount, cost_id, company_id, line["id"]),
         )
         self._consume_receipts(company_id, doc["id"], line["id"], item["id"], line["quantity"])
         self._insert_movement(

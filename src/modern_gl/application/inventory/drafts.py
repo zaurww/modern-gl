@@ -168,18 +168,19 @@ class DraftCommands(InventoryBase):
             (value_date, memo.strip(), company_id, document_id),
         )
 
-    def _set_incoming_reason(self, document_id: int, reason: str | None) -> None:
+    def _set_incoming_reason(self, company_id: int, document_id: int, reason: str | None) -> None:
         """A mədaxil's reason (D91): only a mədaxil has one, so it is never cleared here."""
         self.conn.execute(
-            "UPDATE inventory_documents SET incoming_reason = ? WHERE id = ?",
-            (reason, document_id),
+            "UPDATE inventory_documents SET incoming_reason = ? WHERE company_id = ? AND id = ?",
+            (reason, company_id, document_id),
         )
 
-    def _set_vat_rate(self, document_id: int, rate: int | None) -> None:
+    def _set_vat_rate(self, company_id: int, document_id: int, rate: int | None) -> None:
         if rate is not None and not 0 <= rate <= VAT_RATE_SCALE:
             raise ValidationError(tr("ставка НДС должна быть от 0 до 100%"))
         self.conn.execute(
-            "UPDATE inventory_documents SET vat_rate = ? WHERE id = ?", (rate, document_id)
+            "UPDATE inventory_documents SET vat_rate = ? WHERE company_id = ? AND id = ?",
+            (rate, company_id, document_id),
         )
 
     def _set_currency(
@@ -192,19 +193,33 @@ class DraftCommands(InventoryBase):
         if currency_id is None:
             self.conn.execute(
                 "UPDATE inventory_documents SET currency_id = NULL, currency_rate = NULL "
-                "WHERE id = ?",
-                (document_id,),
+                "WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    document_id,
+                ),
             )
             return
         if self._inventory_document(company_id, document_id)["doc_type"] != "receipt":
             raise ValidationError(tr("в валюте может быть только поступление"))
         self.conn.execute(
-            "UPDATE inventory_documents SET currency_id = ?, currency_rate = ? WHERE id = ?",
-            (self._currency(company_id, currency_id)["id"], typed_rate(rate), document_id),
+            "UPDATE inventory_documents SET currency_id = ?, currency_rate = ? "
+            "WHERE company_id = ? AND id = ?",
+            (
+                self._currency(company_id, currency_id)["id"],
+                typed_rate(rate),
+                company_id,
+                document_id,
+            ),
         )
 
     def _set_invoice(
-        self, document_id: int, invoice: str, kind: str = EQAIME, awaits: bool = False
+        self,
+        company_id: int,
+        document_id: int,
+        invoice: str,
+        kind: str = EQAIME,
+        awaits: bool = False,
     ) -> None:
         """The receipt's e-qaimə, or the customs declaration of imported goods. `awaits`:
         a purchase without a number waits for its e-qaimə (D119); a number ends the wait."""
@@ -213,11 +228,12 @@ class DraftCommands(InventoryBase):
         number = normalize_invoice(invoice)
         self.conn.execute(
             "UPDATE inventory_documents SET invoice = ?, invoice_kind = ?, awaits_invoice = ? "
-            "WHERE id = ?",
+            "WHERE company_id = ? AND id = ?",
             (
                 number,
                 (kind or None) if number else None,
                 1 if awaits and number is None else 0,
+                company_id,
                 document_id,
             ),
         )
@@ -279,11 +295,17 @@ class DraftCommands(InventoryBase):
         self._require_lines_unreferenced(company_id, document_id, keep)
         placeholders = ",".join("?" * len(keep))
         self.conn.execute(
-            f"DELETE FROM inventory_lines WHERE document_id = ? AND id NOT IN ({placeholders})",
-            (document_id, *keep),
+            "DELETE FROM inventory_lines "
+            f"WHERE company_id = ? AND document_id = ? AND id NOT IN ({placeholders})",
+            (company_id, document_id, *keep),
         )
         self.conn.execute(
-            "UPDATE inventory_lines SET line_no = -line_no WHERE document_id = ?", (document_id,)
+            "UPDATE inventory_lines SET line_no = -line_no "
+            "WHERE company_id = ? AND document_id = ?",
+            (
+                company_id,
+                document_id,
+            ),
         )
 
     def _require_lines_not_returned(

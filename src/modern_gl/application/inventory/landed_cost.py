@@ -170,8 +170,8 @@ class LandedCostCommands(StockCommands):
         if not targets:
             raise ValidationError(tr("не выбраны поступления для распределения"))
         self.conn.execute(
-            "UPDATE inventory_documents SET allocation_method = ? WHERE id = ?",
-            (method, document_id),
+            "UPDATE inventory_documents SET allocation_method = ? WHERE company_id = ? AND id = ?",
+            (method, company_id, document_id),
         )
         seen: set[int] = set()
         for line_no, target in enumerate(targets, 1):
@@ -197,7 +197,13 @@ class LandedCostCommands(StockCommands):
                     line_id=target.line_id,
                 ),
             )
-        self.conn.execute("DELETE FROM landed_cost_charges WHERE document_id = ?", (document_id,))
+        self.conn.execute(
+            "DELETE FROM landed_cost_charges WHERE company_id = ? AND document_id = ?",
+            (
+                company_id,
+                document_id,
+            ),
+        )
         for line_no, charge in enumerate(charges, 1):
             self._insert_charge(company_id, document_id, line_no, charge)
 
@@ -323,8 +329,8 @@ class LandedCostCommands(StockCommands):
             postings += _pair(debits, credits)
             self.conn.execute(
                 "UPDATE inventory_lines SET amount = ?, inventory_amount = ?, "
-                "expense_amount = ? WHERE id = ?",
-                (allocated, inventory_amount, expense_amount, line["id"]),
+                "expense_amount = ? WHERE company_id = ? AND id = ?",
+                (allocated, inventory_amount, expense_amount, company_id, line["id"]),
             )
         return postings + self._vat_postings(
             company_id,

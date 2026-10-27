@@ -45,7 +45,8 @@ class CurrencyCommands(LedgerBase):
         with transaction(self.conn):
             cur = self._currency(company_id, currency)
             self.conn.execute(
-                "UPDATE currencies SET active = ? WHERE id = ?", (int(active), cur["id"])
+                "UPDATE currencies SET active = ? WHERE company_id = ? AND id = ?",
+                (int(active), company_id, cur["id"]),
             )
             self._audit(company_id, "currency", cur["id"], "show" if active else "hide", {})
 
@@ -96,9 +97,10 @@ class CurrencyCommands(LedgerBase):
             cur = self._currency(company_id, currency)
             day = iso_date(day)
             old = self.conn.execute(
-                "DELETE FROM currency_rates WHERE currency_id = ? AND rate_date = ? "
+                "DELETE FROM currency_rates "
+                "WHERE company_id = ? AND currency_id = ? AND rate_date = ? "
                 "RETURNING rate, nominal",
-                (cur["id"], day),
+                (company_id, cur["id"], day),
             ).fetchone()
             if old is None:
                 raise NotFoundError(tr("курса {code} на {date} нет", code=cur["code"], date=day))

@@ -158,7 +158,13 @@ class ConversionCommands(ModuleBase):
             if doc["status"] == "posted":
                 self._require_conversion_changeable(company_id, row)
             self._drop_credit_document(company_id, row)
-            self.conn.execute("DELETE FROM currency_conversions WHERE id = ?", (conversion_id,))
+            self.conn.execute(
+                "DELETE FROM currency_conversions WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    conversion_id,
+                ),
+            )
             self.documents.remove(company_id, doc)
             self._audit(company_id, "conversion", conversion_id, "delete", {})
 
@@ -264,8 +270,9 @@ class ConversionCommands(ModuleBase):
         credit_id = self.documents.new(company_id, target_date, data.memo)
         self.documents.write(company_id, credit_id, target_date, credit_lines, data.memo)
         self.conn.execute(
-            "UPDATE currency_conversions SET credit_document_id = ? WHERE id = ?",
-            (credit_id, conversion_id),
+            "UPDATE currency_conversions SET credit_document_id = ? "
+            "WHERE company_id = ? AND id = ?",
+            (credit_id, company_id, conversion_id),
         )
 
     def _conversion_postings(
@@ -430,7 +437,12 @@ class ConversionCommands(ModuleBase):
         if row["credit_document_id"] is None:
             return
         self.conn.execute(
-            "UPDATE currency_conversions SET credit_document_id = NULL WHERE id = ?", (row["id"],)
+            "UPDATE currency_conversions SET credit_document_id = NULL "
+            "WHERE company_id = ? AND id = ?",
+            (
+                company_id,
+                row["id"],
+            ),
         )
         credit = self.documents.get(company_id, row["credit_document_id"])
         self.documents.remove(company_id, credit)

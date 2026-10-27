@@ -68,8 +68,8 @@ class ReturnCommands(SaleCommands):
             raise ValidationError(tr("неизвестный вид возврата"))
         with transaction(self.conn):
             document_id = self._insert_document(company_id, doc_date, doc_type, memo)
-            self._set_vat_rate(document_id, vat_rate)
-            self._set_invoice(document_id, invoice)
+            self._set_vat_rate(company_id, document_id, vat_rate)
+            self._set_invoice(company_id, document_id, invoice)
             self._write_return_draft(
                 company_id, document_id, doc_type, lines, party_account_id, party_subconto
             )
@@ -96,8 +96,8 @@ class ReturnCommands(SaleCommands):
             if doc["doc_type"] not in RETURN_TYPES:
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
             self._update_draft_header(company_id, document_id, doc_date, memo)
-            self._set_vat_rate(document_id, vat_rate)
-            self._set_invoice(document_id, invoice)
+            self._set_vat_rate(company_id, document_id, vat_rate)
+            self._set_invoice(company_id, document_id, invoice)
             self._write_return_draft(
                 company_id,
                 document_id,
@@ -166,7 +166,13 @@ class ReturnCommands(SaleCommands):
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
         self._release_lines(company_id, document_id, lines)
-        self.conn.execute("DELETE FROM inventory_returns WHERE document_id = ?", (document_id,))
+        self.conn.execute(
+            "DELETE FROM inventory_returns WHERE company_id = ? AND document_id = ?",
+            (
+                company_id,
+                document_id,
+            ),
+        )
         for line_no, source in enumerate(lines, 1):
             if source.item_id is None:
                 raise ValidationError(tr("строка {line}: укажите товар", line=line_no))
@@ -331,7 +337,8 @@ class ReturnCommands(SaleCommands):
             Movement(item["id"], warehouse["id"], "issue", -line["quantity"], -cost),
         )
         self.conn.execute(
-            "UPDATE inventory_lines SET inventory_amount = ? WHERE id = ?", (cost, line["id"])
+            "UPDATE inventory_lines SET inventory_amount = ? WHERE company_id = ? AND id = ?",
+            (cost, company_id, line["id"]),
         )
         party = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
         stock = self._inventory_subconto(company_id, item, warehouse)
@@ -379,8 +386,9 @@ class ReturnCommands(SaleCommands):
         cost_id = self._sale_account(company_id, COST_OF_SALES)
         sales_vat_id = self.ledger.account_role(company_id, SALES_VAT)
         self.conn.execute(
-            "UPDATE inventory_lines SET inventory_amount = ?, cost_account_id = ? WHERE id = ?",
-            (cost, cost_id, line["id"]),
+            "UPDATE inventory_lines SET inventory_amount = ?, cost_account_id = ? "
+            "WHERE company_id = ? AND id = ?",
+            (cost, cost_id, company_id, line["id"]),
         )
         self._insert_movement(
             company_id,

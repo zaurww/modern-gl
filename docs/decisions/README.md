@@ -185,3 +185,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D173 | Много строк покупки разом: выделенные строки берут одно значение, ОС — по названиям строк | принято (уточняет D172) | [D173-line-objects.md](D173-line-objects.md) |
 | D174 | Статья затрат разносится по строкам своего счёта, ОС — нет; Ctrl+V — во все выделенные | принято (уточняет D173) | [D174-cost-item-spread.md](D174-cost-item-spread.md) |
 | D-new | «Проверка книги»: программа сверяет свои данные, как Verify Data в QuickBooks | принято (опирается на D101, D149, D155) | [D-new-books-verification.md](D-new-books-verification.md) |
+| D-new | Каждый UPDATE и DELETE называет компанию: правило под тестом, как клиент в SAP | принято (уточняет D71, D72) | [D-new-company-in-every-write.md](D-new-company-in-every-write.md) |

@@ -362,3 +362,44 @@ def test_sql_takes_values_as_parameters_not_text():
     )
     gone = IDENTIFIER_PARAMS.keys() - found
     assert not gone, f"уберите из IDENTIFIER_PARAMS: {sorted(gone)}"
+
+
+# Every UPDATE and DELETE names its company in WHERE (D-new): the way SAP adds the client to
+# every statement, so a row of another company is never touched by an id alone — the guard
+# for the day several companies share one server database (D24, D77). In `companies` the
+# row's own id is the company.
+WRITE_SQL = re.compile(r"^\s*(?:UPDATE|DELETE\s+FROM)\s+(\w+|\{[^}]*\})", re.IGNORECASE)
+
+
+def _sql_text(node: ast.expr) -> str | None:
+    """The SQL of a literal (adjacent literals are one) or an f-string, `{}` for a value."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(str(v.value) if isinstance(v, ast.Constant) else "{}" for v in node.values)
+    return None
+
+
+def _writes_without_company(path: Path) -> list[str]:
+    found = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("execute", "executemany")
+            and node.args
+        ):
+            continue
+        text = _sql_text(node.args[0])
+        match = WRITE_SQL.match(text or "")
+        if text is None or match is None or match.group(1) == "companies":
+            continue
+        parts = re.split(r"\bWHERE\b", text, maxsplit=1, flags=re.IGNORECASE)
+        if len(parts) < 2 or "company_id" not in parts[1]:
+            found.append(f"{rel(path)}:{node.lineno} {match.group(1)}")
+    return found
+
+
+def test_every_write_names_its_company():
+    found = [w for p in files() for w in _writes_without_company(p)]
+    assert not found, f"UPDATE/DELETE без company_id в WHERE: {found}"

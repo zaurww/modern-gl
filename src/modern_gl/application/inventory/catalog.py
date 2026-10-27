@@ -119,8 +119,9 @@ class CatalogCommands(InventoryBase):
                     tr("единицу и счёт товара менять нельзя: {reason}", reason=reason)
                 )
             self.conn.execute(
-                "UPDATE inventory_items SET unit_id = ?, inventory_account_id = ? WHERE id = ?",
-                (unit_id, inventory_account_id, item_id),
+                "UPDATE inventory_items SET unit_id = ?, inventory_account_id = ? "
+                "WHERE company_id = ? AND id = ?",
+                (unit_id, inventory_account_id, company_id, item_id),
             )
             self._audit(
                 company_id,
@@ -178,7 +179,10 @@ class CatalogCommands(InventoryBase):
                             reason=reason,
                         )
                     )
-                self.conn.execute(f"DELETE FROM {table} WHERE id = ?", (row["id"],))
+                self.conn.execute(
+                    f"DELETE FROM {table} WHERE company_id = ? AND id = ?",
+                    (company_id, row["id"]),
+                )
             self.ledger.delete_subconto_value(company_id, value_id)
 
     def add_new_item(

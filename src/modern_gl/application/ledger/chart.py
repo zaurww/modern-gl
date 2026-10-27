@@ -189,12 +189,13 @@ class ChartCommands(AccountTypeCommands):
             optional = self._optional_positions(acc, label, current_sc, sc, used)
             if mode != acc["currency"] and used:
                 self._check_currency_fits(acc, label, mode)
+            values = (new_code, name, int(two_sided), int(group), *sc, optional, mode)
             try:
                 self.conn.execute(
                     "UPDATE accounts SET code = ?, name = ?, two_sided = ?, is_group = ?, "
                     "sc1_kind_id = ?, sc2_kind_id = ?, sc3_kind_id = ?, sc_optional = ?, "
-                    "currency = ? WHERE id = ?",
-                    (new_code, name, int(two_sided), int(group), *sc, optional, mode, acc["id"]),
+                    "currency = ? WHERE company_id = ? AND id = ?",
+                    (*values, company_id, acc["id"]),
                 )
             except IntegrityError as e:
                 raise ValidationError(tr("счёт {code} уже есть", code=new_code)) from e
@@ -275,7 +276,8 @@ class ChartCommands(AccountTypeCommands):
         with transaction(self.conn):
             acc = self._account(company_id, account)
             self.conn.execute(
-                "UPDATE accounts SET active = ? WHERE id = ?", (int(active), acc["id"])
+                "UPDATE accounts SET active = ? WHERE company_id = ? AND id = ?",
+                (int(active), company_id, acc["id"]),
             )
             self._audit(
                 company_id,
@@ -299,7 +301,13 @@ class ChartCommands(AccountTypeCommands):
                         reason=reason,
                     )
                 )
-            self.conn.execute("DELETE FROM accounts WHERE id = ?", (acc["id"],))
+            self.conn.execute(
+                "DELETE FROM accounts WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    acc["id"],
+                ),
+            )
             self._audit(
                 company_id,
                 "account",

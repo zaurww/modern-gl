@@ -262,7 +262,13 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
             if doc["status"] == "posted":
                 self._unpost(company_id, doc)
             self._require_lines_unreferenced(company_id, document_id, keep=())
-            self.conn.execute("DELETE FROM inventory_documents WHERE id = ?", (document_id,))
+            self.conn.execute(
+                "DELETE FROM inventory_documents WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    document_id,
+                ),
+            )
             self._audit(company_id, "inventory_document", document_id, "delete", snapshot)
 
     def delete_documents(self, company_id: int, document_ids: list[int]) -> None:
@@ -285,8 +291,12 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         self._withdraw(company_id, doc)
         gl_document_id = doc["gl_document_id"]
         self.conn.execute(
-            "UPDATE inventory_documents SET gl_document_id = NULL, posted_at = NULL WHERE id = ?",
-            (doc["id"],),
+            "UPDATE inventory_documents SET gl_document_id = NULL, posted_at = NULL "
+            "WHERE company_id = ? AND id = ?",
+            (
+                company_id,
+                doc["id"],
+            ),
         )
         if gl_document_id is not None:
             self.ledger.delete_document(company_id, gl_document_id)
@@ -318,7 +328,11 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         points to its GL document, so posting it again keeps that document's number."""
         document_id = doc["id"]
         self.conn.execute(
-            "UPDATE inventory_documents SET status = 'draft' WHERE id = ?", (document_id,)
+            "UPDATE inventory_documents SET status = 'draft' WHERE company_id = ? AND id = ?",
+            (
+                company_id,
+                document_id,
+            ),
         )
         for table in (
             "landed_cost_expense_allocations",
@@ -326,30 +340,45 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
             "stock_consumptions",
             "stock_movements",
         ):
-            self.conn.execute(f"DELETE FROM {table} WHERE document_id = ?", (document_id,))
+            self.conn.execute(
+                f"DELETE FROM {table} WHERE company_id = ? AND document_id = ?",
+                (company_id, document_id),
+            )
         if doc["doc_type"] in {"issue", "transfer"}:
             self.conn.execute(
                 "UPDATE inventory_lines SET amount = 0, inventory_amount = 0, "
-                "expense_amount = 0 WHERE document_id = ?",
-                (document_id,),
+                "expense_amount = 0 WHERE company_id = ? AND document_id = ?",
+                (
+                    company_id,
+                    document_id,
+                ),
             )
         elif doc["doc_type"] == "sale":  # the revenue is typed; the cost is calculated
             self.conn.execute(
                 "UPDATE inventory_lines SET expense_amount = 0, cost_account_id = NULL "
-                "WHERE document_id = ?",
-                (document_id,),
+                "WHERE company_id = ? AND document_id = ?",
+                (
+                    company_id,
+                    document_id,
+                ),
             )
         elif doc["doc_type"] == "landed_cost":
             self.conn.execute(
                 "UPDATE inventory_lines SET inventory_amount = 0, expense_amount = 0 "
-                "WHERE document_id = ?",
-                (document_id,),
+                "WHERE company_id = ? AND document_id = ?",
+                (
+                    company_id,
+                    document_id,
+                ),
             )
         elif doc["doc_type"] in RETURN_TYPES:  # the price is typed; the cost is calculated
             self.conn.execute(
                 "UPDATE inventory_lines SET inventory_amount = 0, cost_account_id = NULL "
-                "WHERE document_id = ?",
-                (document_id,),
+                "WHERE company_id = ? AND document_id = ?",
+                (
+                    company_id,
+                    document_id,
+                ),
             )
 
     def _apply_in_order(
@@ -440,8 +469,8 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
             self.ledger.rewrite_linked(company_id, gl_document_id, doc_date, postings, memo)
         self.conn.execute(
             "UPDATE inventory_documents SET status = 'posted', gl_document_id = ?, "
-            "posted_at = COALESCE(posted_at, ?) WHERE id = ?",
-            (gl_document_id, now(), inventory_document_id),
+            "posted_at = COALESCE(posted_at, ?) WHERE company_id = ? AND id = ?",
+            (gl_document_id, now(), company_id, inventory_document_id),
         )
         if doc["posted_at"] is None:  # recalculation after an edit is not a new posting
             self._audit(

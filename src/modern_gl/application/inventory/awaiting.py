@@ -41,7 +41,7 @@ class AwaitingCommands(PostingCommands):
             raise ValidationError(tr("не указан номер e-qaimə"))
         if vat is not None:
             self._split_vat(company_id, doc, vat)
-        self._set_invoice(doc["id"], invoice)
+        self._set_invoice(company_id, doc["id"], invoice)
 
     def _split_vat(self, company_id: int, doc: Row, vat: int) -> None:
         if vat and doc["currency_id"] is not None:
@@ -64,4 +64,4 @@ class AwaitingCommands(PostingCommands):
                 (share, company_id, line_id),
             )
         if vat and doc["vat_rate"] is None:
-            self._set_vat_rate(doc["id"], STANDARD_VAT_RATE)
+            self._set_vat_rate(company_id, doc["id"], STANDARD_VAT_RATE)

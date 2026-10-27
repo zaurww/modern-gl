@@ -136,7 +136,9 @@ class ModuleDocuments:
             ledger._audit(company_id, "document", doc_id, "repost", snapshot)
             return
         self.set_header(company_id, doc_id, doc_date, memo)
-        self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
+        self.conn.execute(
+            "DELETE FROM postings WHERE company_id = ? AND document_id = ?", (company_id, doc_id)
+        )
         ledger._insert_postings(company_id, doc_id, postings)
         ledger._post(company_id, doc_id)
 
@@ -198,9 +200,14 @@ class ModuleDocuments:
         self.require_changeable(company_id, doc)
         snapshot = self.ledger._snapshot(doc)
         self.conn.execute(
-            "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc["id"],)
+            "UPDATE documents SET status = 'draft', posted_at = NULL "
+            "WHERE company_id = ? AND id = ?",
+            (company_id, doc["id"]),
         )
-        self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc["id"],))
+        self.conn.execute(
+            "DELETE FROM postings WHERE company_id = ? AND document_id = ?",
+            (company_id, doc["id"]),
+        )
         self._audit(company_id, doc["id"], "unpost", snapshot)
 
     def remove(self, company_id: int, doc: Row) -> None:
@@ -211,10 +218,13 @@ class ModuleDocuments:
         snapshot = self.ledger._snapshot(doc)
         if doc["status"] == "posted":  # immutability triggers allow only this path
             self.conn.execute(
-                "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?",
-                (doc["id"],),
+                "UPDATE documents SET status = 'draft', posted_at = NULL "
+                "WHERE company_id = ? AND id = ?",
+                (company_id, doc["id"]),
             )
-        self.conn.execute("DELETE FROM documents WHERE id = ?", (doc["id"],))
+        self.conn.execute(
+            "DELETE FROM documents WHERE company_id = ? AND id = ?", (company_id, doc["id"])
+        )
         self._audit(company_id, doc["id"], "delete", snapshot)
 
     def _audit(self, company_id: int, doc_id: int, action: str, details: dict) -> None:

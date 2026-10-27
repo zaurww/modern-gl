@@ -131,7 +131,13 @@ class BankCommands(ModuleBase):
             doc = self.documents.get(company_id, row["document_id"])
             if doc["status"] == "posted":
                 self.documents.require_changeable(company_id, doc)
-            self.conn.execute("DELETE FROM bank_operations WHERE id = ?", (operation_id,))
+            self.conn.execute(
+                "DELETE FROM bank_operations WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    operation_id,
+                ),
+            )
             self.documents.remove(company_id, doc)
             self._audit(company_id, "bank_operation", operation_id, "delete", {})
 

@@ -89,8 +89,8 @@ class EqaimeCommands(ModuleBase):
                 self.conn.execute(
                     "UPDATE eqaime_portal SET portal_id = ?, source_system = ?, doc_date = ?, "
                     "party_tin = ?, party_name = ?, status = ?, kind = ?, type = ?, total = ?, "
-                    "vat = ?, last_seen = ? WHERE id = ?",
-                    (*values, old["id"]),
+                    "vat = ?, last_seen = ? WHERE company_id = ? AND id = ?",
+                    (*values, company_id, old["id"]),
                 )
         return changed
 

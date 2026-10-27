@@ -90,9 +90,10 @@ class ReceiptDraftCommands(StockCommands):
                 header.memo,
                 incoming_reason=header.incoming_reason,
             )
-            self._set_vat_rate(document_id, header.vat_rate if purchase else None)
+            self._set_vat_rate(company_id, document_id, header.vat_rate if purchase else None)
             self._set_currency(company_id, document_id, header.currency_id, header.currency_rate)
             self._set_invoice(
+                company_id,
                 document_id,
                 header.invoice if purchase else "",
                 header.invoice_kind,
@@ -160,12 +161,13 @@ class ReceiptDraftCommands(StockCommands):
             ):
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
             if incoming:
-                self._set_incoming_reason(document_id, header.incoming_reason)
+                self._set_incoming_reason(company_id, document_id, header.incoming_reason)
             self._update_draft_header(company_id, document_id, header.doc_date, header.memo)
             receipt = doc["doc_type"] == "receipt"
-            self._set_vat_rate(document_id, header.vat_rate if receipt else None)
+            self._set_vat_rate(company_id, document_id, header.vat_rate if receipt else None)
             self._set_currency(company_id, document_id, header.currency_id, header.currency_rate)
             self._set_invoice(
+                company_id,
                 document_id,
                 header.invoice if receipt else "",
                 header.invoice_kind,

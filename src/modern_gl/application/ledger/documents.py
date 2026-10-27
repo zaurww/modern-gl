@@ -82,10 +82,14 @@ class DocumentCommands(PostingChecks):
         with transaction(self.conn):
             self._require_draft(self._document(company_id, doc_id))
             self.conn.execute(
-                "UPDATE documents SET doc_date = ?, memo = ?, layer_id = ? WHERE id = ?",
-                (iso_date(doc_date), memo, self._layer_id(company_id, layer), doc_id),
+                "UPDATE documents SET doc_date = ?, memo = ?, layer_id = ? "
+                "WHERE company_id = ? AND id = ?",
+                (iso_date(doc_date), memo, self._layer_id(company_id, layer), company_id, doc_id),
             )
-            self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
+            self.conn.execute(
+                "DELETE FROM postings WHERE company_id = ? AND document_id = ?",
+                (company_id, doc_id),
+            )
             self._insert_postings(company_id, doc_id, postings)
             self._show_books_for(company_id, layer)
             self._audit(company_id, "document", doc_id, "update_draft", {})
@@ -115,7 +119,9 @@ class DocumentCommands(PostingChecks):
             self._require_changeable(company_id, doc)
             snapshot = self._snapshot(doc)
             self.conn.execute(
-                "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc_id,)
+                "UPDATE documents SET status = 'draft', posted_at = NULL "
+                "WHERE company_id = ? AND id = ?",
+                (company_id, doc_id),
             )
             self._audit(company_id, "document", doc_id, "unpost", with_reason(snapshot, reason))
 
@@ -196,13 +202,18 @@ class DocumentCommands(PostingChecks):
     ) -> None:
         # immutability triggers let a posted document change only by becoming a draft first
         self.conn.execute(
-            "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc_id,)
+            "UPDATE documents SET status = 'draft', posted_at = NULL "
+            "WHERE company_id = ? AND id = ?",
+            (company_id, doc_id),
         )
         self.conn.execute(
-            "UPDATE documents SET doc_date = ?, memo = ?, layer_id = ? WHERE id = ?",
-            (iso_date(doc_date), memo, self._layer_id(company_id, layer), doc_id),
+            "UPDATE documents SET doc_date = ?, memo = ?, layer_id = ? "
+            "WHERE company_id = ? AND id = ?",
+            (iso_date(doc_date), memo, self._layer_id(company_id, layer), company_id, doc_id),
         )
-        self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
+        self.conn.execute(
+            "DELETE FROM postings WHERE company_id = ? AND document_id = ?", (company_id, doc_id)
+        )
         self._insert_postings(company_id, doc_id, postings)
         self._post(company_id, doc_id)
 
@@ -220,10 +231,13 @@ class DocumentCommands(PostingChecks):
             snapshot = self._snapshot(doc)
             if doc["status"] == "posted":  # immutability triggers allow only this path
                 self.conn.execute(
-                    "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?",
-                    (doc_id,),
+                    "UPDATE documents SET status = 'draft', posted_at = NULL "
+                    "WHERE company_id = ? AND id = ?",
+                    (company_id, doc_id),
                 )
-            self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+            self.conn.execute(
+                "DELETE FROM documents WHERE company_id = ? AND id = ?", (company_id, doc_id)
+            )
             self._audit(company_id, "document", doc_id, "delete", with_reason(snapshot, reason))
 
     def require_changeable(self, company_id: int, doc_id: int) -> None:
@@ -425,7 +439,8 @@ class DocumentCommands(PostingChecks):
         self._require_draft(doc)
         self._validate_for_posting(company_id, doc)
         self.conn.execute(
-            "UPDATE documents SET status = 'posted', posted_at = ? WHERE id = ?", (now(), doc_id)
+            "UPDATE documents SET status = 'posted', posted_at = ? WHERE company_id = ? AND id = ?",
+            (now(), company_id, doc_id),
         )
         action = "reverse" if doc["reversal_of"] is not None else "post"
         self._audit(

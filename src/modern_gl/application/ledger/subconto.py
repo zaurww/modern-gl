@@ -115,7 +115,8 @@ class SubcontoCommands(LedgerBase):
                     raise ValidationError(tr("группу нельзя перенести в неё саму"))
                 ancestor = self._subconto_value(company_id, ancestor)["parent_id"]
             self.conn.execute(
-                "UPDATE subconto_values SET parent_id = ? WHERE id = ?", (parent_id, value_id)
+                "UPDATE subconto_values SET parent_id = ? WHERE company_id = ? AND id = ?",
+                (parent_id, company_id, value_id),
             )
             self._audit(
                 company_id,
@@ -143,8 +144,8 @@ class SubcontoCommands(LedgerBase):
             old = self._subconto_value(company_id, value_id)
             try:
                 self.conn.execute(
-                    "UPDATE subconto_values SET name = ?, code = ? WHERE id = ?",
-                    (name, code, value_id),
+                    "UPDATE subconto_values SET name = ?, code = ? WHERE company_id = ? AND id = ?",
+                    (name, code, company_id, value_id),
                 )
             except IntegrityError as e:
                 raise ValidationError(
@@ -164,7 +165,8 @@ class SubcontoCommands(LedgerBase):
             if old["legal_name"] == legal_name:
                 return
             self.conn.execute(
-                "UPDATE subconto_values SET legal_name = ? WHERE id = ?", (legal_name, value_id)
+                "UPDATE subconto_values SET legal_name = ? WHERE company_id = ? AND id = ?",
+                (legal_name, company_id, value_id),
             )
             self._audit(
                 company_id,
@@ -179,7 +181,8 @@ class SubcontoCommands(LedgerBase):
         with transaction(self.conn):
             self._subconto_value(company_id, value_id)
             self.conn.execute(
-                "UPDATE subconto_values SET active = ? WHERE id = ?", (int(active), value_id)
+                "UPDATE subconto_values SET active = ? WHERE company_id = ? AND id = ?",
+                (int(active), company_id, value_id),
             )
             self._audit(company_id, "subconto_value", value_id, "show" if active else "hide", {})
 
@@ -198,7 +201,13 @@ class SubcontoCommands(LedgerBase):
                         reason=reason,
                     )
                 )
-            self.conn.execute("DELETE FROM subconto_values WHERE id = ?", (value_id,))
+            self.conn.execute(
+                "DELETE FROM subconto_values WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    value_id,
+                ),
+            )
             self._audit(
                 company_id,
                 "subconto_value",
@@ -217,7 +226,8 @@ class SubcontoCommands(LedgerBase):
             if currency_id is not None:
                 self._currency(company_id, currency_id)
             self.conn.execute(
-                "UPDATE subconto_values SET currency_id = ? WHERE id = ?", (currency_id, value_id)
+                "UPDATE subconto_values SET currency_id = ? WHERE company_id = ? AND id = ?",
+                (currency_id, company_id, value_id),
             )
             self._audit(
                 company_id,
@@ -247,8 +257,9 @@ class SubcontoCommands(LedgerBase):
         with transaction(self.conn):
             old = self._subconto_value(company_id, value_id)
             self.conn.execute(
-                "UPDATE subconto_values SET tax_id = ?, nonresident = ?, country = ? WHERE id = ?",
-                (tax_id, int(nonresident), country, value_id),
+                "UPDATE subconto_values SET tax_id = ?, nonresident = ?, country = ? "
+                "WHERE company_id = ? AND id = ?",
+                (tax_id, int(nonresident), country, company_id, value_id),
             )
             self._audit(
                 company_id,
@@ -281,7 +292,8 @@ class SubcontoCommands(LedgerBase):
                         )
                     )
             self.conn.execute(
-                "UPDATE subconto_values SET owner_id = ? WHERE id = ?", (owner_id, value_id)
+                "UPDATE subconto_values SET owner_id = ? WHERE company_id = ? AND id = ?",
+                (owner_id, company_id, value_id),
             )
             self._audit(
                 company_id,
@@ -366,7 +378,10 @@ class SubcontoCommands(LedgerBase):
             if old["name"] == name:
                 return
             self._check_tag_name(company_id, name, tag_id)
-            self.conn.execute("UPDATE tags SET name = ? WHERE id = ?", (name, tag_id))
+            self.conn.execute(
+                "UPDATE tags SET name = ? WHERE company_id = ? AND id = ?",
+                (name, company_id, tag_id),
+            )
             self._audit(company_id, "tag", tag_id, "rename", {"from": old["name"], "to": name})
 
     def delete_tag(self, company_id: int, tag_id: int) -> None:
@@ -380,7 +395,13 @@ class SubcontoCommands(LedgerBase):
                     (company_id, tag_id),
                 )
             ]
-            self.conn.execute("DELETE FROM tags WHERE id = ?", (tag_id,))
+            self.conn.execute(
+                "DELETE FROM tags WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    tag_id,
+                ),
+            )
             self._audit(
                 company_id, "tag", tag_id, "delete", {"name": old["name"], "values": values}
             )
@@ -406,8 +427,9 @@ class SubcontoCommands(LedgerBase):
             if old == wanted:
                 return
             self.conn.executemany(
-                "DELETE FROM subconto_value_tags WHERE value_id = ? AND tag_id = ?",
-                [(value_id, t) for t in old - wanted],
+                "DELETE FROM subconto_value_tags "
+                "WHERE company_id = ? AND value_id = ? AND tag_id = ?",
+                [(company_id, value_id, t) for t in old - wanted],
             )
             self.conn.executemany(
                 "INSERT INTO subconto_value_tags (company_id, value_id, tag_id) VALUES (?, ?, ?)",

@@ -33,15 +33,22 @@ class AccountTypeCommands(LedgerBase):
             # one statement: the file refuses a type of another class even for a moment (0057)
             self.conn.executemany(
                 "UPDATE accounts SET account_class = ?, "
-                "account_type = CASE WHEN ? = 1 THEN NULL ELSE account_type END WHERE id = ?",
+                "account_type = CASE WHEN ? = 1 THEN NULL ELSE account_type END "
+                "WHERE company_id = ? AND id = ?",
                 [
-                    (account_class, int(self._type_class(i) not in (None, account_class)), i)
+                    (
+                        account_class,
+                        int(self._type_class(i) not in (None, account_class)),
+                        company_id,
+                        i,
+                    )
                     for i in ids
                 ],
             )
             if contra is not None:
                 self.conn.execute(
-                    "UPDATE accounts SET contra = ? WHERE id = ?", (int(contra), acc["id"])
+                    "UPDATE accounts SET contra = ? WHERE company_id = ? AND id = ?",
+                    (int(contra), company_id, acc["id"]),
                 )
             self._audit(
                 company_id,
@@ -71,8 +78,9 @@ class AccountTypeCommands(LedgerBase):
                 company_id, acc["id"], "account_type IS ? AND account_class IS ?", old
             )
             self.conn.executemany(
-                "UPDATE accounts SET account_type = ?, account_class = ? WHERE id = ?",
-                [(account_type, account_class, i) for i in ids],
+                "UPDATE accounts SET account_type = ?, account_class = ? "
+                "WHERE company_id = ? AND id = ?",
+                [(account_type, account_class, company_id, i) for i in ids],
             )
             self._audit(
                 company_id,

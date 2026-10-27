@@ -185,11 +185,12 @@ class MovementCommands(ReceiptDraftCommands):
         amount = self._cost(company_id, item, warehouse, line["quantity"], doc["id"])
         self.conn.execute(
             "UPDATE inventory_lines SET amount = ?, inventory_amount = ?, "
-            "expense_amount = ? WHERE id = ?",
+            "expense_amount = ? WHERE company_id = ? AND id = ?",
             (
                 amount,
                 amount if doc["doc_type"] == "transfer" else 0,
                 amount if doc["doc_type"] == "issue" else 0,
+                company_id,
                 line["id"],
             ),
         )

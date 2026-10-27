@@ -48,7 +48,11 @@ class TemplateCommands(LedgerBase):
                 if not found:
                     raise NotFoundError(tr("шаблон не найден"))
                 self.conn.execute(
-                    "DELETE FROM entry_template_lines WHERE template_id = ?", (template_id,)
+                    "DELETE FROM entry_template_lines WHERE company_id = ? AND template_id = ?",
+                    (
+                        company_id,
+                        template_id,
+                    ),
                 )
                 action = "update"
             for line_no, ln in enumerate(lines, start=1):
@@ -87,5 +91,11 @@ class TemplateCommands(LedgerBase):
             ).fetchone()
             if row is None:
                 raise NotFoundError(tr("шаблон не найден"))
-            self.conn.execute("DELETE FROM entry_templates WHERE id = ?", (template_id,))
+            self.conn.execute(
+                "DELETE FROM entry_templates WHERE company_id = ? AND id = ?",
+                (
+                    company_id,
+                    template_id,
+                ),
+            )
             self._audit(company_id, "entry_template", template_id, "delete", {"name": row[0]})
