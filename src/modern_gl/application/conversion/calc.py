@@ -41,6 +41,8 @@ class ConversionFee:
 
 @dataclass(frozen=True)
 class ConversionInput:
+    """A conversion as the form gives it: the debit and the credit side, the fees."""
+
     doc_date: str  # the debit; the exchange difference is of this day
     source: ConversionSide | None  # a draft may lack one side
     target: ConversionSide | None
@@ -51,6 +53,8 @@ class ConversionInput:
 
 @dataclass(frozen=True)
 class Conversion(ConversionInput):
+    """A stored conversion: its GL document (and the credit's, when made later)."""
+
     id: int = 0
     document_id: int = 0
     credit_document_id: int | None = None
@@ -65,11 +69,12 @@ class ConversionCalc:
     source_value: int | None
     target_value: int | None
     fee_values: tuple[int | None, ...] = ()  # each fee at the rate of its own day
-    rates: dict[int, Rate] = field(default_factory=dict)  # of the debit date
+    rates: dict[int, Rate] = field(default_factory=dict[int, Rate])  # of the debit date
     missing: tuple[int, ...] = ()  # currencies without a rate on or before the date
 
     @property
     def fee_total(self) -> int:
+        """The fees in qəpik; one without a rate counts as nothing."""
         return sum(v or 0 for v in self.fee_values)
 
     @property
@@ -92,12 +97,15 @@ def fee_on_credit(data: ConversionInput, fee: ConversionFee) -> bool:
 
 
 def fee_date(data: ConversionInput, fee: ConversionFee) -> str:
+    """The day of a fee: the credit's when it goes with a later credit, else the debit's."""
     if fee_on_credit(data, fee) and data.target_date:
         return data.target_date
     return data.doc_date
 
 
 def calculate(conn: Connection, company_id: int, data: ConversionInput) -> ConversionCalc:
+    """Both sides at the rate of the debit date, each fee at the rate of its day; the
+    currencies without a rate are named, their values None."""
     rates: dict[tuple[int, str], Rate] = {}
     missing: list[int] = []
 
@@ -150,6 +158,7 @@ def official_rate(data: ConversionInput, rates: Mapping[int, Rate]) -> Fraction 
 
 
 def load_conversion(conn: Connection, company_id: int, conversion_id: int) -> Conversion:
+    """A conversion with its document's number, date, memo and status, and its fees."""
     r = conn.execute(
         "SELECT c.*, d.number, d.doc_date, d.memo, d.status FROM currency_conversions c "
         "JOIN documents d ON d.company_id = c.company_id AND d.id = c.document_id "
@@ -199,4 +208,5 @@ def load_conversion(conn: Connection, company_id: int, conversion_id: int) -> Co
 
 
 def same_day(data: ConversionInput) -> bool:
+    """Whether the bank credits on the day of the debit (one GL document)."""
     return data.target_date is None or iso_date(data.target_date) == iso_date(data.doc_date)

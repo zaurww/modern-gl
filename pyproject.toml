@@ -44,12 +44,13 @@ include = ["src", "tests", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 # the core under strict (D170): no Unknown in parameters and answers;
-# application/ — package by package: ledger is in, the modules next
+# application/ — package by package: ledger and conversion are in, the modules next
 strict = [
     "src/modern_gl/domain",
     "src/modern_gl/api",
     "src/modern_gl/infrastructure",
     "src/modern_gl/application/ledger",
+    "src/modern_gl/application/conversion",
 ]
 venvPath = "."
 venv = ".venv"
@@ -120,7 +121,7 @@ modern-gl-cli = "modern_gl.api.cli:cli"
 # input is checked by the application layer's errors, not by assert.
 "src/modern_gl/desktop/**" = ["N802", "N803", "N815", "S101"]
 # docstrings of the public core (claude/audit-types): required in domain, infrastructure,
-# api and application/ledger only
-"!src/modern_gl/{domain,infrastructure,api,application/ledger}/**" = [
+# api, application/ledger and application/conversion only
+"!src/modern_gl/{domain,infrastructure,api,application/ledger,application/conversion}/**" = [
     "D100", "D101", "D102", "D103", "D104", "D105",
 ]

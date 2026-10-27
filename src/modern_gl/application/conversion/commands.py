@@ -11,6 +11,7 @@ with the credit, at the rate of its day.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 
 from modern_gl.application.common import pad_subconto
@@ -57,8 +58,8 @@ def posting_line(
     debit: int,
     credit: int,
     amount: int,
-    debit_sc=(),
-    credit_sc=(),
+    debit_sc: Sequence[int | None] = (),
+    credit_sc: Sequence[int | None] = (),
     text: str = "",
     currency_id: int | None = None,
     currency_amount: int = 0,
@@ -91,6 +92,8 @@ class MissingAccountRoleError(ValidationError):
 
 
 class ConversionCommands(ModuleBase):
+    """The writes of the conversion module: save (and post), unpost, delete, rebuild."""
+
     def save_conversion(
         self,
         company_id: int,
@@ -152,6 +155,8 @@ class ConversionCommands(ModuleBase):
             self._audit(company_id, "conversion", conversion_id, "unpost", {})
 
     def delete_conversion(self, company_id: int, conversion_id: int) -> None:
+        """The conversion and its GL documents away (a posted one — in an open period),
+        with a trace in the audit log."""
         with transaction(self.conn):
             row = self._conversion_row(company_id, conversion_id)
             doc = self.documents.get(company_id, row["document_id"])
@@ -208,7 +213,7 @@ class ConversionCommands(ModuleBase):
                 self._account(company_id, fee.expense_account_id)
 
     def _store(self, company_id: int, conversion_id: int, data: ConversionInput) -> None:
-        def side(s: ConversionSide | None) -> tuple:
+        def side(s: ConversionSide | None) -> tuple[int | str | None, ...]:
             if s is None:
                 return (None, None, None, None, None, None, "")
             return (
