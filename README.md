@@ -10,16 +10,19 @@ Python ≥ 3.12, PySide6, SQLite. Один файл `*.gl` — одна комп
 ## Запуск и проверки
 
 ```sh
-uv sync                      # зависимости (uv.lock)
+uv sync                      # зависимости (uv.lock), Python 3.12 (.python-version)
 uv run modern-gl             # компании — *.gl в «Документы/Modern GL» (--data <папка>); --demo, --demo-year
-uv run pytest -q             # ~1130 тестов, ~9 мин
+uv run pytest -q -n auto     # ~1480 тестов, ~4 мин; --cov — покрытие ([tool.coverage] в pyproject)
 uv run ruff check . && uv run ruff format --check .
 uv run pyright               # 0 ошибок
+uv run --with pre-commit pre-commit install   # те же проверки перед коммитом (.pre-commit-config.yaml)
+uv export --no-dev --format requirements-txt --no-hashes -o requirements.txt   # после uv add / uv lock
 ```
 
 В Linux без экрана: `QT_QPA_PLATFORM=offscreen` и библиотеки `libegl1 libgl1 libxkbcommon0
-libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`). Скриншоты интерфейса —
-`uv run python scripts/screenshots.py <папка>`.
+libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`; там же `hledger`). Скриншоты —
+`uv run python scripts/screenshots.py <папка>`. Сборка для Windows — тег `v*`
+(`.github/workflows/release.yml`, `packaging/modern-gl.spec`); изменения — `CHANGELOG.md`.
 
 ## Как устроено
 
