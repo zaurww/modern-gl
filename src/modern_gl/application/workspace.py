@@ -17,9 +17,11 @@ from datetime import datetime
 from pathlib import Path
 
 from modern_gl.application.chart_csv import DEFAULT_TEMPLATE, apply_chart_template
+from modern_gl.application.document_language import open_in
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.company import FULL
 from modern_gl.domain.errors import LedgerError
+from modern_gl.i18n import DEFAULT as DEFAULT_LANGUAGE
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.company_file import (
@@ -105,6 +107,7 @@ class Workspace:
             try:
                 ledger = Ledger(conn)
                 company_id = ledger.create_company(name)
+                ledger.set_document_language(company_id, DEFAULT_LANGUAGE)  # D-new
                 if chart:
                     apply_chart_template(ledger, company_id, chart)
                 if mode != FULL:
@@ -161,8 +164,17 @@ class Workspace:
         """Open a company file; a file about to get a newer schema is backed up first
         (a failed update: UpgradeError, the file as it was), a file of a newer program is
         refused untouched (NewerFileError), and a damaged file is refused
-        (backup.BackupError) so it can be restored."""
-        path = Path(path)
+        (backup.BackupError) so it can be restored. Its documents are written in its
+        language of documents from now on (D-new)."""
+        conn, company_id = self._updated(Path(path))
+        try:
+            open_in(conn, company_id, write=True)
+        except BaseException:
+            conn.close()
+            raise
+        return conn, company_id
+
+    def _updated(self, path: Path) -> tuple[Connection, int]:
         backup.check(path)
         if file_version(path) >= latest_version():  # a newer file: NewerFileError
             return open_company(path)
@@ -190,7 +202,9 @@ class Workspace:
             raise backup.BackupError(
                 tr("файл повреждён: {file} ({error})", file=path.name, error=e)
             ) from e
-        return conn, first_company(conn, path)
+        company_id = first_company(conn, path)
+        open_in(conn, company_id, write=False)
+        return conn, company_id
 
     def auto_backup(self, conn: Connection, company_file: Path) -> Path | None:
         """The backup made when a company is closed — only if it changed since the last one."""

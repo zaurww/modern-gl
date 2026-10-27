@@ -2,6 +2,10 @@
 
     tr("строка {line}: нулевая сумма", line=3)
 
+A text the program writes into a company's documents (a posting's «Комиссия банка») is
+`trd(...)`: in the company's language of documents (D-new), whatever the interface is —
+switched, it would make every document of a module look changed to a rebuild.
+
 Missing translations fall back to Russian; tests/test_i18n.py checks none are missing.
 """
 
@@ -13,6 +17,7 @@ LANGUAGES = {"az": "Azərbaycanca", "ru": "Русский"}
 DEFAULT = "az"
 _CATALOGS: dict[str, dict[str, str]] = {"az": AZ, "ru": {}}
 _current = DEFAULT
+_document: str | None = None  # the open company's language of documents; None — interface
 
 
 def set_language(code: str) -> None:
@@ -27,7 +32,28 @@ def language() -> str:
 
 
 def tr(source: str, /, **values) -> str:
-    template = _CATALOGS[_current].get(source, source)
+    return _translate(_current, source, values)
+
+
+def set_document_language(code: str | None) -> None:
+    """The open company's language of documents (application.document_language)."""
+    global _document
+    if code is not None and code not in LANGUAGES:
+        raise ValueError(f"unknown language {code!r}")
+    _document = code
+
+
+def document_language() -> str:
+    return _document or _current
+
+
+def trd(source: str, /, **values) -> str:
+    """A text written into a document: in the company's language of documents."""
+    return _translate(document_language(), source, values)
+
+
+def _translate(code: str, source: str, values: dict) -> str:
+    template = _CATALOGS[code].get(source, source)
     return template.format(**values) if values else template
 
 

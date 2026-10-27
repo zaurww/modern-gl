@@ -40,7 +40,7 @@ from modern_gl.desktop.portal_company import ask_tax_id
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import language, set_language, tr
+from modern_gl.i18n import LANGUAGES, language, set_document_language, set_language, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import Connection, DatabaseError, Error, close
 from modern_gl.reporting.handover import handover_files, write_handover
@@ -460,6 +460,15 @@ class CompanyFiles(QMainWindow):
         if self.settings:
             self.settings.setValue("language", code)
         self._reopen()
+
+    def set_document_language(self, code: str) -> None:
+        """The language the program writes its texts into this company's documents in
+        (D-new): the next documents; what is written stays."""
+        if self.session is None:
+            return
+        self.session.ledger.set_document_language(self.session.company_id, code)
+        set_document_language(code)
+        self.notify(tr("Новые документы — на языке: {name}", name=LANGUAGES[code]))
 
     def set_parallel_books(self, on: bool) -> None:
         """Books on or off (D63): the pages are built again with or without the field."""

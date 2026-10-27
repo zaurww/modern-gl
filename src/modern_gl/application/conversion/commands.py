@@ -34,7 +34,7 @@ from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, transaction
 
 EXCHANGE_DIFFERENCE = "Курсовая разница при конвертации"
@@ -291,7 +291,7 @@ class ConversionCommands(ModuleDocumentCommands):
         transit = self._transit_account(company_id)
         calc = self._calculated(company_id, data)
         assert calc.source_value is not None and calc.target_value is not None
-        memo = tr(
+        memo = trd(
             "Конвертация {source} → {target}",
             source=self._code(company_id, source.currency_id),
             target=self._code(company_id, target.currency_id),
@@ -376,7 +376,7 @@ class ConversionCommands(ModuleDocumentCommands):
         """The exchange difference: a loss (Dt loss / Kt transit) or a gain (the other way)."""
         if not difference:
             return None
-        text = tr(EXCHANGE_DIFFERENCE)
+        text = trd(EXCHANGE_DIFFERENCE)
         if difference > 0:
             loss = self._role_account(
                 company_id, FX_LOSS, tr("Не указан счёт убытка от курсовой разницы")
@@ -391,7 +391,7 @@ class ConversionCommands(ModuleDocumentCommands):
 
     def _fee_line(self, company_id: int, fee: ConversionFee, value: int) -> PostingInput:
         """A bank fee: Dt its expense account (or the bank fee role) / Kt the money account."""
-        text = tr(BANK_FEE_ITEM)
+        text = trd(BANK_FEE_ITEM)
         if fee.expense_account_id is not None:
             expense = self._account(company_id, fee.expense_account_id)
         else:

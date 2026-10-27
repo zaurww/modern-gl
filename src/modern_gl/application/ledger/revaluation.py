@@ -14,7 +14,7 @@ from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date, ru_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, transaction
 
 
@@ -66,14 +66,14 @@ class RevaluationCommands(DocumentCommands):
                         from_minor(abs(diff)),
                         dt_sc,
                         ct_sc,
-                        tr("Курсовая разница {code}", code=b["code"]),
+                        trd("Курсовая разница {code}", code=b["code"]),
                         currency_id=b["currency_id"],
                         currency_amount=0,
                     )
                 )
             if not postings:
                 return None
-            text = memo or tr("Переоценка валютных остатков на {date}", date=ru_date(day))
+            text = memo or trd("Переоценка валютных остатков на {date}", date=ru_date(day))
             return self.post_new(company_id, day, postings, text)
 
     def _currency_balances(self, company_id: int, day: str) -> list[Row]:

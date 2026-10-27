@@ -19,7 +19,7 @@ from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import COST_OF_SALES, OUTPUT_VAT, SALES_REVENUE, SALES_VAT
 from modern_gl.domain.errors import ValidationError
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, transaction
 
 
@@ -314,7 +314,7 @@ class SaleCommands(StockCommands):
                 money(amount),
                 debit_sc,
                 self._by_kind(company_id, vat_id, customer_sc),
-                tr("НДС"),
+                trd("НДС"),
                 invoice=invoice,
             )
             for (debit_id, debit_sc, customer_sc), amount in totals.items()

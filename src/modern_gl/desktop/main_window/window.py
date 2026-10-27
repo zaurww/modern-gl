@@ -53,7 +53,7 @@ from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.vat_payer import VAT_REPORTS, edit_vat_payer
 from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import NotFoundError
-from modern_gl.i18n import LANGUAGES, language, tr
+from modern_gl.i18n import LANGUAGES, document_language, language, tr
 from modern_gl.reporting.trade import PURCHASE, SALE
 
 
@@ -169,6 +169,10 @@ class MainWindow(ReportPlaces):
         menu.addSeparator()
         menu.addAction(tr("VÖEN компании…")).triggered.connect(self.edit_tax_id)
         menu.addAction(tr("Плательщик ƏDV с…")).triggered.connect(self.edit_vat_payer)
+        written = menu.addMenu(tr("Язык документов"))  # D-new: the texts the program writes
+        for code, title in LANGUAGES.items():
+            act = written.addAction(("✓  " if code == document_language() else "    ") + title)
+            act.triggered.connect(lambda _=False, c=code: self.set_document_language(c))
         stock_only = menu.addAction(tr("Только склад (без бухгалтерии)"))
         stock_only.setCheckable(True)
         stock_only.setChecked(s.stock_only)

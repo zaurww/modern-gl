@@ -45,7 +45,7 @@ from modern_gl.desktop.widgets import (
     to_qdate,
 )
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 
 HINT = (
     "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия   ·   "
@@ -346,7 +346,7 @@ class OpeningBalancesPage(QWidget):
             debit=retained[0] if len(retained) == 1 else None,
             credit=self.control_account,
             amount=abs(debit - credit),
-            memo=tr("Разница начальных остатков"),
+            memo=trd("Разница начальных остатков"),
             on_credit=debit > credit,
         )
         if self.model.rows[-1].is_empty():
@@ -395,7 +395,7 @@ class OpeningBalancesPage(QWidget):
                 effective,
                 self.model.to_inputs(),
                 post=post,
-                memo=tr("Начальные остатки на {date}", date=ru_date(effective.isoformat())),
+                memo=trd("Начальные остатки на {date}", date=ru_date(effective.isoformat())),
             )
         except (LedgerError, ValueError) as error:
             self.show_error(str(error))

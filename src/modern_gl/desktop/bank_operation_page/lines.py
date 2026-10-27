@@ -31,7 +31,7 @@ from modern_gl.desktop.bank_operation_page.line_row import LineRow
 from modern_gl.desktop.invoice_picker import InvoicePicker
 from modern_gl.domain.accounts import BANK_FEE
 from modern_gl.domain.money import to_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import trd
 
 
 class LinesPart(BankOperationForm):
@@ -89,7 +89,7 @@ class LinesPart(BankOperationForm):
         if account_id is None:
             return ()
         values = self.s.ledger.bank.named_subconto(
-            self.s.company_id, account_id, tr("Комиссия банка")
+            self.s.company_id, account_id, trd("Комиссия банка")
         )
         self.s.catalog.reload()
         return values

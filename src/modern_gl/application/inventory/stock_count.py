@@ -22,7 +22,7 @@ from modern_gl.application.inventory.posting import PostingCommands
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import round_ratio
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import transaction
 
 
@@ -63,7 +63,7 @@ class StockCountCommands(CatalogCommands, PostingCommands):
         `shortage_account_id` at the average cost. Items that agree make nothing."""
         day = iso_date(doc_date)
         warehouse = self._warehouse(company_id, warehouse_id)
-        memo = memo or tr("Инвентаризация · {w}", w=warehouse["name"])
+        memo = memo or trd("Инвентаризация · {w}", w=warehouse["name"])
         surplus: list[ReceiptLine] = []
         shortage: list[IssueLine] = []
         with transaction(self.conn):

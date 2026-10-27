@@ -46,7 +46,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.currency import format_unit_rate
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 
 
 class ConversionPage(ConversionForm):
@@ -286,7 +286,7 @@ class ConversionPage(ConversionForm):
         source, target = self.source.value(), self.target.value()
         memo = self.memo.text().strip()
         if not memo and source is not None and target is not None:
-            memo = tr(
+            memo = trd(
                 "Конвертация {source} → {target}",
                 source=self.source.code(),
                 target=self.target.code(),

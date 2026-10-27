@@ -14,7 +14,7 @@ from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import round_ratio
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row
 
 
@@ -251,7 +251,7 @@ class StockCommands(DraftCommands):
                     money(amount),
                     tuple(None if kind is None else by_kind.get(kind) for kind in vat_kinds),
                     offset_sc,
-                    tr("НДС"),
+                    trd("НДС"),
                     invoice=invoice[0],
                     invoice_kind=invoice[1],
                 )
