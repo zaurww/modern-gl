@@ -9,6 +9,7 @@ docs/history, a detail moves to the module's own document.
 Decisions (docs/decisions) are checked by tests/test_decisions.py.
 """
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -37,6 +38,20 @@ def test_session_documents_stay_short() -> None:
         if size > LIMITS[name]
     ]
     assert not over, "\n".join(over)
+
+
+# a count of the tests or how long they run is out of date after the next commit: the
+# documents say how to run them, pytest says how many there are
+TEST_COUNT = re.compile(r"~\s?\d[\d\s]*(тест|test)|\d+\s*(тестов|tests)\b|~\s?\d+\s*мин")
+
+
+def test_documents_do_not_count_the_tests() -> None:
+    found = [
+        f"{name}: «{m.group(0)}»"
+        for name in (*LIMITS, "README.en.md", "CONTRIBUTING.md")
+        for m in TEST_COUNT.finditer((ROOT / name).read_text(encoding="utf-8"))
+    ]
+    assert not found, found
 
 
 if __name__ == "__main__":

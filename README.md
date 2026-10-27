@@ -14,7 +14,7 @@ Python ≥ 3.12, PySide6, SQLite. Один файл `*.gl` — одна комп
 ```sh
 uv sync                      # зависимости (uv.lock), Python 3.12 (.python-version)
 uv run modern-gl             # компании — *.gl в «Документы/Modern GL» (--data <папка>); --demo, --demo-year
-uv run pytest -q -n auto     # ~1480 тестов, ~4 мин; --cov — покрытие ([tool.coverage] в pyproject)
+uv run pytest -q -n auto     # все тесты, параллельно; --cov — покрытие ([tool.coverage] в pyproject)
 uv run ruff check . && uv run ruff format --check .
 uv run pyright               # 0 ошибок
 uv run --with pre-commit pre-commit install   # те же проверки перед коммитом (.pre-commit-config.yaml)

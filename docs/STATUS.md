@@ -18,7 +18,7 @@
 - `uv run modern-gl` (компании — `*.gl` в «Документы\Modern GL»); `--demo` — демо-компания;
   `--demo-year` — «Xəzər Ofis MMC (demo 2026)», целый год во всех модулях; `--demo-years` —
   она же за 2025 и 2026. Программа открыта — `uv run --no-sync …`.
-- Тесты `uv run pytest -q -n auto` (~1550, ~1 мин; Linux — `QT_QPA_PLATFORM=offscreen`),
+- Тесты `uv run pytest -q -n auto` (Linux — `QT_QPA_PLATFORM=offscreen`),
   `ruff check`, `ruff format --check`, `pyright` (0 ошибок; ядро — strict, D170); CI —
   ubuntu и windows, покрытие 90 % (D161). Скриншоты: `scripts/screenshots.py <папка> az`.
 - Замеры: `uv run python scripts/benchmark.py <папка> --postings 100000` (`--stock`).
