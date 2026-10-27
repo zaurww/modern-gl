@@ -9,7 +9,13 @@ import sqlite3
 import pytest
 
 from modern_gl.demo_data import create_demo_company
-from modern_gl.infrastructure.db import APPLICATION_ID, MIGRATIONS_DIR, close, connect
+from modern_gl.infrastructure.db import (
+    APPLICATION_ID,
+    MIGRATIONS_DIR,
+    close,
+    connect,
+    open_snapshot,
+)
 
 # A migration is never edited once written (CLAUDE.md); a new one is added here with its hash.
 FROZEN = {
@@ -305,6 +311,34 @@ def test_a_company_file_declares_itself(tmp_path):
     with pytest.raises(sqlite3.DatabaseError):
         connect(foreign)
     assert foreign.with_name("other.gl-wal").exists() is False  # the file was not touched
+
+
+def test_another_programs_file_with_the_default_id_is_refused(tmp_path):
+    """application_id 0 is what every other program leaves: a file with tables of its
+    own is not ours and stays byte for byte as it was (no migration is run on it)."""
+    foreign = tmp_path / "notes.gl"
+    with sqlite3.connect(foreign) as other:
+        other.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, text TEXT)")
+        other.execute("INSERT INTO notes (text) VALUES ('hello')")
+    other.close()
+    before = hashlib.sha256(foreign.read_bytes()).hexdigest()
+    with pytest.raises(sqlite3.DatabaseError, match="не файл компании"):
+        connect(foreign)
+    with pytest.raises(sqlite3.DatabaseError, match="не файл компании"):
+        open_snapshot(foreign)
+    assert hashlib.sha256(foreign.read_bytes()).hexdigest() == before
+    assert not foreign.with_name("notes.gl-wal").exists()
+
+
+def test_an_empty_file_and_an_old_file_of_ours_are_accepted(tmp_path):
+    empty = tmp_path / "new.gl"
+    close(connect(empty))  # a new file: no tables, application_id 0
+    old = tmp_path / "old.gl"
+    with sqlite3.connect(old) as ours:  # before 0046: our tables, application_id 0
+        ours.execute("CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+    ours.close()
+    with pytest.raises(sqlite3.DatabaseError, match="already exists"):
+        connect(old)  # the mark is accepted; the schema has no version: 0001 fails on it
 
 
 def test_demo_company_is_consistent(ledger):

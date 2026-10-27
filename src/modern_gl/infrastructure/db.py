@@ -52,8 +52,16 @@ def connect(path: str | Path) -> sqlite3.Connection:
 
 
 def _check_application_id(conn: sqlite3.Connection) -> None:
+    """Another program's database is refused before a migration touches it. 0 is what
+    any program leaves by default, so it passes only for a new (empty) file or a file of
+    ours written before 0046 — one with the companies table."""
     found = conn.execute("PRAGMA application_id").fetchone()[0]
-    if found not in (0, APPLICATION_ID):
+    if found == APPLICATION_ID:
+        return
+    tables = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    ).fetchall()
+    if found != 0 or (tables and ("companies",) not in [tuple(t) for t in tables]):
         raise sqlite3.DatabaseError(tr("это не файл компании Modern GL"))
 
 
@@ -108,6 +116,7 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
         if found != ["ok"]:
             raise sqlite3.DatabaseError("; ".join(found))
         conn.row_factory = sqlite3.Row
+        _check_application_id(conn)
         _check_not_newer(conn, path)
         conn.execute("PRAGMA foreign_keys = ON")
         migrate(conn)
