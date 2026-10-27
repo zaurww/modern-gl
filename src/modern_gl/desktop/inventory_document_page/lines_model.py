@@ -46,6 +46,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     InventoryGridRow,
 )
 from modern_gl.desktop.inventory_document_page.lines_base import (
+    RETURNS,
     InventoryLinesBase,
     by_sale_kinds,
     sale_kinds,
@@ -60,7 +61,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import month_code, month_from_code, month_name
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import format_minor
+from modern_gl.domain.money import format_minor, round_ratio
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     ItemChoice,
@@ -247,6 +248,11 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
                 self._remember_expense(index.row())
         elif key == EXPENSE_MONTH:
             row.expense_date = None if value is None else month_from_code(value)
+        elif key == QUANTITY and self.doc_type in RETURNS and row.amount and row.quantity:
+            # a return keeps the price it was bought (sold) at: fewer back, less to pay
+            row.amount = round_ratio(row.amount * (value or 0), row.quantity) or None
+            row.quantity = value
+            self._recalculate_vat(row)
         else:
             self._set_stored(index.row(), key, value)
         self.dataChanged.emit(

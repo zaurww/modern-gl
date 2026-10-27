@@ -16,7 +16,7 @@ from modern_gl.application.inventory import (
     ReturnLine,
     SaleLine,
 )
-from modern_gl.desktop.inventory_document_page import PRICE, QUANTITY, InventoryDocumentPage
+from modern_gl.desktop.inventory_document_page import QUANTITY, InventoryDocumentPage
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
@@ -168,7 +168,7 @@ def test_the_return_is_filled_from_its_purchase(shop, conn, qtbot):
     assert page.party.currentData() == shop.supplier[0]
     model = page.model
     model.setData(model.index(0, model.columns.index(QUANTITY)), 3 * Q)
-    model.setData(model.index(0, model.columns.index(PRICE)), 1_200)  # the price stays 12.00
+    assert row.amount == 3_600  # the price stays 12.00: 3 back, 36.00
     page.invoice.setText("RT0003")
     assert page.save(post=True), page.error.text()
     assert [p[:3] for p in shop.postings(page.doc.id)] == [
@@ -216,3 +216,28 @@ def test_a_customers_return_e_qaime_becomes_a_return_draft(shop, conn):
     assert (doc.doc_type, doc.invoice) == (SALE_RETURN, "RT2601000001")
     assert (line.amount, line.vat_amount, line.offset_account_id) == (2_000, 360, shop.acc["62"])
     assert line.offset_subconto[0] == shop.customer
+
+
+def test_returns_are_built_again_as_they_were(shop):
+    """D101: the warehouse's documents posted again from the first day — the returns of
+    both kinds too — make the same postings, unpost and post again unchanged."""
+    sale = shop.sale("2026-01-25", [SaleLine(shop.item, shop.main, "3", "60", "10.80")])
+    to_supplier(shop, "2", "24", "4.32", returned_line_id=first_line(shop, 1))
+    back = shop.inventory.post_return(
+        shop.company_id,
+        "2026-01-30",
+        SALE_RETURN,
+        [
+            ReturnLine(
+                shop.item, shop.main, "1", "20", "3.60", returned_line_id=first_line(shop, sale)
+            )
+        ],
+        shop.acc["62"],
+        [shop.customer, shop.contract],
+        vat_rate=1800,
+    )
+    assert shop.inventory.rebuild_postings(shop.company_id, "2026-01-01") == []
+    before = shop.postings(back)
+    shop.inventory.unpost_document(shop.company_id, back)
+    shop.inventory.post_document(shop.company_id, back)
+    assert shop.postings(back) == before
