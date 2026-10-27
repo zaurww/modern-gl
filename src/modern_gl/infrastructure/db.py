@@ -14,7 +14,7 @@ from itertools import count
 from pathlib import Path
 
 from modern_gl.domain.errors import LedgerError, ReadOnlyError
-from modern_gl.i18n import tr
+from modern_gl.i18n import fold, tr
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 # The mark of a company file in the SQLite header ('MGL1', set by migration 0046); 0 is an
@@ -57,6 +57,7 @@ def connect(path: str | Path, timeout: float = BUSY_TIMEOUT) -> sqlite3.Connecti
     # isolation_level=None: no implicit transactions, we open them explicitly.
     conn = sqlite3.connect(path, isolation_level=None, timeout=timeout)
     conn.row_factory = sqlite3.Row
+    _add_functions(conn)
     try:
         with _busy_is_an_error_for_the_user():
             _check_application_id(conn)  # before anything touches another program's file
@@ -70,6 +71,17 @@ def connect(path: str | Path, timeout: float = BUSY_TIMEOUT) -> sqlite3.Connecti
         conn.close()
         raise
     return conn
+
+
+def _fold(text: str | None) -> str | None:
+    return None if text is None else fold(text)
+
+
+def _add_functions(conn: sqlite3.Connection) -> None:
+    """`fold(text)` in SQL: the search form of `i18n.fold` (case, and İ/ı/ş/ə… = i/s/e…),
+    so a list is searched in its query, not in the rows it read. On PostgreSQL the same
+    function goes into the schema."""
+    conn.create_function("fold", 1, _fold, deterministic=True)
 
 
 def _check_application_id(conn: sqlite3.Connection) -> None:
@@ -116,6 +128,7 @@ def connect_reader(path: str | Path) -> sqlite3.Connection:
     (desktop.background): read-only, no migration; WAL lets it read beside the writer."""
     conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True, timeout=BUSY_TIMEOUT)
     conn.row_factory = sqlite3.Row
+    _add_functions(conn)
     return conn
 
 
@@ -131,6 +144,7 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
     mode = "mode=ro" if in_use else "immutable=1"
     source = sqlite3.connect(f"file:{path.as_posix()}?{mode}", uri=True)
     conn = sqlite3.connect(":memory:", isolation_level=None)
+    _add_functions(conn)
     try:
         source.backup(conn)  # consistent even while the owner is writing
         found = [r[0] for r in conn.execute("PRAGMA quick_check(5)")]
