@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import os
 import socket
-import subprocess
 import sys
 
 import pytest
@@ -118,9 +117,10 @@ def hold(path, pid: int, host: str, user: str = "Aynur") -> None:
 
 
 def dead_pid() -> int:
-    child = subprocess.Popen([sys.executable, "-c", "pass"])
-    child.wait()
-    return child.pid
+    """A process id no program can have: above Linux's largest pid_max (2**22) and not a
+    multiple of 4, as Windows ids are. A child that has just ended would do too, but its
+    id can be given to another process at once while the tests start many."""
+    return 2**22 + 1
 
 
 def test_the_lock_lives_while_the_file_is_open(company):
