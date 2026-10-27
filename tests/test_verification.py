@@ -1,4 +1,4 @@
-"""«Проверка книги» (D-new): each check finds the damage made by hand, and only it.
+"""«Проверка книги» (D175): each check finds the damage made by hand, and only it.
 
 Hand-calculated:
 Bank (tests/test_bank.py): a fee of 2.00 USD on 07.03 at 1.70 is 3.40; a rate of 1.75

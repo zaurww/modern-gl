@@ -1,4 +1,4 @@
-"""«Проверка книги» (D-new): the program asks its own data whether they agree — what
+"""«Проверка книги» (D175): the program asks its own data whether they agree — what
 QuickBooks calls Verify Data and SAP a ledger consistency check. The database already
 refuses a wrong row (triggers, CHECK, keys — D149, D155); this finds what no single row
 shows: a file damaged on the disk, a posted document today's rules would refuse, a storno

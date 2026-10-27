@@ -1,4 +1,4 @@
-"""The window of «Проверка книги» (D-new): what it shows, the rebuild, viewing (D80).
+"""The window of «Проверка книги» (D175): what it shows, the rebuild, viewing (D80).
 The figures are those of tests/test_verification.py: a fee of 2.00 USD is 3.40 at 1.70
 and 3.50 once the rate of 07.03 is 1.75."""
 

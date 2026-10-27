@@ -185,7 +185,7 @@ class MainWindow(QMainWindow):
             self._reopen()
 
     def verify_books(self) -> None:
-        """«Проверка книги» (D-new): what does not agree, each finding opens its document;
+        """«Проверка книги» (D175): what does not agree, each finding opens its document;
         after a rebuild the open pages show the new postings."""
         dialog = VerificationDialog(self.open_session, self.open_document, self)
         dialog.exec()

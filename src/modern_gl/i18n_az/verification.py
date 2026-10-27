@@ -1,4 +1,4 @@
-"""«Проверка книги» (D-new): the checks, what they find, the window."""
+"""«Проверка книги» (D175): the checks, what they find, the window."""
 
 AZ: dict[str, str] = {
     # the checks

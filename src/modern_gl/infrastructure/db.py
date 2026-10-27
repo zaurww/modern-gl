@@ -197,7 +197,7 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
 
 def scratch_copy(conn: sqlite3.Connection) -> sqlite3.Connection:
     """The open company copied into memory to try things on — the check of the books
-    (D-new) builds the modules' postings again there: writable even when the original is
+    (D175) builds the modules' postings again there: writable even when the original is
     a snapshot (D80); the original is only read and keeps no lock."""
     copy = sqlite3.connect(":memory:", isolation_level=None, factory=_Connection)
     _add_functions(copy)

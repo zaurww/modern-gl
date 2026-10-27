@@ -1,4 +1,4 @@
-"""«Проверка книги» (D-new): the program asks its data whether they agree. Each check is a
+"""«Проверка книги» (D175): the program asks its data whether they agree. Each check is a
 row: a passed one is quiet (a check mark), one that found something lists it, and a
 finding about a document opens it. What the program can put right itself — the modules'
 postings — is the one blue button, not shown while viewing (D80)."""

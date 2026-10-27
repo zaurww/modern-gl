@@ -364,7 +364,7 @@ def test_sql_takes_values_as_parameters_not_text():
     assert not gone, f"уберите из IDENTIFIER_PARAMS: {sorted(gone)}"
 
 
-# Every UPDATE and DELETE names its company in WHERE (D-new): the way SAP adds the client to
+# Every UPDATE and DELETE names its company in WHERE (D176): the way SAP adds the client to
 # every statement, so a row of another company is never touched by an id alone — the guard
 # for the day several companies share one server database (D24, D77). In `companies` the
 # row's own id is the company.

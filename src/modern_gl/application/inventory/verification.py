@@ -1,4 +1,4 @@
-"""The warehouse in «Проверка книги» (D-new): the stock agrees with its accounts — what
+"""The warehouse in «Проверка книги» (D175): the stock agrees with its accounts — what
 SAP reconciles as stock against the GL (MB5L). The value of the goods by their account
 (the movements' amounts) is the balance of that account in the common layer, where the
 warehouse posts. A posting made to 41 by hand in the journal, past the warehouse, shows

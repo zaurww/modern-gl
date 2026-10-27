@@ -24,7 +24,7 @@ class PostingChecks(SubcontoCommands):
 
     def posted_against_rules(self, company_id: int) -> list[tuple[Row, str]]:
         """Each posted document today's posting rules would refuse, with why: a row a tool
-        wrote past the program, a value made a group since. The check of the books (D-new)
+        wrote past the program, a value made a group since. The check of the books (D175)
         asks it; nothing is changed."""
         problems: list[tuple[Row, str]] = []
         for doc in self.conn.execute(
@@ -44,7 +44,7 @@ class PostingChecks(SubcontoCommands):
 
     def _validate_content(self, company_id: int, doc: Row, posted: bool = False) -> None:
         """The rules of the document's postings. `posted` — one posted before, checked
-        again by the check of the books (D-new): an account closed since is no error, the
+        again by the check of the books (D175): an account closed since is no error, the
         period and the moment of posting are not asked."""
         postings = self.conn.execute(
             "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)

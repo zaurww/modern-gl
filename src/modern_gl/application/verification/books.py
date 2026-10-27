@@ -1,5 +1,5 @@
 """The checks of the books themselves: the posting rules, the storno, the modules'
-postings (D-new). Each reads the copy of the company it is given and names the document."""
+postings (D175). Each reads the copy of the company it is given and names the document."""
 
 from __future__ import annotations
 
