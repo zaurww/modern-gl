@@ -45,49 +45,69 @@ def book_invoices(
     """The e-qaimə of the books by number, purchases or sales, every date: their accruals.
     One reversed to nothing (red storno) is not there. `kind` CUSTOMS: the customs
     declarations instead (the ƏDV register, `reporting/vat_register`)."""
-    accounts = invoice_accounts(conn, company_id)
+    pairs = _pairs(conn, company_id, outgoing)
+    if not pairs:
+        return {}
     params = book_params(conn, company_id, "0001-01-01", "9999-12-31", layers) | {"kind": kind}
+    who = "CASE r.partner " + " ".join(
+        f"WHEN {i} THEN p.{'dt' if outgoing else 'ct'}_sc{i}" for i in (1, 2, 3)
+    )
     result: dict[str, BookInvoice] = {}
+    # summed in SQL by number, document and counterparty; the postings come before the
+    # documents (CROSS JOIN), as in `invoices.py`
     for p in conn.execute(
         f"""
-        WITH {_DOCS}
-        SELECT p.*, docs.doc_date, docs.number
+        WITH {_DOCS},
+        pairs (debit_id, credit_id, accrual, vat, partner) AS (VALUES {pairs})
+        SELECT p.invoice, p.document_id, docs.doc_date, docs.number, {who} END AS who,
+               SUM(r.accrual * p.amount) AS total, SUM(r.vat * p.amount) AS vat
         FROM postings p CROSS JOIN docs
+        JOIN pairs r ON r.debit_id = p.debit_account_id AND r.credit_id = p.credit_account_id
         WHERE docs.id = p.document_id AND p.company_id = :company_id AND p.invoice IS NOT NULL
           AND COALESCE(p.invoice_kind, '') = :kind
-        ORDER BY docs.doc_date, docs.number, p.line_no
+        GROUP BY p.invoice, p.document_id, docs.doc_date, docs.number, {who} END
+        ORDER BY docs.doc_date, docs.number, MIN(p.line_no)
         """,
         params,
     ):
-        debit, credit = accounts[p["debit_account_id"]], accounts[p["credit_account_id"]]
-        # the settlement side, and what it is against; the ƏDV the other way round
-        side, prefix, other = (debit, "dt", credit) if outgoing else (credit, "ct", debit)
-        accrual = is_accrual(side, other)
-        vat = is_vat_accrual(other, side)
-        if not (accrual or vat):
-            continue
         row = result.setdefault(p["invoice"], BookInvoice(p["invoice"], p["doc_date"]))
-        if accrual:
-            row.total += p["amount"]
-            slot = side.partner_at
-            who = p[f"{prefix}_sc{slot}"] if slot else None
-            if who is not None and who not in row.parties:
-                row.parties.append(who)
-        if vat:
-            row.vat += p["amount"]
+        row.total += p["total"]
+        row.vat += p["vat"]
+        if p["who"] is not None and p["who"] not in row.parties:
+            row.parties.append(p["who"])
         if (p["document_id"], p["number"]) not in row.documents:
             row.documents.append((p["document_id"], p["number"]))
+    tax_ids = {
+        r["id"]: r["tax_id"]
+        for r in conn.execute(
+            "SELECT id, tax_id FROM subconto_values WHERE company_id = ? AND tax_id IS NOT NULL",
+            (company_id,),
+        )
+    }
     for row in result.values():
-        row.tax_ids = [
-            r["tax_id"]
-            for party in row.parties
-            for r in conn.execute(
-                "SELECT tax_id FROM subconto_values WHERE company_id = ? AND id = ? "
-                "AND tax_id IS NOT NULL",
-                (company_id, party),
-            )
-        ]
+        row.tax_ids = [tax_ids[party] for party in row.parties if party in tax_ids]
     return {n: r for n, r in result.items() if r.total or r.vat}
+
+
+def _pairs(conn: Connection, company_id: int, outgoing: bool) -> str:
+    """`VALUES` of the (debit, credit) pairs posted with a number that accrue the e-qaimə
+    or its ƏDV: whether they are the accrual, the ƏDV, and the position of the
+    counterparty on the settlement side of an accrual (0: none)."""
+    accounts = invoice_accounts(conn, company_id)
+    found: list[str] = []
+    for p in conn.execute(
+        "SELECT DISTINCT debit_account_id, credit_account_id FROM postings "
+        "WHERE company_id = ? AND invoice IS NOT NULL",
+        (company_id,),
+    ):
+        debit, credit = accounts[p[0]], accounts[p[1]]
+        # the settlement side, and what it is against; the ƏDV the other way round
+        side, other = (debit, credit) if outgoing else (credit, debit)
+        accrual, vat = is_accrual(side, other), is_vat_accrual(other, side)
+        if accrual or vat:
+            partner = (side.partner_at or 0) if accrual else 0
+            found.append(f"({int(p[0])}, {int(p[1])}, {int(accrual)}, {int(vat)}, {partner})")
+    return ", ".join(found)
 
 
 def book_digest(

@@ -2,9 +2,9 @@
 
     uv run python scripts/benchmark.py <folder> [--postings 100000]
 
-Makes (once) `<folder>/big-<N>.gl`: the demo company plus N postings over the years
-2024–2026 — purchases on e-qaimə from 300 suppliers, their payments, sales to 300
-customers, expenses by cost item — and prints how long each report takes, slowest first.
+Makes (once) `<folder>/big-vat-<N>.gl`: the demo company plus N postings over the years
+2024–2026 — purchases with ƏDV on e-qaimə from 300 counterparties (expenses by cost item),
+sales with ƏDV to them, all paid within 60 days, the ƏDV through the deposit — and prints how long each report takes, slowest first.
 Anything over ~0.3 s is a candidate for a background thread.
 
     uv run python scripts/benchmark.py <folder> --stock
@@ -37,7 +37,8 @@ def build(path: Path, postings: int) -> None:
     led = Ledger(conn)
     cid = create_demo_company(led)
     rnd = random.Random(38)
-    acc = {code: led.account_id(cid, code) for code in ("26", "51", "60", "62", "90", "46")}
+    codes = ("26", "51", "54", "60", "62", "46", "19", "68.2")
+    acc = {code: led.account_id(cid, code) for code in codes}
     kind = {
         r["code"]: r["id"]
         for r in conn.execute("SELECT id, code FROM subconto_kinds WHERE company_id = ?", (cid,))
@@ -55,19 +56,65 @@ def build(path: Path, postings: int) -> None:
             led.add_subconto_value(cid, kind["counterparty"], f"Firma {i:03}")
             for i in range(PARTNERS)
         ]
+        deposit = led.add_subconto_value(cid, kind["bank_account"], "ƏDV depozit")
         made = 0
         while made < postings:
             day = date(2024, 1, 1) + timedelta(days=rnd.randrange(DAYS))
+            paid = day + timedelta(days=rnd.randrange(60))
             who = rnd.choice(partners)
-            amount = f"{rnd.randrange(1000, 500000) / 100:.2f}"
+            net = rnd.randrange(1000, 500000)
+            amount, vat = f"{net / 100:.2f}", f"{net * 18 // 100 / 100:.2f}"
+            gross = f"{(net + net * 18 // 100) / 100:.2f}"
             invoice = f"MT{day:%y%m}{rnd.randrange(10**6):06}"
-            lines = [
-                PostingInput(acc["26"], acc["60"], amount, (item,), (who,), invoice=invoice),
-                PostingInput(acc["60"], acc["51"], amount, (who,), (bank,), invoice=invoice),
-            ]
-            for line in lines:
-                led.post_new(cid, day, [line], "Gen")
-            made += len(lines)
+            if rnd.random() < 0.5:  # a purchase with ƏDV, paid: the ƏDV from the deposit
+                docs = [
+                    (
+                        day,
+                        [
+                            PostingInput(
+                                acc["26"], acc["60"], amount, (item,), (who,), invoice=invoice
+                            ),
+                            PostingInput(
+                                acc["19"], acc["60"], vat, (who,), (who,), invoice=invoice
+                            ),
+                        ],
+                    ),
+                    (
+                        paid,
+                        [
+                            PostingInput(
+                                acc["60"], acc["51"], amount, (who,), (bank,), invoice=invoice
+                            ),
+                            PostingInput(
+                                acc["60"], acc["54"], vat, (who,), (deposit,), invoice=invoice
+                            ),
+                        ],
+                    ),
+                ]
+            else:  # a sale with ƏDV, paid: the ƏDV to the deposit
+                docs = [
+                    (
+                        day,
+                        [
+                            PostingInput(acc["62"], acc["46"], gross, (who,), (), invoice=invoice),
+                            PostingInput(acc["46"], acc["68.2"], vat, (), (), invoice=invoice),
+                        ],
+                    ),
+                    (
+                        paid,
+                        [
+                            PostingInput(
+                                acc["51"], acc["62"], amount, (bank,), (who,), invoice=invoice
+                            ),
+                            PostingInput(
+                                acc["54"], acc["62"], vat, (deposit,), (who,), invoice=invoice
+                            ),
+                        ],
+                    ),
+                ]
+            for when, lines in docs:
+                led.post_new(cid, when, lines, "Gen")
+            made += 4
     conn.close()
 
 
@@ -79,6 +126,11 @@ def measure(path: Path) -> list[tuple[float, str]]:
     from modern_gl.reporting.columns import MONTHS, column_periods
     from modern_gl.reporting.profit_loss import profit_and_loss
     from modern_gl.reporting.statements import ACCOUNTS, balance_sheet
+    from modern_gl.reporting.vat import vat_credit
+    from modern_gl.reporting.vat_liability import vat_liability
+    from modern_gl.reporting.vat_payments import vat_payments
+    from modern_gl.reporting.vat_receipts import vat_receipts
+    from modern_gl.reporting.vat_register import vat_register
 
     conn = connect(path)
     cid = conn.execute("SELECT id FROM companies").fetchone()["id"]
@@ -89,6 +141,7 @@ def measure(path: Path) -> list[tuple[float, str]]:
     ).fetchone()
     partner = partner["id"] if partner else None
     year = ("2026-01-01", "2026-12-31")
+    month = ("2026-12-01", "2026-12-31")
     months = column_periods(MONTHS, (date(2026, 1, 1), date(2026, 12, 31)))
     ends = [last for _, last in months[:-1]]
     cases = {
@@ -104,6 +157,12 @@ def measure(path: Path) -> list[tuple[float, str]]:
         "Движение денег по месяцам (D107)": lambda: cash_flow(
             conn, cid, *year, detail=ACCOUNTS, periods=months
         ),
+        "Движение денег, год": lambda: cash_flow(conn, cid, *year, detail=ACCOUNTS),
+        "ƏDV к зачёту, месяц": lambda: vat_credit(conn, cid, *month),
+        "ƏDV к уплате, месяц": lambda: vat_liability(conn, cid, *month),
+        "ƏDV: поступления, месяц": lambda: vat_receipts(conn, cid, *month),
+        "ƏDV: оплаты, месяц": lambda: vat_payments(conn, cid, *month),
+        "ƏDV: реестр, месяц": lambda: vat_register(conn, cid, *month),
         "Карточка 60, год": lambda: reports.account_card(conn, cid, a60, *year),
         "Карточка 60 по контрагенту, год (долг 5)": lambda: reports.account_card(
             conn, cid, a60, *year, subconto=(partner,)
@@ -182,7 +241,7 @@ def main() -> None:
     postings = (
         int(sys.argv[sys.argv.index("--postings") + 1]) if "--postings" in sys.argv else 100_000
     )
-    path = folder / f"big-{postings}.gl"
+    path = folder / f"big-vat-{postings}.gl"
     if not path.exists():
         start = time.perf_counter()
         build(path, postings)
