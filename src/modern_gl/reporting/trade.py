@@ -11,6 +11,8 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 
 PURCHASE, SALE = "receipt", "sale"
+# a section lists its returns too: the goods back to the supplier among the purchases
+RETURNS_OF = {PURCHASE: "purchase_return", SALE: "sale_return"}
 
 
 @dataclass(frozen=True)
@@ -24,9 +26,13 @@ class TradeDocument:
     invoice: str
     counterparties: str  # the names on its lines, «, »-separated
     tax_ids: str  # their VÖEN
-    amount: int  # without VAT
+    amount: int  # without VAT; a return's is negative
     vat: int
     awaits_invoice: int = 0  # 1: a purchase whose e-qaimə comes later (D119)
+
+    @property
+    def is_return(self) -> bool:
+        return self.doc_type in RETURNS_OF.values()
 
     @property
     def total(self) -> int:
@@ -36,9 +42,11 @@ class TradeDocument:
 def trade_documents(
     conn: Connection, company_id: int, doc_type: str | None = None, limit: int = 500
 ) -> list[TradeDocument]:
-    """Receipts and sales (one kind, or both), newest first, with the counterparties of
-    their settlement lines and their totals."""
-    types = (doc_type,) if doc_type else (PURCHASE, SALE)
+    """Receipts and sales (one kind, or both) with their returns — the latest `limit`,
+    listed oldest first (checked one by one from the top), with the counterparties of
+    their settlement lines and their totals (a return's negative)."""
+    kinds = (doc_type,) if doc_type else (PURCHASE, SALE)
+    types = (*kinds, *(RETURNS_OF[k] for k in kinds))
     marks = ", ".join("?" * len(types))
     rows = conn.execute(
         f"""
@@ -57,8 +65,10 @@ def trade_documents(
                          AND c.tax_id IS NOT NULL
                    )
                ), '') AS tax_ids,
-               COALESCE(SUM(l.amount), 0) AS amount,
-               COALESCE(SUM(l.vat_amount), 0) AS vat
+               CASE WHEN d.doc_type LIKE '%return' THEN -1 ELSE 1 END
+                   * COALESCE(SUM(l.amount), 0) AS amount,
+               CASE WHEN d.doc_type LIKE '%return' THEN -1 ELSE 1 END
+                   * COALESCE(SUM(l.vat_amount), 0) AS vat
         FROM inventory_documents d
         LEFT JOIN inventory_lines l ON l.company_id = d.company_id AND l.document_id = d.id
         WHERE d.company_id = ? AND d.doc_type IN ({marks})
@@ -68,7 +78,7 @@ def trade_documents(
         """,
         (company_id, *types, limit),
     )
-    return [TradeDocument(**dict(r)) for r in rows]
+    return [TradeDocument(**dict(r)) for r in reversed(rows.fetchall())]
 
 
 @attention_source(attention.AWAITING_INVOICES)

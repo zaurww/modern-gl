@@ -1,7 +1,7 @@
 """One company file as a file: what the engine alone reads or does to it, before or beside
 the schema — the name inside, the schema version, a consistent copy, one company kept
 out of a shared file of the old kind (D18), where it lies (a network or cloud folder) and
-the lock that keeps a second copy of the program out (D165). The
+the lock that keeps a second copy of the program out (D169). The
 folder of such files, their creation and copies are `application/workspace.py`."""
 
 from __future__ import annotations
@@ -204,7 +204,7 @@ def _remote_file_system(path: Path) -> bool:
     return kind in NETWORK_FS or fuse
 
 
-# ---- one program at a time (D25, D165) ------------------------------
+# ---- one program at a time (D25, D169) ------------------------------
 
 
 class FileInUseError(LedgerError):

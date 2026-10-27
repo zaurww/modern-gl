@@ -8,6 +8,7 @@ from datetime import date
 from modern_gl.application import attention
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.common import group_path
+from modern_gl.application.inventory.amounts import unit_price
 from modern_gl.domain.dates import iso_date
 from modern_gl.i18n import sort_key, tr
 from modern_gl.infrastructure.db import Connection, Row
@@ -37,6 +38,8 @@ class ItemDetails:
     unit_id: int
     inventory_account_id: int
     used: bool
+    min_quantity: int | None = None  # the minimum stock (millionths), None — none
+    precision: int = 3  # of its unit
 
 
 @dataclass(frozen=True)
@@ -130,6 +133,84 @@ def stock_balances(
     return balances
 
 
+@dataclass(frozen=True)
+class BelowMinimum:
+    """An item whose stock on all warehouses is under its minimum; what was last paid for
+    it, and where it came to (a purchase of what is missing starts from them)."""
+
+    item_id: int
+    name: str
+    unit_code: str
+    precision: int
+    quantity: int
+    minimum: int
+    last_price: int | None  # per unit, minor units
+    warehouse_id: int | None
+
+    @property
+    def missing(self) -> int:
+        return self.minimum - self.quantity
+
+
+def below_minimum(conn: Connection, company_id: int, day: str | None = None) -> list[BelowMinimum]:
+    """The items under their minimum stock (posted documents up to `day`), by name."""
+    rows = conn.execute(
+        """
+        SELECT i.id, v.name, u.code AS unit_code, u.precision, i.min_quantity,
+               COALESCE((
+                   SELECT SUM(m.quantity) FROM stock_movements m
+                   JOIN inventory_documents d ON d.id = m.document_id AND d.status = 'posted'
+                   WHERE m.company_id = i.company_id AND m.item_id = i.id
+                     AND (:day IS NULL OR m.doc_date <= :day)
+               ), 0) AS quantity
+        FROM inventory_items i
+        JOIN subconto_values v ON v.id = i.subconto_value_id AND v.active = 1
+        JOIN inventory_units u ON u.id = i.unit_id
+        WHERE i.company_id = :c AND i.min_quantity IS NOT NULL
+        ORDER BY v.name
+        """,
+        {"c": company_id, "day": day},
+    ).fetchall()
+    low = [r for r in rows if r["quantity"] < r["min_quantity"]]
+    last = _last_purchases(conn, company_id) if low else {}
+    return [
+        BelowMinimum(
+            r["id"], r["name"], r["unit_code"], r["precision"], r["quantity"], r["min_quantity"],
+            *last.get(r["id"], (None, None)),
+        )
+        for r in low
+    ]  # fmt: skip
+
+
+def _last_purchases(conn: Connection, company_id: int) -> dict[int, tuple[int | None, int]]:
+    """Each item's last purchase: the price of one unit and the warehouse it came to."""
+    rows = conn.execute(
+        """
+        SELECT item_id, amount, quantity, warehouse_id FROM (
+            SELECT l.item_id, l.amount, l.quantity, l.warehouse_id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY l.item_id ORDER BY d.doc_date DESC, d.id DESC
+                   ) AS place
+            FROM inventory_lines l
+            JOIN inventory_documents d
+              ON d.company_id = l.company_id AND d.id = l.document_id
+             AND d.status = 'posted' AND d.doc_type = 'receipt'
+            WHERE l.company_id = ? AND l.item_id IS NOT NULL AND l.quantity > 0
+        ) latest
+        WHERE place = 1
+        """,
+        (company_id,),
+    )
+    return {r["item_id"]: (unit_price(r["amount"], r["quantity"]), r["warehouse_id"]) for r in rows}
+
+
+@attention_source(attention.BELOW_MINIMUM)
+def items_below_minimum(conn: Connection, company_id: int, day: str) -> list[Attention]:
+    """«Bu gün»: goods to buy — under their minimum stock."""
+    count = len(below_minimum(conn, company_id, day))
+    return [Attention(tr("Товары ниже минимального остатка"), count, ("inventory",))]
+
+
 def idle_items(conn: Connection, company_id: int) -> list[StockBalance]:
     """Active items with nothing on any warehouse: shown under the stock (with no
     warehouse) so that an item just made is there to open."""
@@ -187,9 +268,11 @@ def item_details(conn: Connection, company_id: int, value_id: int) -> ItemDetail
     row = conn.execute(
         """
         SELECT i.id, i.subconto_value_id, i.unit_id, i.inventory_account_id,
+               i.min_quantity, u.precision,
                EXISTS (SELECT 1 FROM inventory_lines l WHERE l.item_id = i.id)
                OR EXISTS (SELECT 1 FROM stock_movements m WHERE m.item_id = i.id) AS used
-        FROM inventory_items i WHERE i.company_id = ? AND i.subconto_value_id = ?
+        FROM inventory_items i JOIN inventory_units u ON u.id = i.unit_id
+        WHERE i.company_id = ? AND i.subconto_value_id = ?
         """,
         (company_id, value_id),
     ).fetchone()
@@ -201,6 +284,8 @@ def item_details(conn: Connection, company_id: int, value_id: int) -> ItemDetail
         row["unit_id"],
         row["inventory_account_id"],
         bool(row["used"]),
+        row["min_quantity"],
+        row["precision"],
     )
 
 

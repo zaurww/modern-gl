@@ -1,4 +1,4 @@
-"""One table of the program's keys (D161). A page binds a key by its id — `bind(self,
+"""One table of the program's keys (D165). A page binds a key by its id — `bind(self,
 "post", self.post)` — and the table says which keys it is and how far it reaches (its
 scope); the legends under the tables («Ins — строка · F9 — копия строки…») are made from
 the same table, so a key and its description cannot drift apart. Two actions cannot share

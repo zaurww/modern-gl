@@ -1,4 +1,4 @@
-"""What happens when the program itself fails (D154): an exception nobody caught — in a
+"""What happens when the program itself fails (D158): an exception nobody caught — in a
 slot, in a worker thread — goes to the log (`infrastructure.logs`) and to one window,
 «Ошибка», with the traceback the user can copy and send. The window stays open, the
 books are untouched: every write is one transaction, which the failure rolled back.

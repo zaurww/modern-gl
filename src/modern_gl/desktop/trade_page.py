@@ -28,7 +28,13 @@ from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import N_, fold, tr
-from modern_gl.reporting.trade import PURCHASE, SALE, TradeDocument, trade_documents
+from modern_gl.reporting.trade import (
+    PURCHASE,
+    RETURNS_OF,
+    SALE,
+    TradeDocument,
+    trade_documents,
+)
 
 
 @dataclass(frozen=True)
@@ -108,7 +114,15 @@ class TradePage(ReportPage):
     def more_items(self) -> list[MenuItem]:
         """The portal (ASAN İmza): e-qaimə of a period as drafts; the month against the
         book — in the report's own «⋯», not in a second one."""
+        returns = RETURNS_OF[self.kind.doc_type]
         portal: list[MenuItem] = [
+            (
+                tr("+ Возврат поставщику")
+                if self.kind.doc_type == PURCHASE
+                else tr("+ Возврат от покупателя"),
+                lambda: self.new_inventory_document.emit(returns),
+            ),
+            None,
             (tr("E-qaimə с портала…"), self.import_eqaime),
             (tr("Сверка с порталом…"), self.reconcile),
             None,
@@ -129,11 +143,13 @@ class TradePage(ReportPage):
                 for r in rows
                 if needle in fold(f"{r.counterparties} {r.tax_ids} {self._invoice(r)}")
             ]
+        at = self.table.currentIndex()  # read again, the cursor stays on its document
+        was = self.model.rows[at.row()].id if at.isValid() else None
         self.model.set(
             [
                 Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100),
                 Column(tr("№"), lambda r: r.number, width=60),
-                Column(tr(self.kind.counterparty), lambda r: r.counterparties),
+                Column(tr(self.kind.counterparty), self._counterparty),
                 Column(
                     tr("E-qaimə"),
                     self._invoice,
@@ -155,6 +171,9 @@ class TradePage(ReportPage):
             ],
             rows,
         )
+        row = next((i for i, r in enumerate(rows) if r.id == was), None)
+        if row is not None:
+            self.table.setCurrentIndex(self.model.index(row, at.column()))
         self.header.subtitle.setText(tr("Документов: {n}", n=len(rows)))
         total = sum(r.total for r in rows if r.status == "posted")
         self.footer.setText(tr(self.kind.footer, total=format_minor(total)))
@@ -167,7 +186,7 @@ class TradePage(ReportPage):
         rows = self.model.rows
         if len(selected) > 1:
             rows = [rows[i] for i in sorted(selected) if i < len(rows)]
-        return [r for r in rows if r.status != "posted"]
+        return [r for r in rows if r.status != "posted" and not r.is_return]
 
     def _show_post_button(self) -> None:
         n = len(self.drafts_to_post())
@@ -240,6 +259,11 @@ class TradePage(ReportPage):
                 tr("Провести"),
                 tr("Остались черновиками: {n}\n\n{reasons}", n=len(result.failed), reasons=reasons),
             )
+
+    @staticmethod
+    def _counterparty(r: TradeDocument) -> str:
+        """A return says so before whose it is: «Возврат · Alfa»."""
+        return f"{tr('Возврат')} · {r.counterparties}" if r.is_return else r.counterparties
 
     @staticmethod
     def _invoice(r: TradeDocument) -> str:

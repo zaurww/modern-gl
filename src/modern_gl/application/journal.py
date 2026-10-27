@@ -1,4 +1,4 @@
-"""The journal read in pages (D164): a large company's year is tens of
+"""The journal read in pages (D168): a large company's year is tens of
 thousands of documents, so the page reads the 500 around the one shown and the rest as
 the list is scrolled. Pages follow the journal's order (date, number) by its key, not by
 an offset, and the search is a condition of the query: it finds what was not read yet."""

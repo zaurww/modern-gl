@@ -1,4 +1,4 @@
-"""The window and the log of a failure of the program (D154)."""
+"""The window and the log of a failure of the program (D158)."""
 
 AZ: dict[str, str] = {
     "Ошибка": "Xəta",

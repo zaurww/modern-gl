@@ -341,6 +341,10 @@ def main() -> None:
     win.open_inventory_document(inventory_document.id)
     assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
     shot("8c2_inventory_document")
+    win.nav.new_return("purchase_return", inventory_document.id)  # «Оформить возврат»
+    shot("8c17_purchase_return")
+    cast(InventoryDocumentPage, win.stack.currentWidget()).dirty = False  # not saved: shown
+    win.close_current()
     from modern_gl.reporting.trade import SALE, trade_documents
 
     sale = trade_documents(session.conn, session.company_id, SALE)[0]  # a service: not in stock

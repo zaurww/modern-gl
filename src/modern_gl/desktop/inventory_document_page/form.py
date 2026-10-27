@@ -65,6 +65,8 @@ class InventoryDocumentForm(GridEditing, PageWidget):
     close_requested = Signal()
     title_changed = Signal()
     open_gl_document = Signal(int)
+    make_return = Signal(str, int)  # the return's type, the purchase (sale) it returns
+    buy_shortage = Signal(int)  # a draft short of goods: a purchase «ждёт e-qaimə» of them
 
     DUPLICATE_COLUMN = 0  # the copy of a line: on its item
 
@@ -253,6 +255,20 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_gl)
         actions.addWidget(self.btn_accrual)
+        self.btn_return = button(tr("Оформить возврат"), "flat")
+        self.btn_return.setToolTip(
+            tr("Товар вернули: возврат по этому документу — его цены и ƏDV, без лишнего ввода")
+        )
+        actions.addWidget(self.btn_return)
+        self.btn_shortage = button(tr("Оприходовать недостающее…"), "flat")
+        self.btn_shortage.setToolTip(
+            tr(
+                "Товар пришёл, а документов нет: покупка «ждёт e-qaimə» на недостающее по "
+                "последней цене; проведите её — и этот документ проведётся"
+            )
+        )
+        self.btn_shortage.hide()
+        actions.addWidget(self.btn_shortage)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")

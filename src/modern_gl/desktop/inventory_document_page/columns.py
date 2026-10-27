@@ -38,6 +38,9 @@ SALE1 = "sale1"
 SALE2 = "sale2"
 SALE3 = "sale3"
 MEMO = "memo"
+# a receipt's line is goods (through a warehouse) or a service (to an account): the choice
+KIND = "kind"
+GOODS, SERVICE = 1, 0
 SC_KEYS = {SC1, SC2, SC3}  # the subconto of the line's offset (supplier, customer) account
 ESC_KEYS = {ESC1, ESC2, ESC3}
 SALE_KEYS = {SALE1, SALE2, SALE3}
@@ -51,7 +54,7 @@ STORED_FIELDS = {
     AMOUNT: "amount",
     MEMO: "memo",
 }
-LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
+LIST_KEYS = {ITEM, KIND, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
 # the name of a line keeps this much; these columns narrow first, down to NARROW_MIN
 ITEM_MIN = 300
 NARROW_MIN = 84
@@ -63,6 +66,7 @@ VAT_DOCUMENTS = INVENTORY_VAT_DOCUMENTS  # kept here for the pages
 
 HEADERS = {
     ITEM: N_("Товар"),
+    KIND: N_("Вид"),
     WAREHOUSE: N_("Склад"),
     TO_WAREHOUSE: N_("Склад-получатель"),
     QUANTITY: N_("Количество"),
@@ -90,7 +94,12 @@ SALE_HEADERS = {ITEM: N_("Товар / услуга"), MEMO: N_("Содержа�
 # a receipt line without an item: a service, a fixed asset or any expense bought
 RECEIPT_HEADERS = {ITEM: N_("Товар / услуга / ОС"), MEMO: N_("Содержание")}
 # the first subconto of the offset account, when the account itself is not shown (D90)
-PARTY_HEADERS = {"receipt": "Поставщик", "sale": "Покупатель"}
+PARTY_HEADERS = {
+    "receipt": "Поставщик",
+    "sale": "Покупатель",
+    "purchase_return": "Поставщик",
+    "sale_return": "Покупатель",
+}
 
 DOCUMENT_TYPES = {
     "opening": "Начальные остатки",
@@ -100,6 +109,8 @@ DOCUMENT_TYPES = {
     "sale": "Продажа",
     "transfer": "Перемещение",
     "landed_cost": "Дополнительные расходы",
+    "purchase_return": "Возврат поставщику",
+    "sale_return": "Возврат от покупателя",
 }
 
 HINT = (  # the keys of the page (desktop/shortcuts.py), under its table
@@ -202,6 +213,7 @@ class InventoryGridRow:
     sale_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
     # a receipt's service of an earlier month (D65): the last day of that month
     expense_date: str | None = None
+    returned_line_id: int | None = None  # a return's line: the purchase's (sale's) it returns
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""

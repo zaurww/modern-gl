@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
+
 from modern_gl.application.common import where_used
+from modern_gl.application.inventory.amounts import blank, to_quantity
 from modern_gl.application.inventory.base import InventoryBase
 from modern_gl.application.inventory.model import INCOMING_REASONS, QUANTITY_SCALE, UsualUnit
 from modern_gl.domain.accounts import FX_GAIN
 from modern_gl.domain.errors import ValidationError
-from modern_gl.i18n import tr
+from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import IntegrityError, insert, transaction
 
 
@@ -88,10 +91,12 @@ class CatalogCommands(InventoryBase):
         group_id: int | None,
         unit_id: int,
         inventory_account_id: int,
+        min_quantity: str | int | Decimal | None = None,
     ) -> None:
         """The item's window saved: its name, code and group in the directory, its unit
-        and stock account — all or nothing."""
+        and stock account, its minimum stock — all or nothing."""
         with transaction(self.conn):
+            self.set_min_quantity(company_id, item_id, min_quantity)
             value_id = self._item(company_id, item_id)["subconto_value_id"]
             self.ledger.update_subconto_value(company_id, value_id, name, code)
             self.ledger.set_subconto_value_parent(company_id, value_id, group_id)
@@ -128,6 +133,30 @@ class CatalogCommands(InventoryBase):
                 },
             )
 
+    def set_min_quantity(
+        self, company_id: int, item_id: int, quantity: str | int | Decimal | None
+    ) -> None:
+        """The item's minimum stock (on all warehouses together); empty or 0 — none."""
+        minimum = None if quantity is None or blank(quantity) else to_quantity(quantity)
+        if minimum is not None and minimum < 0:
+            raise ValidationError(tr("минимальный остаток не может быть меньше нуля"))
+        with transaction(self.conn):
+            item = self._item(company_id, item_id)
+            minimum = minimum or None
+            if item["min_quantity"] == minimum:
+                return
+            self.conn.execute(
+                "UPDATE inventory_items SET min_quantity = ? WHERE company_id = ? AND id = ?",
+                (minimum, company_id, item_id),
+            )
+            self._audit(
+                company_id,
+                "inventory_item",
+                item_id,
+                "set_minimum",
+                {"before": item["min_quantity"], "after": minimum},
+            )
+
     def delete_value(self, company_id: int, value_id: int) -> None:
         """Delete a directory element; an item or a warehouse with it, when no document
         has it (`Ledger.delete_subconto_value` checks the rest)."""
@@ -162,6 +191,7 @@ class CatalogCommands(InventoryBase):
         *,
         group_id: int | None = None,
         first_warehouse: str | None = None,
+        min_quantity: str | int | Decimal | None = None,
     ) -> int:
         """The item dialog's «Сохранить», in one transaction: a usual unit is taken by its
         code or made, and a company with no warehouse yet gets `first_warehouse` — a
@@ -176,7 +206,44 @@ class CatalogCommands(InventoryBase):
             ).fetchone()
             if first_warehouse and has_warehouse is None:
                 self.add_warehouse(company_id, first_warehouse)
+            self.set_min_quantity(company_id, item_id, min_quantity)
         return item_id
+
+    def add_named_items(
+        self,
+        company_id: int,
+        names: list[str],
+        unit: int | UsualUnit,
+        inventory_account_id: int,
+        *,
+        first_warehouse: str | None = None,
+    ) -> list[int]:
+        """Purchase lines made goods, in one transaction: an item for each name, in the
+        same order. A name an active item has already takes that item, the same name twice
+        is one item — nothing is added twice."""
+        with transaction(self.conn):
+            known = {
+                fold(row["name"]): row["id"]
+                for row in self.conn.execute(
+                    "SELECT i.id, v.name FROM inventory_items i "
+                    "JOIN subconto_values v ON v.company_id = i.company_id "
+                    "AND v.id = i.subconto_value_id WHERE i.company_id = ? AND v.active = 1",
+                    (company_id,),
+                )
+            }
+            result = []
+            for name in names:
+                key = fold(name.strip())
+                if key not in known:
+                    known[key] = self.add_new_item(
+                        company_id,
+                        name,
+                        unit,
+                        inventory_account_id,
+                        first_warehouse=first_warehouse,
+                    )
+                result.append(known[key])
+        return result
 
     def _usual_unit(self, company_id: int, unit: UsualUnit) -> int:
         row = self.conn.execute(

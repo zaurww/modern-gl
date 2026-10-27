@@ -1,4 +1,5 @@
-"""The rows of «Требует внимания» stand in a fixed order — bank, stock, unpaid e-qaimə,
+"""The rows of «Требует внимания» stand in a fixed order — bank, goods below their minimum,
+stock below zero, unpaid e-qaimə,
 purchases waiting for e-qaimə — whatever order the modules are imported in (the window's
 packages once changed it by importing in another order)."""
 
@@ -7,7 +8,13 @@ from __future__ import annotations
 import subprocess
 import sys
 
-ORDER = ["bank_attention", "negative_stock", "unpaid_invoices", "awaiting_invoices"]
+ORDER = [
+    "bank_attention",
+    "items_below_minimum",
+    "negative_stock",
+    "unpaid_invoices",
+    "awaiting_invoices",
+]
 MODULES = [
     "modern_gl.application.bank.statements",
     "modern_gl.reporting.inventory.stock",

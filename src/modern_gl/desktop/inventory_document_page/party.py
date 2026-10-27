@@ -13,7 +13,12 @@ from modern_gl.desktop.widgets import button, caption
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
-CAPTIONS = {"receipt": "Поставщик", "sale": "Покупатель"}
+CAPTIONS = {
+    "receipt": "Поставщик",
+    "sale": "Покупатель",
+    "purchase_return": "Поставщик",
+    "sale_return": "Покупатель",
+}
 
 
 class PartyPart(InventoryDocumentForm):

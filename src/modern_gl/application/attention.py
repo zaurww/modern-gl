@@ -30,7 +30,7 @@ _SOURCES: dict[AttentionSource, int] = {}
 
 # where each module's rows stand on «Bu gün»: money first, then goods, then papers —
 # an explicit place, not the order in which the modules happened to be imported
-BANK, STOCK, UNPAID_INVOICES, AWAITING_INVOICES = 10, 20, 30, 40
+BANK, BELOW_MINIMUM, STOCK, UNPAID_INVOICES, AWAITING_INVOICES = 10, 15, 20, 30, 40
 
 
 def attention_source(place: int) -> Callable[[AttentionSource], AttentionSource]:

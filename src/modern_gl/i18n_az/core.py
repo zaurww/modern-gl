@@ -1227,7 +1227,6 @@ AZ: dict[str, str] = {
     "вход на портал истёк — войдите ещё раз": "portala giriş vaxtı bitib — yenidən daxil olun",
     "портал ответил {code}: {text}": "portal {code} cavabı verdi: {text}",
     "портал недоступен: {error}": "portal əlçatan deyil: {error}",
-    "возврат — пока вводится вручную": "qaytarma — hələlik əl ilə daxil edilir",
     "отрицательные суммы — проверьте на портале": "mənfi məbləğlər — portalda yoxlayın",
     "Без названия": "Adsız",
     "Продажа по e-qaimə {n}": "E-qaimə {n} üzrə satış",

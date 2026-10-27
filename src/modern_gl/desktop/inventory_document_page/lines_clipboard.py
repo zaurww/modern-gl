@@ -19,6 +19,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     EXPENSE_MONTH,
     HEADERS,
     ITEM,
+    KIND,
     LIST_KEYS,
     MEMO,
     PASTE_ORDER,
@@ -119,6 +120,7 @@ class LinesClipboard(InventoryLinesBase):
             for column, key in enumerate(self.columns)
             if column >= start
             and shown(column)
+            and key != KIND  # what the line is follows from its item
             and (self.editable(key) or key == UNIT)
             and self.applies(row_index, key)
         ]
@@ -146,7 +148,7 @@ class LinesClipboard(InventoryLinesBase):
 
     def copy_text(self, shown) -> str:
         """The lines as tab-separated text with a header, for Excel."""
-        columns = [c for c in range(len(self.columns)) if shown(c)]
+        columns = [c for c in range(len(self.columns)) if shown(c) and self.columns[c] != KIND]
 
         def title(key: str) -> str:
             if key in SALE_KEYS:

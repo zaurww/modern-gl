@@ -5,8 +5,9 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
+from modern_gl.application.common import local_day
 from modern_gl.domain.eqaime import ALL, IMPORTED, PortalInvoice, portal_invoice
 from modern_gl.domain.periods import MONTH, span_of
 from modern_gl.i18n import tr
@@ -54,7 +55,7 @@ def usual_span(conn: Connection, company_id: int, outgoing: bool) -> str:
     ).fetchone()
     if row is None:
         return MONTH
-    marked = datetime.fromisoformat(row["reconciled_at"]).date()
+    marked = local_day(row["reconciled_at"])
     span = span_of(date.fromisoformat(row["date_from"]), date.fromisoformat(row["date_to"]), marked)
     return span or MONTH
 

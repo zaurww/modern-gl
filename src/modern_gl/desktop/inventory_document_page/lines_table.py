@@ -15,6 +15,7 @@ from PySide6.QtCore import (
 from PySide6.QtWidgets import (
     QAbstractItemDelegate,
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -50,6 +51,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     EXPENSE_MONTH,
     ITEM,
     ITEM_MIN,
+    KIND,
     LIST_KEYS,
     MEMO,
     NARROW_MIN,
@@ -147,6 +149,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         value = index.data(Qt.ItemDataRole.EditRole)
         if model.key(index) == ITEM and model.is_service(index.row()):
             value = model.rows[index.row()].memo  # what the service is, to read or correct
+        elif model.key(index) == KIND:
+            value = ""  # both choices in the list, not only the line's own
         elif model.key(index) in LIST_KEYS:
             value = "" if value is None else index.data(Qt.ItemDataRole.DisplayRole)
         editor.setText(value or "")
@@ -172,7 +176,10 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         """The item, warehouse or account named; a name the list lacks is asked about
         (UNSET: nothing to set now). A service's corrected name stays its memo."""
         value = resolve_choice(model.choices(index.row(), key), text) if text else None
-        if key == ITEM and text and value is None and model.is_service(index.row()):
+        if key == KIND and value is None:
+            return UNSET  # neither of the two
+        service = model.is_service(index.row())
+        if key == ITEM and text and value is None and service and not editor.property("gl_add"):
             model.setData(model.index(index.row(), model.columns.index(MEMO)), text)
             return UNSET
         if text and value is None:
@@ -278,6 +285,7 @@ class InventoryLinesTable(QTableView):
             TO_WAREHOUSE: 110,
             QUANTITY: 100,
             UNIT: 64,
+            KIND: 84,
             PRICE: 84,
             AMOUNT: 96,
             CURRENCY_AMOUNT: 104,
@@ -304,7 +312,7 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, int(key[-1]) not in used or in_header)
             if key in {WAREHOUSE, UNIT}:
                 self.setColumnHidden(column, not goods)
-            if key in {EXPENSE, EXPENSE_MONTH}:
+            if key in {KIND, EXPENSE, EXPENSE_MONTH}:  # a service line is there to change
                 self.setColumnHidden(column, not expenses)
             if key == ACCOUNT:
                 self.setColumnHidden(column, model.accounts_hidden or in_header)
@@ -404,16 +412,35 @@ class InventoryLinesTable(QTableView):
 
 class NewNamesDialog(QDialog):
     """Names pasted from Excel that are not in the lists yet: add them all at once.
-    New items need a unit (pick one or type a new one) and a stock account."""
+    New items need a unit (pick one or type a new one) and a stock account.
+    With `lines` (row, name): purchase services to make goods, each checked or not."""
 
-    def __init__(self, session: Session, listing: str, items: bool, parent=None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        listing: str,
+        items: bool,
+        parent=None,
+        lines: list[tuple[int, str]] | None = None,
+        chosen: set[int] | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Новые элементы справочников"))
+        self.setWindowTitle(tr("Строки — товары") if lines else tr("Новые элементы справочников"))
         self.setMinimumWidth(440)
         form = QFormLayout(self)
-        text = QLabel(tr("Этих элементов нет в справочниках. Добавить?\n\n{names}", names=listing))
+        text = QLabel(
+            tr("Отмеченные строки станут товарами и придут на склад:")
+            if lines
+            else tr("Этих элементов нет в справочниках. Добавить?\n\n{names}", names=listing)
+        )
         text.setWordWrap(True)
         form.addRow(text)
+        self.lines: list[tuple[int, QCheckBox]] = []
+        for row, name in lines or []:
+            box = QCheckBox(name)
+            box.setChecked(row in (chosen or set()))
+            self.lines.append((row, box))
+            form.addRow(box)
         self.unit = QComboBox()
         self.unit.setEditable(True)
         for unit in unit_choices(session.conn, session.company_id):
@@ -429,6 +456,12 @@ class NewNamesDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
         )
+        if lines:
+            buttons.button(QDialogButtonBox.StandardButton.Yes).setText(tr("Сделать товарами"))
+            buttons.button(QDialogButtonBox.StandardButton.No).setText(tr("Отмена"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def checked_rows(self) -> list[int]:
+        return [row for row, box in self.lines if box.isChecked()]

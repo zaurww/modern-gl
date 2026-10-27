@@ -66,7 +66,7 @@ class Ledger(
     modules are objects of their own over the same connection — `ledger.bank`,
     `ledger.conversion`, `ledger.eqaime` (debt 2, D71): the core knows none of them, and
     a module can be left out of a company without touching the core. A module holds the
-    ledger and calls it (`ledger/module.py`, D158); it is not the ledger."""
+    ledger and calls it (`ledger/module.py`, D162); it is not the ledger."""
 
     @cached_property
     def bank(self) -> BankModule:

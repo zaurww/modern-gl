@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, tzinfo
 
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import NotFoundError, PeriodClosedError, ValidationError
@@ -21,6 +21,16 @@ Subconto = tuple[int | None, int | None, int | None]
 def now() -> str:
     """The current UTC time as stored in the database."""
     return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+def local_day(stamp: str, zone: tzinfo | None = None) -> date:
+    """The user's day of a stored time (`now()`, UTC): a mark made at 02:30 in Baku on the
+    1st is the 1st, not the last day of the month before. `zone` — the computer's when
+    None; a time stored without a zone is taken as written."""
+    moment = datetime.fromisoformat(stamp)
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(zone)
+    return moment.date()
 
 
 def pad_subconto(values: Sequence[int | None], line_no: int | None = None) -> Subconto:

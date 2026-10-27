@@ -25,7 +25,7 @@ ALLOCATION_METHODS = ("value", "quantity", "manual")
 # VAT rates are in hundredths of a percent; a receipt starts with the standard rate.
 VAT_RATE_SCALE = 10_000
 STANDARD_VAT_RATE = 1800
-VAT_DOCUMENTS = frozenset({"receipt", "sale"})  # the documents a line's VAT is on
+VAT_DOCUMENTS = frozenset({"receipt", "sale", "purchase_return", "sale_return"})  # with VAT
 # the account a receipt's accrual goes to when the chart has none (D65)
 ACCRUED_CODE = "76H"
 # the accounts a sale posts to (roles) as the settings name them
@@ -47,6 +47,12 @@ INCOMING_REASONS = {
 # documents whose lines bring goods in at their amount: Dt stock / Kt the line's account
 INCOMING_TYPES = {"opening", "receipt", "incoming"}
 INCOMING_SQL = "(" + ", ".join(f"'{t}'" for t in sorted(INCOMING_TYPES)) + ")"  # for IN
+# returns (D153): goods back to the supplier, goods back from a customer; each returns
+# lines of its document type
+PURCHASE_RETURN, SALE_RETURN = "purchase_return", "sale_return"
+RETURN_TYPES = {PURCHASE_RETURN: "receipt", SALE_RETURN: "sale"}
+# what an issue takes its goods from, oldest first: whatever came in, a customer's return too
+QUEUE_SQL = "(" + ", ".join(f"'{t}'" for t in sorted(INCOMING_TYPES | {SALE_RETURN})) + ")"
 
 
 @dataclass(frozen=True)
@@ -128,6 +134,25 @@ class SaleLine:
     customer_subconto: Sequence[int | None] = ()
     line_id: int | None = None
     sale_subconto: Sequence[int | None] = ()
+
+
+@dataclass(frozen=True)
+class ReturnLine:
+    """A line of a return: goods back to the supplier or from a customer. The amount is
+    the price of the return without VAT; the party's account and subconto default to the
+    document's. `returned_line_id`: the purchase's (sale's) line it returns — its price and
+    its cost; None — a return without its document (the average cost)."""
+
+    item_id: int | None
+    warehouse_id: int | None
+    quantity: str | int | Decimal | None
+    amount: str | int | Decimal | None
+    vat_amount: str | int | Decimal | None = None
+    memo: str = ""
+    party_account_id: int | None = None
+    party_subconto: Sequence[int | None] = ()
+    line_id: int | None = None
+    returned_line_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -266,6 +291,7 @@ class InventoryLineData:
     cost_subconto: tuple[int | None, int | None, int | None] = (None, None, None)
     # a receipt's line without an item accrued in an earlier month: its last day (D65)
     expense_date: str | None = None
+    returned_line_id: int | None = None  # a return's line: the line it returns
 
 
 @dataclass(frozen=True)

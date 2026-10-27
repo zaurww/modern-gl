@@ -1,4 +1,4 @@
-"""What the program remembers for the user is in one place (desktop/preferences.py, D162):
+"""What the program remembers for the user is in one place (desktop/preferences.py, D166):
 QSettings is created there only, and each key reads back with its type and default."""
 
 import ast

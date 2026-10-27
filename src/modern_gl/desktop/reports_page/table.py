@@ -259,6 +259,11 @@ class GroupHeader(QHeaderView):
             )
             area = rect.adjusted(0, self._band(), 0, 0) if inner else rect
             _grid_lines(painter, area, logicalIndex == 0)
+            # the grid's top edge: without it the table looks open above
+            painter.save()
+            painter.setPen(QColor(P.hairline))
+            painter.drawLine(rect.topLeft(), rect.topRight())
+            painter.restore()
 
     def paintEvent(self, e) -> None:
         super().paintEvent(e)

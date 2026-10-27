@@ -179,6 +179,10 @@ SLUGS = {
     150: "inventory-reports",
     151: "inventory-entry-party-stock-count",
     152: "document-language-company",
+    153: "inventory-returns",
+    154: "minimum-stock-sale-before-receipt",
+    155: "schema-value-checks",
+    156: "purchase-line-goods-or-service",
 }
 
 

@@ -63,6 +63,8 @@ class DocumentsPart(InventoryForm):
             "sale": tr("Продажа"),
             "transfer": tr("Перемещение"),
             "landed_cost": tr("Дополнительные расходы"),
+            "purchase_return": tr("Возврат поставщику"),
+            "sale_return": tr("Возврат от покупателя"),
         }.get(doc_type, doc_type)
 
     def _selected_document(self) -> InventoryDocumentSummary | None:

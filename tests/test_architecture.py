@@ -210,7 +210,7 @@ def test_ledger_is_the_core_and_modules_are_objects_of_their_own():
 
 
 def test_a_module_calls_the_core_and_is_not_the_core():
-    """D158: a module's write object holds the ledger (`self.ledger`) and calls it; it
+    """D162: a module's write object holds the ledger (`self.ledger`) and calls it; it
     inherits none of the core's scenarios (`ledger.bank.add_account` is no call), and it
     reaches the ledger's internals only through `ledger/module.py`."""
     from modern_gl.application.bank import BankModule

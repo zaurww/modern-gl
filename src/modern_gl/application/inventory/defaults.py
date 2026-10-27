@@ -14,7 +14,7 @@ def default_vat_rate(ledger: Ledger, company_id: int, doc_type: str) -> int | No
     its VAT to; else none."""
     if doc_type not in VAT_DOCUMENTS:
         return None
-    role = OUTPUT_VAT if doc_type == "sale" else INPUT_VAT
+    role = OUTPUT_VAT if doc_type in ("sale", "sale_return") else INPUT_VAT
     return STANDARD_VAT_RATE if ledger.account_role(company_id, role) is not None else None
 
 

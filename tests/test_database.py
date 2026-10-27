@@ -75,6 +75,9 @@ FROZEN = {
     "0052_vat_payer.sql": "3fd20def7c6eebfa",
     "0053_integrity_guards.sql": "cbe99972b6e18951",
     "0054_document_language.sql": "bf04a8471463d5ce",
+    "0055_returns.sql": "0a1c590717ca2e89",
+    "0056_item_minimum.sql": "5434a29414182511",
+    "0057_value_checks.sql": "b9905e018735542d",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).
@@ -352,7 +355,7 @@ def test_demo_company_is_consistent(ledger):
 
 def test_a_locked_file_is_told_in_the_users_words(tmp_path):
     """Another connection (another program) keeps the write lock: after the timeout the
-    write is refused with a message for the user, not with a traceback (D155)."""
+    write is refused with a message for the user, not with a traceback (D159)."""
     path = tmp_path / "shared.gl"
     first = connect(path)
     second = connect(path, timeout=0.2)

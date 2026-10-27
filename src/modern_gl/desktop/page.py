@@ -1,4 +1,4 @@
-"""What the window asks of every page it shows (D160): one protocol instead of
+"""What the window asks of every page it shows (D164): one protocol instead of
 `getattr(page, "is_dirty", …)` and chains of `isinstance`. A page inherits `PageWidget`
 and overrides what it does differently; the window calls the protocol only."""
 

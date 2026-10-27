@@ -9,7 +9,7 @@ from datetime import date
 from modern_gl.application.common import fill_subconto
 from modern_gl.application.inventory.amounts import format_quantity, money
 from modern_gl.application.inventory.drafts import DraftCommands
-from modern_gl.application.inventory.model import INCOMING_SQL, Movement
+from modern_gl.application.inventory.model import QUEUE_SQL, Movement
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.dates import iso_date
@@ -19,9 +19,18 @@ from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row
 
 
+class StockShortageError(ValidationError):
+    """Not enough of an item on a warehouse for what a document takes — the goods came,
+    their papers did not (D154): the page offers to bring them in («ждёт e-qaimə»)."""
+
+    def __init__(self, message: str, item_id: int, warehouse_id: int) -> None:
+        super().__init__(message)
+        self.item_id, self.warehouse_id = item_id, warehouse_id
+
+
 def require_stock(item: Row, warehouse: Row, requested: int, available: int) -> None:
     if requested > available:
-        raise ValidationError(
+        raise StockShortageError(
             tr(
                 "недостаточно товара «{item}» на складе «{warehouse}»: "
                 "доступно {available}, требуется {requested}",
@@ -29,7 +38,9 @@ def require_stock(item: Row, warehouse: Row, requested: int, available: int) -> 
                 warehouse=warehouse["name"],
                 available=format_quantity(available, item["unit_precision"]),
                 requested=format_quantity(requested, item["unit_precision"]),
-            )
+            ),
+            item["id"],
+            warehouse["id"],
         )
 
 
@@ -160,7 +171,7 @@ class StockCommands(DraftCommands):
             JOIN inventory_documents d ON d.id = l.document_id AND d.company_id = l.company_id
             LEFT JOIN stock_consumptions c ON c.receipt_line_id = l.id
             WHERE l.company_id = ? AND l.item_id = ? AND d.status = 'posted'
-              AND d.doc_type IN {INCOMING_SQL}
+              AND d.doc_type IN {QUEUE_SQL}
             GROUP BY l.id, l.quantity, d.doc_date, d.id, l.line_no
             HAVING available > 0
             ORDER BY d.doc_date, d.id, l.line_no

@@ -17,6 +17,7 @@ from modern_gl.application.inventory.model import (
     LandedCostChargeData,
     LandedCostTarget,
     ReceiptLine,
+    ReturnLine,
     SaleLine,
     StoredLine,
     TransferLine,
@@ -62,6 +63,14 @@ class DraftCommands(InventoryBase):
             "ORDER BY line_no",
             (company_id, document_id),
         ).fetchall()
+        returned = {
+            r["line_id"]: r["returned_line_id"]
+            for r in self.conn.execute(
+                "SELECT line_id, returned_line_id FROM inventory_returns "
+                "WHERE company_id = ? AND document_id = ?",
+                (company_id, document_id),
+            )
+        }
         return InventoryDocumentData(
             doc["id"],
             doc["number"],
@@ -91,6 +100,7 @@ class DraftCommands(InventoryBase):
                     row["cost_account_id"],
                     (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"]),
                     row["expense_date"],
+                    returned.get(row["id"]),
                 )
                 for row in rows
             ),
@@ -260,6 +270,7 @@ class DraftCommands(InventoryBase):
         | Sequence[IssueLine]
         | Sequence[TransferLine]
         | Sequence[SaleLine]
+        | Sequence[ReturnLine]
         | Sequence[LandedCostTarget],
     ) -> None:
         """Before a draft is rewritten: drop the lines that are gone, renumber the rest
@@ -275,10 +286,40 @@ class DraftCommands(InventoryBase):
             "UPDATE inventory_lines SET line_no = -line_no WHERE document_id = ?", (document_id,)
         )
 
+    def _require_lines_not_returned(
+        self, company_id: int, document_id: int, keep: set[int] | tuple[()]
+    ) -> None:
+        returned = [
+            row
+            for row in self.conn.execute(
+                """
+                SELECT own.id, own.line_no, d.number
+                FROM inventory_lines own
+                JOIN inventory_returns r ON r.company_id = own.company_id
+                 AND r.returned_line_id = own.id
+                JOIN inventory_documents d ON d.id = r.document_id
+                WHERE own.company_id = ? AND own.document_id = ? AND r.document_id <> ?
+                ORDER BY own.line_no
+                """,
+                (company_id, document_id, document_id),
+            )
+            if row["id"] not in keep
+        ]
+        if returned:
+            raise ValidationError(
+                tr(
+                    "строка {line}: по ней оформлен возврат №{n} — сначала удалите его",
+                    line=abs(returned[0]["line_no"]),
+                    n=returned[0]["number"],
+                )
+            )
+
     def _require_lines_unreferenced(
         self, company_id: int, document_id: int, keep: set[int] | tuple[()]
     ) -> None:
-        """A receipt line that landed cost was allocated to cannot disappear."""
+        """A receipt line that landed cost was allocated to, a purchase (sale) line a
+        return names, cannot disappear."""
+        self._require_lines_not_returned(company_id, document_id, keep)
         used = [
             row
             for row in self.conn.execute(

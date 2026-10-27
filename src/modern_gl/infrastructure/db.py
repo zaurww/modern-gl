@@ -70,7 +70,7 @@ def when_closed(conn: sqlite3.Connection, then: Callable[[], None]) -> None:
 
 def journal_mode(path: str | Path) -> str:
     """WAL keeps its shared memory beside the file, and that is not shared on a network
-    or cloud folder: there the file has the classic journal (D165)."""
+    or cloud folder: there the file has the classic journal (D169)."""
     from modern_gl.infrastructure.company_file import is_network_path  # it imports this
 
     if str(path) in ("", ":memory:"):
@@ -215,7 +215,7 @@ _SAVEPOINTS = count(1)  # names of nested blocks: unique, so an inner one never 
 @contextmanager
 def transaction(conn: sqlite3.Connection) -> Generator[None]:
     """Run the block atomically. Inside an open transaction the block is a savepoint of
-    its own (D156): its failure undoes the block only, the outer transaction goes on —
+    its own (D160): its failure undoes the block only, the outer transaction goes on —
     a loop that keeps the documents that posted and reports the ones that did not.
     A company open for viewing refuses at once, with a message for the user."""
     if conn.in_transaction:

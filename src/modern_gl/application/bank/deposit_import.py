@@ -16,7 +16,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from modern_gl.application.bank.imported import ImportedOperation
 from modern_gl.application.bank.operations import (
@@ -31,6 +31,7 @@ from modern_gl.application.bank.operations import (
 )
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.application.bank.statement import StatementLine, statement
+from modern_gl.application.common import local_day
 from modern_gl.domain.dates import next_day
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import portal_minor
@@ -176,10 +177,8 @@ class PortalLoad:
     def closed_to(self) -> str:
         """The last day of the period that had ended when it was loaded: a day loaded on
         that day may get an operation later — it is loaded again."""
-        moment = datetime.fromisoformat(self.loaded_at)
-        if moment.tzinfo is not None:
-            moment = moment.astimezone()  # the portal's day is the user's day
-        return min(self.date_to, (moment.date() - timedelta(days=1)).isoformat())
+        day = local_day(self.loaded_at)  # the portal's day is the user's day
+        return min(self.date_to, (day - timedelta(days=1)).isoformat())
 
 
 def portal_loads(conn: Connection, company_id: int, place: BankPlace) -> list[PortalLoad]:

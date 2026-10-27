@@ -35,7 +35,9 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
+    GOODS,
     ITEM,
+    KIND,
     MEMO,
     PRICE,
     QUANTITY,
@@ -46,6 +48,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     SC1,
     SC2,
     SC3,
+    SERVICE,
     SEVERAL_MONTHS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
@@ -81,12 +84,22 @@ def by_sale_kinds(catalog, kinds: list[int], values) -> list[int | None]:
 
 
 # the account a new line's offset starts with, by the document (debt 11: by type, not 60/62/46)
-OFFSET_PURPOSE = {"opening": SUPPLIER, "receipt": SUPPLIER, "sale": CUSTOMER}
-PARTY_DOCUMENTS = {"receipt", "sale"}  # the documents with a supplier or customer
+OFFSET_PURPOSE = {
+    "opening": SUPPLIER,
+    "receipt": SUPPLIER,
+    "sale": CUSTOMER,
+    "purchase_return": SUPPLIER,
+    "sale_return": CUSTOMER,
+}
+# the documents with a supplier or customer
+PARTY_DOCUMENTS = {"receipt", "sale", "purchase_return", "sale_return"}
+RETURNS = {"purchase_return", "sale_return"}
 
 
 class InventoryLinesBase(QAbstractTableModel):
     changed = Signal()
+    # «Товар» chosen in «Вид» of a service line: the page makes it an item (row)
+    goods_wanted = Signal(int)
 
     def __init__(
         self,
@@ -137,9 +150,14 @@ class InventoryLinesBase(QAbstractTableModel):
             ]
         elif doc_type == "landed_cost":
             self.columns = [ITEM, WAREHOUSE, QUANTITY, UNIT, AMOUNT, MEMO]
+        elif doc_type in RETURNS:  # goods only, at the price of the return
+            self.columns = [
+                ITEM, WAREHOUSE, QUANTITY, UNIT, PRICE, AMOUNT, VAT, ACCOUNT, SC1, SC2, SC3, MEMO
+            ]  # fmt: skip
         else:
             self.columns = [
                 ITEM,
+                *([KIND] if doc_type == "receipt" else []),
                 WAREHOUSE,
                 QUANTITY,
                 UNIT,
@@ -172,6 +190,8 @@ class InventoryLinesBase(QAbstractTableModel):
             return [(item.id, item.label) for item in self.items.values()]
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return [(warehouse.id, warehouse.label) for warehouse in self.warehouses.values()]
+        if key == KIND:
+            return [(GOODS, tr("Товар")), (SERVICE, tr("Услуга"))]
         if key == ACCOUNT:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         if key == EXPENSE:  # goods come to a stock account through the warehouse only
@@ -348,6 +368,8 @@ class InventoryLinesBase(QAbstractTableModel):
         return not lines or not all(self.is_service(i) for i in lines)
 
     def applies(self, row: int, key: str) -> bool:
+        if key == KIND:  # a line begun: an empty one becomes goods by its item
+            return not self.rows[row].is_empty()
         if key in {WAREHOUSE, UNIT} and self.is_service(row):
             return False
         if key in ESC_KEYS | {EXPENSE, EXPENSE_MONTH} and not self.is_service(row):
@@ -391,7 +413,7 @@ class InventoryLinesBase(QAbstractTableModel):
     def editable(self, key: str) -> bool:
         if key in {UNIT}:
             return False
-        if key in {PRICE, AMOUNT} and self.doc_type not in {*INCOMING_TYPES, "sale"}:
+        if key in {PRICE, AMOUNT} and self.doc_type not in {*INCOMING_TYPES, "sale", *RETURNS}:
             return False
         if key == VAT and self.doc_type not in VAT_DOCUMENTS:
             return False

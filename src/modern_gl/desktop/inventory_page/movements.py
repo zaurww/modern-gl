@@ -21,11 +21,17 @@ from modern_gl.reporting.inventory import (
     stock_card,
 )
 
+PARTY_DOCUMENTS = ("receipt", "sale", "purchase_return", "sale_return")
+
 
 def source_text(source: MovementSource, counterparty: bool = True) -> str:
     """«Alış · e-qaimə AA123 · Supplier», «İdxal · YGB 12345», «Yerdəyişmə → Mağaza»."""
     if source.movement_type == "opening":
         parts = [tr("Начальные остатки")]
+    elif source.doc_type == "purchase_return":
+        parts = [tr("Возврат поставщику")]
+    elif source.doc_type == "sale_return":
+        parts = [tr("Возврат от покупателя")]
     elif source.doc_type == "incoming":
         reason = INCOMING_REASONS.get(source.incoming_reason or "")
         parts = [tr("Оприходование"), *([tr(reason[0])] if reason else [])]
@@ -43,7 +49,7 @@ def source_text(source: MovementSource, counterparty: bool = True) -> str:
         parts = [tr("Дополнительные расходы"), *([source.cost_type] if source.cost_type else [])]
     else:  # an issue
         parts = [tr("Списание"), *([source.cost_type] if source.cost_type else [])]
-    if counterparty and source.counterparty and source.doc_type in ("receipt", "sale"):
+    if counterparty and source.counterparty and source.doc_type in PARTY_DOCUMENTS:
         parts.append(source.counterparty)
     return " · ".join(parts)
 

@@ -1,4 +1,4 @@
-"""`db.transaction` inside an open transaction is a savepoint (D156): a block that fails
+"""`db.transaction` inside an open transaction is a savepoint (D160): a block that fails
 is undone alone, the outer transaction goes on. `dry_run` undoes a block that succeeded."""
 
 from __future__ import annotations

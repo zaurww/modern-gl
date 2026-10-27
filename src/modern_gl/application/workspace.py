@@ -170,7 +170,7 @@ class Workspace:
         (backup.BackupError) so it can be restored. Its documents are written in its
         language of documents from now on (D152). `lock`: the program's own open — a file
         another copy of the program holds is refused (FileInUseError), and holds it until
-        closed (D165); a brief write beside it (AI drafts, the API)
+        closed (D169); a brief write beside it (AI drafts, the API)
         takes no lock."""
         path = Path(path)
         held = take_lock(path) if lock else None

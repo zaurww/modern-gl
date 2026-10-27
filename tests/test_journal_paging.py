@@ -1,4 +1,4 @@
-"""The journal of a large company is read in pages (D164): 500 documents
+"""The journal of a large company is read in pages (D168): 500 documents
 around the one shown, more as the list is scrolled; the search is in the query, so it finds
 a document that was not read yet, letters folded (İ/ş = i/s)."""
 

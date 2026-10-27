@@ -162,8 +162,13 @@ def test_import_a_sale_and_skip_a_return(shop, conn):
     sale = parse_invoice(row, detail, outgoing=True)
     returned = parse_invoice({**row, "id": "r"}, {**detail, "kind": "returnInvoice"}, outgoing=True)
     plans = plan_import(conn, shop.company_id, [sale, returned])
-    assert plans[1].skip_reason and not plans[1].importable
-    (draft,) = import_drafts(shop.inventory, shop.company_id, plans)
+    # a return e-qaimə the company sent is its goods going back (the buyer writes it, the
+    # seller approves): a return to the supplier, on the suppliers' account
+    assert plans[1].importable and plans[1].return_type == "purchase_return"
+    draft, back = import_drafts(shop.inventory, shop.company_id, plans)
+    returned_doc = shop.inventory.load_document(shop.company_id, back)
+    assert returned_doc.doc_type == "purchase_return" and returned_doc.invoice == "MT2603000333"
+    assert returned_doc.lines[0].offset_account_id == shop.acc["60"]
     doc = shop.inventory.load_document(shop.company_id, draft)
     (line,) = doc.lines
     assert doc.doc_type == "sale"

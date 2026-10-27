@@ -29,6 +29,7 @@ from modern_gl.i18n import fold, sort_key, tr
 from modern_gl.reporting.inventory import (
     StockBalance,
     StockSource,
+    below_minimum,
     code_label,
     idle_items,
     item_choices,
@@ -115,8 +116,11 @@ class StockPart(InventoryForm):
         if needle:
             shown = [b for b in shown if needle in fold(searched(b))]
         rows = grouped(shown)
+        self.low = below_minimum(self.s.conn, self.s.company_id)
         self.model.set(
-            self._columns(last_receipts(self.s.conn, self.s.company_id)),
+            self._columns(
+                last_receipts(self.s.conn, self.s.company_id), {m.item_id for m in self.low}
+            ),
             rows,
             emphasis=lambda row: isinstance(row, StockGroup),
             section=lambda row: isinstance(row, StockGroup),
@@ -137,7 +141,9 @@ class StockPart(InventoryForm):
         self._show_movements()
         self._show_documents()
 
-    def _columns(self, sources: dict[tuple[int, int], StockSource]) -> list[Column]:
+    def _columns(self, sources: dict[tuple[int, int], StockSource], low: set[int]) -> list[Column]:
+        """`low`: the items under their minimum — their quantity is amber."""
+
         def average(row) -> int:
             if isinstance(row, StockGroup):
                 return 0
@@ -164,7 +170,13 @@ class StockPart(InventoryForm):
             Column(tr("Товар"), name, width=240),
             Column(tr("Склад"), lambda row: getattr(row, "warehouse_name", ""), width=170),
             Column(tr("Источник"), source, width=250),
-            Column(tr("Количество"), quantity, width=130, right=True),
+            Column(
+                tr("Количество"),
+                quantity,
+                width=130,
+                right=True,
+                tone=lambda row: "amber" if getattr(row, "item_id", None) in low else None,
+            ),
             Column(tr("Ед."), lambda row: getattr(row, "unit_code", ""), width=80),
             Column(tr("Средняя цена"), average, money=True, width=130),
             Column(tr("Стоимость"), lambda row: row.amount, money=True, width=150),

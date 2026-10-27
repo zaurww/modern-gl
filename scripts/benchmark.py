@@ -111,7 +111,7 @@ def measure(path: Path) -> list[tuple[float, str]]:
         "ОСВ по субконто 60, год": lambda: reports.subconto_balance(conn, cid, a60, *year),
         "Журнал: все документы": lambda: list_documents(conn, cid),
         "Журнал: год": lambda: list_documents(conn, cid, *year),
-        "Журнал: порция года (страница, D164)": lambda: documents_before(
+        "Журнал: порция года (страница, D168)": lambda: documents_before(
             conn, JournalFilter(cid, *year), None
         ),
         "Журнал: поиск по году, не найдено": lambda: documents_before(

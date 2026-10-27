@@ -1,4 +1,4 @@
-"""A company file on a network or cloud folder (D25, D165): it gets
+"""A company file on a network or cloud folder (D25, D169): it gets
 the classic journal instead of WAL, «Bu gün» says so; and a lock file keeps a second copy
 of the program out of a file that is open."""
 

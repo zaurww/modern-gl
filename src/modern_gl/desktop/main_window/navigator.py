@@ -119,6 +119,7 @@ class Navigator(QObject):
             page.new_inventory_document.connect(self.new_inventory_document)
             page.open_landed_report.connect(self.reports.open_landed_report)
             page.open_report.connect(self.reports.open_catalog_report)
+            page.buy_missing.connect(self.buy_missing)
             return page
         if key in (("purchases",), ("sales",)):
             page = TradePage(s, PURCHASE if key == ("purchases",) else SALE)
@@ -346,6 +347,39 @@ class Navigator(QObject):
             lambda p=page: self.page_stack.close_page(self.page_stack.key_of(p), ask=False)
         )
         page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
+        if isinstance(page, InventoryDocumentPage):  # a purchase or a sale, not landed costs
+            page.make_return.connect(self.new_return)
+            page.buy_shortage.connect(self.buy_shortage)
+
+    def _open_new_inventory_document(self, page: InventoryDocumentPage) -> None:
+        self._wire_inventory_document(page)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
+
+    def buy_missing(self, missing) -> None:
+        """A purchase of what is under its minimum stock, filled; the supplier to choose."""
+        if self.company.viewing():
+            return
+        page = InventoryDocumentPage(self.company.open_session, doc_type="receipt")
+        page.fill_missing(missing)
+        self._open_new_inventory_document(page)
+
+    def buy_shortage(self, document_id: int) -> None:
+        """The goods a draft lacks, brought in by a purchase that waits for its e-qaimə."""
+        page = InventoryDocumentPage(self.company.open_session, doc_type="receipt")
+        if page.fill_shortage(document_id):
+            self._open_new_inventory_document(page)
+
+    def new_return(self, doc_type: str, source_id: int) -> None:
+        """A return filled from its purchase (sale): what is left to return of each line."""
+        if self.company.viewing():
+            return
+        session = self.company.open_session
+        page = InventoryDocumentPage(session, doc_type=doc_type)
+        if not page.fill_return_of(source_id):
+            session.notify(page.error.text())
+            return
+        self._open_new_inventory_document(page)
 
     def _inventory_document_saved(self, page: InventoryDocumentPage | LandedCostPage) -> None:
         self.page_stack.rekey(page)
