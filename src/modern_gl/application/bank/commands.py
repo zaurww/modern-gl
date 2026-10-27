@@ -10,6 +10,7 @@ amount in the currency kept on the posting.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import fields, replace
 from datetime import date
 
@@ -20,9 +21,10 @@ from modern_gl.application.bank.operations import (
     OUT,
     VAT_DEPOSIT_KINDS,
     BankLine,
+    BankOperation,
     BankOperationInput,
     allocate,
-    load_bank_operation,
+    load_bank_operations,
 )
 from modern_gl.application.common import fill_subconto, pad_subconto
 from modern_gl.application.currencies import no_rate_text, rate_on
@@ -147,14 +149,14 @@ class BankCommands(ModuleBase):
             company_id,
             since,
             "bank_operations",
-            lambda operation_id: self._rebuild_bank_operation(company_id, operation_id),
+            lambda ids: load_bank_operations(self.conn, company_id, ids),
+            lambda op: self._rebuild_bank_operation(company_id, op),
             lambda n, day, error: tr(
                 "банковская операция №{n} от {date}: {error}", n=n, date=day, error=error
             ),
         )
 
-    def _rebuild_bank_operation(self, company_id: int, operation_id: int) -> list[int]:
-        op = load_bank_operation(self.conn, company_id, operation_id)
+    def _rebuild_bank_operation(self, company_id: int, op: BankOperation) -> list[int]:
         postings = self._bank_postings(company_id, op)
         changed = self.documents.rebuild(company_id, op.document_id, op.doc_date, postings, op.memo)
         return [op.document_id] if changed else []
@@ -171,9 +173,12 @@ class BankCommands(ModuleBase):
         A transfer does not go onto the account it transfers to."""
         target = pad_subconto(subconto)
         with transaction(self.conn):
+            currency = self._place_currency(company_id, target)
+            operations = load_bank_operations(self.conn, company_id, operation_ids)
             for operation_id in operation_ids:
-                op = load_bank_operation(self.conn, company_id, operation_id)
-                currency = self._place_currency(company_id, target)
+                op = operations.get(operation_id)
+                if op is None:
+                    raise NotFoundError(tr("документ {id} не найден", id=operation_id))
                 if currency != op.currency_id:
                     raise ValidationError(
                         tr(
@@ -322,13 +327,12 @@ class BankCommands(ModuleBase):
             self._currency(company_id, data.currency_id)
         if data.counterparty_id is not None:
             self._subconto_value(company_id, data.counterparty_id)
+        self._require_accounts(company_id, [x.account_id for x in data.lines])
         for line_no, line in enumerate(data.lines, start=1):
             if line.amount < 0:
                 raise ValidationError(
                     tr("строка {line}: сумма должна быть больше нуля", line=line_no)
                 )
-            if line.account_id is not None:
-                self._account(company_id, line.account_id)
             pad_subconto(line.subconto, line_no)
             try:
                 normalize_invoice(line.invoice)
@@ -338,6 +342,22 @@ class BankCommands(ModuleBase):
                 raise ValidationError(
                     tr("строка {line}: ƏDV на депозит поставщика — только расход", line=line_no)
                 )
+
+    def _require_accounts(self, company_id: int, account_ids: Sequence[int | None]) -> None:
+        """Every account of the lines is the company's: one query, not one a line."""
+        wanted = {a for a in account_ids if a is not None}
+        if not wanted:
+            return
+        marks = ", ".join("?" * len(wanted))
+        known = {
+            r["id"]
+            for r in self.conn.execute(
+                f"SELECT id FROM accounts WHERE company_id = ? AND id IN ({marks})",
+                (company_id, *wanted),
+            )
+        }
+        if wanted - known:
+            raise NotFoundError(tr("счёт не найден"))
 
     def _store_bank(self, company_id: int, operation_id: int, data: BankOperationInput) -> None:
         self.conn.execute(

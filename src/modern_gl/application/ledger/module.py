@@ -10,11 +10,12 @@ day on (`rebuild_postings`, D101): after a rule is fixed, the books follow the d
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import date
 
 from modern_gl.application.common import (
     account_kinds,
+    batches,
     closed_on,
     company_row,
     fill_subconto,
@@ -155,33 +156,38 @@ class ModuleDocuments:
         self.write(company_id, doc_id, doc_date, postings, memo)
         return True
 
-    def rebuild_each(
+    def rebuild_each[T](
         self,
         company_id: int,
         since: date | str,
         table: str,
-        rebuild: Callable[[int], list[int]],
+        load: Callable[[Sequence[int]], Mapping[int, T]],
+        rebuild: Callable[[T], list[int]],
         explain: Callable[[int, str, LedgerError], str],
     ) -> list[int]:
         """`rebuild_postings` of a module: each posted document of `table` (its `id`, the GL
         `document_id`) from `since` on, not in the closed period, in date order goes to
-        `rebuild(id)` — the GL documents that changed. An error stops it all and names the
+        `rebuild(document)` — the GL documents that changed; `load(ids)` reads the module's
+        documents a part at a time, not one by one. An error stops it all and names the
         document: `explain(number, date as the user reads it, error)`."""
         changed: list[int] = []
         with transaction(self.conn):
             start = rebuild_start(company_row(self.conn, company_id), since)
-            for row in self.conn.execute(
+            rows = self.conn.execute(
                 f"SELECT m.id, d.number, d.doc_date FROM {table} m JOIN documents d "
                 "ON d.company_id = m.company_id AND d.id = m.document_id "
                 "WHERE m.company_id = ? AND d.status = 'posted' AND d.doc_date >= ? "
                 "ORDER BY d.doc_date, d.number",
                 (company_id, start),
-            ).fetchall():
-                try:
-                    changed += rebuild(row["id"])
-                except LedgerError as exc:
-                    message = explain(row["number"], ru_date(row["doc_date"]), exc)
-                    raise ValidationError(message) from exc
+            ).fetchall()
+            for part in batches(rows):
+                documents = load([row["id"] for row in part])
+                for row in part:
+                    try:
+                        changed += rebuild(documents[row["id"]])
+                    except LedgerError as exc:
+                        message = explain(row["number"], ru_date(row["doc_date"]), exc)
+                        raise ValidationError(message) from exc
         return changed
 
     def unpost(self, company_id: int, doc: Row) -> None:

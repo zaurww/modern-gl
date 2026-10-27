@@ -201,3 +201,44 @@ def test_a_storno_negates_the_record_and_keeps_the_rest(demo):
         )
     ]
     assert stored == [record.negated()]
+
+
+# ---- no query a document in a loop ---------------------------------------------------------
+
+
+def test_bank_operations_are_read_in_parts_as_one_by_one(monkeypatch):
+    from modern_gl.application import common
+    from modern_gl.application.bank import operations
+    from modern_gl.application.ledger import Ledger
+    from modern_gl.demo_year import create_year_demo
+    from modern_gl.infrastructure.db import connect
+
+    conn = connect(":memory:")
+    cid = create_year_demo(Ledger(conn))
+    ids = [r[0] for r in conn.execute("SELECT id FROM bank_operations ORDER BY id DESC")]
+    monkeypatch.setattr(common, "BATCH", 7)  # parts of 7: the seams are read too
+    monkeypatch.setattr(operations, "batches", lambda items: common.batches(items, common.BATCH))
+    together = operations.load_bank_operations(conn, cid, [*ids, -1])
+    assert -1 not in together and len(together) == len(ids)
+    assert all(together[i] == operations.load_bank_operation(conn, cid, i) for i in ids[:40])
+    conn.close()
+
+
+def test_an_operation_on_an_unknown_account_or_moved_unknown_is_not_found(demo):
+    import pytest
+
+    from modern_gl.application.bank.operations import OUT, BankLine, BankOperationInput
+    from modern_gl.domain.errors import NotFoundError
+
+    led, cid = demo.ledger, demo.company_id
+    data = BankOperationInput(
+        doc_date="2026-03-01",
+        direction=OUT,
+        account_id=demo.acc["221"],
+        kind="other",
+        lines=(BankLine(demo.acc["721"], 1_000), BankLine(99_999, 500)),
+    )
+    with pytest.raises(NotFoundError, match="счёт не найден"):
+        led.bank.save_bank_operation(cid, data, post=False)
+    with pytest.raises(NotFoundError, match="документ 999 не найден"):
+        led.bank.move_bank_operations(cid, [999], demo.acc["222"], ())

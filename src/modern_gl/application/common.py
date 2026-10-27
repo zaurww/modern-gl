@@ -57,6 +57,15 @@ def fill_subconto(
     return first, second, third
 
 
+# ids in one `IN (...)` of a query: well below the engine's limit of parameters
+BATCH = 500
+
+
+def batches[T](items: Sequence[T], size: int = BATCH) -> list[Sequence[T]]:
+    """`items` in parts of at most `size`, in their order: a list read by `IN (...)`."""
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
 def closed_on(company: Row, day: str) -> bool:
     """Whether a day (ISO) is in the company's closed period: on `closed_through` or before."""
     closed = company["closed_through"]

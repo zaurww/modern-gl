@@ -169,9 +169,8 @@ class ConversionCommands(ModuleBase):
             company_id,
             since,
             "currency_conversions",
-            lambda conversion_id: self._rebuild_conversion(
-                company_id, load_conversion(self.conn, company_id, conversion_id)
-            ),
+            lambda ids: {i: load_conversion(self.conn, company_id, i) for i in ids},
+            lambda conversion: self._rebuild_conversion(company_id, conversion),
             lambda n, day, error: tr(
                 "конвертация №{n} от {date}: {error}", n=n, date=day, error=error
             ),
