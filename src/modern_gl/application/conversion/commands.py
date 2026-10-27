@@ -32,7 +32,7 @@ from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.application.ledger.module import ModuleDocumentCommands
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, transaction
@@ -289,8 +289,7 @@ class ConversionCommands(ModuleDocumentCommands):
         into one document)."""
         source, target = require_sides(data)
         transit = self._transit_account(company_id)
-        calc = self._calculated(company_id, data)
-        assert calc.source_value is not None and calc.target_value is not None
+        calc, source_value, target_value = self._calculated(company_id, data)
         memo = trd(
             "Конвертация {source} → {target}",
             source=self._code(company_id, source.currency_id),
@@ -300,7 +299,7 @@ class ConversionCommands(ModuleDocumentCommands):
             posting_line(
                 transit["id"],
                 source.account_id,
-                calc.source_value,
+                source_value,
                 (),
                 source.subconto,
                 memo,
@@ -315,7 +314,7 @@ class ConversionCommands(ModuleDocumentCommands):
             posting_line(
                 target.account_id,
                 transit["id"],
-                calc.target_value,
+                target_value,
                 target.subconto,
                 (),
                 memo,
@@ -331,17 +330,15 @@ class ConversionCommands(ModuleDocumentCommands):
     def _rebuild_conversion(self, company_id: int, conversion: Conversion) -> list[int]:
         """Its one or two GL documents again; a credit made on another day keeps its own."""
         debit_lines, credit_lines = self._conversion_postings(company_id, conversion)
+        credit_id = conversion.credit_document_id
         if same_day(conversion):
             parts = [(conversion.document_id, conversion.doc_date, debit_lines + credit_lines)]
+        elif credit_id is None:  # posted on two days: the credit has a document of its own
+            raise ValidationError(tr("у проведённой конвертации нет документа зачисления"))
         else:
-            assert conversion.credit_document_id is not None  # posted on two days
             parts = [
                 (conversion.document_id, conversion.doc_date, debit_lines),
-                (
-                    conversion.credit_document_id,
-                    conversion.target_date or conversion.doc_date,
-                    credit_lines,
-                ),
+                (credit_id, conversion.target_date or conversion.doc_date, credit_lines),
             ]
         return [
             doc_id
@@ -362,13 +359,20 @@ class ConversionCommands(ModuleDocumentCommands):
             )
         return transit
 
-    def _calculated(self, company_id: int, data: ConversionInput) -> ConversionCalc:
-        """The manat values of the conversion; a currency without a rate stops it."""
+    def _calculated(
+        self, company_id: int, data: ConversionInput
+    ) -> tuple[ConversionCalc, int, int]:
+        """The calculation and the manat values of both sides; a currency without a rate
+        stops it, as does a side left out."""
         calc = calculate(self.conn, company_id, data)
         if calc.missing:
             codes = ", ".join(self._currency(company_id, c)["code"] for c in calc.missing)
             raise ValidationError(no_rate_text(codes, data.doc_date))
-        return calc
+        if calc.source_value is None:
+            raise ValidationError(tr("не указано, с какого счёта списано"))
+        if calc.target_value is None:
+            raise ValidationError(tr("не указано, на какой счёт зачислено"))
+        return calc, calc.source_value, calc.target_value
 
     def _difference_line(
         self, company_id: int, transit_id: int, difference: int
@@ -426,7 +430,7 @@ class ConversionCommands(ModuleDocumentCommands):
             (company_id, conversion_id),
         ).fetchone()
         if row is None:
-            raise ValidationError(tr("документ {id} не найден", id=conversion_id))
+            raise NotFoundError(tr("документ {id} не найден", id=conversion_id))
         return row
 
     def _require_conversion_changeable(self, company_id: int, row: Row) -> None:

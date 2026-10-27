@@ -90,3 +90,66 @@ def test_where_used_reads_the_schema_once_per_process(demo, monkeypatch):
     assert common.where_used(led.conn, cid, "subconto_values", demo.supplier_b) is not None
     assert common.where_used(led.conn, cid, "accounts", demo.acc["301"]) is not None
     assert len(calls) == scanned, "the foreign keys were read again"
+
+
+# ---- one taxonomy of errors ------------------------------------------------------------
+
+
+def test_a_missing_bank_operation_or_conversion_is_not_found(demo):
+    import pytest
+
+    from modern_gl.domain.errors import NotFoundError
+
+    led, cid = demo.ledger, demo.company_id
+    with pytest.raises(NotFoundError, match="документ 999 не найден"):
+        led.bank.delete_bank_operation(cid, 999)
+    with pytest.raises(NotFoundError, match="документ 999 не найден"):
+        led.conversion.delete_conversion(cid, 999)
+
+
+def test_a_line_of_a_wrong_shape_is_a_format_error(demo):
+    import pytest
+
+    from modern_gl.application.catalog import Catalog
+    from modern_gl.application.exchange import FormatError
+    from modern_gl.application.exchange.lines import posting_lines
+
+    cat = Catalog(demo.ledger.conn, demo.company_id)
+    with pytest.raises(FormatError, match="нет проводок"):
+        posting_lines(cat, [])
+    with pytest.raises(FormatError, match="строка 1: ожидается объект"):
+        posting_lines(cat, ["221"])
+    with pytest.raises(FormatError, match="строка 1: лишние поля"):
+        posting_lines(cat, [{"debit": "221", "credit": "301", "amount": "1", "x": 1}])
+    with pytest.raises(FormatError, match="сумма — строкой"):
+        posting_lines(cat, [{"debit": "221", "credit": "301", "amount": 1.5}])
+    with pytest.raises(FormatError, match="pays_vat"):
+        posting_lines(cat, [{"debit": "221", "credit": "301", "amount": "1", "pays_vat": 1}])
+    with pytest.raises(FormatError, match="субконто — списком"):
+        posting_lines(
+            cat, [{"debit": "221", "credit": "301", "amount": "1", "debit_subconto": "x"}]
+        )
+    with pytest.raises(FormatError, match="у счёта 221 субконто"):
+        posting_lines(
+            cat, [{"debit": "221", "credit": "301", "amount": "1", "debit_subconto": ["x"]}]
+        )
+    assert issubclass(FormatError, ValueError)  # whoever caught ValueError still does
+
+
+def test_a_payment_without_a_counterparty_is_one_line(demo):
+    from modern_gl.application.bank.advances import payment_lines
+    from modern_gl.application.bank.operations import OUT
+
+    lines = payment_lines(
+        demo.ledger.conn,
+        demo.company_id,
+        account_id=demo.acc["531"],
+        account_type="payable",
+        subconto=(),
+        counterparty_id=None,
+        amount=12_000,
+        direction=OUT,
+        day="2026-03-01",
+        invoices=(("A-1", 5_000), ("A-2", 5_000)),
+    )
+    assert [(x.account_id, x.amount, x.invoice) for x in lines] == [(demo.acc["531"], 12_000, "")]

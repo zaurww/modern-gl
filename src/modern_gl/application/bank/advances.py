@@ -45,8 +45,7 @@ def payment_lines(
     advance line takes the line's subconto in their places on the advance account — the
     contract, an order (D124) — by kind; the counterparty is put in by the operation."""
     sc = tuple(pad_subconto(subconto))
-    settles = SETTLES.get(account_type or "") == direction and counterparty_id is not None
-    if not settles:
+    if SETTLES.get(account_type or "") != direction or counterparty_id is None:  # not settling
         number = invoices[0][0] if len(invoices) == 1 else ""
         return [BankLine(account_id, amount, sc, number)]
     owed = [amount if still is None else still for _, still in invoices]
@@ -58,7 +57,6 @@ def payment_lines(
     ]
     if not left:
         return lines
-    assert counterparty_id is not None
     balance = counterparty_balance(conn, company_id, account_id, counterparty_id, day)
     debt = (-balance if direction == OUT else balance) - sum(paid)
     cover = max(0, min(left, debt))

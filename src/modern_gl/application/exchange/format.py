@@ -25,7 +25,8 @@ DOCUMENT_KEYS = {"id", "date", "memo", "layer", "postings", "reverses"}
 
 
 class FormatError(ValueError):
-    """The file is not an exchange file of a version this program reads."""
+    """The file is not an exchange file of a version this program reads, or a line of a
+    document is not of the shape the format gives (`lines`)."""
 
 
 @dataclass(frozen=True)

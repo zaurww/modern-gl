@@ -33,7 +33,7 @@ from modern_gl.application.ledger.module import ModuleDocumentCommands
 from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
-from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr, trd
@@ -469,5 +469,5 @@ class BankCommands(ModuleDocumentCommands):
             (company_id, operation_id),
         ).fetchone()
         if row is None:
-            raise ValidationError(tr("документ {id} не найден", id=operation_id))
+            raise NotFoundError(tr("документ {id} не найден", id=operation_id))
         return row

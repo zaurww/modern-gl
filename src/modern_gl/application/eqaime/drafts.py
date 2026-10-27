@@ -20,6 +20,7 @@ from modern_gl.application.inventory import (
     SaleLine,
 )
 from modern_gl.application.queries import remembered_sale_subconto
+from modern_gl.domain.errors import NotFoundError
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, transaction
@@ -56,7 +57,8 @@ def import_drafts(
                     company_id, plan.attach_to.document_id, invoice.number, vat
                 )
                 continue
-            assert plan.counterparty_id is not None  # added above
+            if plan.counterparty_id is None:  # added above, by its VÖEN
+                raise NotFoundError(tr("e-qaimə {n}: контрагент не найден", n=invoice.number))
             account = _settlement_account(conn, company_id, invoice.outgoing)
             subconto = _place(conn, company_id, account, kind, plan.counterparty_id)
             vat_rate = STANDARD_VAT_RATE if invoice.vat else None
