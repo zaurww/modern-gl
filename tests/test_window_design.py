@@ -53,7 +53,6 @@ OTHER_DIALOGS = {
     "BatchCostDialog",
     "BatchPostDialog",
     "CommandPalette",
-    "CrashDialog",
     "ConversionAccountsDialog",
     "HistoryDialog",
     "InventorySettingsDialog",
@@ -69,6 +68,8 @@ OTHER_DIALOGS = {
     "TagsDialog",
     "ValueDialog",
 }
+# forms checked live by the general rules (test_the_form_is_as_designed below)
+FORMS = {"CrashDialog"}
 IMPORT_WINDOWS = {
     "EqaimeImportForm",
     "EqaimeImportDialog",
@@ -86,7 +87,7 @@ def test_every_dialog_is_known():
         for name, base in DIALOG.findall(path.read_text(encoding="utf-8"))
         if base in {"QDialog", "ImportWindow", *IMPORT_WINDOWS} or name.endswith("Dialog")
     }
-    unknown = sorted(set(found) - OTHER_DIALOGS - IMPORT_WINDOWS - {"ImportWindow"})
+    unknown = sorted(set(found) - OTHER_DIALOGS - FORMS - IMPORT_WINDOWS - {"ImportWindow"})
     assert unknown == [], "новое окно — в tests/test_window_design.py (DESIGN.md §7)"
     loose = sorted(n for n in IMPORT_WINDOWS if found.get(n) == "QDialog")
     assert loose == [], "окно загрузки — на ImportWindow (DESIGN.md §7)"
@@ -247,3 +248,44 @@ def test_the_window_is_as_designed(qtbot, shop_session, name):
 
 def test_every_import_window_is_checked_live():
     assert set(STEPS) == IMPORT_WINDOWS - {"EqaimeImportForm"}
+
+
+# ---- forms, live ---------------------------------------------------------------------
+
+
+def crash_form() -> QWidget:
+    from modern_gl.desktop.crash_dialog import CrashDialog
+
+    return CrashDialog("Traceback (most recent call last):\n  ...\nValueError: x\n")
+
+
+FORM_STEPS = {"CrashDialog": crash_form}
+
+
+def form_problems(form: QWidget) -> list[str]:
+    """A form in the theme's look: the general rules of a widget, and at most one blue
+    button, the last one in its row (bottom right)."""
+    tones = theme_tones()
+    problems = [p for w in form.findChildren(QWidget) for p in widget_problems(w, tones)]
+    primaries = [b for b in visible(form, QPushButton) if b.objectName() == "primary"]
+    if len(primaries) > 1:
+        problems.append(f"синих кнопок {len(primaries)}: {[b.text() for b in primaries]}")
+    for b in primaries:
+        row = [w for w in visible(form, QPushButton) if w.parent() is b.parent()]
+        if max(row, key=lambda w: w.mapTo(form, w.rect().topRight()).x()) is not b:
+            problems.append(f"синяя кнопка «{b.text()}» не справа")
+    return problems
+
+
+@pytest.mark.parametrize("name", sorted(FORM_STEPS))
+def test_the_form_is_as_designed(qtbot, name):
+    theme.apply(QApplication.instance())
+    form = FORM_STEPS[name]()
+    qtbot.addWidget(form)
+    form.show()
+    qtbot.wait(10)
+    assert form_problems(form) == [], name
+
+
+def test_every_form_is_checked_live():
+    assert set(FORM_STEPS) == FORMS

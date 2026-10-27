@@ -163,3 +163,12 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D151 | Ввод склада: контрагент в шапке, инвентаризация, все товары на «Склад» | принято | [D151-inventory-entry-party-stock-count.md](D151-inventory-entry-party-stock-count.md) |
 | D152 | Язык документов — настройка компании, а не интерфейса | принято | [D152-document-language-company.md](D152-document-language-company.md) |
 | D-new | Решения — файл на решение в формате ADR | принято | [D-new-adr-decision-files.md](D-new-adr-decision-files.md) |
+| D-new | Обработчик падений и журнал программы | принято | [D-new-crash-log.md](D-new-crash-log.md) |
+| D-new | Инструменты разработки: CI на Windows, покрытие, свойства, снимки, релиз | принято | [D-new-dev-tooling.md](D-new-dev-tooling.md) |
+| D-new | Чужой SQLite-файл не принимается; WAL после миграций; «файл занят» | принято | [D-new-foreign-file.md](D-new-foreign-file.md) |
+| D-new | Модули — композиция, не наследование ядра (уточняет D123) | принято | [D-new-module-composition.md](D-new-module-composition.md) |
+| D-new | Вложенная транзакция — savepoint | принято | [D-new-nested-savepoint.md](D-new-nested-savepoint.md) |
+| D-new | Протокол страницы | принято | [D-new-page-protocol.md](D-new-page-protocol.md) |
+| D-new | Проводка как значение — PostingRecord | принято | [D-new-posting-record.md](D-new-posting-record.md) |
+| D-new | Настройки пользователя — Preferences | принято | [D-new-preferences.md](D-new-preferences.md) |
+| D-new | Реестр горячих клавиш | принято | [D-new-shortcuts-registry.md](D-new-shortcuts-registry.md) |
