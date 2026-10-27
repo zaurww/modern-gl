@@ -43,6 +43,24 @@ fail_under = 87
 include = ["src", "tests", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
+# the core under strict (D-new-pyright-strict-core): no Unknown in parameters and answers;
+# application/ — later, package by package (ledger → modules)
+strict = [
+    "src/modern_gl/domain",
+    "src/modern_gl/api",
+    # infrastructure file by file: db.py — temporarily not, claude/audit-journal edits it
+    # (4 errors left there: `@contextmanager` → `Iterator[...]` instead of `Generator[...]`)
+    "src/modern_gl/infrastructure/__init__.py",
+    "src/modern_gl/infrastructure/app_settings.py",
+    "src/modern_gl/infrastructure/backup.py",
+    "src/modern_gl/infrastructure/cbar.py",
+    "src/modern_gl/infrastructure/company_file.py",
+    "src/modern_gl/infrastructure/etaxes.py",
+    "src/modern_gl/infrastructure/logs.py",
+    "src/modern_gl/infrastructure/report_file.py",
+    "src/modern_gl/infrastructure/table_files.py",
+    "src/modern_gl/infrastructure/templates",
+]
 venvPath = "."
 venv = ".venv"
 

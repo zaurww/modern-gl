@@ -39,7 +39,8 @@ def read_rows(path: str | Path) -> list[list[str]]:
     raise TableFileError(tr("файл {file}: нужен Excel (.xlsx) или CSV", file=path.name))
 
 
-def cell_text(value) -> str:
+def cell_text(value: object) -> str:
+    """A cell of an Excel or CSV file as text: dates as DD.MM.YYYY, numbers without float noise."""
     if value is None:
         return ""
     if isinstance(value, datetime):

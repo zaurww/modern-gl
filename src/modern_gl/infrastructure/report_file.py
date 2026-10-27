@@ -40,8 +40,9 @@ class ReportRow:
 class ReportTable:
     title: str
     columns: list[ReportColumn]
-    rows: list[ReportRow] = field(default_factory=list)
-    about: list[tuple[str, str]] = field(default_factory=list)  # («Период», «01.10 — …»)
+    rows: list[ReportRow] = field(default_factory=list[ReportRow])
+    # («Период», «01.10 — …»)
+    about: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
 
     @property
     def leveled(self) -> bool:

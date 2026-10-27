@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from modern_gl import i18n
@@ -32,7 +33,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if ok else 1
 
 
-def _run(args: argparse.Namespace) -> tuple[dict, bool]:
+def _run(args: argparse.Namespace) -> tuple[Mapping[str, object], bool]:
     if args.command == "import":
         data = json.loads(Path(args.documents).read_text(encoding="utf-8"))
         with open_company(args.company, write=True, actor=args.actor) as company:

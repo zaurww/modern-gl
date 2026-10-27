@@ -37,7 +37,7 @@ def parse(xml: bytes) -> dict[str, tuple[int, int]]:
         root = ET.fromstring(xml)
     except ET.ParseError as e:
         raise RatesUnavailable(tr("ЦБА прислал не то, что ожидалось: {error}", error=e)) from e
-    rates = {}
+    rates: dict[str, tuple[int, int]] = {}
     for valute in root.iter("Valute"):
         code = (valute.get("Code") or "").strip().upper()
         nominal_text = (valute.findtext("Nominal") or "").strip()

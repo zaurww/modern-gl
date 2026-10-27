@@ -8,6 +8,8 @@ say how many were left out, so the model asks for a narrower period instead of g
 
 from __future__ import annotations
 
+from typing import Any
+
 from modern_gl.application import queries
 from modern_gl.application.books import BOOKS
 from modern_gl.application.catalog import Catalog
@@ -51,7 +53,7 @@ def _cut(items: list, limit: int = LIMIT) -> tuple[list, int]:
 TERMS = {True: "current", False: "long_term", None: ""}  # domain.accounts.is_current
 
 
-def chart_of_accounts(conn: Connection, company_id: int) -> dict:
+def chart_of_accounts(conn: Connection, company_id: int) -> dict[str, Any]:
     cat = Catalog(conn, company_id)
     accounts = []
     for a in cat.accounts.values():
@@ -77,7 +79,7 @@ def chart_of_accounts(conn: Connection, company_id: int) -> dict:
 
 def trial_balance(
     conn: Connection, company_id: int, date_from: str, date_to: str, book: str = "common"
-) -> dict:
+) -> dict[str, Any]:
     osv = reports.trial_balance(conn, company_id, date_from, date_to, _layers(book))
     rows = [
         {

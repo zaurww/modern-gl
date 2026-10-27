@@ -110,7 +110,7 @@ def earlier_months(value: date | str, count: int = 12) -> list[str]:
     """The last days of the `count` months before the month of `value`, latest first:
     the months a purchase's expense may belong to (D65)."""
     first = date.fromisoformat(iso_date(value)).replace(day=1)
-    result = []
+    result: list[str] = []
     for _ in range(count):
         last = date.fromordinal(first.toordinal() - 1)
         result.append(last.isoformat())

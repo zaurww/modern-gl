@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from fractions import Fraction
 
 from modern_gl.domain.errors import ValidationError
@@ -27,7 +28,7 @@ _TOKEN = re.compile(r"\s*(?:(\d+(?:[.,]\d+)?)|([SL])(\d*)|(.))")
 
 
 def _tokens(text: str) -> list[tuple[str, str]]:
-    result = []
+    result: list[tuple[str, str]] = []
     for number, name, index, other in _TOKEN.findall(text.upper()):
         if number:
             result.append(("num", number.replace(",", ".")))
@@ -40,6 +41,31 @@ def _tokens(text: str) -> list[tuple[str, str]]:
         elif other.strip() or name:
             raise ValidationError(tr("непонятный символ «{c}» в формуле", c=other or name))
     return result
+
+
+@dataclass(frozen=True)
+class _Num:
+    value: Fraction
+
+
+@dataclass(frozen=True)
+class _Var:
+    name: str  # "S" or "L<n>"
+
+
+@dataclass(frozen=True)
+class _Neg:
+    inner: _Node
+
+
+@dataclass(frozen=True)
+class _BinOp:
+    op: str  # + - * /
+    left: _Node
+    right: _Node
+
+
+type _Node = _Num | _Var | _Neg | _BinOp
 
 
 class _Parser:
@@ -59,7 +85,7 @@ class _Parser:
         self.pos += 1
         return token
 
-    def parse(self):
+    def parse(self) -> _Node:
         if not self.tokens:
             raise ValidationError(tr("пустая формула"))
         node = self.expr()
@@ -67,28 +93,28 @@ class _Parser:
             raise ValidationError(tr("ошибка в формуле «{f}»", f=self.text))
         return node
 
-    def expr(self):
+    def expr(self) -> _Node:
         node = self.term()
         while self.peek() in ("+", "-"):
-            node = (self.take()[0], node, self.term())
+            node = _BinOp(self.take()[0], node, self.term())
         return node
 
-    def term(self):
+    def term(self) -> _Node:
         node = self.factor()
         while self.peek() in ("*", "/"):
-            node = (self.take()[0], node, self.factor())
+            node = _BinOp(self.take()[0], node, self.factor())
         return node
 
-    def factor(self):
+    def factor(self) -> _Node:
         kind = self.peek()
         if kind in ("-", "+"):
             self.take()
             inner = self.factor()
-            return ("neg", inner) if kind == "-" else inner
+            return _Neg(inner) if kind == "-" else inner
         if kind == "num":
-            return ("num", Fraction(self.take()[1]))
+            return _Num(Fraction(self.take()[1]))
         if kind == "var":
-            return ("var", self.take()[1])
+            return _Var(self.take()[1])
         if kind == "(":
             self.take()
             node = self.expr()
@@ -99,27 +125,36 @@ class _Parser:
         raise ValidationError(tr("ошибка в формуле «{f}»", f=self.text))
 
 
-def parse(text: str):
+def parse(text: str) -> _Node:
+    """The formula's tree; ValidationError (message for the user) on a syntax error."""
     return _Parser(text.strip()).parse()
 
 
-def variables(node) -> set[str]:
-    if node[0] == "var":
-        return {node[1]}
-    if node[0] == "num":
-        return set()
-    return set().union(*(variables(child) for child in node[1:]))
+def variables(node: _Node) -> set[str]:
+    match node:
+        case _Var(name):
+            return {name}
+        case _Num():
+            return set()
+        case _Neg(inner):
+            return variables(inner)
+        case _BinOp(_, left, right):
+            return variables(left) | variables(right)
 
 
-def _evaluate(node, values: dict[str, Fraction]) -> Fraction:
-    op = node[0]
-    if op == "num":
-        return node[1]
-    if op == "var":
-        return values[node[1]]
-    if op == "neg":
-        return -_evaluate(node[1], values)
-    left, right = _evaluate(node[1], values), _evaluate(node[2], values)
+def _evaluate(node: _Node, values: dict[str, Fraction]) -> Fraction:
+    match node:
+        case _Num(value):
+            return value
+        case _Var(name):
+            return values[name]
+        case _Neg(inner):
+            return -_evaluate(inner, values)
+        case _BinOp(op, left, right):
+            return _apply(op, _evaluate(left, values), _evaluate(right, values))
+
+
+def _apply(op: str, left: Fraction, right: Fraction) -> Fraction:
     if op == "+":
         return left + right
     if op == "-":

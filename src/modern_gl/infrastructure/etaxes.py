@@ -15,7 +15,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from modern_gl.domain.eqaime import TURNOVER
 from modern_gl.i18n import language, tr
@@ -51,6 +51,7 @@ class Response:
 
 # (method, url, headers, body) -> response; replaced in tests
 Send = Callable[[str, str, dict[str, str], bytes | None], Response]
+JsonObject = dict[str, Any]  # an object of the portal's JSON, as `json.loads` gives it
 
 
 def urllib_send(method: str, url: str, headers: dict[str, str], body: bytes | None) -> Response:
@@ -75,7 +76,8 @@ def _said(body: bytes) -> str:
     except (ValueError, AttributeError):
         message = None
     if isinstance(message, dict):
-        message = message.get(language()) or message.get("az") or next(iter(message.values()), "")
+        texts = cast(dict[str, object], message)  # a JSON object: {"az": …, "ru": …}
+        message = texts.get(language()) or texts.get("az") or next(iter(texts.values()), "")
     if isinstance(message, str) and message:
         return message
     return body[:120].decode(errors="replace")
@@ -86,7 +88,7 @@ class EtaxesClient:
         self.token = token
         self.send = send
 
-    def _call(self, method: str, path: str, body: dict | None = None) -> Any:
+    def _call(self, method: str, path: str, body: dict[str, object] | None = None) -> Any:
         headers = {
             "x-authorization": f"Bearer {self.token}",  # not Authorization: the portal's way
             "Accept": "application/json",
@@ -112,7 +114,7 @@ class EtaxesClient:
         date_from: date,
         date_to: date,
         statuses: tuple[str, ...] = APPROVED,
-    ) -> Iterator[dict]:
+    ) -> Iterator[JsonObject]:
         """The e-qaimə list rows of a period: received (purchases) or sent (sales)."""
         for status in statuses:
             offset = 0
@@ -142,13 +144,13 @@ class EtaxesClient:
                         "actionOwner": None,
                     },
                 )
-                page = data.get("invoices") or []  # not «content»: the portal's field
+                page: list[JsonObject] = data.get("invoices") or []  # not «content»
                 yield from page
                 if not data.get("hasMore") or not page:
                     break
                 offset += PAGE_SIZE
 
-    def detail(self, invoice_id: str, source_system: str) -> dict:
+    def detail(self, invoice_id: str, source_system: str) -> JsonObject:
         """One e-qaimə with its lines (items)."""
         data = self._call("GET", f"{DETAIL}{invoice_id}?sourceSystem={source_system or 'avis'}")
         return data.get("invoice", data)
@@ -159,7 +161,7 @@ class EtaxesClient:
         data = self._call("GET", VAT_ACCOUNT)
         return Decimal(str(data.get("mainAccount") or 0)), str(data.get("informationOn") or "")
 
-    def vat_deposit_operations(self, date_from: date, date_to: date) -> Iterator[dict]:
+    def vat_deposit_operations(self, date_from: date, date_to: date) -> Iterator[JsonObject]:
         """The operations of the ƏDV deposit account in a period, all statuses."""
         offset = 0
         while True:
@@ -182,7 +184,7 @@ class EtaxesClient:
                     "paymentTypes": None,
                 },
             )
-            page = data.get("operations") or []
+            page: list[JsonObject] = data.get("operations") or []
             yield from page
             if not data.get("hasMore") or not page:
                 break

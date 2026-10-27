@@ -49,7 +49,7 @@ def folder_for(workspace_folder: Path, company_file: Path) -> Path:
 
 def list_backups(folder: Path) -> list[Backup]:
     """Backups in a folder, newest first."""
-    result = []
+    result: list[Backup] = []
     for path in Path(folder).glob(f"*{SUFFIX}"):
         made = _stamp_of(path)
         if made is not None:
