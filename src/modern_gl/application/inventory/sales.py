@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import date
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import account_kinds, pad_subconto
 from modern_gl.application.inventory.amounts import (
     blank,
     draft_quantity,
@@ -183,7 +183,7 @@ class SaleCommands(StockCommands):
                 continue
             account = self._account(company_id, account_id)
             codes = self._account_kind_codes(company_id, account)
-            for kind_id, code in zip(self._account_kind_ids(account), codes, strict=True):
+            for kind_id, code in zip(account_kinds(account), codes, strict=True):
                 if kind_id not in (None, *result) and code not in {"item", "warehouse"}:
                     result.append(kind_id)
         return result
@@ -239,7 +239,7 @@ class SaleCommands(StockCommands):
         account = self._account(company_id, account_id)
         result = self._by_kind(company_id, account_id, values)
         for position, (kind_id, value_id) in enumerate(
-            zip(self._account_kind_ids(account), result, strict=True)
+            zip(account_kinds(account), result, strict=True)
         ):
             if kind_id is None or value_id is not None:
                 continue

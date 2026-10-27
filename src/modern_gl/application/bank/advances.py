@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from modern_gl.application.bank.balance import account_balance
 from modern_gl.application.bank.operations import IN, OUT, BankLine, allocate
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto, pad_subconto
 from modern_gl.infrastructure.db import Connection
 
 # a settlement account the payment pays off (60.1 when paying out, 62.1 when money comes in)
@@ -90,7 +90,7 @@ def carried_over(
         "WHERE company_id = ? AND id = ?",
         (company_id, account_id),
     ).fetchone()
-    return tuple(by_kind.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3))  # type: ignore[return-value]
+    return fill_subconto(account, by_kind)
 
 
 @dataclass(frozen=True)

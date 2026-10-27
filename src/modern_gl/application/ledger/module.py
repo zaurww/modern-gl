@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Sequence
 from datetime import date
 
-from modern_gl.application.common import closed_on
+from modern_gl.application.common import account_kinds, closed_on, fill_subconto
 from modern_gl.application.ledger.chart import ChartCommands
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.inputs import PostingInput
@@ -54,19 +54,19 @@ class ModuleDocumentCommands(ChartCommands, DocumentCommands):
         """The account's subconto filled with an element of this name (an item of other
         income and expenses, a cost item…), made on first use."""
         account = self._account(company_id, account_id)
-        values: list[int | None] = []
-        for i in (1, 2, 3):
-            kind_id = account[f"sc{i}_kind_id"]
-            if kind_id is None:
-                values.append(None)
-                continue
-            found = self.conn.execute(
-                "SELECT id FROM subconto_values WHERE company_id = ? AND kind_id = ? "
-                "AND name = ? AND is_group = 0 ORDER BY active DESC, id LIMIT 1",
-                (company_id, kind_id, name),
-            ).fetchone()
-            values.append(found[0] if found else self.add_subconto_value(company_id, kind_id, name))
-        return tuple(values)
+        kinds = {kind for kind in account_kinds(account) if kind is not None}
+        return fill_subconto(
+            account, {kind: self._named_value(company_id, kind, name) for kind in kinds}
+        )
+
+    def _named_value(self, company_id: int, kind_id: int, name: str) -> int:
+        """The element of the directory with this name, made on first use."""
+        found = self.conn.execute(
+            "SELECT id FROM subconto_values WHERE company_id = ? AND kind_id = ? "
+            "AND name = ? AND is_group = 0 ORDER BY active DESC, id LIMIT 1",
+            (company_id, kind_id, name),
+        ).fetchone()
+        return found[0] if found else self.add_subconto_value(company_id, kind_id, name)
 
     def _write_module_document(
         self,

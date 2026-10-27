@@ -24,7 +24,7 @@ from modern_gl.application.bank.operations import (
     allocate,
     load_bank_operation,
 )
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto, pad_subconto
 from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.invoices import open_invoices
 from modern_gl.application.ledger.documents import explain_owner
@@ -309,7 +309,7 @@ class BankCommands(ModuleDocumentCommands):
         kinds = {self._subconto_value(company_id, counterparty_id)["kind_id"]: counterparty_id}
         if contract_id is not None:
             kinds[self._subconto_value(company_id, contract_id)["kind_id"]] = contract_id
-        return tuple(kinds.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3))
+        return fill_subconto(account, kinds)
 
     def _place_currency(self, company_id: int, subconto: tuple[int | None, ...]) -> int | None:
         """The currency of a bank account: of its element of the directory (D47)."""
@@ -395,15 +395,11 @@ class BankCommands(ModuleDocumentCommands):
     ) -> tuple[int | None, int | None, int | None]:
         """The line's subconto with the operation's counterparty in the account's
         counterparty position, when the line leaves it empty."""
-        values = list(pad_subconto(line.subconto))
         if counterparty_id is None or line.account_id is None:
-            return values[0], values[1], values[2]
+            return pad_subconto(line.subconto)
         kind_id = self._subconto_value(company_id, counterparty_id)["kind_id"]
         account = self._account(company_id, line.account_id)
-        for i in range(3):
-            if account[f"sc{i + 1}_kind_id"] == kind_id and values[i] is None:
-                values[i] = counterparty_id
-        return values[0], values[1], values[2]
+        return fill_subconto(account, {kind_id: counterparty_id}, keep=line.subconto)
 
     def _bank_postings(self, company_id: int, data: BankOperationInput) -> list[PostingInput]:
         if data.account_id is None:

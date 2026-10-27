@@ -28,3 +28,43 @@ def test_a_draft_moved_into_an_adjustment_layer_shows_the_books(demo):
     assert not parallel_books(led.conn, cid)
     led.update_draft(cid, doc, "2026-02-28", [demo.p("721", "201", "50")], layer="tax_adj")
     assert parallel_books(led.conn, cid)
+
+
+# ---- one rule: the account's subconto filled by kind ---------------------------------
+
+
+def _account(*kinds: int | None) -> dict:
+    return {"sc1_kind_id": kinds[0], "sc2_kind_id": kinds[1], "sc3_kind_id": kinds[2]}
+
+
+def test_fill_subconto_puts_each_element_at_the_position_of_its_kind():
+    from modern_gl.application.common import fill_subconto
+
+    counterparty, contract = 7, 9  # kinds
+    account = _account(counterparty, contract, None)  # 60.1: counterparty, contract
+    assert fill_subconto(account, {counterparty: 41, contract: 52}) == (41, 52, None)
+    assert fill_subconto(account, {counterparty: 41}) == (41, None, None)
+    assert fill_subconto(account, {contract: 52, 99: 3}) == (None, 52, None)  # unknown kind
+    assert fill_subconto(_account(None, None, None), {counterparty: 41}) == (None, None, None)
+
+
+def test_fill_subconto_keeps_what_was_typed_and_fills_only_the_empty_positions():
+    from modern_gl.application.common import fill_subconto
+
+    counterparty, contract = 7, 9
+    account = _account(contract, counterparty, None)
+    typed = (52,)  # the contract typed, the counterparty from the operation
+    assert fill_subconto(account, {counterparty: 41}, keep=typed) == (52, 41, None)
+    typed = (52, 43)  # a counterparty typed by hand wins over the operation's
+    assert fill_subconto(account, {counterparty: 41}, keep=typed) == (52, 43, None)
+    assert fill_subconto(account, {}, keep=(None, None, 5)) == (None, None, 5)
+
+
+def test_fill_subconto_refuses_more_than_three_typed_values():
+    import pytest
+
+    from modern_gl.application.common import fill_subconto
+    from modern_gl.domain.errors import ValidationError
+
+    with pytest.raises(ValidationError, match="больше 3 субконто"):
+        fill_subconto(_account(1, 2, 3), {}, keep=(1, 2, 3, 4))

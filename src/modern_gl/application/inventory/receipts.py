@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto, pad_subconto
 from modern_gl.application.inventory.amounts import (
     blank,
     draft_quantity,
@@ -182,7 +182,7 @@ class ReceiptDraftCommands(StockCommands):
         for value_id in (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"]):
             if value_id is not None:
                 had[self._subconto_value(company_id, value_id)["kind_id"]] = value_id
-        sc = [had.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3)]
+        sc = fill_subconto(account, had)
         self.conn.execute(
             "UPDATE inventory_lines SET offset_account_id = ?, offset_sc1 = ?, offset_sc2 = ?, "
             "offset_sc3 = ? WHERE company_id = ? AND document_id = ? AND id = ?",

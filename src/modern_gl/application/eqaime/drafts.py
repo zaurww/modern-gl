@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto
 from modern_gl.application.eqaime.counterparties import (
     add_counterparties,
     new_counterparties,
@@ -195,4 +195,4 @@ def _place(
         "WHERE company_id = ? AND id = ?",
         (company_id, account_id),
     ).fetchone()
-    return pad_subconto([value_id if k == kind_id else None for k in tuple(account)])
+    return fill_subconto(account, {kind_id: value_id})

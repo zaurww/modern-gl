@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
-from modern_gl.application.common import closed_on, require_open
+from modern_gl.application.common import account_kinds, closed_on, fill_subconto, require_open
 from modern_gl.application.inventory.model import INCOMING_SQL, AccrualData
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.ledger.base import LedgerBase
@@ -179,9 +179,6 @@ class InventoryBase(LedgerBase):
             ),
         )
 
-    def _account_kind_ids(self, account: Row) -> tuple[int | None, ...]:
-        return tuple(account[f"sc{position}_kind_id"] for position in range(1, 4))
-
     def _account_kind_codes(
         self, company_id: int, account: Row
     ) -> tuple[str | None, str | None, str | None]:
@@ -194,8 +191,7 @@ class InventoryBase(LedgerBase):
         self, company_id: int, account: Row
     ) -> tuple[str | None, str | None, str | None]:
         result: list[str | None] = []
-        for position in range(1, 4):
-            kind_id = account[f"sc{position}_kind_id"]
+        for kind_id in account_kinds(account):
             if kind_id is None:
                 result.append(None)
                 continue
@@ -215,8 +211,7 @@ class InventoryBase(LedgerBase):
             for value_id in values
             if value_id is not None
         }
-        kinds = self._account_kind_ids(self._account(company_id, account_id))
-        return tuple(None if kind is None else by_kind.get(kind) for kind in kinds)
+        return fill_subconto(self._account(company_id, account_id), by_kind)
 
     def _inventory_subconto(
         self, company_id: int, item: Row, warehouse: Row

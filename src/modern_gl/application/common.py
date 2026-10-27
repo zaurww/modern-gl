@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 
 from modern_gl.domain.dates import ru_date
@@ -32,6 +32,27 @@ def pad_subconto(values: Sequence[int | None], line_no: int | None = None) -> Su
             tr("строка {line}: больше {n} субконто", line=line_no, n=MAX_SUBCONTO)
         )
     first, second, third = [*values, *([None] * (MAX_SUBCONTO - len(values)))]
+    return first, second, third
+
+
+def account_kinds(account: Row) -> Subconto:
+    """The kinds of directory at the three subconto positions of an account (None: the
+    position is not used); a row with `sc1_kind_id`, `sc2_kind_id`, `sc3_kind_id`."""
+    return account["sc1_kind_id"], account["sc2_kind_id"], account["sc3_kind_id"]
+
+
+def fill_subconto(
+    account: Row, by_kind: Mapping[int, int | None], keep: Sequence[int | None] = ()
+) -> Subconto:
+    """The account's subconto filled by kind — the one rule for every module (a payment's
+    counterparty on 60, the advance's contract on 62.2, the VAT account's supplier): at
+    each position, the element `keep` has there (typed by hand), else the element of
+    that position's kind in `by_kind` (kind id -> element id), else none."""
+    kept = pad_subconto(keep)
+    first, second, third = (
+        value if value is not None else (None if kind is None else by_kind.get(kind))
+        for kind, value in zip(account_kinds(account), kept, strict=True)
+    )
     return first, second, third
 
 
