@@ -199,7 +199,7 @@ class ReceiptDraftCommands(StockCommands):
     ) -> None:
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
-        doc = self._document(company_id, document_id)
+        doc = self._inventory_document(company_id, document_id)
         doc_type = doc["doc_type"]
         for line_no, source in enumerate(lines, 1):
             expense = self._expense_of(company_id, doc_type, source, line_no)

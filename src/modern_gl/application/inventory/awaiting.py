@@ -20,7 +20,7 @@ class AwaitingCommands(PostingCommands):
         amounts; None leaves the lines as they are. A posted purchase is posted again in
         place (D32): its postings carry the number and the VAT."""
         with transaction(self.conn):
-            doc = self._document(company_id, document_id)
+            doc = self._inventory_document(company_id, document_id)
             if doc["doc_type"] != "receipt" or doc["awaits_invoice"] != 1:
                 raise ValidationError(tr("покупка №{n} не ждёт e-qaimə", n=doc["number"]))
             if doc["status"] == "posted":

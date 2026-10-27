@@ -8,20 +8,19 @@ from contextlib import contextmanager
 from modern_gl.application.common import account_kinds, closed_on, fill_subconto, require_open
 from modern_gl.application.inventory.model import INCOMING_SQL, AccrualData
 from modern_gl.application.ledger import Ledger
-from modern_gl.application.ledger.base import LedgerBase
+from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 
 
-class InventoryBase(LedgerBase):
-    """The ledger's lookups (`LedgerBase`), the warehouse's own, and the catalog kept while
-    documents are recalculated."""
+class InventoryBase(ModuleBase):
+    """The warehouse's lookups over a module's base (`self.ledger` — the core it calls,
+    the shared lookups), and the catalog kept while documents are recalculated."""
 
-    def __init__(self, conn: Connection, actor: str = "local") -> None:
-        super().__init__(conn, actor)
-        self.ledger = Ledger(conn, actor=actor)
+    def __init__(self, conn: Connection, actor: str = "local", ledger: Ledger | None = None):
+        super().__init__(conn, actor, ledger)
         # rows of the catalog (items, warehouses, accounts, subconto) kept while documents
         # are recalculated: nothing there changes meanwhile (debt 6, ~100 000 lookups a year)
         self._kept: dict[tuple, object] | None = None
@@ -118,7 +117,7 @@ class InventoryBase(LedgerBase):
             lambda: super(InventoryBase, self)._subconto_value(company_id, value_id),
         )
 
-    def _document(self, company_id: int, document_id: int) -> Row:
+    def _inventory_document(self, company_id: int, document_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM inventory_documents WHERE company_id = ? AND id = ?",
             (company_id, document_id),
@@ -162,12 +161,12 @@ class InventoryBase(LedgerBase):
         return closed_on(self._company(doc["company_id"]), doc["doc_date"])
 
     def _require_inventory_draft(self, company_id: int, document_id: int) -> Row:
-        doc = self._document(company_id, document_id)
+        doc = self._inventory_document(company_id, document_id)
         if doc["status"] != "draft":
             raise ValidationError(tr("сначала отмените проведение складского документа"))
         return doc
 
-    def _require_open_period(self, doc: Row) -> None:
+    def _require_inventory_open(self, doc: Row) -> None:
         require_open(
             self._company(doc["company_id"]),
             doc["doc_date"],
