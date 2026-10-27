@@ -41,6 +41,7 @@ from modern_gl.reporting.inventory.item_card import (
     gross_profit,
     item_card,
 )
+from modern_gl.reporting.inventory.shortages import Shortage, document_shortages
 from modern_gl.reporting.inventory.statement import (
     BY_ITEM,
     BY_WAREHOUSE,
@@ -84,6 +85,7 @@ __all__ = [
     "MovementSource",
     "ProfitRow",
     "ReceiptLineChoice",
+    "Shortage",
     "StatementRow",
     "StockBalance",
     "StockCardLine",
@@ -93,6 +95,7 @@ __all__ = [
     "below_minimum",
     "code_label",
     "cost_sources",
+    "document_shortages",
     "gross_profit",
     "group_paths",
     "has_units",

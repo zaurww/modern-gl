@@ -66,6 +66,7 @@ class InventoryDocumentForm(QWidget):
     title_changed = Signal()
     open_gl_document = Signal(int)
     make_return = Signal(str, int)  # the return's type, the purchase (sale) it returns
+    buy_shortage = Signal(int)  # a draft short of goods: a purchase «ждёт e-qaimə» of them
 
     def __init__(self, session: Session, doc_type: str) -> None:
         super().__init__()
@@ -260,6 +261,15 @@ class InventoryDocumentForm(QWidget):
             tr("Товар вернули: возврат по этому документу — его цены и ƏDV, без лишнего ввода")
         )
         actions.addWidget(self.btn_return)
+        self.btn_shortage = button(tr("Оприходовать недостающее…"), "flat")
+        self.btn_shortage.setToolTip(
+            tr(
+                "Товар пришёл, а документов нет: покупка «ждёт e-qaimə» на недостающее по "
+                "последней цене; проведите её — и этот документ проведётся"
+            )
+        )
+        self.btn_shortage.hide()
+        actions.addWidget(self.btn_shortage)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")

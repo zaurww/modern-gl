@@ -48,3 +48,33 @@ def test_a_sale_that_does_not_post_stays_one_draft(conn, qtbot):
     assert not page.save(post=True)
     assert documents(conn) == 1
     assert page.doc is not None and page.doc.status == "draft"
+
+
+def test_the_missing_goods_come_in_as_a_purchase_awaiting_its_e_qaime(conn, qtbot):
+    """10 printers bought for 120.00 (10.01, 12.00 each); 12 sold on 25.01 — 2 are not
+    there yet. «Оприходовать недостающее»: a purchase dated 25.01, 2 at the last price
+    12.00 = 24.00 from the same supplier, waiting for its e-qaimə. Posted, the sale posts:
+    12 at 12.00 = 144.00 of cost, nothing left."""
+    shop = make_shop(conn, "classic")
+    shop.receipt("2026-01-10", "10", "120")
+    sale = sale_page(shop, conn, qtbot, 12)
+    sale.date.setDate(sale.date.date().fromString("25.01.2026", "dd.MM.yyyy"))
+    assert not sale.save(post=True)
+    assert sale.btn_shortage.isVisibleTo(sale)
+    purchase = InventoryDocumentPage(sale.s, doc_type="receipt")
+    qtbot.addWidget(purchase)
+    assert purchase.fill_shortage(sale.doc.id)
+    (line,) = purchase.model.rows
+    assert (line.item_id, line.warehouse_id, line.quantity, line.amount) == (
+        shop.item,
+        shop.main,
+        2 * Q,
+        2_400,
+    )
+    assert line.offset_subconto[0] == shop.supplier[0]
+    assert purchase._awaits() and purchase.date.date().toString("dd.MM.yyyy") == "25.01.2026"
+    assert purchase.save(post=True), purchase.error.text()
+    assert purchase.doc.awaits_invoice
+    assert sale.save(post=True), sale.error.text()
+    (goods,) = [p for p in shop.postings(sale.doc.id) if p[:2] == ("46", "41")]
+    assert goods[2] == 14_400

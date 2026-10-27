@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.inventory import (
     INCOMING_TYPES,
     RETURN_TYPES,
+    StockShortage,
     vat_of,
 )
 from modern_gl.desktop.inventory_document_page.clipboard import ClipboardPart
@@ -77,6 +78,9 @@ class InventoryDocumentPage(
         self.btn_gl.clicked.connect(self._open_gl)
         self.btn_accrual.clicked.connect(self._open_accrual)
         self.btn_return.clicked.connect(self._make_return)
+        self.btn_shortage.clicked.connect(
+            lambda: self.doc is not None and self.buy_shortage.emit(self.doc.id)
+        )
         self._connect_delegate()
         self.model.changed.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
@@ -257,6 +261,7 @@ class InventoryDocumentPage(
         )
         self.btn_accrual.setVisible(books and self.doc is not None and bool(self.doc.accruals))
         self.hint.setVisible(not read_only and self.doc_type != "landed_cost")
+        self.btn_shortage.hide()
         self.btn_return.setVisible(posted and not viewing and self.doc_type in RETURN_OF)
 
     def _show_totals(self) -> None:
@@ -305,6 +310,8 @@ class InventoryDocumentPage(
                     self._post_saved(document_id)
         except (LedgerError, ValueError, TypeError) as exc:
             self.show_error(str(exc))
+            # goods short: brought in as a purchase that waits for its e-qaimə (D-new)
+            self.btn_shortage.setVisible(isinstance(exc, StockShortage) and self.doc is not None)
             return False
         self.s.working_date = edited_date(self.date)
         self.load(document_id)

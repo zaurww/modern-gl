@@ -18,9 +18,18 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row
 
 
+class StockShortage(ValidationError):
+    """Not enough of an item on a warehouse for what a document takes — the goods came,
+    their papers did not (D-new): the page offers to bring them in («ждёт e-qaimə»)."""
+
+    def __init__(self, message: str, item_id: int, warehouse_id: int) -> None:
+        super().__init__(message)
+        self.item_id, self.warehouse_id = item_id, warehouse_id
+
+
 def require_stock(item: Row, warehouse: Row, requested: int, available: int) -> None:
     if requested > available:
-        raise ValidationError(
+        raise StockShortage(
             tr(
                 "недостаточно товара «{item}» на складе «{warehouse}»: "
                 "доступно {available}, требуется {requested}",
@@ -28,7 +37,9 @@ def require_stock(item: Row, warehouse: Row, requested: int, available: int) -> 
                 warehouse=warehouse["name"],
                 available=format_quantity(available, item["unit_precision"]),
                 requested=format_quantity(requested, item["unit_precision"]),
-            )
+            ),
+            item["id"],
+            warehouse["id"],
         )
 
 

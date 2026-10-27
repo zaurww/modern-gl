@@ -47,6 +47,7 @@ from modern_gl.application.inventory.model import (
     UsualUnit,
 )
 from modern_gl.application.inventory.rebuild import RebuildCommands
+from modern_gl.application.inventory.stock import StockShortage
 from modern_gl.application.inventory.stock_count import (
     CountedLine,
     StockCountCommands,
@@ -81,6 +82,7 @@ __all__ = [
     "ReturnLine",
     "SaleLine",
     "StockCountResult",
+    "StockShortage",
     "TransferLine",
     "UsualUnit",
     "allocate_charges",

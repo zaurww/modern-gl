@@ -346,6 +346,7 @@ class MainWindow(ReportPlaces):
         page.title_changed.connect(lambda p=page: self._retitle(p))
         if isinstance(page, InventoryDocumentPage):
             page.make_return.connect(self.new_return)
+            page.buy_shortage.connect(self.buy_shortage)
 
     def buy_missing(self, missing) -> None:
         """A purchase of what is under its minimum stock, filled; the supplier to choose."""
@@ -353,6 +354,15 @@ class MainWindow(ReportPlaces):
             return
         page = InventoryDocumentPage(self.open_session, doc_type="receipt")
         page.fill_missing(missing)
+        self._wire_inventory_document(page)
+        self._add_page(page.key, page, open_item=True)
+        self._activate(page.key)
+
+    def buy_shortage(self, document_id: int) -> None:
+        """The goods a draft lacks, brought in by a purchase that waits for its e-qaimə."""
+        page = InventoryDocumentPage(self.open_session, doc_type="receipt")
+        if not page.fill_shortage(document_id):
+            return
         self._wire_inventory_document(page)
         self._add_page(page.key, page, open_item=True)
         self._activate(page.key)
