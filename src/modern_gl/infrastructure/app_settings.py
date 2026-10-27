@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
+from typing import cast
 
 KEY = r"Software\ModernGL\Modern GL"
 
@@ -42,9 +43,10 @@ def read_settings() -> AppSettings:
         language = _value(winreg, key, "language")
     if isinstance(files, str):  # a single file may be stored as a plain string
         files = [files]
+    stored = cast("list[object]", files) if isinstance(files, list) else []
     return AppSettings(
         Path(data_dir) if isinstance(data_dir, str) and data_dir else None,
-        [Path(f) for f in files if f] if isinstance(files, list) else [],
+        [Path(f) for f in stored if isinstance(f, str) and f],
         language if isinstance(language, str) else "",
     )
 
