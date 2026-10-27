@@ -176,7 +176,7 @@ def test_the_return_is_filled_from_its_purchase(shop, conn, qtbot):
         ("60", "41", 3_600),
         ("80", "41", 300),
     ]
-    listed = trade_documents(conn, shop.company_id, PURCHASE)[0]
+    listed = trade_documents(conn, shop.company_id, PURCHASE)[-1]  # the newest: last
     assert listed.is_return and (listed.amount, listed.vat) == (-3_600, 0)
 
 
