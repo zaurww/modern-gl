@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Callable
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 from modern_gl import i18n
@@ -170,6 +171,14 @@ def workspace_from(args: argparse.Namespace) -> Workspace:
     return Workspace(folder, [*settings.company_files, *args.file])
 
 
+def program_version() -> str:
+    """The version of pyproject.toml, as installed; "0.0.0" when run from a bare checkout."""
+    try:
+        return version("modern-gl")
+    except PackageNotFoundError:
+        return "0.0.0"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Modern GL: the books for an AI over MCP")
     parser.add_argument("--data", type=Path, help="folder of company files")
@@ -185,7 +194,7 @@ def main() -> None:
     session = Session()
     drafts = Drafts(companies, lambda: session.client) if args.allow_drafts else None
     about = ABOUT + (DRAFTS_ABOUT if drafts else "")
-    server = Server("modern-gl", "0.1.0", build_tools(companies, drafts), about, session)
+    server = Server("modern-gl", program_version(), build_tools(companies, drafts), about, session)
     try:
         server.serve(sys.stdin.buffer, sys.stdout.buffer)
     finally:
