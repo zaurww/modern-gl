@@ -8,6 +8,7 @@ import pytest
 
 from modern_gl.application.book_invoices import book_invoices
 from modern_gl.application.catalog import Catalog
+from modern_gl.application.eqaime import import_drafts, parse_invoice, plan_import
 from modern_gl.application.inventory import (
     PURCHASE_RETURN,
     QUANTITY_FACTOR,
@@ -176,3 +177,42 @@ def test_the_return_is_filled_from_its_purchase(shop, conn, qtbot):
     ]
     listed = trade_documents(conn, shop.company_id, PURCHASE)[0]
     assert listed.is_return and (listed.amount, listed.vat) == (-3_600, 0)
+
+
+def test_a_customers_return_e_qaime_becomes_a_return_draft(shop, conn):
+    """Alfa sends the return e-qaimə for 1 printer (20.00, ƏDV base 20.00 → 3.60): the
+    import makes a return from the customer on its account 62, the printer found by the
+    sale to Alfa; a return of services is not imported."""
+    shop.ledger.set_subconto_value_tax(shop.company_id, shop.customer, "1234567891")
+    shop.sale("2026-01-25", [SaleLine(shop.item, shop.main, "3", "60", "10.80", "Printer")])
+    row = {
+        "id": "r1",
+        "serialNumber": "RT2601000001",
+        "status": "approved",
+        "kind": "returnInvoice",
+        "createdAt": "2026-01-30T10:00:00",
+        "sender": {"tin": "1234567891", "name": "Alfa"},
+    }
+    item = {"productName": "Printer", "productGroup": {"code": "8443"}, "quantity": 1}
+    detail = {**row, "items": [{**item, "cost": 20, "vat18": 20}]}
+    service = {**row, "id": "r2", "serialNumber": "RT2601000002"}
+    service_detail = {
+        **service,
+        "items": [{**item, "productGroup": {"code": "9995"}, "cost": 5, "vat18": 5}],
+    }
+    plans = plan_import(
+        conn,
+        shop.company_id,
+        [
+            parse_invoice(row, detail, outgoing=False),
+            parse_invoice(service, service_detail, outgoing=False),
+        ],
+    )
+    assert plans[0].return_type == SALE_RETURN and plans[0].lines[0].item_id == shop.item
+    assert not plans[1].importable
+    (draft,) = import_drafts(shop.inventory, shop.company_id, plans)
+    doc = shop.inventory.load_document(shop.company_id, draft)
+    (line,) = doc.lines
+    assert (doc.doc_type, doc.invoice) == (SALE_RETURN, "RT2601000001")
+    assert (line.amount, line.vat_amount, line.offset_account_id) == (2_000, 360, shop.acc["62"])
+    assert line.offset_subconto[0] == shop.customer

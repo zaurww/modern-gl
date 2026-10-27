@@ -17,6 +17,7 @@ from modern_gl.application.inventory import (
     STANDARD_VAT_RATE,
     Inventory,
     ReceiptLine,
+    ReturnLine,
     SaleLine,
 )
 from modern_gl.application.queries import remembered_sale_subconto
@@ -57,6 +58,9 @@ def import_drafts(
                 )
                 continue
             assert plan.counterparty_id is not None  # added above
+            if plan.return_type is not None:
+                created.append(_return_draft(inventory, company_id, plan, warehouse, kind))
+                continue
             account = _settlement_account(conn, company_id, invoice.outgoing)
             subconto = _place(conn, company_id, account, kind, plan.counterparty_id)
             vat_rate = STANDARD_VAT_RATE if invoice.vat else None
@@ -90,6 +94,37 @@ def import_drafts(
                     )
                 )
     return created
+
+
+def _return_draft(
+    inventory: Inventory, company_id: int, plan: InvoicePlan, warehouse: int | None, kind: int
+) -> int:
+    """A return e-qaimə as a return draft: the customer's account (receivable) for goods
+    back from a customer, the supplier's (payable) for goods back to the supplier."""
+    conn, invoice = inventory.conn, plan.invoice
+    assert plan.counterparty_id is not None and plan.return_type is not None
+    account = _settlement_account(conn, company_id, plan.as_sale)
+    return inventory.create_return_draft(
+        company_id,
+        invoice.doc_date,
+        plan.return_type,
+        [
+            ReturnLine(
+                p.item_id,
+                warehouse,
+                _quantity(conn, p.item_id, p.line.quantity),
+                _amount(p.line.amount),
+                _amount(p.line.vat, zero=True),
+                p.line.name,
+            )
+            for p in plan.lines
+        ],
+        account,
+        _place(conn, company_id, account, kind, plan.counterparty_id),
+        tr("Возврат по e-qaimə {n}", n=invoice.number),
+        vat_rate=STANDARD_VAT_RATE if invoice.vat else None,
+        invoice=invoice.number,
+    )
 
 
 def _receipt_line(

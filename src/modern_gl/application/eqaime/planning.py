@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 
 from modern_gl.application.counterparties import known_counterparty
 from modern_gl.application.eqaime.parsing import RETURN_KINDS, EInvoice, EInvoiceLine
+from modern_gl.application.inventory.model import PURCHASE_RETURN, RETURN_TYPES, SALE_RETURN
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection, Row
 
@@ -47,6 +48,24 @@ class InvoicePlan:
     attach_to: AwaitingPurchase | None = None
 
     @property
+    def return_type(self) -> str | None:
+        """A return e-qaimə («malların geri qaytarılması»): the company's own, sent to its
+        supplier — goods back to the supplier; a customer's — goods back from it."""
+        if self.invoice.kind not in RETURN_KINDS:
+            return None
+        return PURCHASE_RETURN if self.invoice.outgoing else SALE_RETURN
+
+    @property
+    def document_type(self) -> str:
+        return self.return_type or self.invoice.doc_type
+
+    @property
+    def as_sale(self) -> bool:
+        """Its lines are read as a sale's (a customer's return too), else a purchase's."""
+        kind = self.return_type
+        return self.invoice.outgoing if kind is None else kind == SALE_RETURN
+
+    @property
     def importable(self) -> bool:
         return self.existing is None and not self.skip_reason
 
@@ -64,6 +83,8 @@ class InvoicePlan:
     def unresolved(self) -> int:
         """Lines the user has to decide: a purchase line neither an item nor an account,
         a sale's goods line without an item."""
+        if self.return_type is not None:  # goods only
+            return sum(1 for p in self.lines if p.item_id is None)
         if self.invoice.outgoing:
             return sum(1 for p in self.lines if p.item_id is None and not p.line.service)
         return sum(1 for p in self.lines if p.item_id is None and p.account_id is None)
@@ -90,17 +111,21 @@ def plan_import(
         existing = conn.execute(
             "SELECT number FROM inventory_documents "
             "WHERE company_id = ? AND doc_type = ? AND invoice = ?",
-            (company_id, invoice.doc_type, invoice.number),
+            (company_id, plan.document_type, invoice.number),
         ).fetchone()
         plan.existing = existing["number"] if existing else None
-        if invoice.kind in RETURN_KINDS:
-            plan.skip_reason = tr("возврат — пока вводится вручную")
+        returned = plan.return_type
+        if returned and any(line.service for line in invoice.lines):
+            plan.skip_reason = tr("возврат услуг — вводится вручную")
         elif any(line.amount < 0 or line.vat < 0 for line in invoice.lines):
             plan.skip_reason = tr("отрицательные суммы — проверьте на портале")
-        history = _history(conn, company_id, invoice.doc_type, counterparty)
+        # a return's lines are what was bought from (sold to) the counterparty
+        source = RETURN_TYPES[returned] if returned else invoice.doc_type
+        history = _history(conn, company_id, source, counterparty)
         for line in invoice.lines:
-            plan.lines.append(_line_plan(line, history, items, invoice.outgoing))
-        if plan.importable and not invoice.outgoing and counterparty is not None:
+            planned = _line_plan(line, history, items, plan.as_sale)
+            plan.lines.append(planned if not returned or planned.item_id else LinePlan(line))
+        if plan.importable and not returned and not invoice.outgoing and counterparty:
             plan.awaiting = awaiting.get(counterparty, [])
         plans.append(plan)
     _choose_awaiting(plans)

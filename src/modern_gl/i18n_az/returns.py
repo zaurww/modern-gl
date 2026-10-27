@@ -34,4 +34,6 @@ AZ: dict[str, str] = {
     ),
     "Возврат по документу №{n}": "№{n} sənədi üzrə qaytarma",
     "По документу №{n} возвращать нечего": "№{n} sənədi üzrə qaytarılacaq bir şey yoxdur",
+    "Возврат по e-qaimə {n}": "{n} e-qaiməsi üzrə qaytarma",
+    "возврат услуг — вводится вручную": "xidmətlərin qaytarılması — əl ilə daxil edilir",
 }

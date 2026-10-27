@@ -46,6 +46,14 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
 from modern_gl.reporting.inventory import item_name
 
+# what an e-qaimə becomes (a return e-qaimə — a return, D-new)
+KIND_NAMES = {
+    "receipt": "Покупка",
+    "sale": "Продажа",
+    "purchase_return": "Возврат поставщику",
+    "sale_return": "Возврат от покупателя",
+}
+
 
 class EqaimeImportDialog(EqaimeImportForm):
     """Period and direction → sign in → the e-qaimə with their lines → drafts."""
@@ -167,7 +175,7 @@ class EqaimeImportDialog(EqaimeImportForm):
 
     def _invoice_item(self, plan: InvoicePlan) -> QTreeWidgetItem:
         invoice = plan.invoice
-        kind = tr("Продажа") if invoice.outgoing else tr("Покупка")
+        kind = tr(KIND_NAMES[plan.document_type])
         item = QTreeWidgetItem(
             [
                 ru_date(invoice.doc_date),
@@ -196,7 +204,7 @@ class EqaimeImportDialog(EqaimeImportForm):
         if plan.unresolved and plan.importable:
             item.setForeground(BECOMES, QColor(P.amber))
         for line in plan.lines:
-            item.addChild(self._line_item(line, invoice.outgoing))
+            item.addChild(self._line_item(line, plan.as_sale, plan.return_type is not None))
         return item
 
     def _expense_month(self, plan: InvoicePlan) -> PickBox:
@@ -262,7 +270,8 @@ class EqaimeImportDialog(EqaimeImportForm):
             parts.append(tr("проверить строк: {n}", n=plan.unresolved))
         return ", ".join(parts) or tr("готово")
 
-    def _line_item(self, plan: LinePlan, outgoing: bool) -> QTreeWidgetItem:
+    def _line_item(self, plan: LinePlan, outgoing: bool, goods: bool = False) -> QTreeWidgetItem:
+        """`goods`: a return's line, an item only."""
         line = plan.line
         quantity = ""
         if line.quantity is not None:
@@ -290,7 +299,9 @@ class EqaimeImportDialog(EqaimeImportForm):
         for column in range(len(COLUMNS)):
             child.setForeground(column, QColor(P.secondary))
         unresolved = (
-            plan.item_id is None and not line.service
+            plan.item_id is None
+            if goods
+            else plan.item_id is None and not line.service
             if outgoing
             else plan.item_id is None and plan.account_id is None
         )
