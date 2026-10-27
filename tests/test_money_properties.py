@@ -40,6 +40,7 @@ def test_round_ratio_is_the_exact_fraction_rounded(numerator: int, denominator: 
     exact = Fraction(numerator, denominator)
     result = round_ratio(numerator, denominator)
     assert result == round_half_away(exact)
+    assert round_ratio(-numerator, -denominator) == result  # a negative denominator too
     assert abs(Fraction(result) - exact) <= Fraction(1, 2)
     if abs(exact - int(exact)) == Fraction(1, 2):  # a half: away from zero
         assert abs(result) == abs(int(exact)) + 1

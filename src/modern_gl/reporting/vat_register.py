@@ -21,7 +21,7 @@ from datetime import date
 
 from modern_gl.application.book_invoices import BookInvoice, book_invoices
 from modern_gl.application.books import COMMON, book_params
-from modern_gl.application.invoices import gathered_invoices
+from modern_gl.application.invoices import IN_PERIOD, gathered_invoices
 from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import CUSTOMS, EQAIME
@@ -111,12 +111,16 @@ def vat_register(
     date_from, date_to = iso_date(date_from), iso_date(date_to)
     if date_from > date_to:
         raise ValidationError(tr("начало периода позже конца"))
-    params = book_params(conn, company_id, date_to, date_to, COMMON)
-    balances = {key: r.balance for key, r in gathered_invoices(conn, company_id, params).items()}
+    params = book_params(conn, company_id, date_from, date_to, COMMON)
+    # an e-qaimə dated in the period has a posting in it: only those numbers are read
+    balances = {
+        key: r.balance
+        for key, r in gathered_invoices(conn, company_id, params, only=IN_PERIOD).items()
+    }
     names = _directory(conn, company_id)
 
     def rows(outgoing: bool, kind: str) -> list[RegisterRow]:
-        found = book_invoices(conn, company_id, outgoing, kind=kind)
+        found = book_invoices(conn, company_id, outgoing, kind=kind, period=(date_from, date_to))
         sign = 1 if outgoing else -1  # a sale owes Dt, a purchase Kt
         return [
             _row(kind, b, names, sign * balances.get((kind, b.number), 0))

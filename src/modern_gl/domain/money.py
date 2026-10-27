@@ -57,8 +57,15 @@ def round_half_away(value: Fraction) -> int:
 
 
 def round_ratio(numerator: int, denominator: int) -> int:
-    """numerator / denominator rounded to an integer, halves away from zero."""
-    return round_half_away(Fraction(numerator, denominator))
+    """numerator / denominator rounded to an integer, halves away from zero — as
+    `round_half_away` of the exact `Fraction`, in integers (the ƏDV reports round so for
+    every e-qaimə)."""
+    if denominator < 0:
+        numerator, denominator = -numerator, -denominator
+    whole, rest = divmod(abs(numerator), denominator)
+    if 2 * rest >= denominator:
+        whole += 1
+    return whole if numerator >= 0 else -whole
 
 
 def from_minor(minor: int) -> Decimal:

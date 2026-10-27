@@ -65,6 +65,9 @@ def purchase_facts(
     params = book_params(conn, company_id, date_to, date_to, layers)
     accounts = invoice_accounts(conn, company_id)
     advances = ", ".join(str(i) for i, a in accounts.items() if a.account_type == ADVANCE_PAID)
+    # a number never debited to the input VAT account has no ƏDV and takes nothing from
+    # the supplier's ƏDV advance (none is owed on it): its postings are not read
+    input_vat = ", ".join(str(i) for i, a in accounts.items() if a.account_type == INPUT_VAT)
     found: dict[tuple[str, str], InvoiceFacts] = {}
     pools: dict[int | None, int] = {}  # the ƏDV advance of each supplier
     for p in conn.execute(
@@ -75,8 +78,12 @@ def purchase_facts(
                p.dt_sc1, p.dt_sc2, p.dt_sc3, p.ct_sc1, p.ct_sc2, p.ct_sc3
         FROM postings p JOIN docs ON docs.id = p.document_id
         WHERE p.company_id = :company_id
-          AND (p.invoice IS NOT NULL OR p.debit_account_id IN ({advances or "0"})
-               OR p.credit_account_id IN ({advances or "0"}))
+          AND ((p.invoice IS NULL AND (p.debit_account_id IN ({advances or "0"})
+                                       OR p.credit_account_id IN ({advances or "0"})))
+               OR (COALESCE(p.invoice_kind, ''), p.invoice) IN (
+                   SELECT COALESCE(v.invoice_kind, ''), v.invoice FROM postings v
+                   WHERE v.company_id = :company_id AND v.invoice IS NOT NULL
+                     AND v.debit_account_id IN ({input_vat or "0"})))
         ORDER BY docs.doc_date, p.document_id, p.line_no
         """,
         params,

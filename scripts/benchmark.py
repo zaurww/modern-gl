@@ -4,7 +4,8 @@
 
 Makes (once) `<folder>/big-vat-<N>.gl`: the demo company plus N postings over the years
 2024–2026 — purchases with ƏDV on e-qaimə from 300 counterparties (expenses by cost item),
-sales with ƏDV to them, all paid within 60 days, the ƏDV through the deposit — and prints how long each report takes, slowest first.
+sales with ƏDV to them, all paid within 60 days, the ƏDV through the deposit — and prints
+how long each report takes, slowest first.
 Anything over ~0.3 s is a candidate for a background thread.
 
     uv run python scripts/benchmark.py <folder> --stock

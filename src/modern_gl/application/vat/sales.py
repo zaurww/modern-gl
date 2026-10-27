@@ -69,8 +69,13 @@ def party_money(
     parties = [i for i, a in accounts.items() if a.account_type in types]
     if not parties:
         return []
+    money = [i for i, a in accounts.items() if a.money]
+    if not money:
+        return []
     found: dict[tuple, SaleFacts] = {}
+    # only money against the counterparty's account, no customs declaration (`_count`)
     marks = ", ".join(str(i) for i in parties)
+    cash = ", ".join(str(i) for i in money)
     for p in conn.execute(
         f"""
         WITH {_DOCS}
@@ -79,7 +84,9 @@ def party_money(
                p.dt_sc1, p.dt_sc2, p.dt_sc3, p.ct_sc1, p.ct_sc2, p.ct_sc3
         FROM postings p JOIN docs ON docs.id = p.document_id
         WHERE p.company_id = :company_id
-          AND (p.debit_account_id IN ({marks}) OR p.credit_account_id IN ({marks}))
+          AND COALESCE(p.invoice_kind, '') = ''
+          AND ((p.debit_account_id IN ({cash}) AND p.credit_account_id IN ({marks}))
+               OR (p.credit_account_id IN ({cash}) AND p.debit_account_id IN ({marks})))
         ORDER BY docs.doc_date, p.document_id, p.line_no
         """,
         params,

@@ -41,14 +41,25 @@ def book_invoices(
     outgoing: bool,
     layers: Sequence[str] = COMMON,
     kind: str = EQAIME,
+    period: tuple[str, str] | None = None,
 ) -> dict[str, BookInvoice]:
     """The e-qaimə of the books by number, purchases or sales, every date: their accruals.
     One reversed to nothing (red storno) is not there. `kind` CUSTOMS: the customs
-    declarations instead (the ƏDV register, `reporting/vat_register`)."""
+    declarations instead (the ƏDV register, `reporting/vat_register`). `period` (ISO):
+    only the numbers with a posting in it — each still with all its postings; the ones
+    dated in the period are among them."""
     pairs = _pairs(conn, company_id, outgoing)
     if not pairs:
         return {}
     params = book_params(conn, company_id, "0001-01-01", "9999-12-31", layers) | {"kind": kind}
+    chosen = ""
+    if period is not None:
+        params |= {"first": period[0], "last": period[1]}
+        chosen = """
+          AND p.invoice IN (
+            SELECT q.invoice FROM postings q CROSS JOIN docs e
+            WHERE e.id = q.document_id AND q.company_id = :company_id
+              AND q.invoice IS NOT NULL AND e.doc_date BETWEEN :first AND :last)"""
     who = "CASE r.partner " + " ".join(
         f"WHEN {i} THEN p.{'dt' if outgoing else 'ct'}_sc{i}" for i in (1, 2, 3)
     )
@@ -64,7 +75,7 @@ def book_invoices(
         FROM postings p CROSS JOIN docs
         JOIN pairs r ON r.debit_id = p.debit_account_id AND r.credit_id = p.credit_account_id
         WHERE docs.id = p.document_id AND p.company_id = :company_id AND p.invoice IS NOT NULL
-          AND COALESCE(p.invoice_kind, '') = :kind
+          AND COALESCE(p.invoice_kind, '') = :kind{chosen}
         GROUP BY p.invoice, p.document_id, docs.doc_date, docs.number, {who} END
         ORDER BY docs.doc_date, docs.number, MIN(p.line_no)
         """,
