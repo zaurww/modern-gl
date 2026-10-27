@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QPushButton
+from PySide6.QtWidgets import QMenu, QMessageBox, QPushButton
 
 from modern_gl.application.inventory import (
     Inventory,
@@ -25,6 +25,7 @@ from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.inventory import landed_cost_report
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
@@ -174,7 +175,7 @@ def year_window(qtbot, tmp_path, monkeypatch):
     conn = connect(path)
     create_year_demo(Ledger(conn))
     conn.close()
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(ws)
     qtbot.addWidget(win)
     win.view_company(path)

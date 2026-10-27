@@ -17,6 +17,7 @@ from modern_gl.application.eqaime import (
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.trade import trade_documents
+from tests.helpers.qt import running_app
 from tests.helpers.sales import Shop, make_shop
 
 SUPPLIER_TIN = "1700000001"
@@ -211,7 +212,6 @@ def test_attach_refuses_a_purchase_that_does_not_wait(shop):
 def test_purchase_form_marks_a_purchase_waiting(shop, conn, qtbot):
     """«Ждёт e-qaimə» in the basis box: the number field is off and the purchase is saved
     waiting; the list of purchases says so."""
-    from PySide6.QtWidgets import QApplication
 
     from modern_gl.application.catalog import Catalog
     from modern_gl.desktop import theme
@@ -228,7 +228,7 @@ def test_purchase_form_marks_a_purchase_waiting(shop, conn, qtbot):
         shop.supplier,
         invoice="MT9",
     )
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     s = Session(
         conn,
         shop.ledger,

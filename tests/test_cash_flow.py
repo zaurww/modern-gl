@@ -82,7 +82,7 @@ def test_a_flow_opens_into_the_other_accounts(books):
 
     conn, cid = books
     flow = cash_flow(conn, cid, "2026-01-01", "2026-02-28", detail=ACCOUNTS)
-    rows = [(ln.kind, code(ln), ln.amount) for ln in flow.lines]
+    rows: list[tuple[str, str, object]] = [(ln.kind, code(ln), ln.amount) for ln in flow.lines]
     customers = rows.index(("line", "Покупатели и заказчики", 100_000))
     assert rows[customers + 1] == ("account", "62", 100_000)
     capital = rows.index(("line", "Уставный капитал", 1_000_000))

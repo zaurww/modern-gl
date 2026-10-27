@@ -18,6 +18,7 @@ from modern_gl.infrastructure.etaxes import (
     TokenExpired,
 )
 from tests.helpers.eqaime import SUPPLIER_TIN, FakePortal, fake_token, received
+from tests.helpers.qt import table_item
 from tests.helpers.sales import Shop, make_shop
 
 CUSTOMER_TIN = "1234567891"
@@ -380,11 +381,11 @@ def test_import_dialog_adds_counterparties_with_edited_names(shop, conn, qtbot):
     assert dialog.parties.isHidden()  # nothing loaded yet
     dialog.show_invoices(invoices)
     assert not dialog.parties.isHidden() and dialog.parties.rowCount() == 1
-    texts = [dialog.parties.item(0, c).text() for c in range(4)]
+    texts = [table_item(dialog.parties, 0, c).text() for c in range(4)]
     assert texts == [SUPPLIER_TIN, long_name, "KOMPYUTER DÜNYASI MMC", "2"]
     assert dialog.parties_title.text() == "Новые контрагенты: 1"
 
-    dialog.parties.item(0, 2).setText("  Kompyuter   Dünyası ")
+    table_item(dialog.parties, 0, 2).setText("  Kompyuter   Dünyası ")
     dialog.add_parties()
     supplier = conn.execute(
         "SELECT name FROM subconto_values WHERE tax_id = ?", (SUPPLIER_TIN,)
@@ -515,7 +516,7 @@ def test_import_dialog_renames_a_counterparty(shop, conn, qtbot):
     assert dialog.renames.isHidden()
     dialog.show_invoices([_named("MT7", "2026-03-01", '"BETA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ')])
     assert not dialog.renames.isHidden() and dialog.renames.rowCount() == 1
-    texts = [dialog.renames.item(0, c).text() for c in range(5)]
+    texts = [table_item(dialog.renames, 0, c).text() for c in range(5)]
     assert texts == [
         SUPPLIER_TIN,
         '"ALFA" MMC',
@@ -524,7 +525,7 @@ def test_import_dialog_renames_a_counterparty(shop, conn, qtbot):
         "BETA MMC",
     ]
     assert dialog.renames_title.text() == "Название изменилось: 1"
-    dialog.renames.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
+    table_item(dialog.renames, 0, 0).setCheckState(Qt.CheckState.Unchecked)
     dialog.apply_renames()
     row = conn.execute(
         "SELECT name, legal_name FROM subconto_values WHERE id = ?", (shop.supplier[0],)

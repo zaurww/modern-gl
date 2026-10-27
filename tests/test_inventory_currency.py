@@ -77,7 +77,7 @@ def imp(ledger, conn) -> Import:
     )
 
 
-def usd_receipt(m: Import, lines, rate="1.7", **kwargs) -> int:
+def usd_receipt(m: Import, lines, rate: str | None = "1.7", **kwargs) -> int:
     return m.inventory.post_receipt(
         m.company_id,
         "2026-04-01",

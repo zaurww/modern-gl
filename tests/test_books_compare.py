@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.workspace import Workspace
@@ -16,6 +16,7 @@ from modern_gl.desktop.reports_page import BooksPage, OsvPage
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import to_qdate
 from modern_gl.reporting.books import compare_books
+from tests.helpers.qt import running_app
 
 
 def adjust(demo) -> None:
@@ -66,10 +67,11 @@ def test_only_the_differences_and_the_day(demo):
 def window(qtbot, tmp_path, monkeypatch, make_demo):
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
     make_demo(tmp_path / "ДЕМО ООО.gl")
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

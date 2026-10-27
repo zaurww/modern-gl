@@ -7,6 +7,7 @@ from datetime import date
 import pytest
 
 from modern_gl.application.ledger import Ledger, PostingInput
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture(name="statements_books")
@@ -66,7 +67,7 @@ def code(line) -> str:
 @pytest.fixture(name="statements_window")
 def window(qtbot, tmp_path, monkeypatch, make_demo):
 
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QMessageBox
 
     from modern_gl.application.workspace import Workspace
     from modern_gl.desktop import theme
@@ -74,10 +75,11 @@ def window(qtbot, tmp_path, monkeypatch, make_demo):
 
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
     make_demo(tmp_path / "ДЕМО ООО.gl")
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

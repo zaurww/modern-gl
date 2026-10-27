@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QCompleter
+from PySide6.QtWidgets import QApplication
 
 from modern_gl.application import queries
 from modern_gl.application.catalog import Catalog
@@ -42,6 +42,7 @@ from modern_gl.reporting.inventory import (
     receipt_line_choices,
     stock_balances,
 )
+from tests.helpers.qt import cell_editor, completer_of, popup_of
 
 
 @dataclass
@@ -446,10 +447,10 @@ def test_charge_account_cell_holds_on_a_group(batch, conn, qtbot):
     index = charges.index(0, charges.columns.index(ACCOUNT))
     table.setCurrentIndex(index)
     table.edit(index)
-    editor = table.indexWidget(index)
+    editor = cell_editor(table, index)
     editor.setText("76")
     editor.textEdited.emit(editor.text())
-    popup = editor.findChild(QCompleter).popup()
+    popup = popup_of(completer_of(editor))
     assert popup.model().rowCount() == 2 and not popup.currentIndex().isValid()
 
     qtbot.keyClick(editor, Qt.Key.Key_Return)  # a group: stays in the cell

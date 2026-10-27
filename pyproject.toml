@@ -40,7 +40,7 @@ source = ["src/modern_gl"]
 fail_under = 87
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "tests", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
 venvPath = "."

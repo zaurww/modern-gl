@@ -14,5 +14,5 @@ def receive(ledger, cid, acc, v, day: str, amount: str, number: str | None, depo
         ledger,
         cid,
         day,
-        PostingInput(money, acc["62"], amount, (v["Kapital"],), beta, invoice=number),
+        PostingInput(money, acc["62"], amount, (v["Kapital"],), beta, invoice=number or ""),
     )

@@ -148,6 +148,7 @@ class FakeDepositPortal:
         if url.endswith("/accountInfo"):
             answer = {"mainAccount": float(self.balance), "informationOn": self.read_at}
             return Response(200, json.dumps(answer).encode())
+        assert request is not None  # a page is asked for with its offset and size
         page = self.rows[request["offset"] : request["offset"] + request["maxCount"]]
         more = request["offset"] + request["maxCount"] < len(self.rows)
         return Response(200, json.dumps({"operations": page, "hasMore": more}).encode())

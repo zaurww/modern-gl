@@ -34,4 +34,5 @@ def test_not_a_number_is_an_error_not_a_zero():
 
 def test_the_e_qaime_list_and_details_round_alike():
     row = {"serialNumber": "MT2610000001", "vat": "0.125", "costWithoutVat": "1.005"}
-    assert (portal_invoice(row, False).vat, portal_invoice(row, False).amount) == (13, 101)
+    invoice = portal_invoice(row, False)
+    assert invoice is not None and (invoice.vat, invoice.amount) == (13, 101)

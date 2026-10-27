@@ -25,7 +25,7 @@ def buy(ledger, cid, acc, v, who: str, day: str, amount: str, vat: str, number: 
     )
 
 
-def pay(ledger, cid, acc, v, day: str, amount: str, number=None, to="60", source="51") -> int:
+def pay(ledger, cid, acc, v, day: str, amount: str, number: str = "", to="60", source="51") -> int:
     """Dt 60 (61 — an advance) / Kt 51 (54 — from the ƏDV deposit) to Альфа."""
     line = PostingInput(
         acc[to], acc[source], amount, party(v, "Альфа"), (v["Kapital"],), invoice=number

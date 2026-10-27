@@ -19,6 +19,7 @@ from modern_gl.desktop.reports_page import OsvPage
 from modern_gl.i18n import tr
 from modern_gl.infrastructure import logs
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
@@ -83,10 +84,11 @@ def window(qtbot, tmp_path):
     conn = connect(tmp_path / "ДЕМО ООО.gl")
     create_demo_company(Ledger(conn))
     conn.close()
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

@@ -5,13 +5,11 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import (
-    QApplication,
-)
 
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.main_window import MainWindow
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture(name="desktop_workspace")
@@ -24,10 +22,11 @@ def workspace(tmp_path, make_demo):
 
 @pytest.fixture(name="desktop_window")
 def window(qtbot, desktop_workspace):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(desktop_workspace)
     qtbot.addWidget(win)
     win.start()  # it opens on «Bu gün» (D86); these tests start from the journal
+    assert win.session is not None
     win.session.working_date = date(2026, 3, 5)
     win.show_place(("journal",))
     win.show()

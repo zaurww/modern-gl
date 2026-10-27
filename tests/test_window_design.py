@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QApplication,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -35,6 +34,7 @@ from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.theme.css import stylesheet
 from modern_gl.reporting.eqaime_reconciliation import reconcile
 from tests.helpers.eqaime import received
+from tests.helpers.qt import running_app
 from tests.helpers.sales import make_shop
 from tests.helpers.vat_deposit import OWN_TIN, PORTAL
 
@@ -190,7 +190,8 @@ def layout_problems(window: ImportWindow) -> list[str]:
     if shown != MARGINS or window.root.spacing() != SPACING:
         problems.append(f"поля окна {shown}, а не {MARGINS}")
     titles = [label for label in visible(window, QLabel) if is_title(label)]
-    if titles != [window.title] or window.root.itemAt(0).widget() is not window.title:
+    first = window.root.itemAt(0)
+    if titles != [window.title] or first is None or first.widget() is not window.title:
         problems.append("заголовок — один, первым")
     primaries = [b for b in visible(window, QPushButton) if b.objectName() == "primary"]
     if len(primaries) > 1:
@@ -200,7 +201,7 @@ def layout_problems(window: ImportWindow) -> list[str]:
         for b in primaries
         if window.footer_right.indexOf(b) < 0
     ]
-    bar = [window.bar.itemAt(n).widget() for n in range(window.bar.count())]
+    bar = [item.widget() for item in map(window.bar.itemAt, range(window.bar.count())) if item]
     if any(isinstance(widget, QPushButton) for widget in bar):
         problems.append("кнопка в панели: действия — внизу")
     return problems
@@ -234,7 +235,7 @@ def design_problems(window: ImportWindow) -> list[str]:
 
 @pytest.mark.parametrize("name", sorted(STEPS))
 def test_the_window_is_as_designed(qtbot, shop_session, name):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     session, place = shop_session
     steps = STEPS[name](session, place)
     for n, window in enumerate(steps, 1):

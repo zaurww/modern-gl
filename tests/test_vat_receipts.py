@@ -25,7 +25,7 @@ def sell(ledger, cid, acc, v, who: str, day: str, total: str, vat: str, number: 
 def receive(ledger, cid, acc, v, who: str, day: str, amount: str, number: str | None = None):
     """Dt 51 / Kt 62 — the money to the bank account."""
     line = PostingInput(
-        acc["51"], acc["62"], amount, (v["Kapital"],), party(v, who), invoice=number
+        acc["51"], acc["62"], amount, (v["Kapital"],), party(v, who), invoice=number or ""
     )
     return post(ledger, cid, day, line)
 

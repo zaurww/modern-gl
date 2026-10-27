@@ -8,7 +8,7 @@ import json
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from modern_gl.application.history import document_history
 from modern_gl.application.period import closed_through
@@ -19,6 +19,7 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.period_dialog import PeriodDialog
 from modern_gl.desktop.widgets import to_qdate
 from tests.conftest import REASON
+from tests.helpers.qt import running_app
 
 
 def last_event(conn, action: str) -> dict:
@@ -68,10 +69,11 @@ def test_document_history_reads_the_trail(demo):
 def window(qtbot, tmp_path, monkeypatch, make_demo):
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
     make_demo(tmp_path / "ДЕМО ООО.gl")
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

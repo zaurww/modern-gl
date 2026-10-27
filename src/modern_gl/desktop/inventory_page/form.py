@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QStackedLayout,
     QVBoxLayout,
     QWidget,
@@ -138,7 +139,7 @@ class InventoryForm(PageWidget):
     def _build_operations(self, root: QVBoxLayout) -> None:
         operations = QHBoxLayout()
         operations.setSpacing(6)
-        self.operation_buttons: dict[str, QWidget] = {}
+        self.operation_buttons: dict[str, QPushButton] = {}
         for title, operation, tip in OPERATIONS:
             control = button(tr(title), "flat", tr(tip))
             control.clicked.connect(lambda _=False, op=operation: self.operation(op))

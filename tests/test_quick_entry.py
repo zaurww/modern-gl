@@ -19,12 +19,14 @@ from modern_gl.application.quick_entry.card import card
 from modern_gl.application.quick_entry.marks import marks
 from modern_gl.application.quick_entry.past import past_lines
 from modern_gl.desktop import theme
+from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 TODAY = date(2026, 3, 5)
 
@@ -138,7 +140,7 @@ def test_template_with_amount_and_subconto(books):
 
 @pytest.fixture
 def bar(qtbot, books):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn, ledger, cid, cat, _ = books
     messages: list[str] = []
     s = Session(conn, ledger, cid, "Firma", cat, notify=messages.append)
@@ -293,16 +295,18 @@ def test_in_the_window_ctrl_l_and_enter_post_without_opening_a_document(
     ws = Workspace(tmp_path / "data")
     path = ws.new_path("Demo")
     make_demo(path)
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(ws)
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = TODAY
     win.show_place(("journal",))
     win.show()
     win.activateWindow()
     qtbot.waitUntil(win.isActiveWindow)
     journal = win.pages[("journal",)]
+    assert isinstance(journal, JournalPage)
     before = journal.model.rowCount()
     qtbot.keyClick(win, Qt.Key.Key_L, Qt.KeyboardModifier.ControlModifier)
     assert QApplication.focusWidget() is journal.quick.edit

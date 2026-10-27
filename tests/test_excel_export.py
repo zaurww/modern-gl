@@ -104,6 +104,7 @@ def test_every_report_goes_to_excel(qtbot, tmp_path, monkeypatch, window):
     rows = list(sheet.iter_rows(min_row=2, values_only=True))
     assert rows[-1][0] == "Чистая прибыль (убыток)"
     assert isinstance(rows[-1][1], int | float | Decimal)
-    assert {r[2] for r in rows} >= {0, 1, 2}  # «Уровень»: lines and what is under them
+    # «Уровень»: lines and what is under them
+    assert {r[2] for r in rows if isinstance(r[2], int)} >= {0, 1, 2}
     export.copy_to_clipboard(page)
     assert QApplication.clipboard().text().splitlines()[-1].startswith("Чистая прибыль")

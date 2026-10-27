@@ -5,7 +5,6 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
@@ -14,15 +13,17 @@ from modern_gl.desktop.main_window import report_places as places
 from modern_gl.desktop.reports_hub import HUB, AccountPrompt, ReportsPage, catalog
 from modern_gl.desktop.reports_page import StatementsPage
 from modern_gl.desktop.reports_page.account import CardPage
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
 def window(qtbot, tmp_path, make_demo):
     make_demo(tmp_path / "ДЕМО ООО.gl")
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

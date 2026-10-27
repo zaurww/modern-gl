@@ -9,6 +9,7 @@ A figure is `Amounts`, one per column of the statement (D107, `columns`)."""
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -56,7 +57,7 @@ def balance_sheet(
     day: date | str,
     layers: tuple[str, ...] = COMMON,
     detail: str = TYPES,
-    days: list[date] | None = None,
+    days: Sequence[date | str] | None = None,
 ) -> Statement:
     """Assets, liabilities and equity on the day; the profit not yet closed into equity
     (the balances of income and expense accounts) is a line of equity. `detail` ACCOUNTS:

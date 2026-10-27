@@ -6,22 +6,23 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.reports_page import OsvPage
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
 def window(qtbot, tmp_path, make_demo):
     make_demo(tmp_path / "ДЕМО ООО.gl")
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

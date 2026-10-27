@@ -47,6 +47,7 @@ def test_restore_brings_back_the_backup_and_keeps_the_current_file(tmp_path):
     ledger.post_new(cid, "2026-03-02", [PostingInput(a, b, "200")])
     conn.close()
 
+    assert saved is not None
     safety = ws.restore(saved, path)
     assert documents(path) == 1
     assert documents(safety) == 2  # the restore itself can be undone
@@ -160,14 +161,17 @@ def test_window_backs_up_on_close_and_restores(qtbot, tmp_path, monkeypatch):
     win = MainWindow(ws)
     qtbot.addWidget(win)
     win.start()
+    assert win.ledger is not None
     win.ledger.post_new(cid, "2026-03-02", [PostingInput(a, b, "200")])
     win.shutdown()
     [first] = ws.backups(path)
     assert documents(first.path) == 2
 
     win.start()
+    assert win.ledger is not None
     win.ledger.post_new(cid, "2026-03-03", [PostingInput(a, b, "300")])
     assert win.restore_from(first.path, path)
+    assert win.conn is not None
     assert win.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 2
     win.shutdown()
 
