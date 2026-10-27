@@ -7,7 +7,7 @@ not the queries' callers."""
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import count
@@ -51,11 +51,38 @@ def _busy_is_an_error_for_the_user() -> Iterator[None]:
         ) from e
 
 
+class _Connection(sqlite3.Connection):
+    """A company's connection that knows what goes with it: a lock file beside the file
+    is released when it is closed (`when_closed`)."""
+
+    def close(self) -> None:
+        try:
+            super().close()
+        finally:
+            for then in self.__dict__.pop("closed_then", []):
+                then()
+
+
+def when_closed(conn: sqlite3.Connection, then: Callable[[], None]) -> None:
+    """Run `then` once the connection (made by `connect`) is closed."""
+    conn.__dict__.setdefault("closed_then", []).append(then)
+
+
+def journal_mode(path: str | Path) -> str:
+    """WAL keeps its shared memory beside the file, and that is not shared on a network
+    or cloud folder: there the file has the classic journal (D-new-network-folder-lock)."""
+    from modern_gl.infrastructure.company_file import is_network_path  # it imports this
+
+    if str(path) in ("", ":memory:"):
+        return "WAL"
+    return "DELETE" if is_network_path(path) else "WAL"
+
+
 def connect(path: str | Path, timeout: float = BUSY_TIMEOUT) -> sqlite3.Connection:
     """Open a ledger database and bring its schema up to date. A file another program
     keeps locked for longer than `timeout` is a BusyError, with a message for the user."""
     # isolation_level=None: no implicit transactions, we open them explicitly.
-    conn = sqlite3.connect(path, isolation_level=None, timeout=timeout)
+    conn = sqlite3.connect(path, isolation_level=None, timeout=timeout, factory=_Connection)
     conn.row_factory = sqlite3.Row
     _add_functions(conn)
     try:
@@ -65,7 +92,7 @@ def connect(path: str | Path, timeout: float = BUSY_TIMEOUT) -> sqlite3.Connecti
             conn.execute("PRAGMA foreign_keys = ON")
             migrate(conn)
             # after the migrations: one that fails leaves the file's header as it was
-            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute(f"PRAGMA journal_mode = {journal_mode(path)}")
             conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
     except BaseException:
         conn.close()
@@ -137,10 +164,14 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
     schema there, that refuses every write. The file is only read — no lock is kept, no
     migration, no backup — so it may be open by its owner meanwhile. A damaged file raises
     sqlite3.DatabaseError."""
+    from modern_gl.infrastructure.company_file import lock_path  # it imports this
+
     path = Path(path)
-    # open by its owner (there is a -wal): read through the owner's WAL; otherwise as an
-    # unchanging file, which leaves no -wal/-shm beside it and works on a read-only share
+    # open by its owner (a -wal; on a network folder, without WAL, its lock): read under
+    # the engine's locks; otherwise as an unchanging file, which leaves no -wal/-shm
+    # beside it and works on a read-only share
     in_use = path.with_name(path.name + "-wal").exists()
+    in_use = in_use or (lock_path(path).exists() and not _in_wal_mode(path))
     mode = "mode=ro" if in_use else "immutable=1"
     source = sqlite3.connect(f"file:{path.as_posix()}?{mode}", uri=True)
     conn = sqlite3.connect(":memory:", isolation_level=None)
@@ -162,6 +193,15 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
         source.close()
     conn.execute("PRAGMA query_only = ON")
     return conn
+
+
+def _in_wal_mode(path: Path) -> bool:
+    """The file's header says WAL (its write version, byte 18, is 2)."""
+    try:
+        with path.open("rb") as f:
+            return f.read(20)[18:19] == b"\x02"
+    except OSError:
+        return False
 
 
 def is_read_only(conn: sqlite3.Connection) -> bool:

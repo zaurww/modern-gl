@@ -59,7 +59,7 @@ class Drafts:
     def _writing(self, company: str) -> Iterator[tuple[Ledger, int]]:
         """The company file itself, briefly: the program may have it open — SQLite lets
         both write in turn; a file behind the program's schema is backed up first."""
-        conn, company_id = self.companies.workspace.open(self.companies.path(company))
+        conn, company_id = self.companies.workspace.open(self.companies.path(company), lock=False)
         try:
             yield Ledger(conn, actor=self.actor), company_id
         finally:

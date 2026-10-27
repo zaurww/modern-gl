@@ -15,6 +15,7 @@ from modern_gl.desktop.background import Background
 from modern_gl.domain.company import STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.infrastructure import cbar
+from modern_gl.infrastructure.company_file import LOCAL, place_of
 from modern_gl.infrastructure.db import Connection
 
 
@@ -70,6 +71,14 @@ class Session:
             self.notify(message)
         else:
             self.notify_undo(message, undo)
+
+    @property
+    def file_place(self) -> str:
+        """Where the open file lies — LOCAL, NETWORK or CLOUD: a live file on a network or
+        cloud folder is slower and not for two at once (D25); a snapshot (D80) is local."""
+        if self.read_only or self.path is None:
+            return LOCAL
+        return place_of(self.path)
 
     @property
     def layers(self) -> list[tuple[str, str]]:

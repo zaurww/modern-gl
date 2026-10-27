@@ -46,7 +46,7 @@ def open_company(path: str | Path, *, write: bool = False, actor: str = "") -> I
     older schema is backed up and updated first, as the program does."""
     path = Path(path)
     workspace = Workspace(path.parent)
-    conn, company_id = workspace.open(path) if write else workspace.view(path)
+    conn, company_id = workspace.open(path, lock=False) if write else workspace.view(path)
     try:
         yield Company(conn, company_id, actor, read_only=not write)
     finally:
