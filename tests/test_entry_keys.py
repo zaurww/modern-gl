@@ -19,6 +19,7 @@ from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.postings import AMOUNT, CT, DT, PostingsTable
 from modern_gl.desktop.session import Session
 from modern_gl.infrastructure.db import connect
+from tests.helpers.entry_keys import focused, items, shown_list, type_text
 
 
 @pytest.fixture(autouse=True)
@@ -54,10 +55,6 @@ def page(qtbot, books):
     conn.close()
 
 
-def focused():
-    return QApplication.focusWidget()
-
-
 def editing_at(page: DocumentPage, col: int) -> bool:
     table = page.table
     return (
@@ -65,31 +62,6 @@ def editing_at(page: DocumentPage, col: int) -> bool:
         and table.currentIndex().column() == col
         and focused().parent() is table.viewport()
     )
-
-
-def type_text(editor, text: str) -> None:
-    editor.setText(text)
-    editor.textEdited.emit(text)
-
-
-def shown_list(qtbot):
-    def popup():
-        return next(
-            (
-                w
-                for w in QApplication.topLevelWidgets()
-                if w.objectName() == "completer" and w.isVisible()
-            ),
-            None,
-        )
-
-    qtbot.waitUntil(lambda: popup() is not None)
-    return popup()
-
-
-def items(popup) -> list[str]:
-    m = popup.model()
-    return [m.index(i, 0).data() for i in range(m.rowCount())]
 
 
 def account(page: DocumentPage, code: str) -> int:

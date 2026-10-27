@@ -15,7 +15,7 @@ from modern_gl.desktop.inventory_page import InventoryPage, StockGroup
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 
 @pytest.fixture

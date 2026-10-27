@@ -13,50 +13,27 @@ from PySide6.QtWidgets import (
     QPushButton,
 )
 
-from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import load_document
-from modern_gl.application.workspace import TRASH, Workspace
-from modern_gl.demo_data import create_demo_company
+from modern_gl.application.workspace import TRASH
 from modern_gl.desktop import theme
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
-from modern_gl.desktop.main_window import SIDEBAR_KEYS, MainWindow, NavDelegate
+from modern_gl.desktop.main_window import SIDEBAR_KEYS, NavDelegate
 from modern_gl.desktop.opening_balances_page import CREDIT_AMOUNT, OpeningBalancesPage
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
 from modern_gl.desktop.reports_page import NAME_MAX, NAME_MIN, OsvPage, SectionRow, figure
-from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.reports import trial_balance
 
 
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    """A modal dialog would block a headless test forever: answer 'discard/no'."""
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
+@pytest.fixture
+def workspace(desktop_workspace):
+    return desktop_workspace
 
 
 @pytest.fixture
-def workspace(tmp_path):
-    ws = Workspace(tmp_path / "data")
-    path = ws.new_path("ДЕМО ООО")
-    conn = connect(path)
-    create_demo_company(Ledger(conn))
-    conn.close()
-    return ws
-
-
-@pytest.fixture
-def window(qtbot, workspace):
-    theme.apply(QApplication.instance())
-    win = MainWindow(workspace)
-    qtbot.addWidget(win)
-    win.start()  # it opens on «Bu gün» (D86); these tests start from the journal
-    win.session.working_date = date(2026, 3, 5)
-    win.show_place(("journal",))
-    win.show()
-    yield win
-    win.shutdown()
+def window(desktop_window):
+    return desktop_window
 
 
 def current_page(win):
@@ -946,7 +923,6 @@ def test_report_grid_and_currency_rows(window, qtbot):
 
 
 def test_theme_switches_at_once_and_keeps_the_company(window):
-    from modern_gl.desktop import theme
 
     try:
         window.set_ui_theme("craft")
@@ -962,7 +938,6 @@ def test_theme_switches_at_once_and_keeps_the_company(window):
 def test_system_theme_follows_the_system_light_or_dark(window, monkeypatch):
     """«As the system» (the default, D86): Things when the system is light, Catppuccin
     Mocha when it turns dark — at once, the company stays open."""
-    from modern_gl.desktop import theme
 
     dark = False
     monkeypatch.setattr(theme, "system_is_dark", lambda: dark)
@@ -990,8 +965,6 @@ def test_every_theme_colors_the_whole_stylesheet():
     palette: no hardcoded white or grey is left in a dark theme."""
     import re
     from dataclasses import fields
-
-    from modern_gl.desktop import theme
 
     names = {f.name for f in fields(theme.Palette)}
     try:

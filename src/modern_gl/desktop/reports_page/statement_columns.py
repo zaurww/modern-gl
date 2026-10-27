@@ -4,14 +4,14 @@ titles of the columns and the figures under them."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QPushButton
 
+from modern_gl.desktop.preferences import STATEMENTS_COLUMNS, prefs
 from modern_gl.desktop.reports_page.table import Column, figure
 from modern_gl.desktop.widgets import MenuItem, button, menu_button, trailing_icon
 from modern_gl.domain.dates import month_title
 from modern_gl.domain.period_input import Period, describe, month_bounds, quarter_of
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.reporting.columns import (
     COMPARISONS,
     MONTHS,
@@ -25,14 +25,13 @@ from modern_gl.reporting.columns import (
 )
 from modern_gl.reporting.statements import Line
 
-SETTING = "reports/statements_columns"
 CHOICES = (
-    (ONE, "Один период"),
-    (MONTHS, "По месяцам"),
-    (QUARTERS, "По кварталам"),
+    (ONE, N_("Один период")),
+    (MONTHS, N_("По месяцам")),
+    (QUARTERS, N_("По кварталам")),
     None,
-    (PREVIOUS, "С прошлым периодом"),
-    (YEAR_AGO, "С прошлым годом"),
+    (PREVIOUS, N_("С прошлым периодом")),
+    (YEAR_AGO, N_("С прошлым годом")),
 )
 
 
@@ -40,7 +39,7 @@ class ColumnsChoice:
     """«Колонки ▾»: a quiet button with the choice in it, remembered between sessions."""
 
     def __init__(self, on_change) -> None:
-        self.mode = str(QSettings().value(SETTING, ONE))
+        self.mode = prefs().view(STATEMENTS_COLUMNS, ONE)
         if self.mode not in dict(c for c in CHOICES if c):
             self.mode = ONE
         self.on_change = on_change
@@ -50,7 +49,7 @@ class ColumnsChoice:
 
     def choose(self, mode: str) -> None:
         self.mode = mode
-        QSettings().setValue(SETTING, mode)
+        prefs().set_view(STATEMENTS_COLUMNS, mode)
         self._show()
         self.on_change()
 

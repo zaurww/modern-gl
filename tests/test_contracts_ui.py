@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import QPersistentModelIndex
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -22,12 +22,7 @@ from modern_gl.desktop.templates_page import TemplatePage
 from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.db import connect
 
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
-    )
+pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
 
 @pytest.fixture

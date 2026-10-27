@@ -10,15 +10,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
 
 from modern_gl.application.eqaime.portal import fetch_list, read_again, rechecks, usual_span
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
-from modern_gl.desktop.eqaime_portal_loader import PortalLoader, changes_warning
+from modern_gl.desktop.eqaime_portal_loader import changes_warning
 from modern_gl.desktop.import_window import FiguresGrid, ImportWindow, restyle, say, signed
 from modern_gl.desktop.period_field import portal_period
+from modern_gl.desktop.portal_worker import PortalRun, run_on_portal
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import money
@@ -27,7 +28,7 @@ from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, status_label
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.domain.periods import full_month
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
 from modern_gl.reporting.eqaime_reconciliation import (
     AMOUNTS,
@@ -47,16 +48,25 @@ from modern_gl.reporting.eqaime_reconciliation import (
     reconciled_through,
 )
 
-COLUMNS = ["Дата", "E-qaimə", "Контрагент", "На портале", "Портал", "Книга", "Разница", ""]
+COLUMNS = [
+    N_("Дата"),
+    N_("E-qaimə"),
+    N_("Контрагент"),
+    N_("На портале"),
+    N_("Портал"),
+    N_("Книга"),
+    N_("Разница"),
+    "",
+]
 GROUP_TITLES = {
-    MISSING: "Есть на портале, нет в книге",
-    VOID_IN_BOOKS: "В книге, но на портале не действует",
-    NOT_ON_PORTAL: "В книге, на портале не найдена",
-    AMOUNTS: "Суммы различаются",
-    PERIOD: "Другой период",
-    PARTY: "Другой контрагент",
-    PENDING: "Ожидает подтверждения или в процессе",
-    MATCHED: "Совпадает",
+    MISSING: N_("Есть на портале, нет в книге"),
+    VOID_IN_BOOKS: N_("В книге, но на портале не действует"),
+    NOT_ON_PORTAL: N_("В книге, на портале не найдена"),
+    AMOUNTS: N_("Суммы различаются"),
+    PERIOD: N_("Другой период"),
+    PARTY: N_("Другой контрагент"),
+    PENDING: N_("Ожидает подтверждения или в процессе"),
+    MATCHED: N_("Совпадает"),
 }
 AMOUNT_COLUMNS = (4, 5, 6)
 
@@ -93,7 +103,7 @@ class EqaimeReconciliationDialog(ImportWindow):
         self.outcome: Reconciliation | None = None
         self.chosen_document: int | None = None  # double-clicked: the caller opens it
         self.period = (session.working_date, session.working_date)  # of the last load
-        self.worker: QThread | None = None
+        self.portal_run: PortalRun | None = None
         self.today = today or date.today()
         self.company = self.subtitle
         self.through = self.subtitle_note  # «Сверено по 20.10.2026»
@@ -195,22 +205,17 @@ class EqaimeReconciliationDialog(ImportWindow):
         self.load_button.setEnabled(False)
         self.status.setText(tr("Загрузка с портала…"))
         skipped: list[str] = []
-        self.worker = QThread(self)
-        self.loader = PortalLoader(
+        self.portal_run = run_on_portal(
+            self,
             lambda progress: PortalLists(
                 fetch_list(client, outgoing, date_from, date_to, progress, skipped=skipped),
                 skipped,
                 read_again(client, checks, progress),
-            )
+            ),
+            self.status.setText,
+            self._loaded,
+            self._failed,
         )
-        self.loader.moveToThread(self.worker)
-        self.worker.started.connect(self.loader.run)
-        self.loader.progress.connect(self.status.setText)
-        self.loader.loaded.connect(self._loaded)
-        self.loader.failed.connect(self._failed)
-        for signal in (self.loader.loaded, self.loader.failed):
-            signal.connect(self.worker.quit)
-        self.worker.start()
 
     def _failed(self, message: str) -> None:
         self.load_button.setEnabled(True)

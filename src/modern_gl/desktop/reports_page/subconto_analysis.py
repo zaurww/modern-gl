@@ -8,19 +8,18 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QCheckBox, QComboBox, QLabel
+from PySide6.QtWidgets import QCheckBox, QComboBox
 
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.preferences import SUBCONTO_ANALYSIS_KIND, prefs
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams, turnover_columns
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import balance_text
+from modern_gl.desktop.widgets import balance_text, caption
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import SubcontoAnalysisRow
 
-KIND_SETTING = "reports/subconto_analysis_kind"  # the directory asked last
 INDENT = "      "
 
 
@@ -47,7 +46,7 @@ class SubcontoAnalysisPage(ReportPage):
         )
         for k in offered:
             self.kind.addItem(cat.kinds[k], k)
-        remembered = QSettings().value(KIND_SETTING, -1, type=int)
+        remembered = prefs().chosen_id(SUBCONTO_ANALYSIS_KIND)
         counterparties = [k for k in offered if cat.kind_codes.get(k) == "counterparty"]
         for wanted in (kind_id, remembered, *counterparties):  # asked, last time, 60 / 62
             if wanted is not None and (at := self.kind.findData(wanted)) >= 0:
@@ -59,9 +58,7 @@ class SubcontoAnalysisPage(ReportPage):
         self.only_open.setToolTip(
             tr("Остаток на балансовых счетах; выручка и расходы остатком не считаются")
         )
-        self.add_to_bar(
-            self._caption(tr("Справочник")), self.kind, self._caption(tr("Элемент")), gap=0
-        )
+        self.add_to_bar(caption(tr("Справочник")), self.kind, caption(tr("Элемент")), gap=0)
         self.add_to_bar(self.element)
         self.header.add_action(self.only_open)
         self._fill_elements()
@@ -69,14 +66,8 @@ class SubcontoAnalysisPage(ReportPage):
         self.element.activated.connect(lambda _i: self.refresh())
         self.only_open.toggled.connect(self.refresh)
 
-    @staticmethod
-    def _caption(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setObjectName("secondary")
-        return label
-
     def _choose_kind(self, _index: int) -> None:
-        QSettings().setValue(KIND_SETTING, self.kind_id)
+        prefs().set_chosen_id(SUBCONTO_ANALYSIS_KIND, self.kind_id)
         self._fill_elements()
         self.refresh()
 

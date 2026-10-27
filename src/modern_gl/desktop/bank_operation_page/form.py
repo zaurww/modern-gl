@@ -35,6 +35,7 @@ from modern_gl.desktop.bank_operation_page.common import (
 )
 from modern_gl.desktop.bank_operation_page.line_row import LineRow
 from modern_gl.desktop.directories_page import added_value, new_value
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
@@ -43,7 +44,7 @@ from modern_gl.desktop.widgets import Chip, MenuItem, button, date_edit, more_bu
 from modern_gl.i18n import tr
 
 
-class BankOperationForm(QWidget):
+class BankOperationForm(PageWidget):
     saved = Signal(int)  # the GL document
     close_requested = Signal()
     title_changed = Signal()

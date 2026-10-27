@@ -36,7 +36,9 @@ from modern_gl.application.queries import company_name, company_tax_id, posting_
 from modern_gl.application.workspace import SUFFIX, TRASH, Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.background import LARGE
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.portal_company import ask_tax_id
+from modern_gl.desktop.preferences import Preferences
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
@@ -85,7 +87,8 @@ class CompanyFiles(QMainWindow):
     def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
         super().__init__()
         self.workspace = workspace
-        self.settings = settings
+        self.settings = settings  # None: nothing is remembered (tests)
+        self.prefs = Preferences(settings) if settings is not None else None
         self.conn: Connection | None = None
         self.ledger: Ledger | None = None
         self.company_path: Path | None = None
@@ -103,7 +106,7 @@ class CompanyFiles(QMainWindow):
         companies = self.workspace.companies()
         if not companies:
             return self.create_company(first=True)
-        last = str(self.settings.value("company_file", "")) if self.settings else ""
+        last = self.prefs.company_file() if self.prefs else ""
         paths = [c.path for c in companies]
         self.open_company(next((p for p in paths if str(p) == last), paths[0]))
         return True
@@ -170,8 +173,8 @@ class CompanyFiles(QMainWindow):
             QMessageBox.warning(self, tr("Открыть компанию"), str(e))
             return
         self._use_company(conn, company_id, Path(path), read_only=False)
-        if self.settings:
-            self.settings.setValue("company_file", str(path))
+        if self.prefs:
+            self.prefs.set_company_file(str(path))
 
     def ask_view_company(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -244,6 +247,8 @@ class CompanyFiles(QMainWindow):
         """Drop all pages of the current company and close its file."""
         if self.session is not None:
             self.session.background.wait()  # a worker's read of this file ends first
+            # its result may still wait in the event loop: not shown on a closed company
+            self.session.closed = True
         self._drop_pages()
         if self.conn is not None:
             try:
@@ -316,8 +321,8 @@ class CompanyFiles(QMainWindow):
 
     def _store_files(self) -> None:
         """Company files outside the folder are remembered between runs."""
-        if self.settings:
-            self.settings.setValue("company_files", [str(f) for f in self.workspace.files])
+        if self.prefs:
+            self.prefs.set_company_files([str(f) for f in self.workspace.files])
 
     def save_copy(self) -> None:
         """A copy of the company to hand over or keep elsewhere (a flash drive…)."""
@@ -431,7 +436,7 @@ class CompanyFiles(QMainWindow):
 
     def user_name(self) -> str:
         """Who is working (D82): the name set in the program, else the Windows user."""
-        name = str(self.settings.value("user_name", "")) if self.settings else ""
+        name = self.prefs.user_name() if self.prefs else ""
         return name.strip() or getpass.getuser()
 
     def ask_user_name(self) -> None:
@@ -448,8 +453,8 @@ class CompanyFiles(QMainWindow):
         """The pages are built again: each module took the name when it opened."""
         if not self._confirm_close_all():
             return
-        if self.settings:
-            self.settings.setValue("user_name", name)
+        if self.prefs:
+            self.prefs.set_user_name(name)
         self._reopen()
         self.notify(tr("Ваше имя: {name}", name=name))
 
@@ -457,8 +462,8 @@ class CompanyFiles(QMainWindow):
         if code == language() or not self._confirm_close_all():
             return
         set_language(code)
-        if self.settings:
-            self.settings.setValue("language", code)
+        if self.prefs:
+            self.prefs.set_language(code)
         self._reopen()
 
     def set_document_language(self, code: str) -> None:
@@ -512,8 +517,8 @@ class CompanyFiles(QMainWindow):
         if name == theme.current_theme() or not self._confirm_close_all():
             return
         theme.use_theme(name)
-        if self.settings:
-            self.settings.setValue("theme", name)
+        if self.prefs:
+            self.prefs.set_theme(name)
         self._repaint()
 
     def set_table_look(self, change: Callable[[bool], None], on: bool) -> None:
@@ -538,7 +543,7 @@ class CompanyFiles(QMainWindow):
         if reopen:
             self._reopen()
 
-    def _dirty_pages(self) -> list[QWidget]:
+    def _dirty_pages(self) -> list[PageWidget]:
         raise NotImplementedError
 
     def _current_place(self) -> tuple | None:

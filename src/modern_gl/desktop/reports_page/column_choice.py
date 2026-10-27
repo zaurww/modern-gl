@@ -6,13 +6,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QPoint, QSettings
+from PySide6.QtCore import QPoint
 from PySide6.QtWidgets import QMenu, QWidget
 
+from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.reports_page.table import Column
 from modern_gl.i18n import tr
-
-SETTING = "reports/columns/{kind}"
 
 
 def column_id(col: Column) -> str:
@@ -22,13 +21,13 @@ def column_id(col: Column) -> str:
 
 class ColumnChoice:
     def __init__(self, kind: str, on_change: Callable[[], None]) -> None:
-        self.setting = SETTING.format(kind=kind)
+        self.kind = kind
         self.on_change = on_change
 
     @property
     def choice(self) -> dict[str, bool]:
         """Read each time: two pages of one kind open show the same."""
-        text = str(QSettings().value(self.setting, "") or "")
+        text = prefs().columns(self.kind)
         # "+VÖEN" shown, "-Договор" hidden: only what the user chose
         return {line[1:]: line[0] == "+" for line in text.splitlines() if line[:1] in ("+", "-")}
 
@@ -43,7 +42,7 @@ class ColumnChoice:
 
     def _save(self, choice: dict[str, bool]) -> None:
         lines = [("+" if on else "-") + cid for cid, on in choice.items()]
-        QSettings().setValue(self.setting, "\n".join(lines))
+        prefs().set_columns(self.kind, "\n".join(lines))
         self.on_change()
 
     def popup(self, columns: list[Column], parent: QWidget, at: QPoint) -> None:

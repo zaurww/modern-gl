@@ -9,6 +9,7 @@ from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from modern_gl.desktop.theme import fonts
+from modern_gl.desktop.widgets import caption
 
 
 def heading(text: str) -> QLabel:
@@ -38,8 +39,7 @@ class Line(QFrame):
         lay.setSpacing(10)
         self.text = QLabel(text)
         lay.addWidget(self.text)
-        self.note = QLabel(note)
-        self.note.setObjectName("secondary")
+        self.note = caption(note)
         lay.addWidget(self.note)
         lay.addStretch(1)
         self.buttons = QHBoxLayout()

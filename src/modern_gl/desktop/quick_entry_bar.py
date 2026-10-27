@@ -39,10 +39,11 @@ from modern_gl.desktop.cell_editing import PickWithKeys, fit_popup
 from modern_gl.desktop.quick_entry_card import EntryCard
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.widgets import caption
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-HELP = (
+HELP = N_(
     "Enter — провести   ·   Shift+Enter — черновик   ·   Ctrl+Enter — открыть в форме   ·   "
     "↑ — прошлые строки   ·   «+Имя» — новый элемент справочника   ·   Esc — скрыть список"
 )
@@ -68,8 +69,7 @@ class QuickEntryBar(QWidget):
         )
         self.edit.setClearButtonEnabled(True)
         lay.addWidget(self.edit)
-        self.preview = QLabel()
-        self.preview.setObjectName("secondary")
+        self.preview = caption()
         self.preview.setWordWrap(True)
         self.preview.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         lay.addWidget(self.preview)

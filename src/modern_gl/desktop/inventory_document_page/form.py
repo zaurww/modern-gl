@@ -11,16 +11,12 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
-    QApplication,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QTableView,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.inventory import (
@@ -29,6 +25,7 @@ from modern_gl.application.inventory import (
     InventoryDocumentData,
     default_vat_rate,
 )
+from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.inventory_document_page.columns import (
     DOCUMENT_TYPES,
     HINT,
@@ -42,12 +39,15 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
     InventoryLinesDelegate,
     InventoryLinesTable,
 )
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import legend
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
     button,
+    caption,
     date_edit,
     edited_date,
 )
@@ -60,11 +60,19 @@ AWAITING = "awaiting"  # the basis box: a purchase waiting for its e-qaimə (D11
 GAP = 16  # between the groups of the header: a document fits a 1366 px screen
 
 
-class InventoryDocumentForm(QWidget):
+class InventoryDocumentForm(GridEditing, PageWidget):
     saved = Signal(int)
     close_requested = Signal()
     title_changed = Signal()
     open_gl_document = Signal(int)
+
+    DUPLICATE_COLUMN = 0  # the copy of a line: on its item
+
+    def _grid(self) -> QTableView:
+        return self.table
+
+    def _rows(self) -> EditableRows:
+        return self.model
 
     def __init__(self, session: Session, doc_type: str) -> None:
         super().__init__()
@@ -124,8 +132,7 @@ class InventoryDocumentForm(QWidget):
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
         meta.setSpacing(8)  # a caption by its field; the groups part by GAP
-        date_caption = QLabel(tr("Дата"))
-        date_caption.setObjectName("secondary")
+        date_caption = caption(tr("Дата"))
         meta.addWidget(date_caption)
         self.date = date_edit(self.s.working_date)
         self.date.setFixedWidth(130)
@@ -136,8 +143,7 @@ class InventoryDocumentForm(QWidget):
         self.type_label.setFont(fonts().heading)
         meta.addWidget(self.type_label)
         meta.addSpacing(GAP)
-        self.vat_caption = QLabel(tr("НДС"))
-        self.vat_caption.setObjectName("secondary")
+        self.vat_caption = caption(tr("НДС"))
         meta.addWidget(self.vat_caption)
         self.vat_rate = PickBox()
         self.vat_rate.setFixedWidth(110)
@@ -166,8 +172,7 @@ class InventoryDocumentForm(QWidget):
             )
         )
         meta.addWidget(self.basis)
-        self.invoice_caption = QLabel(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
-        self.invoice_caption.setObjectName("secondary")
+        self.invoice_caption = caption(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
         meta.addWidget(self.invoice_caption)
         self.invoice = QLineEdit()
         self.invoice.setFixedWidth(140)  # «MT2601001842» and room to spare
@@ -181,8 +186,7 @@ class InventoryDocumentForm(QWidget):
 
     def _build_reason(self, meta: QHBoxLayout) -> None:
         # why goods come in without a purchase (D91): it chooses the account credited
-        self.reason_caption = QLabel(tr("Причина"))
-        self.reason_caption.setObjectName("secondary")
+        self.reason_caption = caption(tr("Причина"))
         meta.addWidget(self.reason_caption)
         self.reason = PickBox()
         self.reason.setFixedWidth(260)
@@ -192,8 +196,7 @@ class InventoryDocumentForm(QWidget):
         meta.addSpacing(GAP)
 
     def _build_currency(self, meta: QHBoxLayout) -> None:
-        self.currency_caption = QLabel(tr("Валюта"))
-        self.currency_caption.setObjectName("secondary")
+        self.currency_caption = caption(tr("Валюта"))
         meta.addWidget(self.currency_caption)
         self.currency = PickBox()
         self.currency.setFixedWidth(80)
@@ -202,8 +205,7 @@ class InventoryDocumentForm(QWidget):
             self.currency.addItem(currency.code, currency.id)
         self.currency.setCurrentIndex(0)
         meta.addWidget(self.currency)
-        self.rate_caption = QLabel(tr("Курс"))
-        self.rate_caption.setObjectName("secondary")
+        self.rate_caption = caption(tr("Курс"))
         meta.addWidget(self.rate_caption)
         self.rate = QLineEdit()
         self.rate.setFixedWidth(90)
@@ -215,26 +217,23 @@ class InventoryDocumentForm(QWidget):
 
     def _build_summary(self, root: QVBoxLayout) -> None:
         summary = QHBoxLayout()
-        self.hint = QLabel(tr(HINT))
+        self.hint = QLabel(legend(*HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window
         summary.addWidget(self.hint, 1)
         summary.addSpacing(24)
-        self.currency_total = QLabel()
-        self.currency_total.setObjectName("secondary")
+        self.currency_total = caption()
         summary.addWidget(self.currency_total)
         summary.addSpacing(16)
-        self.vat_total_caption = QLabel(tr("НДС"))
-        self.vat_total_caption.setObjectName("secondary")
+        self.vat_total_caption = caption(tr("НДС"))
         summary.addWidget(self.vat_total_caption)
         self.vat_total = QLabel()
         self.vat_total.setMinimumWidth(90)
         self.vat_total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         summary.addWidget(self.vat_total)
         summary.addSpacing(16)
-        total_caption = QLabel(tr("Итого"))
-        total_caption.setObjectName("secondary")
+        total_caption = caption(tr("Итого"))
         summary.addWidget(total_caption)
         self.total = QLabel()
         self.total.setMinimumWidth(130)
@@ -263,25 +262,6 @@ class InventoryDocumentForm(QWidget):
         root.addLayout(actions)
 
     # ---- what the parts ask of the fields --------------------------------------------
-
-    def _shortcut(self, keys: str, callback) -> None:
-        shortcut = QShortcut(QKeySequence(keys), self)
-        shortcut.activated.connect(callback)
-
-    def _grid_shortcut(self, keys: str, callback, *, while_editing: bool = False) -> None:
-        shortcut = QShortcut(QKeySequence(keys), self.table)
-        shortcut.setContext(
-            Qt.ShortcutContext.WidgetWithChildrenShortcut
-            if while_editing
-            else Qt.ShortcutContext.WidgetShortcut
-        )
-        shortcut.activated.connect(callback)
-
-    def _finish_editing(self) -> None:
-        editor = QApplication.focusWidget()
-        if self.table.state() == QAbstractItemView.State.EditingState and editor is not None:
-            self.table.commitData(editor)
-            self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
 
     def _shown(self, column: int) -> bool:
         return not self.table.isColumnHidden(column)

@@ -6,7 +6,9 @@ A text the program writes into a company's documents (a posting's «Комисс
 `trd(...)`: in the company's language of documents (D152), whatever the interface is —
 switched, it would make every document of a module look changed to a rebuild.
 
-Missing translations fall back to Russian; tests/test_i18n.py checks none are missing.
+A key kept in a constant and translated later (`tr(title)`) is marked where it is written:
+`N_("Журнал")`. Missing translations fall back to Russian; tests/test_i18n.py checks none
+are missing and none are left without a tr/trd/N_ in the code.
 """
 
 from __future__ import annotations
@@ -29,6 +31,12 @@ def set_language(code: str) -> None:
 
 def language() -> str:
     return _current
+
+
+def N_(source: str, /) -> str:  # the gettext name, known to translators
+    """A translation key kept for later: `NAMES = [N_("Журнал")]`, then `tr(NAMES[0])`.
+    It changes nothing; tests/test_i18n.py reads these as it reads tr("…")."""
+    return source
 
 
 def tr(source: str, /, **values) -> str:

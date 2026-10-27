@@ -7,38 +7,39 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
-    QApplication,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.inventory import (
     Inventory,
     InventoryDocumentData,
 )
+from modern_gl.desktop.grid_editing import finish_editing
 from modern_gl.desktop.landed_cost_page.columns import (
     HINT,
+    HINT_TYPED,
     METHODS,
 )
 from modern_gl.desktop.landed_cost_page.models import ChargesModel, TargetsModel
 from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import SEPARATOR, legend
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
     button,
+    caption,
     date_edit,
 )
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
-class LandedCostForm(QWidget):
+class LandedCostForm(PageWidget):
     saved = Signal(int)
     close_requested = Signal()
     title_changed = Signal()
@@ -95,9 +96,8 @@ class LandedCostForm(QWidget):
         for method, title in METHODS:
             self.method.addItem(tr(title), method)
         self.method.setCurrentIndex(0)
-        for caption, widget in ((tr("Дата"), self.date), (tr("Распределение"), self.method)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
+        for text, widget in ((tr("Дата"), self.date), (tr("Распределение"), self.method)):
+            label = caption(text)
             meta.addWidget(label)
             meta.addWidget(widget)
             meta.addSpacing(12)
@@ -132,20 +132,21 @@ class LandedCostForm(QWidget):
 
     def _build_summary(self, root: QVBoxLayout) -> None:
         summary = QHBoxLayout()
-        self.hint = QLabel(tr(HINT))
+        self.hint = QLabel(
+            SEPARATOR.join([legend(*HINT), *(tr(t) for t in HINT_TYPED), legend("post")])
+        )
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window
         summary.addWidget(self.hint, 1)
         summary.addSpacing(24)
         self.totals: dict[str, QLabel] = {}
-        for key, caption in (
+        for key, text in (
             ("vat", "НДС"),
-            ("allocated", "Распределено"),
+            ("allocated", N_("Распределено")),
             ("total", "Расходы"),
         ):
-            label = QLabel(tr(caption))
-            label.setObjectName("secondary")
+            label = caption(tr(text))
             value = QLabel()
             value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             value.setMinimumWidth(90)
@@ -182,8 +183,4 @@ class LandedCostForm(QWidget):
         self.error.show()
 
     def _finish_editing(self) -> None:
-        editor = QApplication.focusWidget()
-        for table in (self.charges_table, self.targets_table):
-            if table.state() == QAbstractItemView.State.EditingState and editor is not None:
-                table.commitData(editor)
-                table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
+        finish_editing(self.charges_table, self.targets_table)

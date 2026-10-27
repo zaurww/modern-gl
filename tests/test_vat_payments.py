@@ -10,9 +10,8 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.vat import vat_credit
 from modern_gl.reporting.vat_payments import vat_payments
 from modern_gl.reporting.vat_receipts import warning
-from tests.test_invoices import firm as invoice_firm  # noqa: F401 — Альфа, Бета, 51, 54, 60, 61
-from tests.test_vat_credit import post
-from tests.test_vat_receipts import party
+from tests.helpers.vat_credit import post
+from tests.helpers.vat_receipts import party
 
 
 def buy(ledger, cid, acc, v, who: str, day: str, amount: str, vat: str, number: str) -> int:
@@ -34,7 +33,7 @@ def pay(ledger, cid, acc, v, day: str, amount: str, number=None, to="60", source
     return post(ledger, cid, day, line)
 
 
-def test_suppliers_money_against_their_eqaime(invoice_firm):  # noqa: F811
+def test_suppliers_money_against_their_eqaime(invoice_firm):
     """Альфа. MT01 of 05.03, 1 000 + 180: on 10.03 1 000 from the bank and 180 from the
     deposit, both naming it — credited 180, nothing to look at.
     MT02 of 15.03, 500 + 90: paid ahead on 01.03, 590 from the bank to 61 without a number.
@@ -87,7 +86,7 @@ def test_suppliers_money_against_their_eqaime(invoice_firm):  # noqa: F811
     assert (beta.unpaid, april.total.tax) == (23_600, 0)
 
 
-def test_an_open_advance_to_a_supplier(invoice_firm):  # noqa: F811
+def test_an_open_advance_to_a_supplier(invoice_firm):
     """On 01.03 300 to Альфа without a number, no e-qaimə yet: an advance of 300, nothing
     credited, nothing to look at."""
     conn, ledger, cid, acc, v = invoice_firm
@@ -102,7 +101,7 @@ def test_an_open_advance_to_a_supplier(invoice_firm):  # noqa: F811
     )
 
 
-def test_the_suppliers_page(invoice_firm, qtbot):  # noqa: F811
+def test_the_suppliers_page(invoice_firm, qtbot):
     """The page of the suppliers: its title, Альфа with MT01, the footer's credit."""
     from modern_gl.application.catalog import Catalog
     from modern_gl.desktop.reports_page import ReportParams, VatPaymentsPage

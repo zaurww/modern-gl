@@ -27,7 +27,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import format_minor, to_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 class FoldedPart(BankOperationForm):
@@ -148,9 +148,9 @@ class FoldedPart(BankOperationForm):
         vat = vat if self.deposit_shown else 0
         paid = bank + vat
         text = (  # the ƏDV from this account, or from the deposit
-            "банк {bank} + ƏDV {vat} = {total}"
+            N_("банк {bank} + ƏDV {vat} = {total}")
             if self.deposit.currentData() == FROM_BANK
-            else "банк {bank} + депозит {vat} = {total}"
+            else N_("банк {bank} + депозит {vat} = {total}")
         )
         figures = {
             "bank": format_minor(bank),

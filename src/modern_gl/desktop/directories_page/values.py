@@ -23,7 +23,7 @@ from modern_gl.application.ledger import ValueDetails
 from modern_gl.desktop.directories_page.tags import TagPicker
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -86,8 +86,7 @@ class ValueDialog(QDialog):
         form.addRow(tr("Теги"), self.tags)
         lay.addLayout(form)
         for text in notes:
-            note = QLabel(text)
-            note.setObjectName("secondary")
+            note = caption(text)
             note.setWordWrap(True)
             lay.addWidget(note)
         buttons = QHBoxLayout()  # like the account dialog: quiet Cancel, blue Save

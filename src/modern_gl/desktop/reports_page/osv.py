@@ -28,7 +28,7 @@ from modern_gl.desktop.widgets import (
     segments,
 )
 from modern_gl.domain.accounts import normal_side
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import OsvRow
@@ -48,7 +48,7 @@ class OsvPage(ReportPage):
         # how deep, by the period as on every report (DESIGN.md 2): the main accounts,
         # with their subaccounts, or down to every subconto
         detail, buttons = segments(
-            [("top", "Основные счета"), ("sub", "Субсчета"), ("subconto", "Субконто")],
+            [("top", N_("Основные счета")), ("sub", N_("Субсчета")), ("subconto", "Субконто")],
             lambda: None,
         )
         self.top_only, self.expand = buttons["top"], buttons["subconto"]
@@ -79,6 +79,9 @@ class OsvPage(ReportPage):
 
     def title(self) -> str:
         return tr("ОСВ")
+
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh()
 
     @staticmethod
     def _with_subconto(rows: list[OsvRow], subconto) -> list[OsvRow]:

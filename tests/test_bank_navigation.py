@@ -21,9 +21,9 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.bank_page.actions import ACCOUNTS, JOURNAL, STATEMENT
 from modern_gl.desktop.session import Session
-from tests.test_bank_ui import setup_company, value
-from tests.test_entry_keys import focused, type_text
-from tests.test_uniform_entry import shown
+from tests.helpers.bank_ui import setup_company, value
+from tests.helpers.entry_keys import focused, type_text
+from tests.helpers.uniform_entry import shown
 
 
 @pytest.fixture

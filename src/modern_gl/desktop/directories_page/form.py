@@ -4,7 +4,6 @@ what the commands ask of them (page.py has the commands)."""
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
@@ -13,23 +12,24 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QStackedLayout,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.desktop.icons import icon
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, hide_when_viewing
+from modern_gl.desktop.widgets import EmptyState, PageHeader, button, caption, hide_when_viewing
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 
 KIND_ROLE = Qt.ItemDataRole.UserRole
 
 
-class DirectoriesForm(QWidget):
+class DirectoriesForm(PageWidget):
     def __init__(self, session: Session) -> None:
         super().__init__()
         self.setObjectName("page")
@@ -65,8 +65,7 @@ class DirectoriesForm(QWidget):
         top.addWidget(add)
         hide_when_viewing(session.read_only, add_kind, add_group, add)
         right.addLayout(top)
-        self.used_in = QLabel()
-        self.used_in.setObjectName("secondary")
+        self.used_in = caption()
         self.used_in.setWordWrap(True)
         right.addWidget(self.used_in)
 
@@ -87,16 +86,9 @@ class DirectoriesForm(QWidget):
         body.addLayout(right, 1)
         root.addLayout(body, 1)
 
-        for keys, fn in (
-            ("Ins", lambda: self.add_value()),
-            ("F2", lambda: self.rename_value(self._current_value())),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(lambda: self.delete_value(self._current_value()))
+        bind(self, "insert", lambda: self.add_value())
+        bind(self, "edit", lambda: self.rename_value(self._current_value()))
+        bind(self.table, "delete", lambda: self.delete_value(self._current_value()))
         self.refresh()
 
     def _build_table(self) -> None:
@@ -110,8 +102,9 @@ class DirectoriesForm(QWidget):
     def title(self) -> str:
         return tr("Справочники")
 
-    def is_dirty(self) -> bool:
-        return False
+    def activated(self) -> None:
+        self.refresh(keep_value=True)  # elements added elsewhere (e-qaimə import…)
+        self.focus_table()
 
     def focus_table(self) -> None:
         self.table.setFocus()

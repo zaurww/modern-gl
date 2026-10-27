@@ -16,9 +16,8 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.vat import vat_credit
 from modern_gl.reporting.vat_liability import vat_liability
 from modern_gl.reporting.vat_payments import vat_payments
-from tests.test_invoices import firm as invoice_firm  # noqa: F401 — Альфа, Бета, 51, 54, 60, 61
-from tests.test_vat_credit import buy, events, pay, post
-from tests.test_vat_liability import receive
+from tests.helpers.vat_credit import buy, events, pay, post
+from tests.helpers.vat_liability import receive
 
 
 def bank_payment(ledger, cid, acc, v, day: str, *lines: tuple[int, str, bool]) -> int:
@@ -38,7 +37,7 @@ def bank_payment(ledger, cid, acc, v, day: str, *lines: tuple[int, str, bool]) -
     return ledger.bank.save_bank_operation(cid, data, post=True)
 
 
-def test_the_vat_paid_from_the_bank_account_is_credited(invoice_firm):  # noqa: F811
+def test_the_vat_paid_from_the_bank_account_is_credited(invoice_firm):
     """MT01 of 05.03, 1 000 + 180. On 10.03 one bank payment: 1 000 for the value and 180
     straight to Альфа's deposit — credited 180 on 10.03. The same as an ordinary payment
     (MT02, 1 180 from the bank, no mark) credits nothing: the ƏDV did not reach the
@@ -55,7 +54,7 @@ def test_the_vat_paid_from_the_bank_account_is_credited(invoice_firm):  # noqa: 
     assert events(conn, cid, "MT02") == []
 
 
-def test_the_vat_in_part_from_the_bank_in_part_from_the_deposit(invoice_firm):  # noqa: F811
+def test_the_vat_in_part_from_the_bank_in_part_from_the_deposit(invoice_firm):
     """MT03 of 05.03, 1 000 + 180: on 10.03 1 000 and 100 of the ƏDV from the bank, the
     other 80 from the deposit — the ƏDV paid is 100 + 80 = 180, all credited on 10.03.
     «Оплаты поставщикам» shows 180 «с депозита ƏDV», no warning."""
@@ -70,7 +69,7 @@ def test_the_vat_in_part_from_the_bank_in_part_from_the_deposit(invoice_firm):  
     assert (alfa.by_invoice, alfa.deposit, alfa.tax, alfa.excess) == (100_000, 18_000, 18_000, 0)
 
 
-def test_an_advance_to_the_deposit_set_against_the_eqaime(invoice_firm):  # noqa: F811
+def test_an_advance_to_the_deposit_set_against_the_eqaime(invoice_firm):
     """On 01.03 Альфа gets an advance without a number: 500 from the bank (Dt 61 / Kt 51)
     and 90 from our deposit (Dt 61 / Kt 54) — an ƏDV advance of 90. MT04 of 15.03,
     500 + 90; on 20.03 the advance is set against it (Dt 60 / Kt 61 590, MT04): its ƏDV
@@ -113,7 +112,7 @@ def test_an_advance_to_the_deposit_set_against_the_eqaime(invoice_firm):  # noqa
     assert events(conn, cid, "MT05") == []
 
 
-def test_before_the_company_pays_vat_nothing_is_owed_or_credited(invoice_firm):  # noqa: F811
+def test_before_the_company_pays_vat_nothing_is_owed_or_credited(invoice_firm):
     """The company pays ƏDV from 15.03. Sales: an advance of 100 from Бета on 10.03 —
     before the day, nothing owed (it would be 18); 50 on 20.03 — 9 owed. March owes 9.
     Purchases: MT06 of 10.03 (1 000 + 180, paid in full on 12.03) — bought before, not
@@ -144,7 +143,7 @@ def test_before_the_company_pays_vat_nothing_is_owed_or_credited(invoice_firm): 
     assert vat_credit(conn, cid, "2026-03-01", "2026-03-31").credited == 36_000
 
 
-def test_the_mark_goes_out_and_comes_back_in_the_exchange_file(invoice_firm):  # noqa: F811
+def test_the_mark_goes_out_and_comes_back_in_the_exchange_file(invoice_firm):
     """A payment of 180 from the bank to Альфа's deposit (MT09) goes out with
     "pays_vat": true, and a line with it comes back marked; anything but true or false
     is refused."""

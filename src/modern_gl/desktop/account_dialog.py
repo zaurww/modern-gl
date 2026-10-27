@@ -23,13 +23,13 @@ from modern_gl.desktop.widgets import button, class_icon, type_choices
 from modern_gl.domain.accounts import TYPE_CLASS
 from modern_gl.domain.currency import CURRENCY_ONLY, CURRENCY_OPTIONAL, NO_CURRENCY
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 AUTO = "auto"  # type combobox: let the ledger decide (the parent's type and class)
 CURRENCY_CHOICES = (
-    (NO_CURRENCY, "Только в манатах"),
-    (CURRENCY_OPTIONAL, "В манатах и в валюте"),
-    (CURRENCY_ONLY, "Только в валюте"),
+    (NO_CURRENCY, N_("Только в манатах")),
+    (CURRENCY_OPTIONAL, N_("В манатах и в валюте")),
+    (CURRENCY_ONLY, N_("Только в валюте")),
 )
 
 

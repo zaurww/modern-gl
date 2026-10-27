@@ -41,7 +41,7 @@ from modern_gl.desktop.theme import P, check_icon, dot_icon, fonts
 from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_NAMES
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 # re-exported for the pages
 __all__ = ["DateEdit", "date_edit", "edited_date", "ru_date", "to_qdate"]
@@ -80,6 +80,13 @@ def enter_goes_on(page: QWidget, event) -> bool:
         parent = parent.parentWidget()
     page.focusNextChild()
     return True
+
+
+def caption(text: str = "") -> QLabel:
+    """A quiet label: a field's caption, an explanation, a date (P.secondary, D86)."""
+    label = QLabel(text)
+    label.setObjectName("secondary")
+    return label
 
 
 def button(text: str, kind: str = "", tooltip: str = "") -> QPushButton:
@@ -409,11 +416,11 @@ def ask_date(parent: QWidget, title: str, prompt: str, default: date) -> date | 
 
 # Account classes (level 1 of statement classification): order, name, color (a palette name).
 ACCOUNT_CLASSES = [
-    ("asset", "Активы", "accent"),
-    ("liability", "Обязательства", "amber"),
-    ("equity", "Капитал", "violet"),
-    ("revenue", "Доходы", "green"),
-    ("expense", "Расходы", "red"),
+    ("asset", N_("Активы"), "accent"),
+    ("liability", N_("Обязательства"), "amber"),
+    ("equity", N_("Капитал"), "violet"),
+    ("revenue", N_("Доходы"), "green"),
+    ("expense", N_("Расходы"), "red"),
 ]
 CLASS_ORDER: dict[str | None, int] = {code: i for i, (code, _, _) in enumerate(ACCOUNT_CLASSES)}
 _CLASS_ICONS: dict[str, QIcon] = {}

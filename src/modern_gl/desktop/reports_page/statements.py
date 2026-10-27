@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from PySide6.QtCore import QSettings, Signal
+from PySide6.QtCore import Signal
 
+from modern_gl.desktop.preferences import STATEMENTS_DETAIL, STATEMENTS_VIEW, prefs
 from modern_gl.desktop.reports_page.statement_columns import (
     ColumnsChoice,
     amount_columns,
@@ -20,7 +21,7 @@ from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import segments
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.cash_flow import cash_flow
 from modern_gl.reporting.profit_loss import profit_and_loss
@@ -34,14 +35,13 @@ from modern_gl.reporting.statements import (
 )
 
 BALANCE, PROFIT, CASH = "balance", "profit", "cash"
-VIEW_SETTING, DETAIL_SETTING = "reports/statements_view", "reports/statements_detail"
 # the parts of the balance sheet: their subtotal reads «Итого: …»
 SECTIONS = (
-    "Оборотные активы",
-    "Долгосрочные активы",
-    "Краткосрочные обязательства",
-    "Долгосрочные обязательства",
-    "Капитал",
+    N_("Оборотные активы"),
+    N_("Долгосрочные активы"),
+    N_("Краткосрочные обязательства"),
+    N_("Долгосрочные обязательства"),
+    N_("Капитал"),
 )
 INDENT = "      "
 
@@ -54,18 +54,23 @@ class StatementsPage(ReportPage):
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Финансовая отчётность"), params)
         views, self.view_buttons = segments(
-            [(BALANCE, "Баланс"), (PROFIT, "Прибыли и убытки"), (CASH, "Движение денег")],
+            [
+                (BALANCE, N_("Баланс")),
+                (PROFIT, N_("Прибыли и убытки")),
+                (CASH, N_("Движение денег")),
+            ],
             self.refresh,
         )
         self.balance_button = self.view_buttons[BALANCE]
         self.profit_button = self.view_buttons[PROFIT]
         self.cash_button = self.view_buttons[CASH]
         details, self.detail_buttons = segments(
-            [(TYPES, "Кратко"), (ACCOUNTS, "По счетам"), (ITEMS, "По статьям")], self.refresh
+            [(TYPES, N_("Кратко")), (ACCOUNTS, N_("По счетам")), (ITEMS, N_("По статьям"))],
+            self.refresh,
         )
-        settings = QSettings()
-        view = str(settings.value(VIEW_SETTING, BALANCE))
-        detail = str(settings.value(DETAIL_SETTING, ACCOUNTS))
+        remembered = prefs()
+        view = remembered.view(STATEMENTS_VIEW, BALANCE)
+        detail = remembered.view(STATEMENTS_DETAIL, ACCOUNTS)
         self.view_buttons.get(view, self.balance_button).setChecked(True)
         self.detail_buttons.get(detail, self.detail_buttons[ACCOUNTS]).setChecked(True)
         self.columns = ColumnsChoice(self.refresh)  # months side by side, a comparison (D107)
@@ -77,7 +82,7 @@ class StatementsPage(ReportPage):
         return tr("Финансовая отчётность")
 
     def export_title(self) -> str:
-        names = {BALANCE: "Баланс", PROFIT: "Прибыли и убытки", CASH: "Движение денег"}
+        names = {BALANCE: N_("Баланс"), PROFIT: N_("Прибыли и убытки"), CASH: N_("Движение денег")}
         return tr(names[self.view])
 
     def show_view(self, view: str) -> None:
@@ -102,12 +107,12 @@ class StatementsPage(ReportPage):
     def refresh(self) -> None:
         if hasattr(self, "detail_buttons"):  # the first refresh comes from ReportPage
             self.detail_buttons[ITEMS].setVisible(self.view == PROFIT)
-            settings = QSettings()
-            if settings.value(VIEW_SETTING) != self.view:
+            remembered = prefs()
+            if remembered.view(STATEMENTS_VIEW, "") != self.view:
                 self.view_changed.emit()
-            settings.setValue(VIEW_SETTING, self.view)
+            remembered.set_view(STATEMENTS_VIEW, self.view)
             chosen = next(k for k, b in self.detail_buttons.items() if b.isChecked())
-            settings.setValue(DETAIL_SETTING, chosen)
+            remembered.set_view(STATEMENTS_DETAIL, chosen)
         super().refresh()
 
     @property

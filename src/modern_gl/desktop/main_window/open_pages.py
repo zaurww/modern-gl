@@ -26,32 +26,24 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.workspace import Workspace
-from modern_gl.desktop.bank_page import BankPage
-from modern_gl.desktop.directories_page import DirectoriesPage
-from modern_gl.desktop.home_page import HomePage
-from modern_gl.desktop.inventory_page import InventoryPage
-from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window.company_files import CompanyFiles
 from modern_gl.desktop.main_window.sidebar import (
     ALL_OPEN,
     KEY_ROLE,
     PLACE_KEYS,
     REPORT_PAGES,
-    FocusablePage,
     NavDelegate,
     NavKeyed,
     PageT,
     Sidebar,
-    TitledPage,
     open_icon,
     place_icon,
     sections,
     shown_places,
 )
-from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.page import EmptyPage, PageWidget
 from modern_gl.desktop.reports_hub import HUB
 from modern_gl.desktop.toast import Toast
-from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -59,8 +51,8 @@ from modern_gl.i18n import tr
 class OpenPages(CompanyFiles):
     def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
         super().__init__(workspace, settings)
-        self.pages: dict[object, QWidget] = {}
-        self.came_from: dict[QWidget, object] = {}  # an open page → the page it was opened from
+        self.pages: dict[object, PageWidget] = {}
+        self.came_from: dict[PageWidget, object] = {}  # an open page → the page it was opened from
         self.recent: list = []  # open pages, the last shown first (the sidebar shows a few)
         self.resize(1360, 820)
 
@@ -111,15 +103,14 @@ class OpenPages(CompanyFiles):
         self.came_from.clear()
         self.recent.clear()
 
-    def _add_page(self, key, page: QWidget, open_item: bool = False) -> None:
+    def _add_page(self, key, page: PageWidget, open_item: bool = False) -> None:
         self.pages[key] = page
         self.stack.addWidget(page)
         self._size_by_current_page()
         if open_item:
             # closing it returns to the page it was opened from (the list of purchases…)
             self.came_from[page] = self._key_of(self.stack.currentWidget())
-            title = page.title() if isinstance(page, TitledPage) else ""
-            self.sidebar.add_item(key, title, open_icon(key))
+            self.sidebar.add_item(key, page.title(), open_icon(key))
             self._touch(key)
 
     def _size_by_current_page(self, _index: int = 0) -> None:
@@ -151,9 +142,7 @@ class OpenPages(CompanyFiles):
         self.sidebar.nav.blockSignals(False)
         menu = QMenu(self)
         for key in self.recent:
-            page = self.pages[key]
-            title = page.title() if isinstance(page, TitledPage) else ""
-            menu.addAction(open_icon(key), title).triggered.connect(
+            menu.addAction(open_icon(key), self.pages[key].title()).triggered.connect(
                 lambda _=False, key=key: self._activate(key)
             )
         rect = self.sidebar.nav.visualItemRect(item)
@@ -166,20 +155,9 @@ class OpenPages(CompanyFiles):
             self.stack.setCurrentWidget(page)
             self._fade_in(page)
         self._select_nav(key, page)
-        if isinstance(page, JournalPage | HomePage):
-            page.refresh()
-        if isinstance(page, InventoryPage):
-            page.refresh()
-        if isinstance(page, OpeningBalancesPage):
-            page.refresh()
-        if isinstance(page, BankPage):
-            page.refresh()
-        if isinstance(page, DirectoriesPage):  # elements added elsewhere (e-qaimə import…)
-            page.refresh(keep_value=True)
-        if isinstance(page, FocusablePage):
-            page.focus_table()
+        page.activated()
 
-    def _select_nav(self, key, page: QWidget) -> None:
+    def _select_nav(self, key, page: PageWidget) -> None:
         """The sidebar's item of the page shown: its own, a pinned view of it, or — a
         report not pinned — «Все отчёты», where it was opened from (D114)."""
         nav = self.sidebar
@@ -193,7 +171,7 @@ class OpenPages(CompanyFiles):
             nav.nav.setCurrentItem(item)
             nav.nav.blockSignals(False)
 
-    def _fade_in(self, page: QWidget) -> None:
+    def _fade_in(self, page: PageWidget) -> None:
         effect = QGraphicsOpacityEffect(page)
         page.setGraphicsEffect(effect)
         anim = QPropertyAnimation(effect, b"opacity", page)
@@ -231,10 +209,10 @@ class OpenPages(CompanyFiles):
         menu.addAction(tr("Закрыть")).triggered.connect(lambda: self.close_page(key))
         menu.exec(self.sidebar.nav.viewport().mapToGlobal(pos))
 
-    def _retitle(self, page: QWidget) -> None:
+    def _retitle(self, page: PageWidget) -> None:
         key = self._key_of(page)
         item = self.sidebar.item_for(key) if key is not None else None
-        if item is not None and isinstance(page, TitledPage):
+        if item is not None:
             item.setText(page.title())
 
     def _page(self, key, kind: type[PageT]) -> PageT | None:
@@ -244,6 +222,11 @@ class OpenPages(CompanyFiles):
 
     def _key_of(self, page: QWidget | None):
         return next((k for k, p in self.pages.items() if p is page), None)
+
+    def current_page(self) -> PageWidget | None:
+        """The page shown (None — no company)."""
+        page = self.stack.currentWidget()
+        return page if isinstance(page, PageWidget) else None
 
     def close_current(self) -> None:
         key = self._key_of(self.stack.currentWidget())
@@ -271,8 +254,8 @@ class OpenPages(CompanyFiles):
         back = self.came_from.pop(page, None)
         self.show_place(back if back in self.pages else ("journal",))
 
-    def _confirm_close(self, page) -> bool:
-        if not getattr(page, "is_dirty", lambda: False)():  # e.g. the empty-state page
+    def _confirm_close(self, page: PageWidget) -> bool:
+        if not page.is_dirty():
             return True
         answer = QMessageBox.question(
             self,
@@ -292,8 +275,13 @@ class OpenPages(CompanyFiles):
         key = self._key_of(self.stack.currentWidget())
         return key if isinstance(key, tuple) and key in PLACE_KEYS else None
 
-    def _dirty_pages(self) -> list[QWidget]:
-        return [p for p in self.pages.values() if getattr(p, "is_dirty", lambda: False)()]
+    def _dirty_pages(self) -> list[PageWidget]:
+        return [p for p in self.pages.values() if p.is_dirty()]
+
+    def _postings_changed(self, doc_id: int) -> None:
+        """Postings written (a document posted, balances saved): every open page hears it."""
+        for page in list(self.pages.values()):
+            page.on_postings_changed(doc_id)
 
     def _confirm_close_all(self) -> bool:
         return all(self._confirm_close(p) for p in list(self.pages.values()))
@@ -353,15 +341,17 @@ class OpenPages(CompanyFiles):
         self.sidebar.company.setText(tr("Нет компании"))
         self.sidebar.retranslate()
         self.setWindowTitle("Modern GL")
-        page = EmptyState("○", tr("Нет компании"), tr("Создайте компанию в меню слева вверху."))
-        self.pages[("empty",)] = page
+        page = EmptyPage(
+            ("empty",), tr("Нет компании"), tr("Создайте компанию в меню слева вверху.")
+        )
+        self.pages[page.key] = page
         self.stack.addWidget(page)
         self.stack.setCurrentWidget(page)
 
-    def _rekey(self, page) -> None:
+    def _rekey(self, page: PageWidget) -> None:
         """A new document got its number: its page is kept under the new key."""
         old_key = self._key_of(page)
-        if old_key is not None and old_key != page.key and page.doc is not None:
+        if old_key is not None and old_key != page.key:
             self.pages[page.key] = self.pages.pop(old_key)
             self.recent = [page.key if k == old_key else k for k in self.recent]
             item = self.sidebar.item_for(old_key)
@@ -371,5 +361,5 @@ class OpenPages(CompanyFiles):
 
     # ---- what the places are; made by the window -------------------------------------
 
-    def _make_place(self, key) -> QWidget:
+    def _make_place(self, key) -> PageWidget:
         raise NotImplementedError

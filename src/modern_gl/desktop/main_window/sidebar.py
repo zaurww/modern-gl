@@ -30,9 +30,10 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop import icons
 from modern_gl.desktop.reports_hub.catalog import HUB, PIN_KEYS
+from modern_gl.desktop.shortcuts import key_line
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import Chip, trailing_icon
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
 # The sidebar's places by what they are for (D56): entry on top without a heading, then
@@ -44,7 +45,7 @@ PLACES = [
     (("opening",), "Начальные остатки"),
 ]
 # «Все отчёты» (D114): one place for every report; the pinned ones are shown under it
-REPORTS_PLACES = [(HUB, "Все отчёты")]
+REPORTS_PLACES = [(HUB, N_("Все отчёты"))]
 # the reports that are places (open once, not closed): opened from «Все отчёты», in the
 # sidebar only when pinned
 REPORT_PAGES = [("osv",), ("statements",), ("invoices",)]
@@ -64,9 +65,9 @@ MODULES = [
 # section heading (None: no heading) and its places, top to bottom
 SECTIONS = [
     (None, PLACES),
-    ("Отчёты", REPORTS_PLACES),
-    ("Списки", LISTS),
-    ("Модули", MODULES),
+    (N_("Отчёты"), REPORTS_PLACES),
+    (N_("Списки"), LISTS),
+    (N_("Модули"), MODULES),
 ]
 SIDEBAR_KEYS = [key for _, places in SECTIONS for key, _ in places]
 PLACE_KEYS = SIDEBAR_KEYS + REPORT_PAGES  # every place: opened once, never closed
@@ -75,14 +76,14 @@ STOCK_SECTIONS = [
     (
         None,
         [
-            (("home",), "Сегодня"),
-            (("inventory",), "Склад"),
-            (("purchases",), "Покупки"),
-            (("sales",), "Продажи"),
+            (("home",), N_("Сегодня")),
+            (("inventory",), N_("Склад")),
+            (("purchases",), N_("Покупки")),
+            (("sales",), N_("Продажи")),
         ],
     ),
-    ("Отчёты", REPORTS_PLACES),  # the warehouse's reports; those of the books are not there
-    ("Списки", [(("directories",), "Справочники"), (("currencies",), "Валюты")]),
+    (N_("Отчёты"), REPORTS_PLACES),  # the warehouse's reports; those of the books are not there
+    (N_("Списки"), [(("directories",), N_("Справочники")), (("currencies",), N_("Валюты"))]),
 ]
 
 
@@ -123,18 +124,6 @@ def place_icon(key) -> QIcon:
 
 
 PageT = TypeVar("PageT", bound=QWidget)
-
-
-@runtime_checkable
-class TitledPage(Protocol):
-    """A page shown as an item in the sidebar's "Open" section."""
-
-    def title(self) -> str: ...
-
-
-@runtime_checkable
-class FocusablePage(Protocol):
-    def focus_table(self) -> None: ...
 
 
 @runtime_checkable
@@ -219,8 +208,8 @@ class Sidebar(QWidget):
         self.viewing.setText(tr("Только просмотр"))
         self.viewing.setVisible(read_only)
         journal = not (read_only or stock_only)  # Ctrl+N is a new journal document
-        new = tr("Ctrl+N  новый документ") + "\n" if journal else ""
-        self.hint.setText(tr("Ctrl+K  поиск и команды") + "\n" + new + tr("Ctrl+W  закрыть"))
+        keys = ["palette", "new_document" if journal else None, "close_page"]
+        self.hint.setText("\n".join(key_line(k) for k in keys if k))
 
     def add_section(self, title: str) -> QListWidgetItem:
         """A heading as in Things: in words, not capitals, of the items' size but bold, with

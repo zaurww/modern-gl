@@ -32,6 +32,7 @@ from modern_gl.desktop.inventory_document_page.new_values import NewValuesPart
 from modern_gl.desktop.inventory_document_page.party import PartyPart
 from modern_gl.desktop.inventory_document_page.splits import SplitPart
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     edited_date,
     enter_goes_on,
@@ -41,9 +42,9 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.dates import month_title
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.invoice import EQAIME
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-PARTY_MISSING = {"receipt": "Укажите поставщика", "sale": "Укажите покупателя"}
+PARTY_MISSING = {"receipt": N_("Укажите поставщика"), "sale": N_("Укажите покупателя")}
 
 
 class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart):
@@ -78,15 +79,14 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
         self.currency.activated.connect(self._currency_changed)
         self.rate.textEdited.connect(self._rate_edited)
         self.date.dateChanged.connect(self._date_changed)
-        self._shortcut("Ctrl+S", lambda: self.save(post=False))
-        self._shortcut("Ctrl+Return", lambda: self.save(post=True))
-        self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
-        self._grid_shortcut("Ins", self._insert_row, while_editing=True)
-        self._grid_shortcut("F9", self._duplicate_row, while_editing=True)
-        self._grid_shortcut("F8", self._split_row, while_editing=True)
-        self._grid_shortcut("Del", self._remove_row)
-        self._grid_shortcut("Ctrl+V", self.paste)  # inside a cell editor: its own paste
-        self._grid_shortcut("Ctrl+C", self.copy)
+        bind(self, "save", lambda: self.save(post=False))
+        bind(self, "post", lambda: self.save(post=True))
+        bind(self.table, "insert", self._insert_row)
+        bind(self.table, "duplicate_row", self._duplicate_row)
+        bind(self.table, "split_row", self._split_row)
+        bind(self.table, "delete", self._remove_row)
+        bind(self.table, "paste_rows", self.paste)  # inside a cell editor: its own paste
+        bind(self.table, "copy_rows", self.copy)
 
     @property
     def document_id(self) -> int | None:
@@ -113,30 +113,6 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
         """Enter in the comment, date, VAT, basis, currency or rate goes on as Tab does."""
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
-
-    def _insert_row(self) -> None:
-        if self.model.read_only:
-            return
-        self._finish_editing()
-        current = self.table.currentIndex()
-        at = current.row() + 1 if current.isValid() else None
-        row = self.model.insert_row(at)
-        self.table.setCurrentIndex(self.model.index(row, 0))
-
-    def _duplicate_row(self) -> None:
-        self._finish_editing()
-        current = self.table.currentIndex()
-        if self.model.read_only or not current.isValid():
-            return
-        row = self.model.duplicate_row(current.row())
-        self.table.setCurrentIndex(self.model.index(row, 0))
-
-    def _remove_row(self) -> None:
-        self._finish_editing()
-        current = self.table.currentIndex()
-        if self.model.read_only or not current.isValid():
-            return
-        self.model.remove_row(current.row())
 
     def _set_new(self) -> None:
         self.number.setText(tr("Новый"))

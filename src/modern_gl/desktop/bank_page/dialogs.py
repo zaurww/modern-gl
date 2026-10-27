@@ -34,7 +34,7 @@ from modern_gl.application.default_accounts import (
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button, date_edit, edited_date
+from modern_gl.desktop.widgets import button, caption, date_edit, edited_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -88,8 +88,8 @@ class BankAccountDialog(QDialog):
         form.addRow(tr("Счёт учёта"), self.ledger_account)
         form.addRow(tr("Валюта"), self.currency)
         self.card_rows = [(tr("Последние 4 цифры"), self.digits), (tr("Держатель"), self.holder)]
-        for caption, widget in self.card_rows:
-            form.addRow(caption, widget)
+        for text, widget in self.card_rows:
+            form.addRow(text, widget)
         form.addRow("IBAN", self.iban)
         form.addRow("", self.closed)
         self.form = form
@@ -208,9 +208,8 @@ class PeriodDialog(QDialog):
         root = QVBoxLayout(self)
         row = QHBoxLayout()
         self.date_from, self.date_to = date_edit(start), date_edit(start)
-        for caption, edit in ((tr("Период с"), self.date_from), (tr("по"), self.date_to)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
+        for text, edit in ((tr("Период с"), self.date_from), (tr("по"), self.date_to)):
+            label = caption(text)
             edit.setFixedWidth(130)
             row.addWidget(label)
             row.addWidget(edit)

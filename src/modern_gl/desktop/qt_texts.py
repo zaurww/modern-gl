@@ -9,19 +9,19 @@ from __future__ import annotations
 
 from PySide6.QtCore import QCoreApplication, QTranslator
 
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 # Qt's English text (without the "&" accelerator) -> our Russian source text
 STANDARD = {
-    "OK": "ОК",
-    "Cancel": "Отмена",
-    "Yes": "Да",
-    "No": "Нет",
-    "Save": "Сохранить",
-    "Discard": "Не сохранять",
-    "Don't Save": "Не сохранять",
-    "Close": "Закрыть",
-    "Apply": "Применить",
+    "OK": N_("ОК"),
+    "Cancel": N_("Отмена"),
+    "Yes": N_("Да"),
+    "No": N_("Нет"),
+    "Save": N_("Сохранить"),
+    "Discard": N_("Не сохранять"),
+    "Don't Save": N_("Не сохранять"),
+    "Close": N_("Закрыть"),
+    "Apply": N_("Применить"),
 }
 
 

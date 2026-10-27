@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 
+from modern_gl.i18n import N_
+
 
 @dataclass
 class Palette:
@@ -50,9 +52,9 @@ class Palette:
 
 # name -> (title in the menu, the colors that differ from Palette)
 THEMES: dict[str, tuple[str, dict[str, str]]] = {
-    "things": ("Things — один белый лист", {}),
+    "things": (N_("Things — один белый лист"), {}),
     "craft": (
-        "Craft — серый фон, белые листы",
+        N_("Craft — серый фон, белые листы"),
         {
             "window": "#F6F7F9",
             "canvas": "#F6F7F9",
@@ -67,7 +69,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
     # Popular editor palettes (catppuccin.com, rosepinetheme.com, nordtheme.com): their
     # own colors; soft tints are the color mixed into the background.
     "catppuccin_latte": (
-        "Catppuccin Latte — тёплый кремовый",
+        N_("Catppuccin Latte — тёплый кремовый"),
         {
             "window": "#EFF1F5",
             "canvas": "#EFF1F5",
@@ -104,7 +106,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
         },
     ),
     "rose_pine_dawn": (
-        "Rosé Pine Dawn — мягкий бежевый",
+        N_("Rosé Pine Dawn — мягкий бежевый"),
         {
             "window": "#FAF4ED",
             "canvas": "#FAF4ED",
@@ -141,7 +143,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
         },
     ),
     "nord_light": (
-        "Nord — холодный серо-голубой",
+        N_("Nord — холодный серо-голубой"),
         {
             "window": "#ECEFF4",
             "canvas": "#ECEFF4",
@@ -178,7 +180,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
         },
     ),
     "catppuccin_mocha": (
-        "Catppuccin Mocha — тёмная",
+        N_("Catppuccin Mocha — тёмная"),
         {
             "window": "#1E1E2E",
             "canvas": "#1E1E2E",
@@ -219,7 +221,7 @@ THEMES: dict[str, tuple[str, dict[str, str]]] = {
 }
 # "As the system": the light or the dark theme, as the system is set (D86)
 SYSTEM_THEME = "system"
-SYSTEM_TITLE = "Как в системе — светлая или тёмная"
+SYSTEM_TITLE = N_("Как в системе — светлая или тёмная")
 SYSTEM_PAIR = ("things", "catppuccin_mocha")  # (light, dark)
 DEFAULT_THEME = SYSTEM_THEME
 P = Palette()

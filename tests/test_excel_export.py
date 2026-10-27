@@ -17,9 +17,11 @@ from modern_gl.infrastructure.report_file import (
     to_tsv,
     write_xlsx,
 )
-from tests.test_statements import window
 
-__all__ = ["window"]  # the fixture
+
+@pytest.fixture
+def window(statements_window):
+    return statements_window
 
 
 @pytest.fixture

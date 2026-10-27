@@ -12,13 +12,12 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QKeySequence, QShortcut
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QStackedLayout,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.authorship import journal_authors
@@ -29,9 +28,11 @@ from modern_gl.application.queries import (
     list_documents,
 )
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.reason_dialog import confirm_delete
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     EmptyState,
@@ -45,10 +46,10 @@ from modern_gl.desktop.widgets import (
     trailing_icon,
 )
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 
-COLUMNS = ["Дата", "№", "Содержание", "Книга", "Автор", "Сумма", ""]
+COLUMNS = [N_("Дата"), N_("№"), N_("Содержание"), N_("Книга"), N_("Автор"), N_("Сумма"), ""]
 DATE, NUMBER, MEMO, BOOK, AUTHOR, TOTAL, STATUS = range(7)
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -142,7 +143,7 @@ class JournalModel(QAbstractTableModel):
         return None
 
 
-class JournalPage(QWidget):
+class JournalPage(PageWidget):
     key = ("journal",)
     open_document = Signal(int)
     new_document = Signal()
@@ -213,29 +214,23 @@ class JournalPage(QWidget):
         self.table.doubleClicked.connect(self._open_current)
 
     def _bind_keys(self) -> None:
-        for keys, fn in (
-            ("Ins", self.new_document.emit),
-            ("F5", self.refresh),
-            ("Ctrl+F", self.search.setFocus),  # Ctrl+L (quick entry): the main window's
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        for keys, fn in (  # only on the list: in the text fields these keys type
-            ("Return", self._open_current),
-            ("Enter", self._open_current),
-            ("F9", self._copy_current),
-            ("Del", self._delete_current),
-        ):
-            sc = QShortcut(QKeySequence(keys), self.table)
-            sc.setContext(Qt.ShortcutContext.WidgetShortcut)
-            sc.activated.connect(fn)
+        bind(self, "insert", self.new_document.emit)
+        bind(self, "refresh", self.refresh)
+        bind(self, "find", self.search.setFocus)  # Ctrl+L (quick entry): the main window's
+        # only on the list: in the text fields these keys type
+        bind(self.table, "open_row", self._open_current)
+        bind(self.table, "copy_document", self._copy_current)
+        bind(self.table, "delete", self._delete_current)
 
     def title(self) -> str:
         return tr("Журнал")
 
-    def is_dirty(self) -> bool:
-        return False
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
+
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh(select_id=doc_id)
 
     def refresh(self, select_id: int | None = None) -> None:
         """The documents of the year read (in the background for a large company) and

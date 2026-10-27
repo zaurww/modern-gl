@@ -11,7 +11,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, QPersistentModelInd
 from modern_gl.application.inventory import CountedLine, format_quantity, to_quantity
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.money import round_ratio, to_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 ITEM, UNIT, BOOK, QUANTITY, DIFFERENCE, AMOUNT = (
     "item",
@@ -23,12 +23,12 @@ ITEM, UNIT, BOOK, QUANTITY, DIFFERENCE, AMOUNT = (
 )
 COLUMNS = [ITEM, UNIT, BOOK, QUANTITY, DIFFERENCE, AMOUNT]
 HEADERS = {
-    ITEM: "Товар",
-    UNIT: "Ед.",
-    BOOK: "По учёту",
-    QUANTITY: "Факт",
-    DIFFERENCE: "Разница",
-    AMOUNT: "Сумма разницы",
+    ITEM: N_("Товар"),
+    UNIT: N_("Ед."),
+    BOOK: N_("По учёту"),
+    QUANTITY: N_("Факт"),
+    DIFFERENCE: N_("Разница"),
+    AMOUNT: N_("Сумма разницы"),
 }
 NUMBERS = {BOOK, QUANTITY, DIFFERENCE, AMOUNT}
 

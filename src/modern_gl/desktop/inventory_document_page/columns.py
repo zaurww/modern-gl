@@ -9,7 +9,7 @@ from modern_gl.application.inventory import (
 )
 from modern_gl.application.inventory import VAT_DOCUMENTS as INVENTORY_VAT_DOCUMENTS
 from modern_gl.application.table_text import header_names, subconto_header
-from modern_gl.i18n import fold
+from modern_gl.i18n import N_, fold
 
 ITEM = "item"
 WAREHOUSE = "warehouse"
@@ -58,37 +58,37 @@ NARROW_MIN = 84
 SOFT_KEYS = {WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
 NUMBER_KEYS = {QUANTITY, PRICE, AMOUNT, CURRENCY_AMOUNT, VAT}
 # the VAT of a receipt or a sale: rate in hundredths of a percent, None = without VAT
-VAT_RATES = [(STANDARD_VAT_RATE, "18%"), (None, "Без НДС")]
+VAT_RATES = [(STANDARD_VAT_RATE, "18%"), (None, N_("Без НДС"))]
 VAT_DOCUMENTS = INVENTORY_VAT_DOCUMENTS  # kept here for the pages
 
 HEADERS = {
-    ITEM: "Товар",
-    WAREHOUSE: "Склад",
-    TO_WAREHOUSE: "Склад-получатель",
-    QUANTITY: "Количество",
-    UNIT: "Ед.",
-    PRICE: "Цена",
-    AMOUNT: "Сумма",
-    CURRENCY_AMOUNT: "В валюте",
-    VAT: "НДС",
-    ACCOUNT: "Корр. счёт",  # the header stays short; its tooltip says more
-    SC1: "Субконто",
+    ITEM: N_("Товар"),
+    WAREHOUSE: N_("Склад"),
+    TO_WAREHOUSE: N_("Склад-получатель"),
+    QUANTITY: N_("Количество"),
+    UNIT: N_("Ед."),
+    PRICE: N_("Цена"),
+    AMOUNT: N_("Сумма"),
+    CURRENCY_AMOUNT: N_("В валюте"),
+    VAT: N_("НДС"),
+    ACCOUNT: N_("Корр. счёт"),  # the header stays short; its tooltip says more
+    SC1: N_("Субконто"),
     SC2: "",
     SC3: "",
-    EXPENSE: "Счёт затрат",
-    ESC1: "Субконто затрат",
+    EXPENSE: N_("Счёт затрат"),
+    ESC1: N_("Субконто затрат"),
     ESC2: "",
     ESC3: "",
-    EXPENSE_MONTH: "Расход за",
+    EXPENSE_MONTH: N_("Расход за"),
     SALE1: "",  # the name of the directory
     SALE2: "",
     SALE3: "",
-    MEMO: "Комментарий",
+    MEMO: N_("Комментарий"),
 }
 # a sale line is goods or a service: a line without an item, its memo says what it is
-SALE_HEADERS = {ITEM: "Товар / услуга", MEMO: "Содержание"}
+SALE_HEADERS = {ITEM: N_("Товар / услуга"), MEMO: N_("Содержание")}
 # a receipt line without an item: a service, a fixed asset or any expense bought
-RECEIPT_HEADERS = {ITEM: "Товар / услуга / ОС", MEMO: "Содержание"}
+RECEIPT_HEADERS = {ITEM: N_("Товар / услуга / ОС"), MEMO: N_("Содержание")}
 # the first subconto of the offset account, when the account itself is not shown (D90)
 PARTY_HEADERS = {"receipt": "Поставщик", "sale": "Покупатель"}
 
@@ -102,26 +102,35 @@ DOCUMENT_TYPES = {
     "landed_cost": "Дополнительные расходы",
 }
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "F8 — разделить строку   ·   Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
-    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести"
+HINT = (  # the keys of the page (desktop/shortcuts.py), under its table
+    "next_field",
+    "previous_field",
+    "insert",
+    "duplicate_row",
+    "split_row",
+    "delete",
+    "paste_rows",
+    "save",
+    "post",
 )
 
 
 # Excel header -> column; "Субконто" columns go in a row after the account
 PASTE_HEADERS = [
-    (header_names("Товар", "Наименование", "Номенклатура", "Mal", "Malın adı", "Ad"), ITEM),
-    (header_names("Склад", "Anbar"), WAREHOUSE),
-    (header_names("Склад-получатель"), TO_WAREHOUSE),
-    (header_names("Количество", "Кол-во", "Miqdar"), QUANTITY),
-    (header_names("Ед.", "Ед", "Единица", "Единица измерения", "Vahid", "Ölçü vahidi"), UNIT),
-    (header_names("Цена", "Qiymət"), PRICE),
-    (header_names("Сумма", "Məbləğ", "Сумма без НДС", "ƏDV-siz məbləğ"), AMOUNT),
-    (header_names("НДС", "Сумма НДС", "ƏDV", "ƏDV məbləği"), VAT),
-    (header_names("Корр. счёт", "Счёт", "Hesab"), ACCOUNT),
-    (header_names("Расход за", "Месяц расхода", "Xərc dövrü", "Xərc ayı"), EXPENSE_MONTH),
-    (header_names("Комментарий", "Содержание", "Şərh", "Məzmun"), MEMO),
+    (header_names(N_("Товар"), N_("Наименование"), "Номенклатура", "Mal", "Malın adı", "Ad"), ITEM),
+    (header_names(N_("Склад"), "Anbar"), WAREHOUSE),
+    (header_names(N_("Склад-получатель")), TO_WAREHOUSE),
+    (header_names(N_("Количество"), N_("Кол-во"), "Miqdar"), QUANTITY),
+    (
+        header_names(N_("Ед."), "Ед", "Единица", N_("Единица измерения"), "Vahid", "Ölçü vahidi"),
+        UNIT,
+    ),
+    (header_names(N_("Цена"), "Qiymət"), PRICE),
+    (header_names(N_("Сумма"), "Məbləğ", "Сумма без НДС", "ƏDV-siz məbləğ"), AMOUNT),
+    (header_names(N_("НДС"), "Сумма НДС", N_("ƏDV"), "ƏDV məbləği"), VAT),
+    (header_names(N_("Корр. счёт"), N_("Счёт"), "Hesab"), ACCOUNT),
+    (header_names(N_("Расход за"), "Месяц расхода", "Xərc dövrü", "Xərc ayı"), EXPENSE_MONTH),
+    (header_names(N_("Комментарий"), N_("Содержание"), "Şərh", "Məzmun"), MEMO),
 ]
 # accounts before their subconto, the quantity before a price, a pasted amount over a price
 PASTE_ORDER = [

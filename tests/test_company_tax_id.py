@@ -13,7 +13,7 @@ from modern_gl.desktop.portal_company import company_token
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import IntegrityError
-from tests.test_eqaime_import import fake_token
+from tests.helpers.eqaime import fake_token
 
 OURS, OTHER = "1402375141", "1700000001"
 

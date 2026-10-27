@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.date_field import DateEdit, edited_date, to_qdate
 from modern_gl.desktop.day_calendar import DayCalendar
-from modern_gl.desktop.widgets import button, icon_button
+from modern_gl.desktop.widgets import button, caption, icon_button
 from modern_gl.domain.dates import month_short
 from modern_gl.domain.period_input import (
     Period,
@@ -33,25 +33,25 @@ from modern_gl.domain.period_input import (
     quarter_bounds,
 )
 from modern_gl.domain.periods import DAY, LAST_MONTH, LAST_WEEK, MONTH, WEEK, span_period
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 # the usual periods: what is typed for them (so the field and the panel agree), caption
 PRESETS = (
-    ("м", "Этот месяц"),
-    ("пм", "Прошлый месяц"),
-    ("кв", "Этот квартал"),
-    ("пк", "Прошлый квартал"),
-    ("сг", "С начала года"),
-    ("г", "Этот год"),
-    ("пг", "Прошлый год"),
+    (N_("м"), N_("Этот месяц")),
+    ("пм", N_("Прошлый месяц")),
+    ("кв", N_("Этот квартал")),
+    ("пк", N_("Прошлый квартал")),
+    ("сг", N_("С начала года")),
+    ("г", N_("Этот год")),
+    ("пг", N_("Прошлый год")),
 )
 # the portal's (D53): its pages look at days and weeks, not at quarters and years
 PORTAL_PRESETS = (
-    (DAY, "Вчера"),
-    (WEEK, "Эта неделя"),
-    (LAST_WEEK, "Прошлая неделя"),
-    (MONTH, "Этот месяц"),
-    (LAST_MONTH, "Прошлый месяц"),
+    (DAY, N_("Вчера")),
+    (WEEK, N_("Эта неделя")),
+    (LAST_WEEK, N_("Прошлая неделя")),
+    (MONTH, N_("Этот месяц")),
+    (LAST_MONTH, N_("Прошлый месяц")),
 )
 
 Preset = tuple[str, str, Period]  # a key, the caption (to translate), the period
@@ -136,8 +136,8 @@ class PeriodWindow(QFrame):
         column = QVBoxLayout()
         column.setSpacing(2)
         self.preset_buttons: dict[str, QPushButton] = {}
-        for key, caption, period in self.presets:
-            b = self._cell(tr(caption), "periodPreset")
+        for key, text, period in self.presets:
+            b = self._cell(tr(text), "periodPreset")
             b.setChecked(period == self.period)
             b.clicked.connect(lambda _=False, p=period: self.choose(p))
             column.addWidget(b)
@@ -193,9 +193,8 @@ class PeriodWindow(QFrame):
             DateEdit(to_qdate(self.dates[0])),
             DateEdit(to_qdate(self.dates[1])),
         )
-        for caption, field in ((tr("С"), self.first), (tr("по"), self.last)):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
+        for text, field in ((tr("С"), self.first), (tr("по"), self.last)):
+            label = caption(text)
             field.setFixedWidth(140)
             field.dateChanged.connect(lambda _d: self._show_typed())
             row.addWidget(label)

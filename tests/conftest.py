@@ -23,8 +23,11 @@ Expected ОСВ for February 2026 (hand-calculated):
 from __future__ import annotations
 
 import os
+import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -43,6 +46,19 @@ from modern_gl.infrastructure.db import connect
 # on one example — a busy CI machine is not a failure
 hypothesis_settings.register_profile("modern_gl", max_examples=200, deadline=None)
 hypothesis_settings.load_profile("modern_gl")
+
+# fixtures several test modules use (tests/helpers/): available to every test
+pytest_plugins = [
+    "tests.helpers.bank",
+    "tests.helpers.bank_ui",
+    "tests.helpers.conversion",
+    "tests.helpers.currency",
+    "tests.helpers.desktop",
+    "tests.helpers.inventory",
+    "tests.helpers.invoices",
+    "tests.helpers.statements",
+    "tests.helpers.vat_deposit",
+]
 
 
 @dataclass
@@ -70,6 +86,38 @@ def own_settings(tmp_path_factory):
         QSettings.Scope.UserScope,
         str(tmp_path_factory.mktemp("settings")),
     )
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "questions(answer): what QMessageBox.question answers in this test module"
+    )
+
+
+@pytest.fixture(autouse=True)
+def no_modal_dialogs(monkeypatch, request):
+    """A modal message box would block a headless test forever: warnings and notes are
+    shown to nobody, a question is answered «Discard» — or as the module's
+    `pytestmark = pytest.mark.questions("Yes")` says. A test that wants another answer
+    patches QMessageBox itself (after this, so it wins)."""
+    from PySide6.QtWidgets import QMessageBox
+
+    marker = request.node.get_closest_marker("questions")
+    answer = getattr(QMessageBox.StandardButton, marker.args[0] if marker else "Discard")
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: answer))
+    for name in ("warning", "information", "critical"):
+        monkeypatch.setattr(QMessageBox, name, staticmethod(lambda *a, **k: None))
+
+
+@pytest.fixture(autouse=True)
+def windows_are_deleted(qapp):
+    """What a test closed is deleted when it ends. `deleteLater` waits for an event loop
+    the tests do not run: windows piled up (220 widgets a test), and every theme.apply
+    restyled all of them — a test's setup grew from 0.1 to 3 s along test_desktop."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    yield
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -168,16 +216,40 @@ def demo(ledger) -> Demo:
     return build_demo(ledger)
 
 
-@pytest.fixture
-def demo_window(qtbot, tmp_path):
-    """The main window on the demo company («ДЕМО ООО»), shown."""
-    from modern_gl.application.workspace import Workspace
+@pytest.fixture(scope="session")
+def demo_file(tmp_path_factory) -> Path:
+    """The demo company («ДЕМО ООО») made once per test process (it takes ~3 s), in
+    Russian as the tests read it; each test takes a copy (`make_demo`)."""
     from modern_gl.demo_data import create_demo_company
-    from modern_gl.desktop.main_window import MainWindow
 
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
+    path = tmp_path_factory.mktemp("golden") / "ДЕМО ООО.gl"
+    set_language("ru")
+    set_document_language(None)
+    conn = connect(path)
     create_demo_company(Ledger(conn))
     conn.close()
+    return path
+
+
+@pytest.fixture
+def make_demo(demo_file) -> Callable[[Path], Path]:
+    """`make_demo(path)`: the demo company's file as created, at `path` (a copy)."""
+
+    def copy(path: Path) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(demo_file, path)
+        return path
+
+    return copy
+
+
+@pytest.fixture
+def demo_window(qtbot, tmp_path, make_demo):
+    """The main window on the demo company («ДЕМО ООО»), shown."""
+    from modern_gl.application.workspace import Workspace
+    from modern_gl.desktop.main_window import MainWindow
+
+    make_demo(tmp_path / "ДЕМО ООО.gl")
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()

@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QWidget,
 )
@@ -20,7 +19,7 @@ from modern_gl.desktop.conversion_page.common import (
 )
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 
@@ -45,16 +44,14 @@ class FeeRow(QWidget):
         self.currency = PickBox()
         self.currency.setFixedWidth(80)
         lay.addWidget(self.currency)
-        taken = QLabel(tr("удержана с"))
-        taken.setObjectName("secondary")
+        taken = caption(tr("удержана с"))
         lay.addWidget(taken)
         self.place = PickBox(tr("Счёт…"))
         for label, data in money_places(session):
             self.place.addItem(label, data)
         self.place.setCurrentIndex(0)
         lay.addWidget(self.place, 2)
-        to = QLabel(tr("на счёт"))
-        to.setObjectName("secondary")
+        to = caption(tr("на счёт"))
         lay.addWidget(to)
         self.expense = PickBox(tr("по настройкам"))
         for account in session.catalog.leaf_accounts:

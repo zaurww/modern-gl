@@ -5,13 +5,8 @@ from __future__ import annotations
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import (
     QGuiApplication,
-    QKeySequence,
-    QShortcut,
 )
-from PySide6.QtWidgets import (
-    QMenu,
-    QWidget,
-)
+from PySide6.QtWidgets import QMenu
 
 from modern_gl.application.bank import load_bank_operation
 from modern_gl.application.conversion import load_conversion
@@ -44,14 +39,15 @@ from modern_gl.desktop.main_window.commands import palette_entries
 from modern_gl.desktop.main_window.report_places import ReportPlaces
 from modern_gl.desktop.main_window.sidebar import shown_places
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.page import EmptyPage, PageWidget
 from modern_gl.desktop.period_dialog import PeriodDialog
-from modern_gl.desktop.reports_page import ChartPage, OsvPage, ReportPage
+from modern_gl.desktop.reports_page import ReportPage
 from modern_gl.desktop.reports_page.table import grid, set_grid, set_zebra, zebra
+from modern_gl.desktop.shortcuts import PLACES_BY_KEY, bind
 from modern_gl.desktop.stock_count_page import StockCountPage
 from modern_gl.desktop.templates_page import TemplatePage, TemplatesPage
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.desktop.vat_payer import VAT_REPORTS, edit_vat_payer
-from modern_gl.desktop.widgets import EmptyState
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import LANGUAGES, document_language, language, tr
 from modern_gl.reporting.trade import PURCHASE, SALE
@@ -61,26 +57,12 @@ class MainWindow(ReportPlaces):
     def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
         super().__init__(workspace, settings)
         self.sidebar.company.clicked.connect(self._company_menu)
-        for keys, fn in (
-            ("Ctrl+N", self.new_document),
-            ("Ctrl+W", self.close_current),
-            ("Ctrl+F4", self.close_current),
-            ("Ctrl+1", lambda: self.show_place(("journal",))),
-            ("Ctrl+2", lambda: self.show_place(("osv",))),
-            ("Ctrl+3", lambda: self.show_place(("chart",))),
-            ("Ctrl+4", lambda: self.show_place(("directories",))),
-            ("Ctrl+5", lambda: self.show_place(("templates",))),
-            ("Ctrl+6", lambda: self.show_place(("inventory",))),
-            ("Ctrl+7", lambda: self.show_place(("currencies",))),
-            ("Ctrl+8", lambda: self.show_place(("invoices",))),
-            ("Ctrl+9", lambda: self.show_place(("opening",))),
-            ("Ctrl+0", lambda: self.show_place(("purchases",))),
-            ("Ctrl+-", lambda: self.show_place(("sales",))),
-            ("Ctrl+B", lambda: self.show_place(("bank",))),
-            ("Ctrl+L", self.quick_entry),
-            ("Ctrl+K", self.command_palette),
-        ):
-            QShortcut(QKeySequence(keys), self).activated.connect(fn)
+        bind(self, "new_document", self.new_document)
+        bind(self, "close_page", self.close_current)
+        bind(self, "quick_entry", self.quick_entry)
+        bind(self, "palette", self.command_palette)
+        for place in PLACES_BY_KEY:  # Ctrl+1… — the places of the sidebar
+            bind(self, f"go_{place}", lambda p=place: self.show_place((p,)))
         hints = QGuiApplication.styleHints()
         if hints is not None:
             hints.colorSchemeChanged.connect(lambda _scheme: self.follow_system_theme())
@@ -190,7 +172,7 @@ class MainWindow(ReportPlaces):
         self.notify(tr("Компания открыта только для просмотра"))
         return True
 
-    def _make_place(self, key) -> QWidget:
+    def _make_place(self, key) -> PageWidget:
         s = self.open_session
         if key == ("home",):
             page = HomePage(s, shown_places(s.stock_only))
@@ -218,7 +200,7 @@ class MainWindow(ReportPlaces):
             try:
                 page = OpeningBalancesPage(s)
             except NotFoundError as e:  # viewing a company that has none (D80)
-                return EmptyState("○", tr("Начальные остатки"), str(e))
+                return EmptyPage(key, tr("Начальные остатки"), str(e))
             page.saved.connect(self._postings_changed)
             return page
         if key == ("currencies",):
@@ -311,15 +293,6 @@ class MainWindow(ReportPlaces):
             self.new_bank_operation(BankOperationPage.copy_of(operation))
             return
         self.new_document(load_document(s.conn, s.company_id, doc_id))
-
-    def _postings_changed(self, doc_id: int) -> None:
-        journal = self._page(("journal",), JournalPage)
-        if journal is not None:
-            journal.refresh(select_id=doc_id)
-        for key in (("osv",), ("chart",), ("invoices",), ("bank",)):
-            page = self.pages.get(key)
-            if isinstance(page, (OsvPage, ChartPage, InvoicesPage, BankPage)):
-                page.refresh()
 
     def show_document(self, doc_id: int) -> None:
         """The GL document itself, even when a warehouse document made it."""

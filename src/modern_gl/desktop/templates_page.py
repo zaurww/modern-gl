@@ -10,29 +10,32 @@ from __future__ import annotations
 from functools import partial
 
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QStackedLayout,
+    QTableView,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.ledger import TemplateLine
 from modern_gl.application.queries import TemplateData, list_templates, load_template
+from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import PostingRow, PostingsDelegate, PostingsModel, PostingsTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
     button,
+    caption,
     enter_goes_on,
     hide_when_viewing,
     money,
@@ -44,7 +47,7 @@ from modern_gl.i18n import tr
 PREVIEW_AMOUNT = 100000  # the editor shows what the lines give for S = 1 000.00
 
 
-class TemplatesPage(QWidget):
+class TemplatesPage(PageWidget):
     key = ("templates",)
     use_template = Signal(int)  # template id: new document from it
     edit_template = Signal(object)  # template id, or None for a new one
@@ -86,23 +89,14 @@ class TemplatesPage(QWidget):
         hint.setFont(fonts().small)
         root.addWidget(hint)
 
-        for keys, fn in (
-            ("Return", lambda: self._use(self._current())),
-            ("Enter", lambda: self._use(self._current())),
-            ("F2", lambda: self._edit(self._current())),
-            ("Ins", lambda: self.edit_template.emit(None)),
-            ("Del", lambda: self.delete(self._current())),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
+        bind(self, "open", lambda: self._use(self._current()))
+        bind(self, "edit", lambda: self._edit(self._current()))
+        bind(self, "insert", lambda: self.edit_template.emit(None))
+        bind(self.table, "delete", lambda: self.delete(self._current()))
         self.refresh()
 
     def title(self) -> str:
         return tr("Шаблоны")
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()
@@ -164,12 +158,18 @@ class TemplatesPage(QWidget):
         self.refresh()
 
 
-class TemplatePage(QWidget):
+class TemplatePage(GridEditing, PageWidget):
     """Edit one entry template (or make a new one): name, memo, lines with formulas."""
 
     saved = Signal(int)  # template id
     close_requested = Signal()
     title_changed = Signal()
+
+    def _grid(self) -> QTableView:
+        return self.table
+
+    def _rows(self) -> EditableRows:
+        return self.model
 
     def __init__(self, session: Session, template_id: int | None = None) -> None:
         super().__init__()
@@ -190,9 +190,8 @@ class TemplatePage(QWidget):
         root.addWidget(self.name)
 
         meta = QHBoxLayout()
-        caption = QLabel(tr("Содержание документа"))
-        caption.setObjectName("secondary")
-        meta.addWidget(caption)
+        title = caption(tr("Содержание документа"))
+        meta.addWidget(title)
         self.memo = QLineEdit(t.memo if t else "")
         self.memo.setPlaceholderText(tr("как у шаблона"))
         meta.addWidget(self.memo, 1)
@@ -200,8 +199,7 @@ class TemplatePage(QWidget):
 
         self._build_table(root, t)
 
-        self.preview = QLabel()
-        self.preview.setObjectName("secondary")
+        self.preview = caption()
         root.addWidget(self.preview)
         self.error = QLabel()
         self.error.setObjectName("error")
@@ -270,17 +268,10 @@ class TemplatePage(QWidget):
         self.model.changed.connect(self._changed)
         self.name.textEdited.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
-        for keys, fn in (
-            ("Ctrl+S", self.save),
-            ("Ins", self._insert_row),
-            ("F9", self._duplicate_row),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        del_row = QShortcut(QKeySequence("Del"), self.table)
-        del_row.setContext(Qt.ShortcutContext.WidgetShortcut)
-        del_row.activated.connect(self._remove_row)
+        bind(self, "save", self.save)
+        bind(self, "insert", self._insert_row)
+        bind(self, "duplicate_row", self._duplicate_row)
+        bind(self.table, "delete", self._remove_row)
 
     @property
     def key(self):
@@ -365,19 +356,3 @@ class TemplatePage(QWidget):
         self.dirty = False
         self.saved.emit(self.template_id)
         self.close_requested.emit()
-
-    def _insert_row(self) -> None:
-        cur = self.table.currentIndex()
-        row = self.model.insert_row(cur.row() + 1 if cur.isValid() else None)
-        self.table.setCurrentIndex(self.model.index(row, 0))
-
-    def _duplicate_row(self) -> None:
-        cur = self.table.currentIndex()
-        if cur.isValid():
-            row = self.model.duplicate_row(cur.row())
-            self.table.setCurrentIndex(self.model.index(row, cur.column()))
-
-    def _remove_row(self) -> None:
-        cur = self.table.currentIndex()
-        if cur.isValid():
-            self.model.remove_row(cur.row())

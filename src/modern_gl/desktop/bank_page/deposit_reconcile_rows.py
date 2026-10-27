@@ -21,10 +21,10 @@ from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import P
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-COLUMNS = ["Дата", "Контрагент / содержание", "Портал", "Программа", "Состояние"]
-STATE = COLUMNS.index("Состояние")
+COLUMNS = [N_("Дата"), "Контрагент / содержание", N_("Портал"), N_("Программа"), N_("Состояние")]
+STATE = COLUMNS.index(N_("Состояние"))
 
 
 def signed(amount: int) -> str:

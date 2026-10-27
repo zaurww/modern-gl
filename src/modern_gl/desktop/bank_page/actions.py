@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import date, timedelta
 
-from PySide6.QtCore import QSettings, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QDialog, QFileDialog, QMenu, QMessageBox
 
 from modern_gl.application.bank import (
@@ -26,6 +26,7 @@ from modern_gl.desktop.bank_page.file_dialog import BankFileDialog
 from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
 from modern_gl.desktop.bank_page.portal import DepositDialog
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
+from modern_gl.desktop.preferences import BANK_AMOUNTS, prefs
 from modern_gl.desktop.reports_page import ReportPage
 from modern_gl.desktop.widgets import MenuItem
 from modern_gl.domain.errors import LedgerError
@@ -227,12 +228,12 @@ class BankActions(ReportPage):
 
     def amount_mode(self) -> str:
         if self._amount_mode is None:  # remembered between sessions
-            self._amount_mode = ONE if QSettings().value("bank/amounts", TWO) == ONE else TWO
+            self._amount_mode = ONE if prefs().view(BANK_AMOUNTS, TWO) == ONE else TWO
         return self._amount_mode
 
     def set_amount_mode(self, mode: str) -> None:
         self._amount_mode = mode
-        QSettings().setValue("bank/amounts", mode)
+        prefs().set_view(BANK_AMOUNTS, mode)
         self._start_entry = True
         self.refresh()
 

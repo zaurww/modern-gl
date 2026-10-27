@@ -9,7 +9,7 @@ from typing import Any
 
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import portal_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 # statuses that count in turnover (etaxes-ext DOVRIYYE_STATUSES); the API takes one at a time
 TURNOVER = ("approved", "approvedBySystem", "cancelationRefused", "correctionRefused")
@@ -24,20 +24,20 @@ ALL = (*IMPORTED, *IN_PROGRESS, *(s for s in VOID if s != "rejected"))
 
 # the portal's own names (Azerbaijani); the Russian ones are for the Russian interface
 _LABELS = {
-    "approved": "Подтверждена",
-    "approvedBySystem": "Подтверждена системой",
-    "cancelationRefused": "Отказ в аннулировании",
-    "correctionRefused": "Отказ в исправлении",
-    ON_APPROVAL: "Ожидает подтверждения",
-    "updateApproval": "Исправлена",
-    "updateRequested": "Возвращена на исправление",
-    "cancelRequested": "Отправлена на аннулирование",
-    "onApprovalEdited": "Отправлена на исправление",
-    "canceled": "Аннулирована",
-    "deleted": "Удалена",
-    "deletedBySystem": "Удалена системой",
-    "deactivated": "Деактивирована",
-    "rejected": "Отклонена",
+    "approved": N_("Подтверждена"),
+    "approvedBySystem": N_("Подтверждена системой"),
+    "cancelationRefused": N_("Отказ в аннулировании"),
+    "correctionRefused": N_("Отказ в исправлении"),
+    ON_APPROVAL: N_("Ожидает подтверждения"),
+    "updateApproval": N_("Исправлена"),
+    "updateRequested": N_("Возвращена на исправление"),
+    "cancelRequested": N_("Отправлена на аннулирование"),
+    "onApprovalEdited": N_("Отправлена на исправление"),
+    "canceled": N_("Аннулирована"),
+    "deleted": N_("Удалена"),
+    "deletedBySystem": N_("Удалена системой"),
+    "deactivated": N_("Деактивирована"),
+    "rejected": N_("Отклонена"),
 }
 
 

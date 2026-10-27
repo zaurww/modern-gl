@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 from modern_gl.application.authorship import local_time
 from modern_gl.application.history import HistoryEvent
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.i18n import tr
 
 
@@ -35,8 +35,7 @@ class HistoryDialog(QDialog):
             self.lines.append(label)
             root.addWidget(label)
         if not events:
-            empty = QLabel(tr("В журнале действий о документе ничего нет."))
-            empty.setObjectName("secondary")
+            empty = caption(tr("В журнале действий о документе ничего нет."))
             root.addWidget(empty)
         root.addStretch(1)
         row = QHBoxLayout()

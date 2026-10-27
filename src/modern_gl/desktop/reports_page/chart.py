@@ -5,7 +5,6 @@ from __future__ import annotations
 from PySide6.QtCore import (
     Qt,
 )
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QHeaderView,
     QMessageBox,
@@ -22,6 +21,7 @@ from modern_gl.desktop.reports_page.view import (
     month_of,
 )
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     class_icon,
     hide_when_viewing,
@@ -29,7 +29,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 # the columns that narrow in a narrow window, in this order, and how far
 NARROWING = (("subconto", 200), ("type", 180), ("name", 240))
@@ -95,20 +95,16 @@ class ChartPage(ReportPage):
         self.model.bands = False
         add = self.header.primary(tr("+ Новый счёт"), lambda: self.edit_account(None), "Ins")
         hide_when_viewing(session.read_only, add)
-        for keys, fn in (
-            ("Ins", lambda: self.edit_account(None)),
-            ("F2", lambda: self.edit_account(self._current())),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
-        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(lambda: self.delete_account(self._current()))
+        bind(self, "insert", lambda: self.edit_account(None))
+        bind(self, "edit", lambda: self.edit_account(self._current()))
+        bind(self.table, "delete", lambda: self.delete_account(self._current()))
         self.refresh()
 
     def title(self) -> str:
         return tr("План счетов")
+
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh()
 
     def build(self) -> None:
         cat = self.s.catalog
@@ -176,7 +172,7 @@ class ChartPage(ReportPage):
 
     def toggle_hidden(self, acc) -> None:
         self.s.ledger.set_account_active(self.s.company_id, acc.id, not acc.active)
-        message = "Счёт {code} снова виден" if not acc.active else "Счёт {code} скрыт"
+        message = N_("Счёт {code} снова виден") if not acc.active else N_("Счёт {code} скрыт")
         self._after_change(acc.id, tr(message, code=acc.short))
 
     def delete_account(self, acc: AccountInfo | None) -> None:

@@ -17,7 +17,7 @@ from modern_gl.application.eqaime import (
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.trade import trade_documents
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 SUPPLIER_TIN = "1700000001"
 

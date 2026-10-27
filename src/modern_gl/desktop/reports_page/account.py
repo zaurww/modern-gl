@@ -5,12 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
-from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (
     QComboBox,
-    QLabel,
 )
 
+from modern_gl.desktop.preferences import SUBCONTO_LEVELS, prefs
 from modern_gl.desktop.reports_page.view import (
     Column,
     ReportPage,
@@ -20,6 +19,7 @@ from modern_gl.desktop.reports_page.view import (
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
     balance_text,
+    caption,
     money,
     ru_date,
 )
@@ -30,7 +30,6 @@ from modern_gl.reporting import reports
 from modern_gl.reporting.reports import SubcontoRow, Turnovers
 
 # ОСВ по субконто: how deep (an index of «Детализация»; -1: the deepest the account has)
-LEVELS_SETTING = "reports/subconto_levels"
 
 
 class AccountReportPage(ReportPage):
@@ -195,8 +194,7 @@ class SubcontoPage(AccountReportPage):
         an account of settlements — down to the e-qaimə (D110). The choice is remembered."""
         self.tag = QComboBox()
         self.tag.setMinimumWidth(190)
-        self.tag_label = QLabel(tr("Тег"))
-        self.tag_label.setObjectName("secondary")
+        self.tag_label = caption(tr("Тег"))
         self.levels = QComboBox()
         self.levels.setMinimumWidth(190)
         kinds = self._kinds()
@@ -207,11 +205,9 @@ class SubcontoPage(AccountReportPage):
         if self.s.catalog.takes_invoice(self.account_id):
             self.levels.addItem("E-qaimə", (len(kinds), True))
         deepest = self.levels.count() - 1  # down to the e-qaimə, as in 1C
-        chosen = QSettings().value(LEVELS_SETTING, -1, type=int)
-        chosen = chosen if isinstance(chosen, int) else -1
+        chosen = prefs().chosen_id(SUBCONTO_LEVELS)
         self.levels.setCurrentIndex(deepest if chosen < 0 else min(chosen, deepest))
-        levels_label = QLabel(tr("Детализация"))
-        levels_label.setObjectName("secondary")
+        levels_label = caption(tr("Детализация"))
         self.add_to_bar(levels_label, gap=0)
         self.add_to_bar(self.levels)
         self.add_to_bar(self.tag_label, gap=0)
@@ -223,7 +219,7 @@ class SubcontoPage(AccountReportPage):
         self.levels.activated.connect(self._choose_levels)
 
     def _choose_levels(self, index: int) -> None:
-        QSettings().setValue(LEVELS_SETTING, -1 if index == self.levels.count() - 1 else index)
+        prefs().set_chosen_id(SUBCONTO_LEVELS, -1 if index == self.levels.count() - 1 else index)
         self.refresh()
 
     @property

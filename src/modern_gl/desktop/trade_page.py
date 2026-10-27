@@ -6,8 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMessageBox
 
 from modern_gl.application.inventory import Inventory
@@ -17,6 +16,7 @@ from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.reports_page import Column, ReportPage
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
@@ -27,7 +27,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import N_, fold, tr
 from modern_gl.reporting.trade import PURCHASE, SALE, TradeDocument, trade_documents
 
 
@@ -47,22 +47,22 @@ KINDS = {
     PURCHASE: TradeKind(
         PURCHASE,
         ("purchases",),
-        "Покупки",
-        "+ Покупка",
-        "Поставщик",
-        "Покупок пока нет",
-        "Товары, услуги и ОС от поставщика.",
-        "Проведено покупок: {total}",
+        N_("Покупки"),
+        N_("+ Покупка"),
+        N_("Поставщик"),
+        N_("Покупок пока нет"),
+        N_("Товары, услуги и ОС от поставщика."),
+        N_("Проведено покупок: {total}"),
     ),
     SALE: TradeKind(
         SALE,
         ("sales",),
-        "Продажи",
-        "+ Продажа",
-        "Покупатель",
-        "Продаж пока нет",
-        "Товары и услуги покупателю.",
-        "Проведено продаж: {total}",
+        N_("Продажи"),
+        N_("+ Продажа"),
+        N_("Покупатель"),
+        N_("Продаж пока нет"),
+        N_("Товары и услуги покупателю."),
+        N_("Проведено продаж: {total}"),
     ),
 }
 
@@ -102,9 +102,7 @@ class TradePage(ReportPage):
         self.stack.addWidget(self.empty)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.selectionModel().selectionChanged.connect(lambda *_: self._show_post_button())
-        delete = QShortcut(QKeySequence("Del"), self.table)  # not while typing a search
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(self.delete_selected)
+        bind(self.table, "delete", self.delete_selected)  # not while typing a search
         self.refresh()
 
     def more_items(self) -> list[MenuItem]:

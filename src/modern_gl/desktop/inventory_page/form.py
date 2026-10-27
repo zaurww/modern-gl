@@ -5,7 +5,7 @@ so purchases and sales are typed from this page too, and the postings make thems
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Signal
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.inventory import Inventory
+from modern_gl.desktop.page import PageWidget
+from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
@@ -26,46 +28,52 @@ from modern_gl.desktop.widgets import (
     menu_button,
     trailing_icon,
 )
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.reporting.inventory import StockBalance
-
-IDLE_SETTING = "inventory/idle_items"  # items with nothing in stock listed too
 
 # what each operation does, in one phrase for a beginner
 OPERATIONS = (
     (
-        "+ Покупка",
+        N_("+ Покупка"),
         "receipt",
-        "Товар пришёл от поставщика — по e-qaimə или таможенной декларации; "
-        "проводки создаются сами",
+        N_(
+            "Товар пришёл от поставщика — по e-qaimə или таможенной декларации; "
+            "проводки создаются сами"
+        ),
     ),
     (
-        "+ Продажа",
+        N_("+ Продажа"),
         "sale",
-        "Товар продан покупателю: выручка, ƏDV и себестоимость проводятся сами",
+        N_("Товар продан покупателю: выручка, ƏDV и себестоимость проводятся сами"),
     ),
     (
-        "Оприходование",
+        N_("Оприходование"),
         "incoming",
-        "Товар пришёл не от поставщика: излишки, вклад учредителя, своё производство, подарок",
+        N_("Товар пришёл не от поставщика: излишки, вклад учредителя, своё производство, подарок"),
     ),
-    ("Списание", "issue", "Товар израсходован или испорчен: его стоимость уходит в расходы"),
-    ("Перемещение", "transfer", "Товар переехал на другой склад; стоимость не меняется"),
     (
-        "Инвентаризация",
+        N_("Списание"),
+        "issue",
+        N_("Товар израсходован или испорчен: его стоимость уходит в расходы"),
+    ),
+    (N_("Перемещение"), "transfer", N_("Товар переехал на другой склад; стоимость не меняется")),
+    (
+        N_("Инвентаризация"),
         "count",
-        "Пересчитали склад: учёт подставлен, впишите факт — излишки и недостача проведутся сами",
+        N_(
+            "Пересчитали склад: учёт подставлен, впишите факт — излишки и недостача проведутся сами"
+        ),
     ),
     (
-        "Доп. расходы",
+        N_("Доп. расходы"),
         "landed_cost",
-        "Доставка, таможня, сертификация — увеличивают стоимость полученного товара",
+        N_("Доставка, таможня, сертификация — увеличивают стоимость полученного товара"),
     ),
-    ("Начальные остатки", "opening", "Что было на складе в день начала учёта в программе"),
+    (N_("Начальные остатки"), "opening", N_("Что было на складе в день начала учёта в программе")),
 )
 
 
-class InventoryForm(QWidget):
+class InventoryForm(PageWidget):
     key = ("inventory",)
     open_inventory_document = Signal(int)
     new_inventory_document = Signal(str)
@@ -181,8 +189,9 @@ class InventoryForm(QWidget):
     def title(self) -> str:
         return tr("Склад")
 
-    def is_dirty(self) -> bool:
-        return False
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
 
     def operation(self, operation: str) -> None:
         self.new_inventory_document.emit(operation)
@@ -190,13 +199,13 @@ class InventoryForm(QWidget):
     def idle_shown(self) -> bool:
         """Items with nothing in stock are listed too (muted) — a new item is seen at once;
         «⋯» hides them, remembered (D106)."""
-        return bool(QSettings().value(IDLE_SETTING, True, type=bool))
+        return prefs().idle_items_shown()
 
     def _idle_mark(self) -> str:
         return "✓  " if self.idle_shown() else "    "
 
     def _toggle_idle(self) -> None:
-        QSettings().setValue(IDLE_SETTING, not self.idle_shown())
+        prefs().set_idle_items_shown(not self.idle_shown())
         self.refresh()
 
     # ---- made by the groups of the page; each group may call the others --------------

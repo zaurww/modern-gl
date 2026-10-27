@@ -9,16 +9,14 @@ import pytest
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.ledger import PostingInput
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.backups_dialog import MIRROR_SETTING, BackupsDialog
 from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure import backup
-from modern_gl.infrastructure.db import connect
-from tests.test_backup import company, documents
+from tests.helpers.backup import company, documents
 
 
 def test_a_backup_goes_to_the_second_folder_too(tmp_path):
@@ -46,11 +44,9 @@ def test_a_missing_second_folder_does_not_lose_the_first_copy(tmp_path):
 
 
 @pytest.fixture
-def window(qtbot, tmp_path, monkeypatch):
+def window(qtbot, tmp_path, monkeypatch, make_demo):
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
+    make_demo(tmp_path / "ДЕМО ООО.gl")
     theme.apply(QApplication.instance())
     settings = QSettings(str(tmp_path / "settings.ini"), QSettings.Format.IniFormat)
     win = MainWindow(Workspace(tmp_path), settings)

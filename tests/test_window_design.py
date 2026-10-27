@@ -34,9 +34,9 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.theme.css import stylesheet
 from modern_gl.reporting.eqaime_reconciliation import reconcile
-from tests.test_eqaime_import import received
-from tests.test_sales import make_shop
-from tests.test_vat_deposit_import import OWN_TIN, PORTAL
+from tests.helpers.eqaime import received
+from tests.helpers.sales import make_shop
+from tests.helpers.vat_deposit import OWN_TIN, PORTAL
 
 DESKTOP = Path(__file__).parent.parent / "src" / "modern_gl" / "desktop"
 DIALOG = re.compile(r"^class (\w+)\((\w+)\):", re.MULTILINE)

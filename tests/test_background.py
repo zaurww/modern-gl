@@ -8,21 +8,16 @@ from datetime import date
 import pytest
 from PySide6.QtWidgets import QApplication
 
-from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.reports_page import OsvPage
-from modern_gl.infrastructure.db import connect
 
 
 @pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
+def window(qtbot, tmp_path, make_demo):
+    make_demo(tmp_path / "ДЕМО ООО.gl")
     theme.apply(QApplication.instance())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
@@ -75,3 +70,20 @@ def test_the_last_refresh_wins_and_a_closed_page_gets_nothing(window, qtbot):
     qtbot.waitUntil(lambda: len(shown) == 1)
     qtbot.wait(50)
     assert len(shown) == 1  # the first run's result was dropped
+
+
+def test_a_read_queued_before_the_company_closes_is_not_shown(window, qtbot):
+    """The worker finished, its result waits in the event loop, the company is closed (its
+    file too): the page is not filled with it on a closed company."""
+    window.session.large = True
+    window.show_place(("osv",))
+    osv = window.stack.currentWidget()
+    shown: list = []
+    osv.present = lambda data: shown.append(data)  # type: ignore[method-assign]
+    session = window.session
+    osv.refresh()
+    window._close_company()  # waits for the worker, drops the pages, closes the file
+    qtbot.wait(100)  # the queued result is delivered now, if at all
+    assert shown == []
+    assert session.closed
+    window.start()  # the fixture closes it again

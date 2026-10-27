@@ -10,11 +10,21 @@ money 0 → 10 550 (cash 50 + bank 10 500). February alone: 9 500 → 10 550, op
 
 from __future__ import annotations
 
+import pytest
+
 from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.cash_flow import cash_flow
-from tests.test_statements import books, code, shown, window
+from tests.helpers.statements import code, shown
 
-__all__ = ["books", "window"]  # the fixtures
+
+@pytest.fixture
+def books(statements_books):
+    return statements_books
+
+
+@pytest.fixture
+def window(statements_window):
+    return statements_window
 
 
 def test_two_months_of_money(books):

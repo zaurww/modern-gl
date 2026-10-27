@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QGuiApplication, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -34,13 +34,16 @@ from PySide6.QtWidgets import (
 from modern_gl.application.currencies import CurrencyInfo, Rate, latest_rates, list_rates
 from modern_gl.application.default_accounts import EXCHANGE_GAIN, EXCHANGE_LOSS, default_account
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
     EmptyState,
     PageHeader,
     button,
+    caption,
     date_edit,
     edited_date,
     hide_when_viewing,
@@ -81,7 +84,7 @@ def _buttons(dlg: QDialog, lay: QVBoxLayout) -> None:
     lay.addWidget(buttons)
 
 
-class CurrenciesPage(QWidget):
+class CurrenciesPage(PageWidget):
     key = ("currencies",)
     open_document = Signal(int)
 
@@ -129,8 +132,7 @@ class CurrenciesPage(QWidget):
         top.addWidget(add)
         hide_when_viewing(session.read_only, rates, more, add)
         right.addLayout(top)
-        self.latest = QLabel()
-        self.latest.setObjectName("secondary")
+        self.latest = caption()
         right.addWidget(self.latest)
 
         self._build_table()
@@ -150,13 +152,10 @@ class CurrenciesPage(QWidget):
         body.addLayout(right, 1)
         root.addLayout(body, 1)
 
-        for keys, fn in (
-            ("Ins", self.add_rate),
-            ("Del", lambda: self.delete_rate(self._rate_at(self.table.currentIndex()))),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
+        bind(self, "insert", self.add_rate)
+        bind(
+            self.table, "delete", lambda: self.delete_rate(self._rate_at(self.table.currentIndex()))
+        )
         self.refresh()
 
     def _build_table(self) -> None:
@@ -168,9 +167,6 @@ class CurrenciesPage(QWidget):
 
     def title(self) -> str:
         return tr("Валюты")
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()
@@ -377,13 +373,12 @@ class CurrenciesPage(QWidget):
         end = date_edit(self.s.working_date, dlg)
         form.addRow(tr("С"), start)
         form.addRow(tr("по"), end)
-        note = QLabel(
+        note = caption(
             tr(
                 "Официальные курсы Центрального банка Азербайджана (cbar.az) "
                 "для валют компании. Нужен интернет."
             )
         )
-        note.setObjectName("secondary")
         note.setWordWrap(True)
         lay.addWidget(note)
         _buttons(dlg, lay)
@@ -441,13 +436,12 @@ class CurrenciesPage(QWidget):
         form.addRow(tr("На дату"), day)
         form.addRow(tr("Положительные разницы (Кт)"), gain)
         form.addRow(tr("Отрицательные разницы (Дт)"), loss)
-        note = QLabel(
+        note = caption(
             tr(
                 "Остатки валютных счетов пересчитываются по курсу на дату; разница "
                 "проводится одним документом."
             )
         )
-        note.setObjectName("secondary")
         note.setWordWrap(True)
         lay.addWidget(note)
         _buttons(dlg, lay)

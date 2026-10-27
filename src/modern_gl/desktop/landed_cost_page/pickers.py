@@ -34,6 +34,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     button,
+    caption,
     money,
 )
 from modern_gl.domain.currency import format_unit_rate, unit_rate
@@ -73,8 +74,7 @@ class PickerDialog(QDialog):
         self.resize(820, 480)
         self.all_rows = rows
         layout = QVBoxLayout(self)
-        text = QLabel(hint)
-        text.setObjectName("secondary")
+        text = caption(hint)
         text.setWordWrap(True)
         layout.addWidget(text)
         self.search = QLineEdit()
@@ -274,8 +274,7 @@ class BatchCostDialog(QDialog):
         layout.addWidget(heading)
         notes = _rate_notes(charges)
         if notes:
-            note = QLabel("   ·   ".join(notes))
-            note.setObjectName("secondary")
+            note = caption("   ·   ".join(notes))
             layout.addWidget(note)
         self.columns = _cost_columns(charges, any(line.currency for line in lines))
         rows = [_cost_row(line) for line in lines]

@@ -8,12 +8,13 @@ from collections.abc import Callable
 
 from PySide6.QtCore import Signal
 
+from modern_gl.desktop.preferences import STOCK_STATEMENT_VIEW
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.stock_reports.common import INDENT, quantity_column, view_switch
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import money
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.inventory import (
     BY_ITEM,
@@ -23,12 +24,12 @@ from modern_gl.reporting.inventory import (
     stock_statement,
 )
 
-VIEW_SETTING = "reports/stock_statement_view"
+VIEW_SETTING = STOCK_STATEMENT_VIEW
 GROUPS = (
-    ("Начало", "opening"),
-    ("Приход", "in"),
-    ("Расход", "out"),
-    ("Конец", "closing"),
+    (N_("Начало"), "opening"),
+    (N_("Приход"), "in"),
+    (N_("Расход"), "out"),
+    (N_("Конец"), "closing"),
 )
 
 
@@ -40,7 +41,9 @@ class StockStatementPage(ReportPage):
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Ведомость по складу"), params)
         switch, self.view = view_switch(
-            VIEW_SETTING, [(BY_ITEM, "По товарам"), (BY_WAREHOUSE, "По складам")], self.refresh
+            VIEW_SETTING,
+            [(BY_ITEM, N_("По товарам")), (BY_WAREHOUSE, N_("По складам"))],
+            self.refresh,
         )
         self.add_to_bar(switch)
         self.empty.say(

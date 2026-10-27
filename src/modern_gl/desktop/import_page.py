@@ -7,8 +7,7 @@ from datetime import date
 from fractions import Fraction
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -16,29 +15,29 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
-    QLabel,
     QStackedLayout,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application import journal_import
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.journal_import import ImportPlan, Row
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, money
+from modern_gl.desktop.widgets import EmptyState, PageHeader, button, caption, money
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.table_files import from_clipboard, read_rows
 
-COLUMNS_HINT = "Дата · Документ · Дебет · Субконто · Кредит · Субконто · Сумма · Содержание"
+COLUMNS_HINT = N_("Дата · Документ · Дебет · Субконто · Кредит · Субконто · Сумма · Содержание")
 
 
-class ImportPage(QWidget):
+class ImportPage(PageWidget):
     key = ("import",)
     imported = Signal(list)  # ids of the new documents
 
@@ -94,8 +93,7 @@ class ImportPage(QWidget):
         root.addLayout(self.stack, 1)
 
         bottom = QHBoxLayout()
-        self.summary = QLabel()
-        self.summary.setObjectName("secondary")
+        self.summary = caption()
         self.summary.setWordWrap(True)
         bottom.addWidget(self.summary, 1)
         self.run_button = button(tr("Импортировать"), "primary")
@@ -104,16 +102,11 @@ class ImportPage(QWidget):
         bottom.addWidget(self.run_button)
         root.addLayout(bottom)
 
-        sc = QShortcut(QKeySequence("Ctrl+V"), self)
-        sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        sc.activated.connect(lambda: self.paste())
+        bind(self, "paste", lambda: self.paste())
         self.rebuild()
 
     def title(self) -> str:
         return tr("Импорт из Excel")
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()

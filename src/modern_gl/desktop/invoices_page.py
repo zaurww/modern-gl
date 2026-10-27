@@ -56,6 +56,9 @@ class InvoicesPage(ReportPage):
     def title(self) -> str:
         return tr("E-qaimələr")
 
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh()
+
     def job(self) -> Callable[[Connection], list[InvoiceRow]]:
         p, cid, open_only = self.params, self.s.company_id, self.open_only.isChecked()
         return lambda conn: invoice_report(conn, cid, p.date_from, p.date_to, p.layers, open_only)

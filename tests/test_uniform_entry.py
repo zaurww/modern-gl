@@ -8,19 +8,19 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QDialog, QLineEdit, QMessageBox
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.desktop import theme
 from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.inventory_document_page import WAREHOUSE, InventoryDocumentPage
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage
-from tests.test_bank_ui import setup_company
-from tests.test_entry_keys import focused, items, shown_list, type_text
-from tests.test_sales import make_shop
+from tests.helpers.bank_ui import setup_company
+from tests.helpers.entry_keys import focused, items, shown_list, type_text
+from tests.helpers.sales import make_shop
+from tests.helpers.uniform_entry import shown
 
 
 @pytest.fixture(autouse=True)
@@ -34,15 +34,6 @@ def no_windows(monkeypatch):
         raise AssertionError("a window opened")
 
     monkeypatch.setattr(QDialog, "exec", no_dialog)
-
-
-def shown(qtbot, page):
-    theme.apply(QApplication.instance())
-    qtbot.addWidget(page)
-    page.show()
-    page.activateWindow()
-    qtbot.waitUntil(page.isActiveWindow)
-    return page
 
 
 @pytest.fixture

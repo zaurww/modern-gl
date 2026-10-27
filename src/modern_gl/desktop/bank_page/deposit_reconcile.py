@@ -31,9 +31,9 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.dates import date_range, next_day
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-TITLE = "Сверка ƏDV depozit с порталом"
+TITLE = N_("Сверка ƏDV depozit с порталом")
 
 
 class DepositReconcileDialog(ImportWindow):
