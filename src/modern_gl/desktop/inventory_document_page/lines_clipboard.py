@@ -33,23 +33,23 @@ from modern_gl.desktop.inventory_document_page.columns import (
     VAT,
     WAREHOUSE,
     InventoryPaste,
-    UnknownName,
+    UnknownNameError,
     paste_columns,
 )
 from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import to_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 class LinesClipboard(InventoryLinesBase):
     def parse(self, row_index: int, key: str, text: str):
-        """The value of a cell from pasted text. Raises UnknownName for a new name."""
+        """The value of a cell from pasted text. Raises UnknownNameError for a new name."""
         text = text.strip()
         if key in {ITEM, WAREHOUSE, TO_WAREHOUSE}:
             value = resolve_choice(self.choices(row_index, key), text)
             if value is None:
-                raise UnknownName(key, text)
+                raise UnknownNameError(key, text)
             return value
         if key in {ACCOUNT, EXPENSE}:
             return self.s.catalog.resolve_account(text).id
@@ -61,7 +61,7 @@ class LinesClipboard(InventoryLinesBase):
                 raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
             value = self.s.catalog.resolve_value(kind_id, text, self.owner_at(row_index, key))
             if value is None:
-                raise UnknownName(key, text, kind_id)
+                raise UnknownNameError(key, text, kind_id)
             return value
         if key == QUANTITY:
             value = to_quantity(plain_number(text))
@@ -134,7 +134,7 @@ class LinesClipboard(InventoryLinesBase):
             try:
                 value = self.parse(row_index, key, pasted[key])
                 self.setData(self.index(row_index, self.columns.index(key)), value)
-            except UnknownName as e:
+            except UnknownNameError as e:
                 result.unknown.append((row_index, key, e.text, e.kind_id))
                 if key == ITEM and UNIT in pasted:
                     result.units[e.text] = pasted[UNIT]
@@ -154,7 +154,7 @@ class LinesClipboard(InventoryLinesBase):
             if key in SALE_KEYS:
                 return str(self.headerData(self.columns.index(key), Qt.Orientation.Horizontal))
             if key in SUBCONTO_KEYS:
-                caption = "Субконто" if key in SC_KEYS else "Субконто затрат"
+                caption = "Субконто" if key in SC_KEYS else N_("Субконто затрат")
                 return f"{tr(caption)} {key[-1]}"
             return tr(HEADERS[key])
 

@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from fractions import Fraction
 
 from modern_gl.domain.currency import to_base
+from modern_gl.i18n import N_
 from modern_gl.reporting.inventory import (
     ReceiptLineChoice,
 )
@@ -50,16 +51,13 @@ TARGET_HEADERS = {
 NUMBER_KEYS = {AMOUNT, CURRENCY_AMOUNT, RATE, VAT, QUANTITY, COST, SHARE, UNIT_COST}
 
 METHODS = [
-    ("value", "По стоимости"),
-    ("quantity", "По количеству"),
-    ("manual", "Вручную"),
+    ("value", N_("По стоимости")),
+    ("quantity", N_("По количеству")),
+    ("manual", N_("Вручную")),
 ]
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   "
-    "Ins — расход   ·   Del — удалить строку   ·   "
-    "Сумма «30 USD» — в валюте   ·   НДС «18%» — посчитать   ·   Ctrl+Enter — провести"
-)
+HINT = ("next_field", "previous_field", "add_charge", "delete")  # the keys (desktop/shortcuts.py)…
+HINT_TYPED = (N_("Сумма «30 USD» — в валюте"), N_("НДС «18%» — посчитать"))  # …and what is typed
 
 
 @dataclass

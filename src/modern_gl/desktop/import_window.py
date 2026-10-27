@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 
@@ -62,11 +62,9 @@ class ImportWindow(QDialog):
         self.title.setFont(fonts().title)
         self.root.addWidget(self.title)
         line = QHBoxLayout()
-        self.subtitle = QLabel(subtitle)  # the portal's firm, the account
-        self.subtitle.setObjectName("secondary")
+        self.subtitle = caption(subtitle)  # the portal's firm, the account
         line.addWidget(self.subtitle, 1)
-        self.subtitle_note = QLabel()  # «Сверено по 20.10.2026»
-        self.subtitle_note.setObjectName("secondary")
+        self.subtitle_note = caption()  # «Сверено по 20.10.2026»
         line.addWidget(self.subtitle_note)
         self.root.addLayout(line)
         self.bar = QHBoxLayout()  # what to load: no buttons here, they are at the bottom
@@ -76,8 +74,7 @@ class ImportWindow(QDialog):
         self.warning.setObjectName("warning")
         self.warning.setWordWrap(True)
         self.warning.hide()
-        self.status = QLabel()  # what to do, what is going on, what was found
-        self.status.setObjectName("secondary")
+        self.status = caption()  # what to do, what is going on, what was found
         self.status.setWordWrap(True)
         self.footer_left = QHBoxLayout()
         self.footer_right = QHBoxLayout()
@@ -137,16 +134,14 @@ class FiguresGrid(QWidget):
         grid = QGridLayout()
         grid.setHorizontalSpacing(32)
         grid.setVerticalSpacing(4)
-        for column, caption in enumerate(columns, 1):
-            label = QLabel(caption)
-            label.setObjectName("secondary")
+        for column, text in enumerate(columns, 1):
+            label = caption(text)
             label.setAlignment(Qt.AlignmentFlag.AlignRight)
             grid.addWidget(label, 0, column)
         self.cells: dict[tuple[int, int], QLabel] = {}
         for r, side in enumerate((tr("Портал"), tr("Программа"), tr("Разница")), 1):
-            caption = QLabel(side)
-            caption.setObjectName("secondary")
-            grid.addWidget(caption, r, 0)
+            side_label = caption(side)
+            grid.addWidget(side_label, r, 0)
             for column in range(1, len(columns) + 1):
                 cell = QLabel()
                 font = QFont(fonts().table)

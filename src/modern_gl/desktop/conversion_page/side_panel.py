@@ -24,7 +24,7 @@ from modern_gl.desktop.conversion_page.common import (
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import date_edit
+from modern_gl.desktop.widgets import caption, date_edit
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 
@@ -61,13 +61,12 @@ class SidePanel(QFrame):
         self.sc_captions: list[QLabel] = []
         self.sc: list[PickBox] = []
         for _ in range(3):
-            caption = QLabel()
-            caption.setObjectName("secondary")
+            label = caption()
             box = PickBox(NONE)
             box.activated.connect(self._subconto_changed)
-            self.sc_captions.append(caption)
+            self.sc_captions.append(label)
             self.sc.append(box)
-            self._row(caption, box)
+            self._row(label, box)
         self.currency = PickBox()
         self._row(tr("Валюта"), self.currency)
         self.amount = QLineEdit()
@@ -93,12 +92,10 @@ class SidePanel(QFrame):
         self.reference.textEdited.connect(lambda _: self.changed.emit())
         self._account_changed()
 
-    def _row(self, caption: str | QLabel, widget: QWidget) -> None:
-        if isinstance(caption, str):
-            caption = QLabel(caption)
-            caption.setObjectName("secondary")
+    def _row(self, title: str | QLabel, widget: QWidget) -> None:
+        label = caption(title) if isinstance(title, str) else title
         row = self.form.rowCount()
-        self.form.addWidget(caption, row, 0)
+        self.form.addWidget(label, row, 0)
         self.form.addWidget(widget, row, 1)
 
     @property
@@ -109,14 +106,14 @@ class SidePanel(QFrame):
     def _account_changed(self, *_) -> None:
         account = self.account_info
         kinds = account.sc_kinds if account else (None, None, None)
-        for caption, box, kind in zip(self.sc_captions, self.sc, kinds, strict=True):
+        for label, box, kind in zip(self.sc_captions, self.sc, kinds, strict=True):
             box.clear()
             shown = kind is not None
-            caption.setVisible(shown)
+            label.setVisible(shown)
             box.setVisible(shown)
             if kind is None:
                 continue
-            caption.setText(self.s.catalog.kinds[kind])
+            label.setText(self.s.catalog.kinds[kind])
             values = self.s.catalog.values(kind)
             for v in values:
                 box.addItem(v.name, v.id)
@@ -195,13 +192,12 @@ class SidePanel(QFrame):
 class Stat(QWidget):
     """A caption over a number: the summary under the form."""
 
-    def __init__(self, caption: str) -> None:
+    def __init__(self, text: str) -> None:
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(4)
-        self.caption = QLabel(caption)
-        self.caption.setObjectName("secondary")
+        self.caption = caption(text)
         self.caption.setFont(fonts().small)
         self.value = QLabel(NONE)
         self.value.setFont(fonts().heading)

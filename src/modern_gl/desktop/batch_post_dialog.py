@@ -16,7 +16,7 @@ from modern_gl.desktop.directories_page import added_value, new_value
 from modern_gl.desktop.pick import ENTER, PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.i18n import tr
 
 
@@ -43,8 +43,7 @@ class BatchPostDialog(QDialog):
         title.setFont(fonts().heading)
         root.addWidget(title)
         if names:
-            who = QLabel(names)
-            who.setObjectName("secondary")
+            who = caption(names)
             who.setWordWrap(True)
             root.addWidget(who)
         self.account: PickBox | None = None
@@ -55,13 +54,12 @@ class BatchPostDialog(QDialog):
             root.addWidget(QLabel(self._question()))
             root.addLayout(self.form)
             self._build_fields()
-            hint = QLabel(
+            hint = caption(
                 tr(
                     "Пусто — каждой строке как в прошлый раз. Выбранное запомнится: "
                     "следующие e-qaimə этих контрагентов предложат то же."
                 )
             )
-            hint.setObjectName("secondary")
             hint.setWordWrap(True)
             root.addWidget(hint)
         self.error = QLabel()

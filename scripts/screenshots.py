@@ -21,11 +21,13 @@ from PySide6.QtGui import QPainter
 from PySide6.QtWidgets import QApplication, QLineEdit
 
 from modern_gl import i18n
+from modern_gl.application.catalog import AccountInfo
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import qt_texts, theme
 from modern_gl.desktop.app import add_demo_company
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.import_page import ImportPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
@@ -41,6 +43,13 @@ from modern_gl.desktop.reports_page import (
     VatReceiptsPage,
     VatRegisterPage,
 )
+
+
+def sc_kind(account: AccountInfo, position: int) -> int:
+    """The subconto kind at a position of a demo account that is known to have it."""
+    kind = account.sc_kinds[position]
+    assert kind is not None, (account.code, position)
+    return kind
 
 
 def main() -> None:
@@ -96,7 +105,9 @@ def main() -> None:
     journal.quick.edit.setCursorPosition(3)
     journal.quick.suggest()
     shot("1d_quick_suggest")
-    journal.quick.completer.popup().hide()
+    popup = journal.quick.completer.popup()
+    assert popup is not None
+    popup.hide()
     journal.quick.edit.clear()
     palette = win.command_palette()  # Ctrl+K: find and do anything (D86)
     assert palette is not None
@@ -104,7 +115,7 @@ def main() -> None:
     shot("14_command_palette")
     palette.close()
     win.show_import()
-    importer = win.pages[("import",)]
+    importer = cast(ImportPage, win.pages[("import",)])
     alfa = i18n.tr("Альфа Трейд").split()[0]
     contract = i18n.tr("Договор поставки №1")
     bank = i18n.tr("Основной расчётный счёт")
@@ -209,7 +220,7 @@ def main() -> None:
     win.resize(1400, 860)
     win.show_place(("directories",))
     directories = cast(DirectoriesPage, win.stack.currentWidget())
-    banks = session.catalog.by_code["51"].sc_kinds[0]
+    banks = sc_kind(session.catalog.by_code["51"], 0)
     assert banks is not None  # 51 has the "bank accounts" directory
     for name in ("Kapital Bank", "ABB"):
         ledger.add_subconto_value(session.company_id, banks, name)
@@ -220,7 +231,7 @@ def main() -> None:
     shot("8b2_contracts")
     from modern_gl.desktop.directories_page import ValueDialog
 
-    contracts = session.catalog.by_code["60"].sc_kinds[1]
+    contracts = sc_kind(session.catalog.by_code["60"], 1)
     alfa_id = next(v.id for v in session.catalog.values(session.catalog.owner_kinds[contracts]))
     value_dialog = ValueDialog(
         session, contracts, i18n.tr("Новый элемент"), "Faktura 15", alfa_id, win
@@ -330,7 +341,7 @@ def main() -> None:
     win.open_inventory_document(inventory_document.id)
     assert isinstance(win.stack.currentWidget(), InventoryDocumentPage)
     shot("8c2_inventory_document")
-    win.new_return("purchase_return", inventory_document.id)  # «Оформить возврат»
+    win.nav.new_return("purchase_return", inventory_document.id)  # «Оформить возврат»
     shot("8c17_purchase_return")
     cast(InventoryDocumentPage, win.stack.currentWidget()).dirty = False  # not saved: shown
     win.close_current()
@@ -355,9 +366,9 @@ def main() -> None:
     from modern_gl.reporting.inventory import receipt_line_choices
 
     cid, catalog = session.company_id, session.catalog
-    partner = catalog.values(catalog.by_code["60"].sc_kinds[0])[1]
-    contract = catalog.values(catalog.by_code["60"].sc_kinds[1], partner.id)[0]
-    cost_item = catalog.values(catalog.by_code["44"].sc_kinds[0])[0]
+    partner = catalog.values(sc_kind(catalog.by_code["60"], 0))[1]
+    contract = catalog.values(sc_kind(catalog.by_code["60"], 1), partner.id)[0]
+    cost_item = catalog.values(sc_kind(catalog.by_code["44"], 0))[0]
     broker = ledger.post_new(
         cid,
         "2026-02-04",
@@ -703,7 +714,7 @@ def main() -> None:
     page.memo.setText("Hosting")
     m = page.model
     m.setData(m.index(0, 0), acc["26"].id)
-    m.setData(m.index(0, 1), next(iter(session.catalog.values(acc["26"].sc_kinds[0]))).id)
+    m.setData(m.index(0, 1), next(iter(session.catalog.values(sc_kind(acc["26"], 0)))).id)
     m.setData(m.index(0, 4), acc["60"].id)
     m.setData(m.index(0, 11), m.parse(0, 11, "500 USD"))
     shot("10e_document_rate_note")
@@ -834,7 +845,7 @@ def shoot_stock_only(win, ledger, shot) -> None:
     """D90: the same company kept as a warehouse only — the books are not shown."""
     from modern_gl.domain.company import FULL, STOCK_ONLY
 
-    win._confirm_close_all = lambda: True  # the bank payment above is left unsaved
+    win.company.confirm_close = lambda: True  # the bank payment above is left unsaved
     ledger.set_company_mode(win.open_session.company_id, STOCK_ONLY)
     win.open_company(win.company_path)
     win.open_session.working_date = date(2026, 2, 28)
@@ -847,7 +858,7 @@ def shoot_stock_only(win, ledger, shot) -> None:
 
 def shoot_viewing(win, shot) -> None:
     """D80: the same company open for viewing only — nothing offers to change it."""
-    win._confirm_close_all = lambda: True  # the bank payment above is left unsaved
+    win.company.confirm_close = lambda: True  # the bank payment above is left unsaved
     win.view_company(win.company_path)
     s = win.open_session
     s.working_date = date(2026, 2, 28)

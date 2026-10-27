@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from modern_gl.application.common import insert, where_used
+from modern_gl.application.common import where_used
 from modern_gl.application.ledger.base import LedgerBase, account_label
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import fold, tr
-from modern_gl.infrastructure.db import IntegrityError, Row, transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, insert, transaction
 
 
 class SubcontoCommands(LedgerBase):
+    """Use cases of directories (subconto kinds), their elements and tags; audited."""
+
     def add_subconto_kind(
         self, company_id: int, code: str | None, name: str, owner_kind_id: int | None = None
     ) -> int:
@@ -41,6 +43,8 @@ class SubcontoCommands(LedgerBase):
         return kind_id
 
     def subconto_kind_id(self, company_id: int, code: str) -> int:
+        """The id of a directory by its code ("counterparty", "contract"…); NotFoundError
+        if the company has none."""
         return self._kind_id(company_id, code)
 
     def add_subconto_value(
@@ -355,6 +359,7 @@ class SubcontoCommands(LedgerBase):
         return tag_id
 
     def rename_tag(self, company_id: int, tag_id: int, name: str) -> None:
+        """Rename a tag (spaces collapsed); ValidationError if another tag has the name. Audited."""
         name = " ".join(name.split())
         with transaction(self.conn):
             old = self._tag(company_id, tag_id)

@@ -22,11 +22,11 @@ from modern_gl.desktop.document_page.templates import TemplatesPart
 from modern_gl.desktop.history_dialog import HistoryDialog
 from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.postings import (
-    DT,
     PostingRow,
 )
 from modern_gl.desktop.reason_dialog import ask_reason, confirm_delete
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     MenuItem,
     ask_date,
@@ -72,18 +72,16 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
             lambda row, tid: QTimer.singleShot(0, lambda: self.insert_template(row, tid))
         )
 
-        self._shortcut("Ctrl+S", lambda: self.save(post=False))
-        self._shortcut("Ctrl+Return", lambda: self.save(post=True))
-        self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
-        self._shortcut("Ctrl+Shift+Return", self.post_and_new)
-        self._shortcut("Ctrl+Shift+Enter", self.post_and_new)
+        bind(self, "save", lambda: self.save(post=False))
+        bind(self, "post", lambda: self.save(post=True))
+        bind(self, "post_and_new", self.post_and_new)
         # Ins and F9 also work while a cell is being edited (in 1C-style entry an editor
         # is almost always open); Del inside an editor deletes text, so it does not.
-        self._grid_shortcut("Ins", self._insert_row, while_editing=True)
-        self._grid_shortcut("F9", self._duplicate_row, while_editing=True)
-        self._grid_shortcut("Del", self._remove_row)
-        self._grid_shortcut("Ctrl+V", self.paste)  # inside a cell editor: its own paste
-        self._grid_shortcut("Ctrl+C", self.copy)
+        bind(self.table, "insert", self._insert_row)
+        bind(self.table, "duplicate_row", self._duplicate_row)
+        bind(self.table, "delete", self._remove_row)
+        bind(self.table, "paste_rows", self.paste)  # inside a cell editor: its own paste
+        bind(self.table, "copy_rows", self.copy)
 
     def _wire_dirty(self) -> None:
         self.model.changed.connect(self._changed)
@@ -347,29 +345,3 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         """Enter in the title, date, book or operation amount goes on as Tab does."""
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
-
-    def _insert_row(self) -> None:
-        if self.model.read_only:
-            return
-        self._finish_editing()
-        cur = self.table.currentIndex()
-        row = self.model.insert_row(cur.row() + 1 if cur.isValid() else None)
-        idx = self.model.index(row, DT)
-        self.table.setCurrentIndex(idx)
-        self.table.edit(idx)
-
-    def _duplicate_row(self) -> None:
-        cur = self.table.currentIndex()
-        if self.model.read_only or not cur.isValid():
-            return
-        self._finish_editing()
-        row = self.model.duplicate_row(cur.row())
-        self.table.setCurrentIndex(self.model.index(row, cur.column()))
-
-    def _remove_row(self) -> None:
-        cur = self.table.currentIndex()
-        if self.model.read_only or not cur.isValid():
-            return
-        self.model.remove_row(cur.row())
-        row = min(cur.row(), self.model.rowCount() - 1)
-        self.table.setCurrentIndex(self.model.index(row, cur.column()))

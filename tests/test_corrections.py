@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from typing import Any
 
 import pytest
 
@@ -9,13 +10,15 @@ from modern_gl.domain.errors import PeriodClosedError, ValidationError
 from modern_gl.reporting.reports import trial_balance
 
 
-def audit(conn, doc_id, action):
+def audit(conn, doc_id, action) -> dict[str, Any]:
+    """The copy the action left in the journal of actions (it must be there)."""
     row = conn.execute(
         "SELECT details FROM audit_events WHERE entity = 'document' AND entity_id = ? "
         "AND action = ?",
         (doc_id, action),
     ).fetchone()
-    return json.loads(row[0]) if row else None
+    assert row is not None, (doc_id, action)
+    return json.loads(row[0])
 
 
 def osv_721(conn, cid):

@@ -9,7 +9,7 @@ from modern_gl.application.inventory import STANDARD_VAT_RATE, ReceiptLine, Sale
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.reporting.trade import PURCHASE, SALE, trade_documents
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 
 @pytest.fixture

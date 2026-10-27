@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from modern_gl.application.bank.balance import account_balance
 from modern_gl.application.bank.operations import IN, OUT, BankLine, allocate
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import fill_subconto, pad_subconto
 from modern_gl.infrastructure.db import Connection
 
 # a settlement account the payment pays off (60.1 when paying out, 62.1 when money comes in)
@@ -25,7 +25,7 @@ def counterparty_balance(
     return account_balance(conn, company_id, account_id, counterparty_id, day)
 
 
-def payment_lines(
+def payment_lines(  # noqa: PLR0913 one payment's facts, keyword-only
     conn: Connection,
     company_id: int,
     *,
@@ -45,8 +45,7 @@ def payment_lines(
     advance line takes the line's subconto in their places on the advance account — the
     contract, an order (D124) — by kind; the counterparty is put in by the operation."""
     sc = tuple(pad_subconto(subconto))
-    settles = SETTLES.get(account_type or "") == direction and counterparty_id is not None
-    if not settles:
+    if SETTLES.get(account_type or "") != direction or counterparty_id is None:  # not settling
         number = invoices[0][0] if len(invoices) == 1 else ""
         return [BankLine(account_id, amount, sc, number)]
     owed = [amount if still is None else still for _, still in invoices]
@@ -58,7 +57,6 @@ def payment_lines(
     ]
     if not left:
         return lines
-    assert counterparty_id is not None
     balance = counterparty_balance(conn, company_id, account_id, counterparty_id, day)
     debt = (-balance if direction == OUT else balance) - sum(paid)
     cover = max(0, min(left, debt))
@@ -90,7 +88,7 @@ def carried_over(
         "WHERE company_id = ? AND id = ?",
         (company_id, account_id),
     ).fetchone()
-    return tuple(by_kind.get(account[f"sc{i}_kind_id"]) for i in (1, 2, 3))  # type: ignore[return-value]
+    return fill_subconto(account, by_kind)
 
 
 @dataclass(frozen=True)

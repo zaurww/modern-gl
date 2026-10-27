@@ -4,6 +4,7 @@ ledger's input in one place — `typed_posting` (debt 12)."""
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 import pytest
 
@@ -43,7 +44,7 @@ def test_a_typed_line_in_minor_units_becomes_the_ledgers_input():
 
 
 def test_the_form_and_the_quick_line_give_the_same_input():
-    fields = dict(debit=11, credit=22, amount=500, memo="Аренда", invoice="MT2")
+    fields: dict[str, Any] = dict(debit=11, credit=22, amount=500, memo="Аренда", invoice="MT2")
     assert typed_posting(1, PostingRow(**fields)) == typed_posting(1, QuickLine(**fields))
 
 

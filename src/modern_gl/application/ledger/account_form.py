@@ -13,6 +13,8 @@ from modern_gl.infrastructure.db import transaction
 
 @dataclass(frozen=True)
 class AccountForm:
+    """What the account's window holds: saved as one scenario by `save_account_form`."""
+
     code: str
     name: str
     parent_id: int | None = None  # a new account only: under which
@@ -27,6 +29,8 @@ class AccountForm:
 
 
 class AccountFormCommands(ChartCommands, SubcontoCommands):
+    """Use case of the account's window: add or change an account in one transaction."""
+
     def save_account_form(self, company_id: int, account_id: int | None, form: AccountForm) -> int:
         """Add the account (`account_id` None) or change it; returns its id. The first
         subaccount turns a plain parent into a group."""

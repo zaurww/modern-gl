@@ -4,16 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from modern_gl.application.common import insert, pad_subconto
+from modern_gl.application.common import pad_subconto
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.application.ledger.inputs import TemplateLine
 from modern_gl.domain import formula as formulas
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import insert, transaction
 
 
 class TemplateCommands(LedgerBase):
+    """Use cases of entry templates: postings with amount formulas, saved for reuse."""
+
     def save_template(
         self,
         company_id: int,
@@ -77,6 +79,7 @@ class TemplateCommands(LedgerBase):
         return template_id
 
     def delete_template(self, company_id: int, template_id: int) -> None:
+        """Delete a template (documents made from it stay); NotFoundError if it is not there."""
         with transaction(self.conn):
             row = self.conn.execute(
                 "SELECT name FROM entry_templates WHERE company_id = ? AND id = ?",

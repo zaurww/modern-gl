@@ -14,9 +14,9 @@ from modern_gl.desktop import portal_login
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.tax_id import resident_tax_id
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-TITLE = "Портал e-taxes"
+TITLE = N_("Портал e-taxes")
 
 
 def ask_tax_id(parent: QWidget, current: str = "") -> str | None:

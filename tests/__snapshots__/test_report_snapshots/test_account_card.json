@@ -1,0 +1,23 @@
+{
+  "currency_closing": {},
+  "currency_opening": {},
+  "lines": [
+    {
+      "balance": 700000,
+      "corr_code": "222",
+      "corr_id": 4,
+      "credit": 200000,
+      "currency": "",
+      "currency_credit": 0,
+      "currency_debit": 0,
+      "debit": 0,
+      "doc_date": "2026-02-04",
+      "document_id": 5,
+      "invoice": "",
+      "invoice_kind": "",
+      "memo": "",
+      "number": 5
+    }
+  ],
+  "opening": 900000
+}

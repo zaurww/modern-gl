@@ -16,7 +16,7 @@ from modern_gl.desktop.inventory_document_page import (
     InventoryDocumentPage,
 )
 from modern_gl.desktop.session import Session
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 
 def page_of(shop: Shop, conn, qtbot, document_id=None, doc_type="receipt"):
@@ -54,6 +54,7 @@ def test_the_supplier_in_the_header_goes_to_every_line(conn, qtbot):
     model.insert_row()  # a new line takes the header's supplier too
     assert model.rows[1].offset_subconto == model.rows[0].offset_subconto
     assert page.save(post=True), page.error.text()
+    assert page.doc is not None
     assert [p[:3] for p in shop.postings(page.doc.id)] == [("41", "60", 3_000), ("19", "60", 540)]
     line = conn.execute(
         "SELECT dt_sc1, ct_sc1, ct_sc2 FROM postings WHERE document_id = ? AND line_no = 1",

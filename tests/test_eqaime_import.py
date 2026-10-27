@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import date
 from decimal import Decimal
 
@@ -16,50 +15,13 @@ from modern_gl.infrastructure.etaxes import (
     APPROVED,
     EtaxesClient,
     PortalError,
-    Response,
-    TokenExpired,
+    TokenExpiredError,
 )
-from tests.test_sales import Shop, make_shop
+from tests.helpers.eqaime import SUPPLIER_TIN, FakePortal, fake_token, received
+from tests.helpers.qt import table_item
+from tests.helpers.sales import Shop, make_shop
 
-SUPPLIER_TIN = "1700000001"
 CUSTOMER_TIN = "1234567891"
-
-
-def received(number: str = "MT2603000111", tin: str = SUPPLIER_TIN) -> tuple[dict, dict]:
-    """A supplier's e-qaimə: 10 printers 120.00 (VAT base 120.00) and a repair 50.00
-    (code 99…: a service, VAT base 50.00): VAT 21.60 + 9.00."""
-    row = {
-        "id": "a1",
-        "sourceSystem": "avis",
-        "serialNumber": number,
-        "status": "approved",
-        "kind": "defaultInvoice",
-        "createdAt": "2026-03-05T15:32:56.394",
-        "sender": {"tin": tin, "name": "Təchizatçı MMC"},
-    }
-    detail = {
-        **row,
-        "items": [
-            {
-                "productName": "Printer",
-                "productGroup": {"code": "8443321000"},
-                "unit": "ədəd",
-                "quantity": 10,
-                "pricePerUnit": 12,
-                "cost": 120.0,
-                "vat18": 120.0,
-            },
-            {
-                "productName": "Printerin təmiri",
-                "productGroup": {"code": "9995110000"},
-                "unit": "xidmət",
-                "quantity": 1,
-                "cost": 50,
-                "vat18": 50,
-            },
-        ],
-    }
-    return row, detail
 
 
 @pytest.fixture
@@ -228,28 +190,6 @@ def test_import_a_sale_and_skip_a_return(shop, conn):
     shop.inventory.post_document(shop.company_id, draft)
 
 
-class FakePortal:
-    """Answers like new.e-taxes.gov.az: pages of 50, one status per request."""
-
-    def __init__(self, rows: dict[str, list[dict]], details: dict[str, dict]) -> None:
-        self.rows, self.details, self.calls = rows, details, []
-
-    def __call__(self, method, url, headers, body):
-        self.calls.append((method, url, headers, json.loads(body) if body else None))
-        if headers["x-authorization"] != "Bearer good":
-            return Response(401, b"")
-        if method == "POST":
-            request = json.loads(body)
-            rows = self.rows.get(request["statuses"][0], [])
-            page = rows[request["offset"] : request["offset"] + request["maxCount"]]
-            more = request["offset"] + request["maxCount"] < len(rows)
-            return Response(200, json.dumps({"invoices": page, "hasMore": more}).encode())
-        invoice_id = url.rsplit("/", 1)[1].split("?")[0]
-        if invoice_id not in self.details:
-            return Response(500, b"INTERNAL_SERVICE_EXCEPTION")
-        return Response(200, json.dumps({"invoice": self.details[invoice_id]}).encode())
-
-
 def test_client_pages_statuses_and_reads_details():
     rows = [{"id": str(i), "serialNumber": f"MT{i}"} for i in range(60)]
     portal = FakePortal({"approved": rows, "approvedBySystem": [{"id": "x"}]}, {"7": {"id": "7"}})
@@ -263,17 +203,8 @@ def test_client_pages_statuses_and_reads_details():
     assert client.detail("7", "avis") == {"id": "7"}
     with pytest.raises(PortalError, match="портал ответил 500"):
         client.detail("8", "avis")
-    with pytest.raises(TokenExpired):
+    with pytest.raises(TokenExpiredError):
         list(EtaxesClient("old", send=portal).invoices(True, date(2026, 3, 1), date(2026, 3, 2)))
-
-
-def fake_token(voen: str = "1402375141", name: str = "ДЕМО MMC", lifetime: int = 600) -> str:
-    import base64
-    import time
-
-    payload = {"voen": voen, "organizationName": name, "exp": int(time.time()) + lifetime}
-    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")
-    return f"head.{body}.sign"
 
 
 def test_token_helpers():
@@ -455,11 +386,11 @@ def test_import_dialog_adds_counterparties_with_edited_names(shop, conn, qtbot):
     assert dialog.parties.isHidden()  # nothing loaded yet
     dialog.show_invoices(invoices)
     assert not dialog.parties.isHidden() and dialog.parties.rowCount() == 1
-    texts = [dialog.parties.item(0, c).text() for c in range(4)]
+    texts = [table_item(dialog.parties, 0, c).text() for c in range(4)]
     assert texts == [SUPPLIER_TIN, long_name, "KOMPYUTER DÜNYASI MMC", "2"]
     assert dialog.parties_title.text() == "Новые контрагенты: 1"
 
-    dialog.parties.item(0, 2).setText("  Kompyuter   Dünyası ")
+    table_item(dialog.parties, 0, 2).setText("  Kompyuter   Dünyası ")
     dialog.add_parties()
     supplier = conn.execute(
         "SELECT name FROM subconto_values WHERE tax_id = ?", (SUPPLIER_TIN,)
@@ -590,7 +521,7 @@ def test_import_dialog_renames_a_counterparty(shop, conn, qtbot):
     assert dialog.renames.isHidden()
     dialog.show_invoices([_named("MT7", "2026-03-01", '"BETA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ')])
     assert not dialog.renames.isHidden() and dialog.renames.rowCount() == 1
-    texts = [dialog.renames.item(0, c).text() for c in range(5)]
+    texts = [table_item(dialog.renames, 0, c).text() for c in range(5)]
     assert texts == [
         SUPPLIER_TIN,
         '"ALFA" MMC',
@@ -599,7 +530,7 @@ def test_import_dialog_renames_a_counterparty(shop, conn, qtbot):
         "BETA MMC",
     ]
     assert dialog.renames_title.text() == "Название изменилось: 1"
-    dialog.renames.item(0, 0).setCheckState(Qt.CheckState.Unchecked)
+    table_item(dialog.renames, 0, 0).setCheckState(Qt.CheckState.Unchecked)
     dialog.apply_renames()
     row = conn.execute(
         "SELECT name, legal_name FROM subconto_values WHERE id = ?", (shop.supplier[0],)

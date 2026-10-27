@@ -15,9 +15,9 @@ from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWi
 from modern_gl.desktop import icons
 from modern_gl.desktop.theme import P
 from modern_gl.domain.dates import month_title
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-WEEKDAYS = ("Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс")
+WEEKDAYS = (N_("Пн"), N_("Вт"), N_("Ср"), N_("Чт"), N_("Пт"), N_("Сб"), N_("Вс"))
 CELL_W, CELL_H, ROW_GAP, HEAD_H = 34, 32, 2, 24
 RADIUS = 7
 WEEKS = 6  # always six: the panel keeps its height from month to month

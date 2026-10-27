@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import date
 
 from PySide6.QtCore import QModelIndex, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
@@ -54,15 +53,17 @@ from modern_gl.desktop.bank_page.levels import (
 from modern_gl.desktop.bank_page.reconcile import ReconcileBar
 from modern_gl.desktop.period_field import PeriodField
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     EmptyState,
     button,
+    caption,
     icon_button,
     ru_date,
     segments,
 )
 from modern_gl.domain.periods import MONTH, span_period
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 
 
@@ -121,28 +122,12 @@ class BankPage(BankActions):
         }
         for empty in self.empty_states.values():
             self.stack.addWidget(empty)
-        # Enter opens a row of the table only: in the entry line it goes on through it
-        for shortcut in self.findChildren(QShortcut):
-            if shortcut.key().toString() in ("Return", "Enter"):
-                shortcut.setEnabled(False)
-        for keys in ("Return", "Enter"):
-            shortcut = QShortcut(QKeySequence(keys), self.table)
-            shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
-            shortcut.activated.connect(self._drill_current)
-        delete = QShortcut(QKeySequence("Del"), self.table)  # the marked lines
-        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
-        delete.activated.connect(self.delete_selected)
+        bind(self.table, "delete", self.delete_selected)  # the marked lines
         # an account or a statement opens with one click: the lists are the way in
         self.table.clicked.connect(self._clicked)
-        for keys, fn in (
-            ("Backspace", self.up),
-            ("Alt+Up", self.up),
-            ("Alt+Left", lambda: self.step(-1)),
-            ("Alt+Right", lambda: self.step(1)),
-        ):
-            shortcut = QShortcut(QKeySequence(keys), self)
-            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            shortcut.activated.connect(fn)
+        bind(self, "up", self.up)
+        bind(self, "previous", lambda: self.step(-1))
+        bind(self, "next", lambda: self.step(1))
         self.refresh()
 
     # ---- building ---------------------------------------------------------------------
@@ -176,16 +161,15 @@ class BankPage(BankActions):
         self.period_field = PeriodField(span_period(MONTH, today), today)
         self.period_field.changed.connect(self.refresh)
         box, self.view_buttons = segments(
-            [(DAYS, "По дням"), (LINES, "Все операции")], self._view_chosen
+            [(DAYS, N_("По дням")), (LINES, N_("Все операции"))], self._view_chosen
         )
         self.view_buttons[DAYS].setChecked(True)
         self.bar_box = QWidget()
         bar = QHBoxLayout(self.bar_box)
         bar.setContentsMargins(0, 0, 0, 0)
         bar.setSpacing(8)
-        caption = QLabel(tr("Период"))
-        caption.setObjectName("secondary")
-        for widget in (caption, self.period_field, box):
+        label = caption(tr("Период"))
+        for widget in (label, self.period_field, box):
             bar.addWidget(widget)
         bar.addStretch(1)
         root = self.layout()
@@ -223,8 +207,7 @@ class BankPage(BankActions):
             return
         for i, (text, level) in enumerate(steps):
             if i == len(steps) - 1:
-                label = QLabel(text)
-                label.setObjectName("secondary")
+                label = caption(text)
                 self.crumbs.addWidget(label)
                 continue
             link = button(text, "crumb")
@@ -305,6 +288,17 @@ class BankPage(BankActions):
 
     def title(self) -> str:
         return tr("Банк")
+
+    def _bind_open(self) -> None:
+        """Enter opens a row of the table only: in the entry line it goes on through it."""
+        bind(self.table, "open_row", self._drill_current)
+
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
+
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh()
 
     def fetch(self, conn: Connection) -> BankData:
         return self.job()(conn)

@@ -8,7 +8,7 @@ from fractions import Fraction
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QLineEdit
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -21,19 +21,14 @@ from modern_gl.desktop.reports_page import CardPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import CURRENCY_OPTIONAL, parse_rate
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import focused, running_app
 
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
-    )
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
 
 @pytest.fixture
 def session(qtbot):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("ООО Валюта")
@@ -55,7 +50,9 @@ def session(qtbot):
 
 def ids(s: Session):
     cat = s.catalog
-    bank = next(v.id for v in cat.all_values(cat.by_code["52"].sc_kinds[0]) if v.currency_id)
+    kind = cat.by_code["52"].sc_kinds[0]
+    assert kind is not None  # 52: the bank account
+    bank = next(v.id for v in cat.all_values(kind) if v.currency_id)
     return cat.by_code["52"].id, cat.by_code["50"].id, bank
 
 
@@ -78,6 +75,7 @@ def test_currency_line_follows_the_rate_of_the_document_date(session, qtbot):
     assert m.rows[0].amount == 171_000
 
     assert page.save(post=True), page.error.text()
+    assert page.doc is not None
     [p] = page.doc.postings
     usd = session.ledger.currency_id(session.company_id, "USD")
     assert (p.amount, p.currency_amount, p.currency_id) == (171_000, 100_000, usd)
@@ -145,7 +143,8 @@ def test_currencies_page_loads_cbar_rates_and_revalues(session, qtbot):
     assert page.load_rates(date(2026, 3, 30), date(2026, 3, 31)) == 2
     usd = session.ledger.currency_id(session.company_id, "USD")
     assert session.catalog.currencies[usd].code == "USD"
-    assert page.currency().code == "EUR"  # first in the list
+    chosen = page.currency()
+    assert chosen is not None and chosen.code == "EUR"  # first in the list
     page.refresh(select=usd)
     assert page.model.rows[0].rate_date == "2026-03-31"
     assert page.model.index(0, 3).data() == "ЦБА (cbar.az)"
@@ -166,7 +165,7 @@ def test_currencies_page_loads_cbar_rates_and_revalues(session, qtbot):
 
 
 def test_no_connection_is_reported_once(session, qtbot):
-    from modern_gl.infrastructure.cbar import RatesUnavailable
+    from modern_gl.infrastructure.cbar import RatesUnavailableError
 
     page = CurrenciesPage(session)
     qtbot.addWidget(page)
@@ -174,7 +173,7 @@ def test_no_connection_is_reported_once(session, qtbot):
 
     def offline(day):
         calls.append(day)
-        raise RatesUnavailable("Не удалось связаться с сайтом ЦБА (cbar.az): offline")
+        raise RatesUnavailableError("Не удалось связаться с сайтом ЦБА (cbar.az): offline")
 
     page.fetch = offline
     assert page.load_rates(date(2026, 3, 1), date(2026, 3, 10)) == 0
@@ -228,7 +227,7 @@ def type_into_cell(qtbot, page: DocumentPage, row: int, col: int, text: str) -> 
     idx = page.model.index(row, col)
     page.table.setCurrentIndex(idx)
     page.table.edit(idx)
-    editor = QApplication.focusWidget()
+    editor = focused(QLineEdit)
     editor.setText(text)
     qtbot.keyClick(editor, Qt.Key.Key_Return)
 

@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application import attention
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.books import COMMON, book_params
 from modern_gl.application.invoices import IN_PERIOD, UNPAID, InvoiceRow, gathered_invoices
@@ -37,7 +38,7 @@ def invoice_report(
     return list(gathered_invoices(conn, company_id, params, only=only).values())
 
 
-@attention_source
+@attention_source(attention.UNPAID_INVOICES)
 def unpaid_invoices(conn: Connection, company_id: int, day: str) -> list[Attention]:
     """«Bu gün» (D86): e-qaimə not settled on the day — to suppliers, and from buyers."""
     rows = invoice_report(conn, company_id, day, day, open_only=True)

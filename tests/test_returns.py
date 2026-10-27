@@ -22,7 +22,7 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
 from modern_gl.reporting.trade import PURCHASE, trade_documents
 from modern_gl.reporting.vat_register import vat_register
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 Q = QUANTITY_FACTOR
 
@@ -172,6 +172,7 @@ def test_the_return_is_filled_from_its_purchase(shop, conn, qtbot):
     assert row.amount == 3_600  # the price stays 12.00: 3 back, 36.00
     page.invoice.setText("RT0003")
     assert page.save(post=True), page.error.text()
+    assert page.doc is not None
     assert [p[:3] for p in shop.postings(page.doc.id)] == [
         ("60", "41", 3_600),
         ("80", "41", 300),

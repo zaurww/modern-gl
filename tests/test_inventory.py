@@ -1,10 +1,9 @@
 import sqlite3
-from dataclasses import dataclass
 from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -54,20 +53,8 @@ from modern_gl.reporting.inventory import (
     warehouse_choices,
 )
 from modern_gl.reporting.reports import trial_balance
-
-
-@dataclass
-class InventoryDemo:
-    inventory: Inventory
-    company_id: int
-    item: int
-    other_item: int
-    main: int
-    reserve: int
-    inventory_account: int
-    payable_account: int
-    expense_account: int
-    supplier: int
+from tests.helpers.inventory import InventoryDemo
+from tests.helpers.qt import cell_editor, completer_of, popup_of
 
 
 def test_inventory_migration_upgrades_v6_database(tmp_path):
@@ -96,48 +83,6 @@ def test_inventory_migration_upgrades_v6_database(tmp_path):
         upgraded.close()
 
 
-@pytest.fixture
-def inventory_demo(ledger, conn) -> InventoryDemo:
-    company_id = ledger.create_company("Склад")
-    item_kind = ledger.add_subconto_kind(company_id, "item", "Товары")
-    warehouse_kind = ledger.add_subconto_kind(company_id, "warehouse", "Склады")
-    counterparty_kind = ledger.add_subconto_kind(company_id, "counterparty", "Контрагенты")
-    inventory_account = ledger.add_account(
-        company_id,
-        "41",
-        "Товары",
-        subconto=[item_kind, warehouse_kind],
-        account_class="asset",
-    )
-    payable_account = ledger.add_account(
-        company_id,
-        "60",
-        "Поставщики",
-        subconto=[counterparty_kind],
-        account_class="liability",
-    )
-    expense_account = ledger.add_account(company_id, "46", "Себестоимость", account_class="expense")
-    supplier = ledger.add_subconto_value(company_id, counterparty_kind, "Поставщик")
-    inventory = Inventory(conn, actor="test")
-    unit = inventory.add_unit(company_id, "шт", "Штука", precision=3)
-    item = inventory.add_item(company_id, "Товар A", unit, inventory_account, "A")
-    other_item = inventory.add_item(company_id, "Товар B", unit, inventory_account, "B")
-    main = inventory.add_warehouse(company_id, "Основной", "MAIN")
-    reserve = inventory.add_warehouse(company_id, "Резервный", "RESERVE")
-    return InventoryDemo(
-        inventory,
-        company_id,
-        item,
-        other_item,
-        main,
-        reserve,
-        inventory_account,
-        payable_account,
-        expense_account,
-        supplier,
-    )
-
-
 def receipt(demo: InventoryDemo, quantity="10", amount="100.00", *, item=None, warehouse=None):
     return demo.inventory.post_receipt(
         demo.company_id,
@@ -160,7 +105,7 @@ def test_quantity_is_exact_and_rejects_float():
     assert to_quantity("1 234,567") == 1_234_567_000
     assert format_quantity(to_quantity("140"), 0) == "140"
     with pytest.raises(TypeError):
-        to_quantity(1.5)
+        to_quantity(1.5)  # pyright: ignore[reportArgumentType]  # a float must be refused
     with pytest.raises(ValueError, match="больше 6"):
         to_quantity("1.0000001")
 
@@ -924,7 +869,7 @@ def _type_in_cell(qtbot, page: InventoryDocumentPage, row: int, key: str, text: 
     index = page.model.index(row, page.model.columns.index(key))
     page.table.setCurrentIndex(index)
     page.table.edit(index)
-    editor = page.table.indexWidget(index)
+    editor = cell_editor(page.table, index)
     editor.setText(text)
     qtbot.keyClick(editor, Qt.Key.Key_Tab)
 
@@ -952,10 +897,10 @@ def test_inventory_account_cell_lists_a_group_and_holds_on_it(inventory_demo, le
     index = page.model.index(0, page.model.columns.index(ACCOUNT))
     page.table.setCurrentIndex(index)
     page.table.edit(index)
-    editor = page.table.indexWidget(index)
+    editor = cell_editor(page.table, index)
     editor.setText(group.code)
     editor.textEdited.emit(editor.text())
-    popup = editor.findChild(QCompleter).popup()
+    popup = popup_of(completer_of(editor))
     assert popup.model().rowCount() == len(subs)
     assert not popup.currentIndex().isValid()  # not the first subaccount behind the back
 
@@ -998,11 +943,14 @@ def test_inventory_grid_tab_commits_adds_counterparty_and_saves_unfinished_draft
     model.setData(model.index(0, model.columns.index(ACCOUNT)), demo.payable_account)
     _type_in_cell(qtbot, page, 0, SC1, "Новый поставщик")
     qtbot.waitUntil(lambda: model.rows[0].offset_subconto[0] is not None)
-    added = session.catalog.value(model.rows[0].offset_subconto[0])
+    added_id = model.rows[0].offset_subconto[0]
+    assert added_id is not None
+    added = session.catalog.value(added_id)
     assert added.name == "Новый поставщик"
 
     model.insert_row()  # a prefilled trailing row is not a line
     assert page.save(post=False), page.error.text()
+    assert page.doc is not None
     assert page.doc.status == "draft"
     assert len(page.doc.lines) == 1
     line = page.doc.lines[0]
@@ -1191,7 +1139,7 @@ def test_posted_receipt_is_edited_in_place_and_later_documents_follow(inventory_
     edited = demo.inventory.load_document(demo.company_id, inv_doc)
     assert edited.status == "posted"
     assert edited.lines[0].id == line.id
-    # issue: 150.00 * 4 / 10 = 60.00
+    # the issue costs 150.00 × 4 / 10 = 60.00
     assert demo.inventory.load_document(demo.company_id, issue).lines[0].amount == 6_000
     # landed cost 20.00: 6 of 10 still in stock -> 12.00 to stock, 8.00 to expense
     lc_line = demo.inventory.load_document(demo.company_id, landed).lines[0]

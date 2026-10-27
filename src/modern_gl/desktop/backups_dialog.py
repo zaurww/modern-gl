@@ -11,13 +11,12 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from modern_gl.application.workspace import Workspace
+from modern_gl.desktop.preferences import Preferences
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.i18n import tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import Connection, Error
-
-MIRROR_SETTING = "backup_mirror"
 
 
 class BackupsDialog(QDialog):
@@ -58,8 +57,7 @@ class BackupsDialog(QDialog):
         self.update_texts()
 
     def _note(self, root: QVBoxLayout) -> QLabel:
-        label = QLabel()
-        label.setObjectName("secondary")
+        label = caption()
         label.setWordWrap(True)
         root.addWidget(label)
         return label
@@ -130,7 +128,7 @@ class BackupsDialog(QDialog):
     def set_mirror(self, folder: Path | None) -> None:
         self.workspace.mirror = folder
         if self.settings is not None:
-            self.settings.setValue(MIRROR_SETTING, str(folder) if folder else "")
+            Preferences(self.settings).set_backup_mirror(str(folder) if folder else "")
         self.update_texts()
 
     def backup_now(self) -> None:

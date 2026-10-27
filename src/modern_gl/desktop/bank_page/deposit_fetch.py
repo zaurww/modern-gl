@@ -7,15 +7,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 
-from PySide6.QtCore import QObject, QThread, Signal
+from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QWidget
 
 from modern_gl.application.bank import BankPlace
 from modern_gl.application.bank.deposit_import import DepositFetched, fetch_deposit
 from modern_gl.application.bank.deposit_reconciliation import changed_since
 from modern_gl.desktop import portal_login
-from modern_gl.desktop.eqaime_portal_loader import PortalLoader
 from modern_gl.desktop.portal_company import company_token
+from modern_gl.desktop.portal_worker import PortalRun, run_on_portal
 from modern_gl.desktop.session import Session
 from modern_gl.infrastructure.etaxes import EtaxesClient
 
@@ -36,8 +36,7 @@ class DepositFetch(QObject):
     ) -> None:
         super().__init__(window)
         self.window, self.s, self.sign_in, self.today = window, session, sign_in, today
-        self.worker: QThread | None = None
-        self.loader: PortalLoader | None = None
+        self.portal_run: PortalRun | None = None
 
     def start(self, first: date, last: date) -> bool:
         """Sign in (the portal's page, unless signed in already) and read the operations
@@ -47,18 +46,13 @@ class DepositFetch(QObject):
             return False
         tin = portal_login.company_tin(token)
         client, today = EtaxesClient(token), self.today
-        self.worker = QThread(self)
-        self.loader = PortalLoader(
-            lambda progress: fetch_deposit(client, first, today, tin, progress, last)
+        self.portal_run = run_on_portal(
+            self,
+            lambda progress: fetch_deposit(client, first, today, tin, progress, last),
+            self.progress.emit,
+            self.loaded.emit,
+            self._failed,
         )
-        self.loader.moveToThread(self.worker)
-        self.worker.started.connect(self.loader.run)
-        self.loader.progress.connect(self.progress.emit)
-        self.loader.loaded.connect(self.loaded.emit)
-        self.loader.failed.connect(self._failed)
-        for signal in (self.loader.loaded, self.loader.failed):
-            signal.connect(self.worker.quit)
-        self.worker.start()
         return True
 
     def _failed(self, message: str) -> None:

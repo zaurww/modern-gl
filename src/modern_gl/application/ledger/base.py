@@ -19,6 +19,9 @@ def account_label(account: Row) -> str:
 
 
 class LedgerBase:
+    """The connection, the author of changes (`actor`, written to `audit_events`) and the
+    lookups every use case shares; a lookup raises NotFoundError, never writes."""
+
     def __init__(self, conn: Connection, actor: str = "local") -> None:
         self.conn = conn
         self.actor = actor

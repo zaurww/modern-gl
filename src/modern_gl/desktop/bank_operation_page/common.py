@@ -20,7 +20,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import ru_date
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 NONE = "—"
 # the line's account suggests the kind of a counterparty's operation
@@ -34,7 +34,7 @@ WITH_COUNTERPARTY = (SUPPLIER, CUSTOMER, OTHER)
 SEVERAL = "several"  # the list item «several e-qaimə…»
 FROM_BANK = "from_bank"  # the ƏDV part from this account to the supplier's deposit
 # an e-qaimə the books do not have yet: an imported draft, or only seen on the portal
-SOURCES = {DRAFT: "черновик", PORTAL: "с портала"}
+SOURCES = {DRAFT: N_("черновик"), PORTAL: N_("с портала")}
 
 
 FIELD_WIDTH = 460  # the fields on the cursor's path

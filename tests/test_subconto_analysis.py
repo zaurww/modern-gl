@@ -20,7 +20,7 @@ from __future__ import annotations
 import pytest
 
 from modern_gl.reporting.reports import subconto_analysis
-from tests.test_travel_agency import JUNE, _post_cases, make_agency
+from tests.helpers.travel_agency import JUNE, _post_cases, make_agency
 
 
 @pytest.fixture

@@ -30,10 +30,13 @@ from modern_gl.infrastructure.company_file import (
     copy_file,
     file_version,
     first_company,
+    hold_while_open,
     keep_only,
     make_self_contained,
     open_company,
+    release_lock,
     sidecars,
+    take_lock,
 )
 from modern_gl.infrastructure.db import (
     Connection,
@@ -160,13 +163,25 @@ class Workspace:
     def backup_folder(self, company_file: Path) -> Path:
         return backup.folder_for(self.folder, company_file)
 
-    def open(self, path: Path) -> tuple[Connection, int]:
+    def open(self, path: Path, *, lock: bool = True) -> tuple[Connection, int]:
         """Open a company file; a file about to get a newer schema is backed up first
         (a failed update: UpgradeError, the file as it was), a file of a newer program is
         refused untouched (NewerFileError), and a damaged file is refused
         (backup.BackupError) so it can be restored. Its documents are written in its
-        language of documents from now on (D152)."""
-        conn, company_id = self._updated(Path(path))
+        language of documents from now on (D152). `lock`: the program's own open — a file
+        another copy of the program holds is refused (FileInUseError), and holds it until
+        closed (D169); a brief write beside it (AI drafts, the API)
+        takes no lock."""
+        path = Path(path)
+        held = take_lock(path) if lock else None
+        try:
+            conn, company_id = self._updated(path)
+        except BaseException:
+            if held is not None:
+                release_lock(held)
+            raise
+        if held is not None:
+            hold_while_open(conn, held)
         try:
             open_in(conn, company_id, write=True)
         except BaseException:

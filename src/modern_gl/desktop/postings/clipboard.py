@@ -15,7 +15,7 @@ from modern_gl.desktop.postings.columns import (
     DT,
     InCurrency,
     PasteResult,
-    UnknownValue,
+    UnknownValueError,
     column_role,
     header_columns,
 )
@@ -33,7 +33,7 @@ from modern_gl.i18n import tr
 class PostingsClipboard(PostingsBase):
     def parse(self, row: int, col: int, text: str):
         """The value for a cell from what was typed or pasted; None for an empty text.
-        Raises LookupError / ValueError (UnknownValue for a name not in a directory)."""
+        Raises LookupError / ValueError (UnknownValueError for a name not in a directory)."""
         text = text.strip()
         side, pos = column_role(col)
         if side == "invoice":
@@ -69,7 +69,7 @@ class PostingsClipboard(PostingsBase):
             raise ValueError(tr("у счёта нет этого субконто: {text}", text=text))
         value = self.catalog.resolve_value(kind, text, self.owner_at(row, col))
         if value is None:
-            raise UnknownValue(kind, text)
+            raise UnknownValueError(kind, text)
         return value
 
     def _in_currency(self, text: str) -> InCurrency | None:
@@ -148,7 +148,7 @@ class PostingsClipboard(PostingsBase):
     def _paste_cell(self, row, col, text, n, result) -> None:
         try:
             value = self.parse(row, col, text)
-        except UnknownValue as e:
+        except UnknownValueError as e:
             result.unknown.append((row, col, e.kind_id, e.text))
             return
         except (LookupError, ValueError, TypeError, ValidationError) as e:

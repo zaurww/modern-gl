@@ -151,8 +151,7 @@ def vat_receipts(
             if e.day >= since:  # nothing is owed before the company pays ƏDV
                 owed += e.amount
                 line.tax += e.amount if e.day >= date_from else 0
-        if issue(row, line, sale, received, date_from, date_to):
-            assert sale is not None
+        if sale is not None and issue(row, line, sale, received, date_from, date_to):
             if _to_account(facts, sale):
                 row.reason = row.reason or VAT_TO_ACCOUNT
         else:

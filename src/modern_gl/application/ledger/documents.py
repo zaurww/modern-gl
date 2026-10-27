@@ -5,8 +5,9 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import date
 
-from modern_gl.application.common import insert, now, pad_subconto, with_reason
+from modern_gl.application.common import now, with_reason
 from modern_gl.application.ledger.inputs import PostingInput
+from modern_gl.application.ledger.posting_record import INSERT_POSTING, PostingRecord
 from modern_gl.application.ledger.validation import PostingChecks
 from modern_gl.application.queries import DocumentOwner, document_owner, journal_drafts
 from modern_gl.domain.dates import iso_date
@@ -15,10 +16,8 @@ from modern_gl.domain.errors import (
     NotFoundError,
     ValidationError,
 )
-from modern_gl.domain.invoice import KINDS, normalize_invoice
-from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import IntegrityError, Row, transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, insert, transaction
 
 # What a module tells the user when the journal refuses one of its GL documents:
 # (role, the GL document's number, the module document's number or None) -> text. A module
@@ -29,6 +28,8 @@ OWNER_TEXTS: dict[str, OwnerText] = {}
 
 
 def explain_owner(module: str, text: OwnerText) -> None:
+    """Register a module's words for a refusal to change its GL document (see OWNER_TEXTS);
+    the module calls it on import."""
     OWNER_TEXTS[module] = text
 
 
@@ -46,6 +47,9 @@ def _owner_text(role: str, number: int, owner: DocumentOwner) -> str:
 
 
 class DocumentCommands(PostingChecks):
+    """Use cases of GL documents: drafts, posting, unposting, deleting and storno (D5, D19,
+    D32). Each is one transaction; a document a module owns is refused here."""
+
     def create_draft(
         self,
         company_id: int,
@@ -54,9 +58,13 @@ class DocumentCommands(PostingChecks):
         memo: str = "",
         layer: str = "common",
     ) -> int:
+        """A new draft with its postings (amounts in manat, see PostingInput); returns its id.
+        A malformed amount is a ValidationError naming the line; the accounting checks run
+        when it is posted. Audited."""
         with transaction(self.conn):
             doc_id = self._insert_document(company_id, doc_date, memo, layer)
             self._insert_postings(company_id, doc_id, postings)
+            self._show_books_for(company_id, layer)
             self._audit(company_id, "document", doc_id, "create_draft", {})
         return doc_id
 
@@ -69,6 +77,8 @@ class DocumentCommands(PostingChecks):
         memo: str = "",
         layer: str = "common",
     ) -> None:
+        """Replace a draft's date, memo, layer and postings. ValidationError for a posted
+        document. Audited."""
         with transaction(self.conn):
             self._require_draft(self._document(company_id, doc_id))
             self.conn.execute(
@@ -77,9 +87,11 @@ class DocumentCommands(PostingChecks):
             )
             self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc_id,))
             self._insert_postings(company_id, doc_id, postings)
+            self._show_books_for(company_id, layer)
             self._audit(company_id, "document", doc_id, "update_draft", {})
 
     def delete_draft(self, company_id: int, doc_id: int) -> None:
+        """Delete a draft (a posted document must be unposted first: ValidationError)."""
         with transaction(self.conn):
             self._require_draft(self._document(company_id, doc_id))
             self.delete_document(company_id, doc_id)
@@ -130,6 +142,7 @@ class DocumentCommands(PostingChecks):
             self._require_changeable(company_id, doc)
             snapshot = self._snapshot(doc)
             self._rewrite(company_id, doc_id, doc_date, postings, memo, layer)
+            self._show_books_for(company_id, layer)
             self._audit(company_id, "document", doc_id, "repost", snapshot)
 
     def rewrite_linked(
@@ -160,44 +173,17 @@ class DocumentCommands(PostingChecks):
     ) -> bool:
         if doc["doc_date"] != iso_date(doc_date) or doc["memo"] != memo:
             return False
-        stored = [
-            (
-                p["debit_account_id"],
-                p["credit_account_id"],
-                p["amount"],
-                (p["dt_sc1"], p["dt_sc2"], p["dt_sc3"]),
-                (p["ct_sc1"], p["ct_sc2"], p["ct_sc3"]),
-                p["memo"],
-                p["currency_id"],
-                p["currency_amount"],
-                p["invoice"],
-                p["invoice_kind"],
-                p["pays_vat"],
-            )
-            for p in self.conn.execute(
-                "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
-            )
-        ]
+        stored = [PostingRecord.from_row(p) for p in self._posting_rows(doc["id"])]
         try:
-            wanted = [
-                (
-                    p.debit_account_id,
-                    p.credit_account_id,
-                    to_minor(p.amount),
-                    pad_subconto(p.debit_subconto),
-                    pad_subconto(p.credit_subconto),
-                    p.memo,
-                    p.currency_id,
-                    None if p.currency_id is None else to_minor(p.currency_amount or 0),
-                    normalize_invoice(p.invoice),
-                    _invoice_kind(p),
-                    int(p.pays_vat),
-                )
-                for p in postings
-            ]
+            wanted = [PostingRecord.from_input(p, n) for n, p in enumerate(postings, start=1)]
         except (TypeError, ValueError, ValidationError):
             return False
         return stored == wanted
+
+    def _posting_rows(self, doc_id: int) -> list[Row]:
+        return self.conn.execute(
+            "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc_id,)
+        ).fetchall()
 
     def _rewrite(
         self,
@@ -276,10 +262,8 @@ class DocumentCommands(PostingChecks):
     def _snapshot(self, doc: Row) -> dict:
         """Everything needed to see later what a removed / unposted document contained."""
         postings = [
-            {k: p[k] for k in p.keys() if k not in ("id", "company_id", "document_id")}
-            for p in self.conn.execute(
-                "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
-            )
+            {"line_no": p["line_no"], **PostingRecord.from_row(p).as_dict()}
+            for p in self._posting_rows(doc["id"])
         ]
         header = {
             k: doc[k]
@@ -288,6 +272,8 @@ class DocumentCommands(PostingChecks):
         return {**header, "postings": postings}
 
     def post(self, company_id: int, doc_id: int) -> None:
+        """Post a draft: its postings are checked (balanced accounts, subconto, currency) and
+        the period must be open — ValidationError / PeriodClosedError otherwise. Audited."""
         with transaction(self.conn):
             self._post(company_id, doc_id)
 
@@ -345,6 +331,7 @@ class DocumentCommands(PostingChecks):
         with transaction(self.conn):
             doc_id = self._insert_document(company_id, doc_date, memo, layer)
             self._insert_postings(company_id, doc_id, postings)
+            self._show_books_for(company_id, layer)
             self._post(company_id, doc_id)
         return doc_id
 
@@ -370,17 +357,10 @@ class DocumentCommands(PostingChecks):
                 orig["layer"],
                 reversal_of=doc_id,
             )
-            self.conn.execute(
-                """
-                INSERT INTO postings (company_id, document_id, line_no, debit_account_id,
-                    credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, currency_amount, invoice, invoice_kind, pays_vat)
-                SELECT company_id, ?, line_no, debit_account_id, credit_account_id, -amount,
-                    dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo,
-                    currency_id, -currency_amount, invoice, invoice_kind, pays_vat
-                FROM postings WHERE document_id = ? ORDER BY line_no
-                """,
-                (new_id, doc_id),
+            self._insert_records(
+                company_id,
+                new_id,
+                [PostingRecord.from_row(p).negated() for p in self._posting_rows(doc_id)],
             )
             self._post(company_id, new_id)
         return new_id
@@ -416,55 +396,24 @@ class DocumentCommands(PostingChecks):
     def _insert_postings(
         self, company_id: int, doc_id: int, postings: Sequence[PostingInput]
     ) -> None:
-        rows = []
-        for line_no, p in enumerate(postings, start=1):
-            try:
-                amount = to_minor(p.amount)
-            except (TypeError, ValueError) as e:
-                raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
-            if amount == 0:
-                raise ValidationError(tr("строка {line}: нулевая сумма", line=line_no))
-            try:
-                invoice = normalize_invoice(p.invoice)
-            except ValidationError as e:
-                raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
-            currency_amount = None
-            if p.currency_id is not None:
-                try:
-                    currency_amount = to_minor(
-                        p.currency_amount if p.currency_amount is not None else 0
-                    )
-                except (TypeError, ValueError) as e:
-                    raise ValidationError(
-                        tr("строка {line}: {error}", line=line_no, error=e)
-                    ) from e
-            rows.append(
-                (
-                    company_id,
-                    doc_id,
-                    line_no,
-                    p.debit_account_id,
-                    p.credit_account_id,
-                    amount,
-                    *pad_subconto(p.debit_subconto, line_no),
-                    *pad_subconto(p.credit_subconto, line_no),
-                    p.memo,
-                    p.currency_id,
-                    currency_amount,
-                    invoice,
-                    _invoice_kind(p) if invoice else None,
-                    int(p.pays_vat),
-                )
-            )
-        if not rows:  # a draft without postings (a file of an older schema has no new columns)
+        self._insert_records(
+            company_id,
+            doc_id,
+            [PostingRecord.from_input(p, line_no) for line_no, p in enumerate(postings, start=1)],
+        )
+
+    def _insert_records(
+        self, company_id: int, doc_id: int, records: Sequence[PostingRecord]
+    ) -> None:
+        if not records:  # a draft without postings (a file of an older schema has no new columns)
             return
         try:
             self.conn.executemany(
-                "INSERT INTO postings (company_id, document_id, line_no, debit_account_id, "
-                "credit_account_id, amount, dt_sc1, dt_sc2, dt_sc3, ct_sc1, ct_sc2, ct_sc3, memo, "
-                "currency_id, currency_amount, invoice, invoice_kind, pays_vat) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                rows,
+                INSERT_POSTING,
+                [
+                    (company_id, doc_id, line_no, *record.params())
+                    for line_no, record in enumerate(records, start=1)
+                ],
             )
         except IntegrityError as e:
             raise ValidationError(
@@ -507,13 +456,10 @@ class DocumentCommands(PostingChecks):
         ).fetchone()
         if row is None:
             raise NotFoundError(tr("слой {code} не найден", code=code))
-        if code != "common":  # a document in an adjustment layer shows the books (D63)
-            self.conn.execute("UPDATE companies SET parallel_books = 1 WHERE id = ?", (company_id,))
         return row["id"]
 
-
-def _invoice_kind(p: PostingInput) -> str | None:
-    """Stored kind of the posting's number: None for an e-qaimə (or no number)."""
-    if p.invoice_kind not in KINDS:
-        raise ValidationError(tr("неизвестный вид документа: {kind}", kind=p.invoice_kind))
-    return p.invoice_kind or None if normalize_invoice(p.invoice) else None
+    def _show_books_for(self, company_id: int, layer: str) -> None:
+        """A document entered in an adjustment layer turns the parallel books on (D63):
+        the scenario that creates or changes such a document says so, nothing else does."""
+        if layer != "common":
+            self.conn.execute("UPDATE companies SET parallel_books = 1 WHERE id = ?", (company_id,))

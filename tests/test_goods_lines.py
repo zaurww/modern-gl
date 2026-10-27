@@ -21,7 +21,7 @@ from modern_gl.desktop.inventory_document_page.columns import GOODS, KIND, SERVI
 from modern_gl.desktop.inventory_document_page.lines_table import NewNamesDialog
 from modern_gl.desktop.session import Session
 from modern_gl.reporting.inventory import item_choices, stock_balances
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 
 @pytest.fixture

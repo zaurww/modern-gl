@@ -16,7 +16,7 @@ from PySide6.QtCore import QStandardPaths, QTimer, QUrl
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import BASE_URL, PORTAL_TOKEN_KEY
 
@@ -52,7 +52,7 @@ class PortalLoginDialog(QDialog):
         self.resize(1100, 780)
         root = QVBoxLayout(self)
         root.setContentsMargins(16, 12, 16, 16)
-        hint = QLabel(
+        hint = caption(
             tr(
                 "Войдите через ASAN İmza и выберите компанию с VÖEN {tin} — окно закроется само.",
                 tin=company,
@@ -60,12 +60,11 @@ class PortalLoginDialog(QDialog):
             if company
             else tr("Войдите через ASAN İmza и выберите компанию — окно закроется само.")
         )
-        hint.setObjectName("secondary")
         hint.setFont(fonts().small)
         top = QHBoxLayout()
         top.addWidget(hint, 1)
         reload = button(tr("Обновить страницу"), "flat")
-        reload.clicked.connect(lambda: self.view.reload())
+        reload.clicked.connect(self.view.reload)
         top.addWidget(reload)
         root.addLayout(top)
         self.state = QLabel(waiting_for(None, company))  # what the window waits for now

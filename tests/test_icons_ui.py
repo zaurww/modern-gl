@@ -6,28 +6,25 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QPushButton
 
-from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.widgets import more_button
-from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 GLYPHS = ("⋯", "←", "→", "▾", "▼")
 
 
 @pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
-    theme.apply(QApplication.instance())
+def window(qtbot, tmp_path, make_demo):
+    make_demo(tmp_path / "ДЕМО ООО.gl")
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

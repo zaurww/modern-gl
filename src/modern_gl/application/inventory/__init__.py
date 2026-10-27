@@ -40,6 +40,7 @@ from modern_gl.application.inventory.model import (
     LandedCostCharge,
     LandedCostChargeData,
     LandedCostTarget,
+    ReceiptHeader,
     ReceiptLine,
     ReturnLine,
     SaleLine,
@@ -47,7 +48,7 @@ from modern_gl.application.inventory.model import (
     UsualUnit,
 )
 from modern_gl.application.inventory.rebuild import RebuildCommands
-from modern_gl.application.inventory.stock import StockShortage
+from modern_gl.application.inventory.stock import StockShortageError
 from modern_gl.application.inventory.stock_count import (
     CountedLine,
     StockCountCommands,
@@ -78,11 +79,12 @@ __all__ = [
     "LandedCostCharge",
     "LandedCostChargeData",
     "LandedCostTarget",
+    "ReceiptHeader",
     "ReceiptLine",
     "ReturnLine",
     "SaleLine",
     "StockCountResult",
-    "StockShortage",
+    "StockShortageError",
     "TransferLine",
     "UsualUnit",
     "allocate_charges",

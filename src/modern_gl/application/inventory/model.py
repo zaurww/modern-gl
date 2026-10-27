@@ -17,6 +17,7 @@ from modern_gl.domain.accounts import (
     SALES_REVENUE,
     SALES_VAT,
 )
+from modern_gl.i18n import N_
 
 QUANTITY_SCALE = 6
 QUANTITY_FACTOR = 10**QUANTITY_SCALE
@@ -31,17 +32,17 @@ ACCRUED_CODE = "76H"
 SALE_ROLE_NAMES = {
     SALES_REVENUE: "Выручка",
     COST_OF_SALES: "Себестоимость продаж",
-    OUTPUT_VAT: "НДС к уплате",
-    SALES_VAT: "НДС начисляется со счёта",
+    OUTPUT_VAT: N_("НДС к уплате"),
+    SALES_VAT: N_("НДС начисляется со счёта"),
 }
 
 
 # «Mədaxil» (D91): why goods come in without a purchase, its name and the account role
 INCOMING_REASONS = {
-    "surplus": ("Излишки (инвентаризация)", INCOMING_SURPLUS),
-    "contribution": ("Вклад учредителя", INCOMING_CONTRIBUTION),
-    "production": ("Собственное производство", INCOMING_PRODUCTION),
-    "gift": ("Безвозмездное получение (подарок)", INCOMING_GIFT),
+    "surplus": (N_("Излишки (инвентаризация)"), INCOMING_SURPLUS),
+    "contribution": (N_("Вклад учредителя"), INCOMING_CONTRIBUTION),
+    "production": (N_("Собственное производство"), INCOMING_PRODUCTION),
+    "gift": (N_("Безвозмездное получение (подарок)"), INCOMING_GIFT),
 }
 # documents whose lines bring goods in at their amount: Dt stock / Kt the line's account
 INCOMING_TYPES = {"opening", "receipt", "incoming"}
@@ -52,6 +53,30 @@ PURCHASE_RETURN, SALE_RETURN = "purchase_return", "sale_return"
 RETURN_TYPES = {PURCHASE_RETURN: "receipt", SALE_RETURN: "sale"}
 # what an issue takes its goods from, oldest first: whatever came in, a customer's return too
 QUEUE_SQL = "(" + ", ".join(f"'{t}'" for t in sorted(INCOMING_TYPES | {SALE_RETURN})) + ")"
+
+
+@dataclass(frozen=True)
+class ReceiptHeader:
+    """What a receipt, an opening balance or a mədaxil (D91) says besides its lines: the
+    account it is owed on, its kind and its terms — one value instead of a dozen
+    arguments passed from method to method."""
+
+    doc_date: date | str
+    credit_account_id: int | None
+    credit_subconto: Sequence[int | None] = ()
+    memo: str = ""
+    opening: bool = False
+    incoming_reason: str | None = None  # a mədaxil without a purchase (D91)
+    vat_rate: int | None = None  # remembered for a purchase only
+    currency_id: int | None = None
+    currency_rate: str | int | Decimal | None = None
+    invoice: str = ""
+    invoice_kind: str = ""
+    awaits_invoice: bool = False  # the goods came before their e-qaimə (D119)
+
+    @property
+    def doc_type(self) -> str:
+        return "incoming" if self.incoming_reason else "opening" if self.opening else "receipt"
 
 
 @dataclass(frozen=True)
@@ -141,11 +166,11 @@ class UsualUnit:
 
 # offered by the item dialog (in Russian, translated there): a first item needs no setup
 USUAL_UNITS = (
-    UsualUnit("шт", "Штука", 0),
-    UsualUnit("кг", "Килограмм"),
-    UsualUnit("л", "Литр"),
-    UsualUnit("м", "Метр"),
-    UsualUnit("м²", "Квадратный метр"),
+    UsualUnit("шт", N_("Штука"), 0),
+    UsualUnit(N_("кг"), N_("Килограмм")),
+    UsualUnit(N_("л"), N_("Литр")),
+    UsualUnit("м", N_("Метр")),
+    UsualUnit(N_("м²"), N_("Квадратный метр")),
     UsualUnit("уп.", "Упаковка", 0),
 )
 
@@ -158,6 +183,42 @@ class TransferLine:
     quantity: str | int | Decimal | None
     memo: str = ""
     line_id: int | None = None
+
+
+@dataclass(frozen=True)
+class StoredLine:
+    """A row of `inventory_lines` as a draft writes it (`_insert_line`); `line_id` — an
+    edited line keeps its id."""
+
+    line_no: int
+    item_id: int | None
+    warehouse_id: int | None
+    quantity: int
+    memo: str = ""
+    to_warehouse_id: int | None = None
+    amount: int = 0
+    inventory_amount: int = 0
+    expense_amount: int = 0
+    offset_account_id: int | None = None
+    offset_subconto: Sequence[int | None] = ()
+    source_receipt_line_id: int | None = None
+    line_id: int | None = None
+    vat_amount: int = 0
+    currency_amount: int | None = None
+    cost_account_id: int | None = None
+    cost_subconto: Sequence[int | None] = ()
+    expense_date: str | None = None
+
+
+@dataclass(frozen=True)
+class Movement:
+    """What a posted line moves: a row of `stock_movements` (`_insert_movement`)."""
+
+    item_id: int
+    warehouse_id: int
+    movement_type: str
+    quantity: int
+    amount: int
 
 
 @dataclass(frozen=True)

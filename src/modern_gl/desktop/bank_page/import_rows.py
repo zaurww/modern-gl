@@ -15,10 +15,18 @@ from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import money
 from modern_gl.domain.dates import ru_date
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-COLUMNS = ["Дата", "Контрагент", "VÖEN", "Приход", "Расход", "Станет", "Состояние"]
-BECOMES, STATE = COLUMNS.index("Станет"), COLUMNS.index("Состояние")
+COLUMNS = [
+    N_("Дата"),
+    N_("Контрагент"),
+    N_("VÖEN"),
+    N_("Приход"),
+    N_("Расход"),
+    N_("Станет"),
+    N_("Состояние"),
+]
+BECOMES, STATE = COLUMNS.index(N_("Станет")), COLUMNS.index(N_("Состояние"))
 CHOICES = (POSTED, DRAFT, LINKED)  # what can be left out; KNOWN is in the books already
 
 

@@ -7,7 +7,6 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
 
 import modern_gl.desktop.main_window  # noqa: F401  modules add their rows of «what waits»
 from modern_gl.application.attention import POST_DRAFTS
@@ -21,6 +20,7 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.overview import attention, money, rates
 from modern_gl.reporting.reports import trial_balance
+from tests.helpers.qt import layout_widget, running_app
 
 
 @pytest.fixture
@@ -81,14 +81,13 @@ def test_post_drafts_posts_and_leaves_what_cannot_post(ledger):
 
 
 @pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
-    theme.apply(QApplication.instance())
+def window(qtbot, tmp_path, make_demo):
+    make_demo(tmp_path / "ДЕМО ООО.gl")
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win
@@ -145,7 +144,7 @@ def test_viewing_and_stock_only(window):
     window.session.read_only = True
     page = home(window)
     page.refresh()
-    post = page.sections[0].lines[0].buttons.itemAt(0).widget()
+    post = layout_widget(page.sections[0].lines[0].buttons, 0)
     assert post.isHidden()
     window.session.read_only = False
     window.set_stock_only(True)

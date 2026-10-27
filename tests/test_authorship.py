@@ -28,11 +28,13 @@ def test_a_draft_has_no_poster_and_unposting_forgets_it(conn):
     demo = build_demo(Ledger(conn, actor="Aynur"))
     cid = demo.company_id
     doc = demo.docs[0]
-    assert document_authors(conn, cid, doc).posted_by == "Aynur"  # post_new: entered and posted
+    posted = document_authors(conn, cid, doc)
+    assert posted is not None and posted.posted_by == "Aynur"  # post_new: entered and posted
     Ledger(conn, actor="Zaur").unpost(cid, doc)
 
     authors = document_authors(conn, cid, doc)
 
+    assert authors is not None
     assert (authors.entered_by, authors.posted_by) == ("Aynur", None)
 
 
@@ -44,7 +46,8 @@ def test_reposted_by_another_shows_the_last_one(conn):
     zaur.unpost(cid, doc)
     zaur.post(cid, doc)
 
-    assert document_authors(conn, cid, doc).posted_by == "Zaur"
+    authors = document_authors(conn, cid, doc)
+    assert authors is not None and authors.posted_by == "Zaur"
     assert journal_authors(conn, cid)[doc] == "Zaur"
     assert journal_authors(conn, cid)[demo.docs[0]] == "Aynur"
 

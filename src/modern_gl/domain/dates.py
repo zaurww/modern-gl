@@ -1,10 +1,12 @@
+"""Dates and months as the program stores and shows them: ISO strings, month codes, titles."""
+
 from __future__ import annotations
 
 import calendar
 import re
 from datetime import date, datetime, timedelta
 
-from modern_gl.i18n import tr, upper
+from modern_gl.i18n import N_, tr, upper
 
 
 def iso_date(value: date | str) -> str:
@@ -37,18 +39,18 @@ def date_range(first: date | str, last: date | str, sep: str = " — ") -> str:
 
 
 _MONTHS = (
-    "январь",
-    "февраль",
-    "март",
-    "апрель",
-    "май",
-    "июнь",
-    "июль",
-    "август",
-    "сентябрь",
-    "октябрь",
-    "ноябрь",
-    "декабрь",
+    N_("январь"),
+    N_("февраль"),
+    N_("март"),
+    N_("апрель"),
+    N_("май"),
+    N_("июнь"),
+    N_("июль"),
+    N_("август"),
+    N_("сентябрь"),
+    N_("октябрь"),
+    N_("ноябрь"),
+    N_("декабрь"),
 )
 
 
@@ -108,7 +110,7 @@ def earlier_months(value: date | str, count: int = 12) -> list[str]:
     """The last days of the `count` months before the month of `value`, latest first:
     the months a purchase's expense may belong to (D65)."""
     first = date.fromisoformat(iso_date(value)).replace(day=1)
-    result = []
+    result: list[str] = []
     for _ in range(count):
         last = date.fromordinal(first.toordinal() - 1)
         result.append(last.isoformat())

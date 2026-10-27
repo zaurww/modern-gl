@@ -10,6 +10,8 @@ from modern_gl.infrastructure.db import transaction
 
 
 class AccountTypeCommands(LedgerBase):
+    """Use cases of an account's class and type: what it means, whatever its code."""
+
     def set_account_class(
         self,
         company_id: int,

@@ -7,8 +7,7 @@ from dataclasses import replace
 from datetime import date
 from itertools import pairwise
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -18,7 +17,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.conversion import (
     ConversionInput,
-    MissingAccountRole,
+    MissingAccountRoleError,
     bank_rate,
     calculate,
     load_conversion,
@@ -36,6 +35,7 @@ from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.form import ConversionForm
 from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     MenuItem,
@@ -72,16 +72,10 @@ class ConversionPage(ConversionForm):
         self.btn_delete.clicked.connect(self.delete)
         self.btn_unpost.clicked.connect(self.unpost)
         self.btn_gl.clicked.connect(self._open_gl)
-        for keys, fn in (
-            ("Ctrl+S", lambda: self.save(post=self.posted)),
-            ("Ctrl+Return", lambda: self.save(post=True)),
-            ("Ctrl+Enter", lambda: self.save(post=True)),
-            ("Ins", lambda: self.add_fee(focus=True)),
-            ("Ctrl+Del", self._remove_current_fee),
-        ):
-            shortcut = QShortcut(QKeySequence(keys), self)
-            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            shortcut.activated.connect(fn)
+        bind(self, "save", lambda: self.save(post=self.posted))
+        bind(self, "post", lambda: self.save(post=True))
+        bind(self, "insert", lambda: self.add_fee(focus=True))
+        bind(self, "remove_line", self._remove_current_fee)
         self.btn_add_fee.setToolTip(tr("Комиссия, которую удержал банк") + " (Ins)")
         for panel in (self.source, self.target):
             panel.changed.connect(self._changed)
@@ -358,7 +352,7 @@ class ConversionPage(ConversionForm):
             conversion_id = self.s.ledger.conversion.save_conversion(
                 self.s.company_id, data, self.doc.id if self.doc else None, post=post
             )
-        except MissingAccountRole as e:
+        except MissingAccountRoleError as e:
             # a chart without the accounts: choose them now and post again
             chosen = self.edit_accounts(missing=e.role)
             if chosen and self.s.ledger.account_role(self.s.company_id, e.role) is not None:

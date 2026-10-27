@@ -20,17 +20,22 @@ SHEET_NAME_BAD = "[]:*?/\\"
 
 @dataclass
 class ReportColumn:
+    """A column of a report file; a money column holds minor units."""
+
     title: str
     money: bool = False  # cells are minor units (int) or None
     group: str = ""  # «Начальное сальдо» over its Dt and Kt: «Начальное сальдо · Дт»
 
     @property
     def caption(self) -> str:
+        """The header of the column: with its group («Начальное сальдо · Дт»)."""
         return f"{self.group} · {self.title}" if self.group else self.title
 
 
 @dataclass
 class ReportRow:
+    """A line of a report file: its cells, depth (Excel outline) and whether it is a total."""
+
     cells: list[object]  # text, or minor units in a money column
     level: int = 0
     bold: bool = False  # a subtotal or a total
@@ -38,29 +43,35 @@ class ReportRow:
 
 @dataclass
 class ReportTable:
+    """A report ready to be written as a file: columns, rows and what it was made for."""
+
     title: str
     columns: list[ReportColumn]
-    rows: list[ReportRow] = field(default_factory=list)
-    about: list[tuple[str, str]] = field(default_factory=list)  # («Период», «01.10 — …»)
+    rows: list[ReportRow] = field(default_factory=list[ReportRow])
+    # («Период», «01.10 — …»)
+    about: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
 
     @property
     def leveled(self) -> bool:
+        """Whether lines have depth (then Excel shows them as an outline)."""
         return any(r.level for r in self.rows)
 
 
 def amount(minor: object) -> Decimal | None:
+    """Minor units as manat for a cell (kopecks / 100); None for anything else."""
     return Decimal(minor) / 100 if isinstance(minor, int) else None
 
 
 def write_xlsx(table: ReportTable, path: str | Path) -> None:
+    """Write the report as an .xlsx: the table on the first sheet (header frozen, amounts as
+    numbers, lines as an outline), the report's parameters on «Параметры»."""
     from openpyxl import Workbook
     from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.properties import Outline
 
     book = Workbook()
-    sheet = book.active
-    assert sheet is not None
+    sheet = book.worksheets[0]  # a new book has one sheet
     sheet.title = sheet_name(table.title)
     level_column = table.leveled
     headers = [c.caption for c in table.columns] + ([tr("Уровень")] if level_column else [])

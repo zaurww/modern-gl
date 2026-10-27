@@ -10,7 +10,6 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
-    QLabel,
     QLineEdit,
     QScrollArea,
     QVBoxLayout,
@@ -18,11 +17,12 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop.home_page.rows import Line, Section, heading
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_hub import catalog
 from modern_gl.desktop.reports_hub.catalog import Report
 from modern_gl.desktop.reports_hub.tiles import ReportTile
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.widgets import PageHeader
+from modern_gl.desktop.widgets import PageHeader, caption
 from modern_gl.i18n import tr
 
 COLUMNS = 2  # tiles side by side in a group
@@ -41,7 +41,7 @@ def place(grid: QGridLayout, tiles: list[ReportTile]) -> None:
         tile.setVisible(tile.matched)
 
 
-class ReportsPage(QWidget):
+class ReportsPage(PageWidget):
     key = catalog.HUB
     open_report = Signal(str)  # a report's id: the window opens it (and remembers it)
     pins_changed = Signal()
@@ -74,9 +74,6 @@ class ReportsPage(QWidget):
     def title(self) -> str:
         return tr("Отчёты")
 
-    def is_dirty(self) -> bool:
-        return False
-
     # ---- the parts ---------------------------------------------------------------------
 
     def _build_catalog(self) -> QWidget:
@@ -101,8 +98,7 @@ class ReportsPage(QWidget):
             reports = [r for r in self.reports if r.group == group]
             if reports:
                 lay.addWidget(self._group(group, reports, pinned))
-        self.nothing = QLabel(tr("Такого отчёта нет — попробуйте другое слово"))
-        self.nothing.setObjectName("secondary")
+        self.nothing = caption(tr("Такого отчёта нет — попробуйте другое слово"))
         self.nothing.setContentsMargins(0, 24, 0, 0)
         self.nothing.hide()
         lay.addWidget(self.nothing)

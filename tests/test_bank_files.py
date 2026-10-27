@@ -55,6 +55,8 @@ from modern_gl.application.conversion.calc import load_conversion
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.domain.currency import parse_rate
 from modern_gl.i18n import tr
+from tests.helpers.excel import active_sheet
+from tests.helpers.qt import tree_item
 
 OWN_TIN = "1400000001"
 PERIOD = "01/08/2026 - 05/08/2026"
@@ -80,7 +82,7 @@ def kapital_file(path, iban, currency, opening, lines, tin=OWN_TIN):
     """A statement in Kapital Bank's form: `lines` — (day, number, other side, amount,
     base amount, purpose); the balances are counted as the bank shows them."""
     book = Workbook()
-    sheet = book.active
+    sheet = active_sheet(book)
     sheet.title = "Hesabdan Çıxarış"
     sheet["A1"] = "Hesabdan çıxarış / Account statement"
     closing = Decimal(opening) + sum(Decimal(x[3]) for x in lines)
@@ -314,7 +316,7 @@ def test_a_file_whose_balances_do_not_agree_is_not_loaded(tmp_path):
     from openpyxl import load_workbook
 
     book = load_workbook(path)
-    book.active["H15"] = Decimal("3998")  # the bank's balance after the second line
+    active_sheet(book)["H15"] = Decimal("3998")  # the bank's balance after the second line
     book.save(path)
     with pytest.raises(BankFileError, match=r"строка 2: остаток 3 998\.00"):
         read_bank_file(path)
@@ -322,7 +324,7 @@ def test_a_file_whose_balances_do_not_agree_is_not_loaded(tmp_path):
 
 def test_a_form_of_another_bank_is_said_so(tmp_path):
     book = Workbook()
-    book.active["A1"] = "Çıxarış"
+    active_sheet(book)["A1"] = "Çıxarış"
     book.save(tmp_path / "other.xlsx")
     with pytest.raises(BankFileError, match=r"форма выписки не распознана.*Kapital Bank"):
         read_bank_file(tmp_path / "other.xlsx")
@@ -622,7 +624,7 @@ def test_the_window_shows_the_lines_to_check_first_and_posts(qtbot, firm, sessio
     assert dialog.balances.objectName() == "secondary"  # no alarm: the drafts make it
 
     tax = next(n for n, r in enumerate(rows) if r.op.reference == "1005")
-    dialog.rows.topLevelItem(tax).setCheckState(0, Qt.CheckState.Unchecked)
+    tree_item(dialog.rows, tax).setCheckState(0, Qt.CheckState.Unchecked)
     # the DSMF's 52.00 left out: the books will not meet the bank — said so
     assert tr(" — разница {diff}", diff="-452.00") in dialog.balances.text()
     dialog.post_button.click()

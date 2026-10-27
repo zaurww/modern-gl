@@ -10,12 +10,12 @@ from typing import Protocol
 
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 DEFAULT_LAYERS = (
     ("common", "Общий учёт"),
-    ("ifrs_adj", "Корректировки МСФО"),
-    ("tax_adj", "Налоговые корректировки"),
+    ("ifrs_adj", N_("Корректировки МСФО")),
+    ("tax_adj", N_("Налоговые корректировки")),
 )
 
 SIDES = (("debit", "dt"), ("credit", "ct"))
@@ -45,23 +45,49 @@ class TypedLine(Protocol):
     """A posting as a form or the quick line holds it: amounts in minor units."""
 
     @property
-    def debit(self) -> int | None: ...
+    def debit(self) -> int | None:
+        """The debit account id; None while not chosen."""
+        ...
+
     @property
-    def credit(self) -> int | None: ...
+    def credit(self) -> int | None:
+        """The credit account id; None while not chosen."""
+        ...
+
     @property
-    def amount(self) -> int | None: ...
+    def amount(self) -> int | None:
+        """The amount in minor units (kopecks); None while not typed."""
+        ...
+
     @property
-    def debit_sc(self) -> Sequence[int | None]: ...
+    def debit_sc(self) -> Sequence[int | None]:
+        """Debit subconto by position (1..3); None where empty."""
+        ...
+
     @property
-    def credit_sc(self) -> Sequence[int | None]: ...
+    def credit_sc(self) -> Sequence[int | None]:
+        """Credit subconto by position (1..3); None where empty."""
+        ...
+
     @property
-    def memo(self) -> str: ...
+    def memo(self) -> str:
+        """The posting's text as typed (trimmed by `typed_posting`)."""
+        ...
+
     @property
-    def currency_id(self) -> int | None: ...
+    def currency_id(self) -> int | None:
+        """The currency of the posting; None — in manat."""
+        ...
+
     @property
-    def currency_amount(self) -> int | None: ...
+    def currency_amount(self) -> int | None:
+        """The amount in the currency, minor units; None without a currency."""
+        ...
+
     @property
-    def invoice(self) -> str: ...
+    def invoice(self) -> str:
+        """The e-qaimə number typed; "" — none."""
+        ...
 
 
 def typed_posting(
@@ -112,6 +138,8 @@ class TemplateLine:
 
 @dataclass(frozen=True)
 class ImportedDocument:
+    """One document to import (`import_documents`): postings in manat, as PostingInput."""
+
     doc_date: date | str
     postings: Sequence[PostingInput]
     memo: str = ""
@@ -122,6 +150,8 @@ class ImportedDocument:
 
 @dataclass
 class ImportOutcome:
+    """What `import_documents` did: created ids, problems by document, or ones there already."""
+
     ids: list[int] = field(default_factory=list)  # created documents (empty if discarded)
     errors: list[tuple[int, str]] = field(default_factory=list)  # (document index, message)
     # (document index, its id): imported before from the same source, left as it is

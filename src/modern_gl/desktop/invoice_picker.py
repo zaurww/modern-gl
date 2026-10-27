@@ -21,7 +21,7 @@ from modern_gl.application.bank import allocate
 from modern_gl.application.invoices import OpenInvoice
 from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import button, ru_date, tick_icon
+from modern_gl.desktop.widgets import button, caption, ru_date, tick_icon
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
 
@@ -45,8 +45,7 @@ class InvoicePicker(QDialog):
         heading = QLabel(tr("Несколько e-qaimə"))
         heading.setFont(fonts().heading)
         lay.addWidget(heading)
-        hint = QLabel(tr("Пробел — отметить; оплата идёт с самой старой."))
-        hint.setObjectName("secondary")
+        hint = caption(tr("Пробел — отметить; оплата идёт с самой старой."))
         lay.addWidget(hint)
         self.list = QTreeWidget()  # number · date · left to pay, no grid
         self.list.setColumnCount(3)
@@ -74,8 +73,7 @@ class InvoicePicker(QDialog):
             self.list.setCurrentItem(self.items[0])
         self.list.itemClicked.connect(lambda item, _column: self._toggle(item))
         self.list.installEventFilter(self)  # Space and Enter before the list takes them
-        self.summary = QLabel()
-        self.summary.setObjectName("secondary")
+        self.summary = caption()
         lay.addWidget(self.summary)
         buttons = QHBoxLayout()
         buttons.addStretch(1)

@@ -87,14 +87,19 @@ def test_ready_templates_post_correctly(ledger, conn):
     counterparty = ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "counterparty"), "A")
     contract = ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "contract"), "№1")
     amounts = compute([ln.formula for ln in sale.lines], 118000)
+
+    def given(value: int | None) -> int:
+        assert value is not None  # a ready template names its accounts, the formula the sum
+        return value
+
     ledger.post_new(
         cid,
         "2026-04-10",
         [
             PostingInput(
-                ln.debit_account_id,
-                ln.credit_account_id,
-                Decimal(amount).scaleb(-2),  # kopecks -> manat
+                given(ln.debit_account_id),
+                given(ln.credit_account_id),
+                Decimal(given(amount)).scaleb(-2),  # kopecks -> manat
                 [counterparty, contract]
                 if ln.debit_account_id == ledger.account_id(cid, "62")
                 else [],

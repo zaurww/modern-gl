@@ -18,7 +18,7 @@ from modern_gl.reporting.inventory import (
     item_card,
     stock_statement,
 )
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 Q = QUANTITY_FACTOR
 

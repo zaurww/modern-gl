@@ -4,7 +4,7 @@ firm is never loaded by mistake."""
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QMessageBox, QWidget
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.queries import company_tax_id
@@ -13,7 +13,8 @@ from modern_gl.desktop.portal_company import company_token
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import IntegrityError
-from tests.test_eqaime_import import fake_token
+from tests.helpers.eqaime import fake_token
+from tests.helpers.qt import running_app
 
 OURS, OTHER = "1402375141", "1700000001"
 
@@ -40,7 +41,7 @@ def test_the_company_vöen_is_ten_digits_and_audited(ledger):
 
 @pytest.fixture
 def session(qtbot, ledger, monkeypatch):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     cid = ledger.create_company("ACCOUNTING MMC")
     portal_login.forget_token()
     warned: list[str] = []
@@ -51,6 +52,14 @@ def session(qtbot, ledger, monkeypatch):
     s.warned = warned  # type: ignore[attr-defined]
     yield s
     portal_login.forget_token()
+
+
+@pytest.fixture
+def parent(qtbot) -> QWidget:
+    """The window the portal's questions are asked over."""
+    widget = QWidget()
+    qtbot.addWidget(widget)
+    return widget
 
 
 def answer(monkeypatch, yes: bool) -> list[str]:
@@ -64,36 +73,36 @@ def answer(monkeypatch, yes: bool) -> list[str]:
     return asked
 
 
-def test_the_first_sign_in_offers_the_portal_vöen(qtbot, session, monkeypatch):
+def test_the_first_sign_in_offers_the_portal_vöen(qtbot, session, monkeypatch, parent):
     asked = answer(monkeypatch, yes=True)
     token = fake_token(OURS, "ACCOUNTİNG.AZ MMC")
-    assert company_token(None, session, lambda _p: token) == token
+    assert company_token(parent, session, lambda _p: token) == token
     assert "VÖEN 1402375141" in asked[0] and "ACCOUNTING MMC" in asked[0]
     assert company_tax_id(session.conn, session.company_id) == OURS
 
 
-def test_a_refused_vöen_is_not_remembered(qtbot, session, monkeypatch):
+def test_a_refused_vöen_is_not_remembered(qtbot, session, monkeypatch, parent):
     answer(monkeypatch, yes=False)
-    assert company_token(None, session, lambda _p: fake_token(OTHER)) is None
+    assert company_token(parent, session, lambda _p: fake_token(OTHER)) is None
     assert company_tax_id(session.conn, session.company_id) is None
 
 
-def test_a_token_of_another_firm_loads_nothing(qtbot, session, monkeypatch):
+def test_a_token_of_another_firm_loads_nothing(qtbot, session, monkeypatch, parent):
     asked = answer(monkeypatch, yes=True)
     session.ledger.set_company_tax_id(session.company_id, OURS)
-    assert company_token(None, session, lambda _p: fake_token(OTHER, "BAŞQA MMC")) is None
+    assert company_token(parent, session, lambda _p: fake_token(OTHER, "BAŞQA MMC")) is None
     assert asked == [] and "BAŞQA MMC" in session.warned[0] and OURS in session.warned[0]
     assert company_tax_id(session.conn, session.company_id) == OURS
 
 
-def test_the_open_session_is_used_only_for_its_firm(qtbot, session, monkeypatch):
+def test_the_open_session_is_used_only_for_its_firm(qtbot, session, monkeypatch, parent):
     """The token kept in memory serves the company with its VÖEN; another company signs
     in again — the portal's window then waits for that firm."""
     session.ledger.set_company_tax_id(session.company_id, OURS)
     ours = fake_token(OURS)
-    assert company_token(None, session, lambda _p: ours) == ours
+    assert company_token(parent, session, lambda _p: ours) == ours
     calls: list[str] = []
-    assert company_token(None, session, lambda _p: calls.append("asked")) == ours
+    assert company_token(parent, session, lambda _p: calls.append("asked")) == ours
     assert calls == []  # signed in already
     wanted: list[str] = []
     monkeypatch.setattr(

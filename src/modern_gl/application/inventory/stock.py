@@ -6,9 +6,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import date
 
+from modern_gl.application.common import fill_subconto
 from modern_gl.application.inventory.amounts import format_quantity, money
 from modern_gl.application.inventory.drafts import DraftCommands
-from modern_gl.application.inventory.model import QUEUE_SQL
+from modern_gl.application.inventory.model import QUEUE_SQL, Movement
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.dates import iso_date
@@ -18,7 +19,7 @@ from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row
 
 
-class StockShortage(ValidationError):
+class StockShortageError(ValidationError):
     """Not enough of an item on a warehouse for what a document takes — the goods came,
     their papers did not (D154): the page offers to bring them in («ждёт e-qaimə»)."""
 
@@ -29,7 +30,7 @@ class StockShortage(ValidationError):
 
 def require_stock(item: Row, warehouse: Row, requested: int, available: int) -> None:
     if requested > available:
-        raise StockShortage(
+        raise StockShortageError(
             tr(
                 "недостаточно товара «{item}» на складе «{warehouse}»: "
                 "доступно {available}, требуется {requested}",
@@ -50,12 +51,10 @@ class StockCommands(DraftCommands):
         document_id: int,
         line_id: int,
         doc_date: date | str,
-        item_id: int,
-        warehouse_id: int,
-        movement_type: str,
-        quantity: int,
-        amount: int,
+        movement: Movement,
     ) -> None:
+        item_id, warehouse_id = movement.item_id, movement.warehouse_id
+        quantity, amount = movement.quantity, movement.amount
         self.conn.execute(
             "INSERT INTO stock_movements (company_id, document_id, line_id, doc_date, item_id, "
             "warehouse_id, movement_type, quantity, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -66,7 +65,7 @@ class StockCommands(DraftCommands):
                 iso_date(doc_date),
                 item_id,
                 warehouse_id,
-                movement_type,
+                movement.movement_type,
                 quantity,
                 amount,
             ),
@@ -247,7 +246,7 @@ class StockCommands(DraftCommands):
             raise ValidationError(
                 tr("не указан счёт НДС к возмещению — выберите его в настройках склада")
             )
-        vat_kinds = self._account_kind_ids(self._account(company_id, vat_account_id))
+        vat_account = self._account(company_id, vat_account_id)
         result = []
         for (account_id, offset_sc), amount in totals.items():
             by_kind = {
@@ -260,7 +259,7 @@ class StockCommands(DraftCommands):
                     vat_account_id,
                     account_id,
                     money(amount),
-                    tuple(None if kind is None else by_kind.get(kind) for kind in vat_kinds),
+                    fill_subconto(vat_account, by_kind),
                     offset_sc,
                     trd("НДС"),
                     invoice=invoice[0],

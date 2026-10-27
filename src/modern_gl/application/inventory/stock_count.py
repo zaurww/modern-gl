@@ -17,7 +17,12 @@ from modern_gl.application.inventory.amounts import (
     to_quantity,
 )
 from modern_gl.application.inventory.catalog import CatalogCommands
-from modern_gl.application.inventory.model import QUANTITY_SCALE, IssueLine, ReceiptLine
+from modern_gl.application.inventory.model import (
+    QUANTITY_SCALE,
+    IssueLine,
+    ReceiptHeader,
+    ReceiptLine,
+)
 from modern_gl.application.inventory.posting import PostingCommands
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
@@ -147,9 +152,8 @@ class StockCountCommands(CatalogCommands, PostingCommands):
             raise ValidationError(
                 tr("не выбран счёт излишков — укажите его в настройках склада (Оприходование)")
             )
-        document_id = self.create_receipt_draft(
-            company_id, day, lines, account, (), memo, incoming_reason="surplus"
-        )
+        header = ReceiptHeader(day, account, (), memo, incoming_reason="surplus")
+        document_id = self.save_receipt_draft(company_id, header, lines)
         self._post_in_sequence(company_id, document_id)
         return document_id
 

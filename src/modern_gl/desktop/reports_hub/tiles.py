@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QFrame, QGridLayout, QLabel, QSizePolicy, QWidget
 from modern_gl.desktop import icons
 from modern_gl.desktop.reports_hub.catalog import Report
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.i18n import tr
 
 ENTER = (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space)
@@ -45,8 +45,7 @@ class ReportTile(QFrame):
         self.name.setFont(fonts().bold)
         self.name.setWordWrap(True)  # «Satışların portalla üzləşdirilməsi» is long
         grid.addWidget(self.name, 0, 1)
-        self.hint = QLabel(tr(report.hint))
-        self.hint.setObjectName("secondary")
+        self.hint = caption(tr(report.hint))
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)
         grid.addWidget(self.hint, 1, 1, 1, 2)

@@ -6,7 +6,6 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import QDate
-from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -14,20 +13,17 @@ from modern_gl.application.conversion import load_conversion
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
+from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.conversion_page import ConversionPage
 from modern_gl.desktop.document_page import DocumentPage
+from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
-    )
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
 
 def setup_company(ledger: Ledger) -> int:
@@ -44,7 +40,7 @@ def setup_company(ledger: Ledger) -> int:
 
 @pytest.fixture
 def session(qtbot):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = setup_company(ledger)
@@ -80,8 +76,9 @@ def test_new_conversion_shows_rates_and_difference(qtbot, session):
     page = ConversionPage(session)
     qtbot.addWidget(page)
     # a currency account on the left, a manat one on the right
-    assert page.source.account_info.code == "52"
-    assert page.target.account_info.code == "51"
+    source, target = page.source.account_info, page.target.account_info
+    assert source is not None and source.code == "52"
+    assert target is not None and target.code == "51"
     fill_sale(page)
     assert page.source.code() == "USD" and not page.source.currency.isEnabled()
     assert page.cbar.value.text() == "1 USD = 1.7000 AZN"
@@ -113,7 +110,7 @@ def test_errors_stay_on_the_page(qtbot, session):
 
 
 def test_journal_opens_the_conversion_and_its_postings_are_read_only(qtbot, tmp_path):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     workspace = Workspace(tmp_path / "data")
     conn = connect(workspace.new_path("ООО Валюта"))
     setup_company(Ledger(conn))
@@ -125,7 +122,9 @@ def test_journal_opens_the_conversion_and_its_postings_are_read_only(qtbot, tmp_
     win.show_place(("journal",))
     try:
         win.show_place(("bank",))  # conversions start in the bank module
-        win.pages[("bank",)].new_conversion.emit()
+        bank = win.pages[("bank",)]
+        assert isinstance(bank, BankPage)
+        bank.new_conversion.emit()
         page = win.stack.currentWidget()
         assert isinstance(page, ConversionPage)
         fill_sale(page)
@@ -134,12 +133,14 @@ def test_journal_opens_the_conversion_and_its_postings_are_read_only(qtbot, tmp_
         assert doc is not None and ("conversion", doc.id) in win.pages
 
         journal = win.pages[("journal",)]
+        assert isinstance(journal, JournalPage)
         assert doc.document_id in {d.id for d in journal.model.docs}
         win.close_page(("conversion", doc.id))
         win.open_document(doc.document_id)
-        assert isinstance(win.stack.currentWidget(), ConversionPage)
+        opened = win.stack.currentWidget()
+        assert isinstance(opened, ConversionPage)
 
-        win.stack.currentWidget().btn_gl.click()
+        opened.btn_gl.click()
         gl = win.stack.currentWidget()
         assert isinstance(gl, DocumentPage) and gl.model.read_only
 
@@ -156,7 +157,7 @@ def test_journal_opens_the_conversion_and_its_postings_are_read_only(qtbot, tmp_
 def test_the_credit_day_opens_the_same_conversion(qtbot, tmp_path):
     """A conversion credited on a later day has two GL documents; the window learns from
     document_owners that either opens (and F9 copies) the conversion (debt 12)."""
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     workspace = Workspace(tmp_path / "data")
     conn = connect(workspace.new_path("ООО Валюта"))
     setup_company(Ledger(conn))
@@ -167,7 +168,9 @@ def test_the_credit_day_opens_the_same_conversion(qtbot, tmp_path):
     win.open_session.working_date = date(2026, 3, 5)
     try:
         win.show_place(("bank",))
-        win.pages[("bank",)].new_conversion.emit()
+        bank = win.pages[("bank",)]
+        assert isinstance(bank, BankPage)
+        bank.new_conversion.emit()
         page = win.stack.currentWidget()
         assert isinstance(page, ConversionPage)
         fill_sale(page)

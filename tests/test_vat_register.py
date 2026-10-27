@@ -15,9 +15,8 @@ from modern_gl.reporting.vat_register import (
     rate_totals,
     vat_register,
 )
-from tests.test_eqaime_reconciliation import on_portal
-from tests.test_invoices import firm as invoice_firm  # noqa: F401 — Альфа, 60, 19, 51, 54
-from tests.test_vat_credit import buy, pay, post
+from tests.helpers.eqaime_reconciliation import on_portal
+from tests.helpers.vat_credit import buy, pay, post
 
 
 def sell(ledger, cid, acc, v, day: str, total: str, vat: str, number: str) -> int:
@@ -28,7 +27,7 @@ def sell(ledger, cid, acc, v, day: str, total: str, vat: str, number: str) -> in
     return post(ledger, cid, day, *lines)
 
 
-def test_the_register_of_a_month(invoice_firm):  # noqa: F811
+def test_the_register_of_a_month(invoice_firm):
     """March, purchases:
       MT2603001 05.03 Альфа 1 000 + 180; paid 500 (20.03) and ƏДV 180 (25.03) → unpaid
                 1 180 − 680 = 500; the other 500 paid on 02.04 is April's — still 500.
@@ -53,19 +52,42 @@ def test_the_register_of_a_month(invoice_firm):  # noqa: F811
     doc_b = buy(ledger, cid, acc, v, "2026-03-07", "500", "90", "MT2603009")
     pay(ledger, cid, acc, v, "2026-03-28", "500", "MT2603009")
     pay(ledger, cid, acc, v, "2026-03-28", "90", "MT2603009", deposit=True)
-    declared = dict(invoice="12345", invoice_kind="customs")
     doc_c = post(
         ledger,
         cid,
         "2026-03-10",
-        PostingInput(acc["26"], acc["60"], "2000", (v["Аренда"],), alfa, **declared),
-        PostingInput(acc["19"], acc["76"], "360", (v["Бета"],), customs, **declared),
+        PostingInput(
+            acc["26"],
+            acc["60"],
+            "2000",
+            (v["Аренда"],),
+            alfa,
+            invoice="12345",
+            invoice_kind="customs",
+        ),
+        PostingInput(
+            acc["19"],
+            acc["76"],
+            "360",
+            (v["Бета"],),
+            customs,
+            invoice="12345",
+            invoice_kind="customs",
+        ),
     )
     post(
         ledger,
         cid,
         "2026-03-12",
-        PostingInput(acc["76"], acc["51"], "360", customs, (v["Kapital"],), **declared),
+        PostingInput(
+            acc["76"],
+            acc["51"],
+            "360",
+            customs,
+            (v["Kapital"],),
+            invoice="12345",
+            invoice_kind="customs",
+        ),
     )
     post(
         ledger,
@@ -139,7 +161,7 @@ def checks(conn, cid, date_from: str, date_to: str) -> list[tuple]:
     return [(c.state, c.numbers) for c in report.checks]
 
 
-def test_the_register_knows_whether_its_month_agrees_with_the_portal(invoice_firm):  # noqa: F811
+def test_the_register_knows_whether_its_month_agrees_with_the_portal(invoice_firm):
     """March: purchase MT2603001 (1 000 + 180), sale MT2603777. Nothing marked — both
     «не сверено». Purchases marked in two halves (01–15, 16–31) cover March; sales the
     month. On 10.04 the purchase is corrected (storno and 400 + 72 anew, D140): the books
@@ -191,7 +213,7 @@ def test_the_rate_is_whole_percent_of_the_amount():
     ]
 
 
-def test_the_page_shows_purchases_then_sales_with_totals(invoice_firm, qtbot):  # noqa: F811
+def test_the_page_shows_purchases_then_sales_with_totals(invoice_firm, qtbot):
     """March: one purchase 1 000 + 180 and one sale 1 180 with ƏDV 180. The page: the
     heading «Покупки», the row, «Итого 18%: 1»; the same for sales; the footer — the ƏDV
     of both; a double click on a row opens its document. April is empty."""
@@ -230,7 +252,7 @@ def test_the_page_shows_purchases_then_sales_with_totals(invoice_firm, qtbot):  
 
 
 def test_the_page_shows_the_portal_check_and_opens_the_reconciliation(
-    invoice_firm,  # noqa: F811
+    invoice_firm,
     qtbot,
     monkeypatch,
 ):

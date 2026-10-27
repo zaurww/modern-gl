@@ -13,7 +13,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import below_minimum
 from modern_gl.reporting.inventory.stock import items_below_minimum
-from tests.test_sales import make_shop
+from tests.helpers.sales import make_shop
 
 Q = 10**6
 

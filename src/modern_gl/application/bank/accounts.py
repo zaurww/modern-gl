@@ -9,15 +9,16 @@ from dataclasses import dataclass
 from modern_gl.application.bank.places import BankPlace, bank_places
 from modern_gl.application.bank.statement import place_balance
 from modern_gl.application.bank.statements import DIFF, OPEN, bank_statements
+from modern_gl.i18n import N_
 from modern_gl.infrastructure.db import Connection
 
 CURRENT, CURRENCY, VAT_DEPOSIT, CARD = "current", "currency", "vat_deposit", "card"
 # the groups of the list, in order (Russian name — a translation key)
 ACCOUNT_KINDS = (
-    (CURRENT, "Расчётные счета"),
-    (CURRENCY, "Валютные счета"),
-    (VAT_DEPOSIT, "Депозит ƏDV"),
-    (CARD, "Бизнес-карты"),
+    (CURRENT, N_("Расчётные счета")),
+    (CURRENCY, N_("Валютные счета")),
+    (VAT_DEPOSIT, N_("Депозит ƏDV")),
+    (CARD, N_("Бизнес-карты")),
 )
 
 

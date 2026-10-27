@@ -1,0 +1,206 @@
+{
+  "lines": [
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [],
+      "kind": "heading",
+      "title": "Активы",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [],
+      "kind": "heading",
+      "title": "Оборотные активы",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": "",
+      "amount": [
+        1040000
+      ],
+      "kind": "line",
+      "title": "Счета без типа",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": 1,
+      "account_type": null,
+      "amount": [
+        140000
+      ],
+      "kind": "account",
+      "title": "201  Материалы",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": 3,
+      "account_type": null,
+      "amount": [
+        700000
+      ],
+      "kind": "account",
+      "title": "221  Банк 1",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": 4,
+      "account_type": null,
+      "amount": [
+        200000
+      ],
+      "kind": "account",
+      "title": "222  Банк 2",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        1040000
+      ],
+      "kind": "subtotal",
+      "title": "Оборотные активы",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        1040000
+      ],
+      "kind": "total",
+      "title": "Итого активы",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [],
+      "kind": "heading",
+      "title": "Обязательства и капитал",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [],
+      "kind": "heading",
+      "title": "Краткосрочные обязательства",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": "",
+      "amount": [
+        70000
+      ],
+      "kind": "line",
+      "title": "Счета без типа",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": 6,
+      "account_type": null,
+      "amount": [
+        70000
+      ],
+      "kind": "account",
+      "title": "531  Поставщики",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        70000
+      ],
+      "kind": "subtotal",
+      "title": "Краткосрочные обязательства",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [],
+      "kind": "heading",
+      "title": "Капитал",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": "",
+      "amount": [
+        1000000
+      ],
+      "kind": "line",
+      "title": "Счета без типа",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": 5,
+      "account_type": null,
+      "amount": [
+        1000000
+      ],
+      "kind": "account",
+      "title": "301  Капитал",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        -30000
+      ],
+      "kind": "line",
+      "title": "Прибыль (убыток) текущего периода",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        970000
+      ],
+      "kind": "subtotal",
+      "title": "Капитал",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        1040000
+      ],
+      "kind": "total",
+      "title": "Итого обязательства и капитал",
+      "under_line": false,
+      "value_id": null
+    }
+  ],
+  "unbalanced": [
+    0
+  ]
+}

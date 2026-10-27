@@ -3,19 +3,17 @@ and reports as open items that close back to where they were opened from."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import cast
 
 from PySide6.QtCore import (
     QEasingCurve,
     QEvent,
+    QObject,
     QPropertyAnimation,
-    QSettings,
-    Qt,
+    Signal,
 )
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
-    QHBoxLayout,
     QLayout,
     QListWidgetItem,
     QMenu,
@@ -25,80 +23,49 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from modern_gl.application.workspace import Workspace
-from modern_gl.desktop.bank_page import BankPage
-from modern_gl.desktop.directories_page import DirectoriesPage
-from modern_gl.desktop.home_page import HomePage
-from modern_gl.desktop.inventory_page import InventoryPage
-from modern_gl.desktop.journal_page import JournalPage
-from modern_gl.desktop.main_window.company_files import CompanyFiles
 from modern_gl.desktop.main_window.sidebar import (
     ALL_OPEN,
     KEY_ROLE,
     PLACE_KEYS,
     REPORT_PAGES,
-    FocusablePage,
     NavDelegate,
     NavKeyed,
     PageT,
     Sidebar,
-    TitledPage,
     open_icon,
-    place_icon,
-    sections,
-    shown_places,
 )
-from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
-from modern_gl.desktop.reports_hub import HUB
-from modern_gl.desktop.toast import Toast
-from modern_gl.desktop.widgets import EmptyState
-from modern_gl.domain.errors import LedgerError
+from modern_gl.desktop.page import PageWidget
+from modern_gl.desktop.reports_hub import HUB, PIN_KEYS
 from modern_gl.i18n import tr
 
 
-class OpenPages(CompanyFiles):
-    def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
-        super().__init__(workspace, settings)
-        self.pages: dict[object, QWidget] = {}
-        self.came_from: dict[QWidget, object] = {}  # an open page → the page it was opened from
+class PageStack(QObject):
+    """The open pages by key, the one shown, the sidebar's items of them and where each
+    was opened from. What is not open yet it does not make: it asks for it with
+    `place_wanted` (a place of the sidebar, a pinned report), and `unpin_wanted` takes a
+    pinned report off the sidebar."""
+
+    place_wanted = Signal(object)  # a key of the sidebar with no page open for it
+    unpin_wanted = Signal(str)  # a pinned report's id: off the sidebar
+
+    def __init__(self, sidebar: Sidebar, stack: QStackedWidget, owner: QWidget) -> None:
+        super().__init__(owner)
+        self.owner = owner  # the window: menus and questions are shown over it
+        self.sidebar = sidebar
+        self.stack = stack
+        self.pages: dict[object, PageWidget] = {}
+        self.came_from: dict[PageWidget, object] = {}  # an open page → the page it was opened from
         self.recent: list = []  # open pages, the last shown first (the sidebar shows a few)
-        self.resize(1360, 820)
-
-        central = QWidget()
-        lay = QHBoxLayout(central)
-        lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(0)
-        self.sidebar = Sidebar()
-        lay.addWidget(self.sidebar)
-        self.stack = QStackedWidget()
         self.stack.currentChanged.connect(self._size_by_current_page)
-        lay.addWidget(self.stack, 1)
-        self.setCentralWidget(central)
-        self.toast = Toast(self)
-
         self.sidebar.nav.currentItemChanged.connect(self._on_nav)
         self.sidebar.nav.itemClicked.connect(self._on_nav_click)
         self.sidebar.nav.customContextMenuRequested.connect(self._nav_menu)
-        self.sidebar.nav.viewport().installEventFilter(self)
+        # kept: while the window is destroyed the sidebar is gone before this filter
+        self._viewport = self.sidebar.nav.viewport()
+        self._viewport.installEventFilter(self)
 
-    # ---- the company shown -----------------------------------------------------------
-
-    def _show_company(self, name: str) -> None:
-        read_only = self.open_session.read_only
-        self.sidebar.company.setText(name)
-        viewing = f" — {tr('только просмотр')}" if read_only else ""
-        self.setWindowTitle(f"{name}{viewing} — Modern GL")
-        stock_only = self.open_session.stock_only
-        self.sidebar.retranslate(read_only, stock_only)
-        for heading, places in sections(stock_only):
-            if heading is not None:
-                self.sidebar.add_section(tr(heading))
-            for key, text in places:
-                self.sidebar.add_item(key, tr(text), place_icon(key))
-        self.sidebar.add_section(tr("Открытые")).setHidden(True)  # arrange_open shows it
-        self.show_place(("home",))
-
-    def _drop_pages(self) -> None:
+    def drop(self) -> None:
+        """Every page goes (the company is closed), and the sidebar's items with them."""
         # quietly: clearing moves the current item, and that would open a page again
         # with this company, whose file is closed right below
         self.sidebar.nav.blockSignals(True)
@@ -111,16 +78,21 @@ class OpenPages(CompanyFiles):
         self.came_from.clear()
         self.recent.clear()
 
-    def _add_page(self, key, page: QWidget, open_item: bool = False) -> None:
+    def add(self, key, page: PageWidget, open_item: bool = False) -> None:
         self.pages[key] = page
         self.stack.addWidget(page)
         self._size_by_current_page()
         if open_item:
             # closing it returns to the page it was opened from (the list of purchases…)
-            self.came_from[page] = self._key_of(self.stack.currentWidget())
-            title = page.title() if isinstance(page, TitledPage) else ""
-            self.sidebar.add_item(key, title, open_icon(key))
+            self.came_from[page] = self.key_of(self.stack.currentWidget())
+            self.sidebar.add_item(key, page.title(), open_icon(key))
             self._touch(key)
+
+    def show_alone(self, page: PageWidget) -> None:
+        """A page with no item in the sidebar («Нет компании»)."""
+        self.pages[page.key] = page
+        self.stack.addWidget(page)
+        self.stack.setCurrentWidget(page)
 
     def _size_by_current_page(self, _index: int = 0) -> None:
         """Only the page shown sets how narrow the window may get: a stack takes the
@@ -143,43 +115,30 @@ class OpenPages(CompanyFiles):
     def _all_open_menu(self) -> None:
         """«All (N)…»: every open page in a menu, the last shown first."""
         item = self.sidebar.item_for(ALL_OPEN)
-        current = self.sidebar.item_for(self._key_of(self.stack.currentWidget()))
+        current = self.sidebar.item_for(self.key_of(self.stack.currentWidget()))
         if item is None or current is None:
             return
         self.sidebar.nav.blockSignals(True)  # the item is a button, not a place to stay on
         self.sidebar.nav.setCurrentItem(current)
         self.sidebar.nav.blockSignals(False)
-        menu = QMenu(self)
+        menu = QMenu(self.owner)
         for key in self.recent:
-            page = self.pages[key]
-            title = page.title() if isinstance(page, TitledPage) else ""
-            menu.addAction(open_icon(key), title).triggered.connect(
-                lambda _=False, key=key: self._activate(key)
+            menu.addAction(open_icon(key), self.pages[key].title()).triggered.connect(
+                lambda _=False, key=key: self.activate(key)
             )
         rect = self.sidebar.nav.visualItemRect(item)
         menu.exec(self.sidebar.nav.viewport().mapToGlobal(rect.bottomLeft()))
 
-    def _activate(self, key) -> None:
+    def activate(self, key) -> None:
         page = self.pages[key]
         self._touch(key)
         if self.stack.currentWidget() is not page:
             self.stack.setCurrentWidget(page)
             self._fade_in(page)
-        self._select_nav(key, page)
-        if isinstance(page, JournalPage | HomePage):
-            page.refresh()
-        if isinstance(page, InventoryPage):
-            page.refresh()
-        if isinstance(page, OpeningBalancesPage):
-            page.refresh()
-        if isinstance(page, BankPage):
-            page.refresh()
-        if isinstance(page, DirectoriesPage):  # elements added elsewhere (e-qaimə import…)
-            page.refresh(keep_value=True)
-        if isinstance(page, FocusablePage):
-            page.focus_table()
+        self.select_nav(key, page)
+        page.activated()
 
-    def _select_nav(self, key, page: QWidget) -> None:
+    def select_nav(self, key, page: PageWidget) -> None:
         """The sidebar's item of the page shown: its own, a pinned view of it, or — a
         report not pinned — «Все отчёты», where it was opened from (D114)."""
         nav = self.sidebar
@@ -193,7 +152,13 @@ class OpenPages(CompanyFiles):
             nav.nav.setCurrentItem(item)
             nav.nav.blockSignals(False)
 
-    def _fade_in(self, page: QWidget) -> None:
+    def select_current(self) -> None:
+        """The sidebar keeps the item of the page shown (a pinned report opened from it)."""
+        page = self.current_page()
+        if page is not None:
+            self.select_nav(self.key_of(page), page)
+
+    def _fade_in(self, page: PageWidget) -> None:
         effect = QGraphicsOpacityEffect(page)
         page.setGraphicsEffect(effect)
         anim = QPropertyAnimation(effect, b"opacity", page)
@@ -214,9 +179,9 @@ class OpenPages(CompanyFiles):
         if key == ALL_OPEN:  # a button, not a place: it answers a click (_on_nav_click)
             return
         if key in self.pages:
-            self._activate(key)
+            self.activate(key)
         else:
-            self.show_place(key)
+            self.place_wanted.emit(key)
 
     def _on_nav_click(self, item: QListWidgetItem) -> None:
         if item.data(KEY_ROLE) == ALL_OPEN:
@@ -225,28 +190,41 @@ class OpenPages(CompanyFiles):
     def _nav_menu(self, pos) -> None:
         item = self.sidebar.nav.itemAt(pos)
         key = item.data(KEY_ROLE) if item else None
-        if not NavDelegate.closable(key):
+        menu = QMenu(self.owner)
+        if key in PIN_KEYS:
+            menu.addAction(tr("Убрать из боковой панели")).triggered.connect(
+                lambda: self.unpin_wanted.emit(PIN_KEYS[key])
+            )
+        elif NavDelegate.closable(key):
+            menu.addAction(tr("Закрыть")).triggered.connect(lambda: self.close_page(key))
+        else:
             return
-        menu = QMenu(self)
-        menu.addAction(tr("Закрыть")).triggered.connect(lambda: self.close_page(key))
         menu.exec(self.sidebar.nav.viewport().mapToGlobal(pos))
 
-    def _retitle(self, page: QWidget) -> None:
-        key = self._key_of(page)
+    def retitle(self, page: PageWidget) -> None:
+        key = self.key_of(page)
         item = self.sidebar.item_for(key) if key is not None else None
-        if item is not None and isinstance(page, TitledPage):
+        if item is not None:
             item.setText(page.title())
 
-    def _page(self, key, kind: type[PageT]) -> PageT | None:
+    def page(self, key, kind: type[PageT]) -> PageT | None:
         """The open page under `key` if it is of this kind."""
         page = self.pages.get(key)
         return page if isinstance(page, kind) else None
 
-    def _key_of(self, page: QWidget | None):
+    def key_of(self, page: QWidget | None):
         return next((k for k, p in self.pages.items() if p is page), None)
 
+    def current_page(self) -> PageWidget | None:
+        """The page shown (None — no company)."""
+        page = self.stack.currentWidget()
+        return page if isinstance(page, PageWidget) else None
+
+    def current_key(self):
+        return self.key_of(self.stack.currentWidget())
+
     def close_current(self) -> None:
-        key = self._key_of(self.stack.currentWidget())
+        key = self.current_key()
         if NavDelegate.closable(key):
             self.close_page(key)
 
@@ -269,13 +247,13 @@ class OpenPages(CompanyFiles):
         self.stack.removeWidget(page)
         page.deleteLater()
         back = self.came_from.pop(page, None)
-        self.show_place(back if back in self.pages else ("journal",))
+        self.place_wanted.emit(back if back in self.pages else ("journal",))
 
-    def _confirm_close(self, page) -> bool:
-        if not getattr(page, "is_dirty", lambda: False)():  # e.g. the empty-state page
+    def _confirm_close(self, page: PageWidget) -> bool:
+        if not page.is_dirty():
             return True
         answer = QMessageBox.question(
-            self,
+            self.owner,
             tr("Несохранённые изменения"),
             tr("Сохранить «{title}»?", title=page.title().rstrip(" •")),
             QMessageBox.StandardButton.Save
@@ -287,35 +265,31 @@ class OpenPages(CompanyFiles):
             return page.save(post=False)
         return answer == QMessageBox.StandardButton.Discard
 
-    def _current_place(self) -> tuple | None:
+    def current_place(self) -> tuple | None:
         """The sidebar place shown (not an open document): kept when the window is rebuilt."""
-        key = self._key_of(self.stack.currentWidget())
+        key = self.current_key()
         return key if isinstance(key, tuple) and key in PLACE_KEYS else None
 
-    def _dirty_pages(self) -> list[QWidget]:
-        return [p for p in self.pages.values() if getattr(p, "is_dirty", lambda: False)()]
+    def dirty_pages(self) -> list[PageWidget]:
+        return [p for p in self.pages.values() if p.is_dirty()]
 
-    def _confirm_close_all(self) -> bool:
+    def postings_changed(self, doc_id: int) -> None:
+        """Postings written (a document posted, balances saved): every open page hears it."""
+        for page in list(self.pages.values()):
+            page.on_postings_changed(doc_id)
+
+    def confirm_close_all(self) -> bool:
         return all(self._confirm_close(p) for p in list(self.pages.values()))
 
-    def closeEvent(self, event) -> None:
-        if self._confirm_close_all():
-            event.accept()
-        else:
-            event.ignore()
-
-    def keyPressEvent(self, event) -> None:
-        # Esc nobody on the page wanted (an open cell or list takes it first): back
-        if event.key() == Qt.Key.Key_Escape and not event.modifiers():
-            self.close_current()
-            return
-        super().keyPressEvent(event)
-
-    def eventFilter(self, obj, event) -> bool:
+    def eventFilter(self, watched, event) -> bool:
         """Click on the × of an open item in the sidebar closes it."""
-        if obj is self.sidebar.nav.viewport() and event.type() in (
-            QEvent.Type.MouseButtonPress,
-            QEvent.Type.MouseButtonRelease,
+        if (
+            event.type()
+            in (
+                QEvent.Type.MouseButtonPress,
+                QEvent.Type.MouseButtonRelease,
+            )
+            and watched is self._viewport
         ):
             pos = event.position().toPoint()
             item = self.sidebar.nav.itemAt(pos)
@@ -326,50 +300,15 @@ class OpenPages(CompanyFiles):
                     if event.type() == QEvent.Type.MouseButtonRelease:
                         self.close_page(key)
                     return True
-        return super().eventFilter(obj, event)
+        return super().eventFilter(watched, event)
 
-    def notify(self, message: str, undo: Callable[[], None] | None = None) -> None:
-        self.toast.show_message(message, None if undo is None else lambda: self._undo(undo))
-
-    def _undo(self, undo: Callable[[], None]) -> None:
-        """«Undo» on the toast: done, then the page shown reads it again."""
-        try:
-            undo()
-        except LedgerError as e:
-            self.toast.show_message(str(e))
-            return
-        key = self._key_of(self.stack.currentWidget())
-        if key is not None:
-            self._activate(key)
-
-    def show_place(self, key) -> None:
-        if self.session is not None and key not in shown_places(self.session.stock_only):
-            return  # a page of the books, in a company kept as a warehouse only (D90)
-        if key not in self.pages:
-            self._add_page(key, self._make_place(key))
-        self._activate(key)
-
-    def _show_no_company(self) -> None:
-        self.sidebar.company.setText(tr("Нет компании"))
-        self.sidebar.retranslate()
-        self.setWindowTitle("Modern GL")
-        page = EmptyState("○", tr("Нет компании"), tr("Создайте компанию в меню слева вверху."))
-        self.pages[("empty",)] = page
-        self.stack.addWidget(page)
-        self.stack.setCurrentWidget(page)
-
-    def _rekey(self, page) -> None:
+    def rekey(self, page: PageWidget) -> None:
         """A new document got its number: its page is kept under the new key."""
-        old_key = self._key_of(page)
-        if old_key is not None and old_key != page.key and page.doc is not None:
+        old_key = self.key_of(page)
+        if old_key is not None and old_key != page.key:
             self.pages[page.key] = self.pages.pop(old_key)
             self.recent = [page.key if k == old_key else k for k in self.recent]
             item = self.sidebar.item_for(old_key)
             if item is not None:
                 item.setData(KEY_ROLE, page.key)
                 item.setIcon(open_icon(page.key))
-
-    # ---- what the places are; made by the window -------------------------------------
-
-    def _make_place(self, key) -> QWidget:
-        raise NotImplementedError

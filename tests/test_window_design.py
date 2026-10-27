@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
-    QApplication,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -34,9 +33,10 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.theme.css import stylesheet
 from modern_gl.reporting.eqaime_reconciliation import reconcile
-from tests.test_eqaime_import import received
-from tests.test_sales import make_shop
-from tests.test_vat_deposit_import import OWN_TIN, PORTAL
+from tests.helpers.eqaime import received
+from tests.helpers.qt import running_app
+from tests.helpers.sales import make_shop
+from tests.helpers.vat_deposit import OWN_TIN, PORTAL
 
 DESKTOP = Path(__file__).parent.parent / "src" / "modern_gl" / "desktop"
 DIALOG = re.compile(r"^class (\w+)\((\w+)\):", re.MULTILINE)
@@ -68,6 +68,8 @@ OTHER_DIALOGS = {
     "TagsDialog",
     "ValueDialog",
 }
+# forms checked live by the general rules (test_the_form_is_as_designed below)
+FORMS = {"CrashDialog"}
 IMPORT_WINDOWS = {
     "EqaimeImportForm",
     "EqaimeImportDialog",
@@ -85,7 +87,7 @@ def test_every_dialog_is_known():
         for name, base in DIALOG.findall(path.read_text(encoding="utf-8"))
         if base in {"QDialog", "ImportWindow", *IMPORT_WINDOWS} or name.endswith("Dialog")
     }
-    unknown = sorted(set(found) - OTHER_DIALOGS - IMPORT_WINDOWS - {"ImportWindow"})
+    unknown = sorted(set(found) - OTHER_DIALOGS - FORMS - IMPORT_WINDOWS - {"ImportWindow"})
     assert unknown == [], "новое окно — в tests/test_window_design.py (DESIGN.md §7)"
     loose = sorted(n for n in IMPORT_WINDOWS if found.get(n) == "QDialog")
     assert loose == [], "окно загрузки — на ImportWindow (DESIGN.md §7)"
@@ -189,7 +191,8 @@ def layout_problems(window: ImportWindow) -> list[str]:
     if shown != MARGINS or window.root.spacing() != SPACING:
         problems.append(f"поля окна {shown}, а не {MARGINS}")
     titles = [label for label in visible(window, QLabel) if is_title(label)]
-    if titles != [window.title] or window.root.itemAt(0).widget() is not window.title:
+    first = window.root.itemAt(0)
+    if titles != [window.title] or first is None or first.widget() is not window.title:
         problems.append("заголовок — один, первым")
     primaries = [b for b in visible(window, QPushButton) if b.objectName() == "primary"]
     if len(primaries) > 1:
@@ -199,7 +202,7 @@ def layout_problems(window: ImportWindow) -> list[str]:
         for b in primaries
         if window.footer_right.indexOf(b) < 0
     ]
-    bar = [window.bar.itemAt(n).widget() for n in range(window.bar.count())]
+    bar = [item.widget() for item in map(window.bar.itemAt, range(window.bar.count())) if item]
     if any(isinstance(widget, QPushButton) for widget in bar):
         problems.append("кнопка в панели: действия — внизу")
     return problems
@@ -233,7 +236,7 @@ def design_problems(window: ImportWindow) -> list[str]:
 
 @pytest.mark.parametrize("name", sorted(STEPS))
 def test_the_window_is_as_designed(qtbot, shop_session, name):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     session, place = shop_session
     steps = STEPS[name](session, place)
     for n, window in enumerate(steps, 1):
@@ -246,3 +249,44 @@ def test_the_window_is_as_designed(qtbot, shop_session, name):
 
 def test_every_import_window_is_checked_live():
     assert set(STEPS) == IMPORT_WINDOWS - {"EqaimeImportForm"}
+
+
+# ---- forms, live ---------------------------------------------------------------------
+
+
+def crash_form() -> QWidget:
+    from modern_gl.desktop.crash_dialog import CrashDialog
+
+    return CrashDialog("Traceback (most recent call last):\n  ...\nValueError: x\n")
+
+
+FORM_STEPS = {"CrashDialog": crash_form}
+
+
+def form_problems(form: QWidget) -> list[str]:
+    """A form in the theme's look: the general rules of a widget, and at most one blue
+    button, the last one in its row (bottom right)."""
+    tones = theme_tones()
+    problems = [p for w in form.findChildren(QWidget) for p in widget_problems(w, tones)]
+    primaries = [b for b in visible(form, QPushButton) if b.objectName() == "primary"]
+    if len(primaries) > 1:
+        problems.append(f"синих кнопок {len(primaries)}: {[b.text() for b in primaries]}")
+    for b in primaries:
+        row = [w for w in visible(form, QPushButton) if w.parent() is b.parent()]
+        if max(row, key=lambda w: w.mapTo(form, w.rect().topRight()).x()) is not b:
+            problems.append(f"синяя кнопка «{b.text()}» не справа")
+    return problems
+
+
+@pytest.mark.parametrize("name", sorted(FORM_STEPS))
+def test_the_form_is_as_designed(qtbot, name):
+    theme.apply(running_app())
+    form = FORM_STEPS[name]()
+    qtbot.addWidget(form)
+    form.show()
+    qtbot.wait(10)
+    assert form_problems(form) == [], name
+
+
+def test_every_form_is_checked_live():
+    assert set(FORM_STEPS) == FORMS

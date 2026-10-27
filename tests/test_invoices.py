@@ -8,42 +8,20 @@ from datetime import date
 import pytest
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import load_document
 from modern_gl.application.quick_entry import parse
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
-from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.invoices import invoice_report
 from modern_gl.reporting.reports import account_card, subconto_balance
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
-def firm():
-    conn = connect(":memory:")
-    ledger = Ledger(conn, actor="test")
-    cid = ledger.create_company("Firma")
-    apply_chart_template(ledger, cid, "classic", "ru")
-    kind = {c: ledger.subconto_kind_id(cid, c) for c in ("counterparty", "contract")}
-    v = {
-        "Альфа": ledger.add_subconto_value(cid, kind["counterparty"], "Альфа"),
-        "Бета": ledger.add_subconto_value(cid, kind["counterparty"], "Бета"),
-        "Аренда": ledger.add_subconto_value(
-            cid, ledger.subconto_kind_id(cid, "cost_item"), "Аренда"
-        ),
-        "Kapital": ledger.add_subconto_value(
-            cid, ledger.subconto_kind_id(cid, "bank_account"), "Kapital"
-        ),
-    }
-    v["Д-1"] = ledger.add_subconto_value(cid, kind["contract"], "Д-1", owner_id=v["Альфа"])
-    v["Общий"] = ledger.add_subconto_value(cid, kind["contract"], "Общий")
-    ledger.set_subconto_value_tax(cid, v["Альфа"], "1234567890")
-    cat = Catalog(conn, cid)
-    acc = {code: a.id for code, a in cat.by_code.items()}
-    yield conn, ledger, cid, acc, v
-    conn.close()
+def firm(invoice_firm):
+    return invoice_firm
 
 
 def test_number_is_written_as_the_portal_shows_it():
@@ -269,7 +247,6 @@ def test_invoice_number_fills_related_postings_without_overwriting(firm):
 
 
 def test_page_finds_an_invoice_by_vöen(firm, qtbot):
-    from PySide6.QtWidgets import QApplication
 
     from modern_gl.desktop import theme
     from modern_gl.desktop.invoices_page import InvoicesPage
@@ -278,7 +255,7 @@ def test_page_finds_an_invoice_by_vöen(firm, qtbot):
 
     conn, ledger, cid, acc, v = firm
     purchase_sale_payment(ledger, cid, acc, v)
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     s = Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda _m: None)
     page = InvoicesPage(s, ReportParams(date(2026, 3, 1), date(2026, 3, 31)))
     qtbot.addWidget(page)
@@ -339,7 +316,6 @@ def test_warehouse_receipt_carries_its_e_qaime_or_declaration(firm):
 
 
 def test_receipt_form_shows_and_saves_the_basis(firm, qtbot):
-    from PySide6.QtWidgets import QApplication
 
     from modern_gl.application.inventory import Inventory, ReceiptLine
     from modern_gl.desktop import theme
@@ -360,7 +336,7 @@ def test_receipt_form_shows_and_saves_the_basis(firm, qtbot):
         (v["Альфа"], v["Д-1"]),
         invoice="MT9",
     )
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     s = Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda _m: None)
     page = InventoryDocumentPage(s, doc_type="receipt")
     qtbot.addWidget(page)

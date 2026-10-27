@@ -20,43 +20,7 @@ from modern_gl.application.vat import (
 )
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.vat import vat_credit
-from tests.test_invoices import firm as invoice_firm  # noqa: F401 — Альфа, 60, 19, 51, 54
-
-RULE = CreditRule("2024-01-01")
-
-
-def post(ledger, cid, day: str, *lines: PostingInput) -> int:
-    return ledger.post_new(cid, day, list(lines))
-
-
-def buy(ledger, cid, acc, v, day: str, amount: str, vat: str, number: str) -> int:
-    """A purchase of a service from Альфа on an e-qaimə: Dt 26 / Kt 60 and Dt 19 / Kt 60."""
-    alfa = (v["Альфа"], v["Д-1"])
-    return post(
-        ledger,
-        cid,
-        day,
-        PostingInput(acc["26"], acc["60"], amount, (v["Аренда"],), alfa, invoice=number),
-        PostingInput(acc["19"], acc["60"], vat, (v["Альфа"],), alfa, invoice=number),
-    )
-
-
-def pay(ledger, cid, acc, v, day: str, amount: str, number: str, deposit: bool = False) -> int:
-    """Dt 60 / Kt 51 — the amount from the bank; Kt 54 — the ƏDV from the deposit (D41)."""
-    source = acc["54"] if deposit else acc["51"]
-    return post(
-        ledger,
-        cid,
-        day,
-        PostingInput(
-            acc["60"], source, amount, (v["Альфа"], v["Д-1"]), (v["Kapital"],), invoice=number
-        ),
-    )
-
-
-def events(conn, cid, number: str, kind: str = "", date_to: str = "2026-12-31") -> list[tuple]:
-    facts = {(f.kind, f.invoice): f for f in purchase_facts(conn, cid, date_to)}
-    return [(e.day, e.amount) for e in credit_events(facts[(kind, number)], RULE)]
+from tests.helpers.vat_credit import RULE, buy, events, pay, post
 
 
 def test_the_rule_is_chosen_by_the_day_and_unknown_years_are_refused():
@@ -66,7 +30,7 @@ def test_the_rule_is_chosen_by_the_day_and_unknown_years_are_refused():
         rule_for("2023-12-31")
 
 
-def test_credit_grows_with_the_share_paid(invoice_firm):  # noqa: F811
+def test_credit_grows_with_the_share_paid(invoice_firm):
     """E-qaimə of 05.03: 1 000.00 + ƏDV 180.00.
       20.03  500.00 of the amount from the bank: the share paid is 1/2, but no ƏDV paid — 0.
       25.03  ƏDV 180.00 from the deposit: 180 paid, the share of the amount is 90 — credit 90.
@@ -91,7 +55,7 @@ def test_credit_grows_with_the_share_paid(invoice_firm):  # noqa: F811
     assert events(conn, cid, "MT2603001", date_to="2026-03-31") == [("2026-03-25", 9_000)]
 
 
-def test_an_advance_waits_for_the_eqaime(invoice_firm):  # noqa: F811
+def test_an_advance_waits_for_the_eqaime(invoice_firm):
     """Paid in full on 01.03 — 1 000.00 from the bank, ƏDV 180.00 from the deposit — on an
     e-qaimə that comes on 05.03: the whole 180.00 is credited on 05.03, not on 01.03."""
     conn, ledger, cid, acc, v = invoice_firm
@@ -101,7 +65,7 @@ def test_an_advance_waits_for_the_eqaime(invoice_firm):  # noqa: F811
     assert events(conn, cid, "MT2603002") == [("2026-03-05", 18_000)]
 
 
-def test_one_side_paid_gives_nothing(invoice_firm):  # noqa: F811
+def test_one_side_paid_gives_nothing(invoice_firm):
     """Only the amount paid (1 000.00 on 10.03), or only the ƏDV (180.00 on 12.03 for
     another e-qaimə): nothing is credited; the ƏDV alone paid in full counts for 0 while
     the share of the amount paid is 0."""
@@ -114,7 +78,7 @@ def test_one_side_paid_gives_nothing(invoice_firm):  # noqa: F811
     assert events(conn, cid, "MT2603004") == []
 
 
-def test_the_share_is_rounded_and_the_last_payment_completes_it(invoice_firm):  # noqa: F811
+def test_the_share_is_rounded_and_the_last_payment_completes_it(invoice_firm):
     """E-qaimə 333.33 + ƏDV 60.00; ƏDV paid in full on 06.03; the amount in three parts:
       10.03  111.11 → share 60 × 111.11 / 333.33 = 20.0002 → 20.00
       20.03  111.11 → 60 × 222.22 / 333.33 = 40.0004 → 40.00: +20.00
@@ -133,7 +97,7 @@ def test_the_share_is_rounded_and_the_last_payment_completes_it(invoice_firm):  
     ]
 
 
-def test_without_partial_share_the_credit_comes_at_once(invoice_firm):  # noqa: F811
+def test_without_partial_share_the_credit_comes_at_once(invoice_firm):
     """The same e-qaimə under a version without partial credit: 60.00 on 30.03, when
     everything is paid."""
     conn, ledger, cid, acc, v = invoice_firm
@@ -146,7 +110,7 @@ def test_without_partial_share_the_credit_comes_at_once(invoice_firm):  # noqa: 
     assert credit_events(facts, whole) == [CreditEvent("2026-03-30", 6_000)]
 
 
-def test_a_customs_declaration_is_credited_as_its_vat_is_paid(invoice_firm):  # noqa: F811
+def test_a_customs_declaration_is_credited_as_its_vat_is_paid(invoice_firm):
     """Import on declaration 12345 of 10.03: Dt 26 / Kt 60 [Альфа] 2 000.00 — the goods
     (an expense here, stock needs the warehouse), not paid; ƏDV Dt 19 / Kt 76 [Бета, the
     customs] 360.00. Paid to the customs from the bank: 100.00 on 12.03, 260.00 on 15.03 —
@@ -219,7 +183,7 @@ def test_a_customs_declaration_is_credited_as_its_vat_is_paid(invoice_firm):  # 
     ]
 
 
-def test_sales_and_eqaime_without_vat_are_not_purchases(invoice_firm):  # noqa: F811
+def test_sales_and_eqaime_without_vat_are_not_purchases(invoice_firm):
     """A sale (Dt 62 / Kt 46, Dt 46 / Kt 68.2) and a purchase without ƏDV are no input ƏDV."""
     conn, ledger, cid, acc, v = invoice_firm
     beta = (v["Бета"], v["Общий"])
@@ -241,7 +205,7 @@ def test_sales_and_eqaime_without_vat_are_not_purchases(invoice_firm):  # noqa: 
     assert purchase_facts(conn, cid, "2026-03-31") == []
 
 
-def test_the_report_of_a_month_sums_the_credit_and_what_waits(invoice_firm):  # noqa: F811
+def test_the_report_of_a_month_sums_the_credit_and_what_waits(invoice_firm):
     """March: e-qaimə A (1 000 + 180) — 90.00 credited on 25.03, 90.00 waits; e-qaimə B
     (500 + 90) paid in full on 28.03 — 90.00; the declaration — 360.00 on 12.03. April: the
     other 90.00 of A on 02.04. Rows carry the counterparty's name; the footer the totals."""
@@ -310,7 +274,7 @@ def test_facts_of_a_number_without_payments():
     assert credit_events(facts, RULE) == []
 
 
-def test_the_page_shows_the_credit_of_the_month(invoice_firm, qtbot):  # noqa: F811
+def test_the_page_shows_the_credit_of_the_month(invoice_firm, qtbot):
     """The page of March: the rows of the report, the footer with the totals; a double
     click on a row opens the e-qaimə's document."""
     from modern_gl.application.catalog import Catalog

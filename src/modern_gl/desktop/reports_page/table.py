@@ -13,7 +13,6 @@ from PySide6.QtCore import (
     QPersistentModelIndex,
     QRect,
     QRectF,
-    QSettings,
     QSize,
     Qt,
 )
@@ -26,6 +25,7 @@ from PySide6.QtWidgets import (
     QTableView,
 )
 
+from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.domain.money import format_minor
 from modern_gl.reporting.reports import OsvRow
@@ -43,10 +43,6 @@ NAME_MAX = 380  # px: a longer name is cut with "…" (the whole of it shows und
 GROUP_GAP = 24  # px of air in front of each Dt/Kt pair
 
 BAND = 1  # rows in a band: plain zebra
-
-ZEBRA_SETTING = "reports/zebra"  # «Оформление → Полосы в таблицах», off by default (D103)
-
-GRID_SETTING = "reports/grid"  # «Оформление → Сетка в отчётах», on by default (D127)
 
 ROW_HEIGHT = 24
 
@@ -79,19 +75,19 @@ class Column:
 
 
 def zebra() -> bool:
-    return bool(QSettings().value(ZEBRA_SETTING, False, type=bool))
+    return prefs().zebra()
 
 
 def set_zebra(on: bool) -> None:
-    QSettings().setValue(ZEBRA_SETTING, on)
+    prefs().set_zebra(on)
 
 
 def grid() -> bool:
-    return bool(QSettings().value(GRID_SETTING, True, type=bool))
+    return prefs().grid()
 
 
 def set_grid(on: bool) -> None:
-    QSettings().setValue(GRID_SETTING, on)
+    prefs().set_grid(on)
 
 
 def figure(minor: int | None) -> str:

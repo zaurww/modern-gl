@@ -15,6 +15,7 @@ from modern_gl.application.bank.places import BankPlace
 from modern_gl.application.counterparties import known_counterparty, short_name
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import fold, tr
+from modern_gl.infrastructure.db import transaction
 
 
 def party_key(op: ImportedOperation) -> str:
@@ -38,11 +39,11 @@ class BankImportCommands(BankCommands, BankStatementCommands):
                 continue
             existing = known_counterparty(self.conn, company_id, op.tin, op.name)
             if existing is None:
-                kind = kind or self.subconto_kind_id(company_id, "counterparty")
-                existing = self.add_subconto_value(company_id, kind, short_name(op.name))
+                kind = kind or self.ledger.subconto_kind_id(company_id, "counterparty")
+                existing = self.ledger.add_subconto_value(company_id, kind, short_name(op.name))
                 if op.tin:
-                    self.set_subconto_value_tax(company_id, existing, op.tin)
-                self.set_subconto_value_legal_name(company_id, existing, op.name)
+                    self.ledger.set_subconto_value_tax(company_id, existing, op.tin)
+                self.ledger.set_subconto_value_legal_name(company_id, existing, op.name)
                 added.add(existing)
             found[key] = existing
         return found, added
@@ -53,14 +54,11 @@ class BankImportCommands(BankCommands, BankStatementCommands):
         """The operation saved: posted when `post` and nothing `why` not to, else (and
         when posting fails) a draft. -> (POSTED or DRAFT, why a draft, its GL document)."""
         if post and not why:
-            self.conn.execute("SAVEPOINT bank_import_operation")
             try:
-                saved = self.save_bank_operation(company_id, data, post=True)
-                self.conn.execute("RELEASE bank_import_operation")
+                with transaction(self.conn):  # a savepoint: what did not post is undone
+                    saved = self.save_bank_operation(company_id, data, post=True)
                 return POSTED, "", self._bank_row(company_id, saved)["document_id"]
             except LedgerError as e:
-                self.conn.execute("ROLLBACK TO bank_import_operation")
-                self.conn.execute("RELEASE bank_import_operation")
                 why = str(e)
         saved = self.save_bank_operation(company_id, data, post=False)
         return (

@@ -144,8 +144,9 @@ def file_operations(
                 continue
             if op.kind == CONVERSION:
                 taken = tuple(f.line for f in fees if f.line.group == op.line.group)
-                op = FileOperation(op.line, op.place, op.kind, op.target, fees=taken)
-            found.append(op)
+                found.append(FileOperation(op.line, op.place, op.kind, op.target, fees=taken))
+            else:
+                found.append(op)
     return found
 
 

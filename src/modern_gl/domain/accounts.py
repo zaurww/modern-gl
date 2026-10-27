@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from modern_gl.i18n import N_
+
 ACCOUNT_CLASSES = ("asset", "liability", "equity", "revenue", "expense")
 DEBIT_NORMAL = {"asset", "expense"}  # liability, equity, revenue: credit-normal
 # Accounts that automatic postings use, chosen per company (table account_roles)
@@ -69,51 +71,51 @@ ROLE_TYPES = {
 # program so that reports and automatic postings understand any company's chart; the
 # class follows from the type. (type, class, Russian name — a translation key).
 ACCOUNT_TYPES = (
-    ("cash", "asset", "Касса"),
-    ("bank", "asset", "Банковские счета"),
-    ("transit", "asset", "Переводы в пути"),
+    ("cash", "asset", N_("Касса")),
+    ("bank", "asset", N_("Банковские счета")),
+    ("transit", "asset", N_("Переводы в пути")),
     # ƏDV depozit hesabı: money that may only pay ƏDV, so not free cash like "bank" (D41)
-    ("vat_deposit", "asset", "Депозитный счёт НДС"),
-    ("receivable", "asset", "Покупатели и заказчики"),
-    ("advance_paid", "asset", "Авансы выданные"),
-    ("other_receivable", "asset", "Прочая дебиторская задолженность"),
-    ("input_vat", "asset", "НДС к возмещению"),
-    ("inventory", "asset", "Запасы"),
+    ("vat_deposit", "asset", N_("Депозитный счёт НДС")),
+    ("receivable", "asset", N_("Покупатели и заказчики")),
+    ("advance_paid", "asset", N_("Авансы выданные")),
+    ("other_receivable", "asset", N_("Прочая дебиторская задолженность")),
+    ("input_vat", "asset", N_("НДС к возмещению")),
+    ("inventory", "asset", N_("Запасы")),
     # the first types of a class are current (within a year), NONCURRENT_TYPES follow (D89);
     # "investment", "other_asset", "other_liability" kept their codes when the long-term
     # ones came, so charts in CSV files still load
-    ("investment", "asset", "Краткосрочные финансовые вложения"),
-    ("other_asset", "asset", "Прочие оборотные активы"),
-    ("fixed_asset", "asset", "Основные средства"),
-    ("intangible", "asset", "Нематериальные активы"),
-    ("long_term_investment", "asset", "Долгосрочные финансовые вложения"),
-    ("other_noncurrent_asset", "asset", "Прочие внеоборотные активы"),
-    ("deferred_tax_asset", "asset", "Отложенные налоговые активы"),  # D128
-    ("payable", "liability", "Поставщики и подрядчики"),
-    ("advance_received", "liability", "Авансы полученные"),
+    ("investment", "asset", N_("Краткосрочные финансовые вложения")),
+    ("other_asset", "asset", N_("Прочие оборотные активы")),
+    ("fixed_asset", "asset", N_("Основные средства")),
+    ("intangible", "asset", N_("Нематериальные активы")),
+    ("long_term_investment", "asset", N_("Долгосрочные финансовые вложения")),
+    ("other_noncurrent_asset", "asset", N_("Прочие внеоборотные активы")),
+    ("deferred_tax_asset", "asset", N_("Отложенные налоговые активы")),  # D128
+    ("payable", "liability", N_("Поставщики и подрядчики")),
+    ("advance_received", "liability", N_("Авансы полученные")),
     # not a settlement by e-qaimə: Dt 76H / Kt 60 is no payment of the invoice (D65)
-    ("accrued_expenses", "liability", "Начисленные расходы"),
-    ("tax_payable", "liability", "Налоги и обязательные платежи"),
-    ("payroll", "liability", "Оплата труда"),
-    ("short_term_loan", "liability", "Краткосрочные кредиты"),
-    ("other_liability", "liability", "Прочие краткосрочные обязательства"),
-    ("long_term_loan", "liability", "Долгосрочные кредиты"),
-    ("other_long_term_liability", "liability", "Прочие долгосрочные обязательства"),
-    ("deferred_tax_liability", "liability", "Отложенные налоговые обязательства"),
-    ("share_capital", "equity", "Уставный капитал"),
-    ("retained_earnings", "equity", "Нераспределённая прибыль"),
-    ("profit_loss", "equity", "Финансовый результат"),
-    ("other_equity", "equity", "Прочий капитал"),
-    ("sales", "revenue", "Выручка"),
-    ("other_income", "revenue", "Прочие доходы"),
+    ("accrued_expenses", "liability", N_("Начисленные расходы")),
+    ("tax_payable", "liability", N_("Налоги и обязательные платежи")),
+    ("payroll", "liability", N_("Оплата труда")),
+    ("short_term_loan", "liability", N_("Краткосрочные кредиты")),
+    ("other_liability", "liability", N_("Прочие краткосрочные обязательства")),
+    ("long_term_loan", "liability", N_("Долгосрочные кредиты")),
+    ("other_long_term_liability", "liability", N_("Прочие долгосрочные обязательства")),
+    ("deferred_tax_liability", "liability", N_("Отложенные налоговые обязательства")),
+    ("share_capital", "equity", N_("Уставный капитал")),
+    ("retained_earnings", "equity", N_("Нераспределённая прибыль")),
+    ("profit_loss", "equity", N_("Финансовый результат")),
+    ("other_equity", "equity", N_("Прочий капитал")),
+    ("sales", "revenue", N_("Выручка")),
+    ("other_income", "revenue", N_("Прочие доходы")),
     # IFRS 18 (D128): interest and dividends received — investing; interest on borrowings
     # — financing
-    ("finance_income", "revenue", "Финансовые доходы"),
-    ("cost_of_sales", "expense", "Себестоимость продаж"),
-    ("operating_expense", "expense", "Операционные расходы"),
-    ("other_expense", "expense", "Прочие расходы"),
-    ("finance_expense", "expense", "Финансовые расходы"),
-    ("income_tax", "expense", "Налог на прибыль"),
+    ("finance_income", "revenue", N_("Финансовые доходы")),
+    ("cost_of_sales", "expense", N_("Себестоимость продаж")),
+    ("operating_expense", "expense", N_("Операционные расходы")),
+    ("other_expense", "expense", N_("Прочие расходы")),
+    ("finance_expense", "expense", N_("Финансовые расходы")),
+    ("income_tax", "expense", N_("Налог на прибыль")),
 )
 # Lines on these accounts may name the e-qaimə they belong to: settlements with partners
 # (an account without a type counts if it has the counterparty directory) and ƏDV (a

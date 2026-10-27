@@ -25,7 +25,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -35,6 +34,7 @@ from modern_gl.desktop.reports_page import CardPage, ReportParams, SubcontoPage
 from modern_gl.desktop.session import Session
 from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.reports import account_card, subconto_balance
+from tests.helpers.qt import running_app
 
 MARCH = ("2026-03-01", "2026-03-31")
 
@@ -157,7 +157,7 @@ def test_card_of_one_contract_and_of_one_counterparty(books):
 
 @pytest.fixture
 def session(qtbot, books):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn, ledger, cid, _ = books
     return Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda _: None)
 

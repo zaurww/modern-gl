@@ -8,7 +8,7 @@ from datetime import date
 
 from modern_gl.application.book_invoices import book_digest
 from modern_gl.application.common import now
-from modern_gl.application.ledger.base import LedgerBase
+from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.eqaime import PortalInvoice
 from modern_gl.domain.errors import ValidationError
@@ -25,7 +25,7 @@ _WATCHED = (
 )
 
 
-class EqaimeCommands(LedgerBase):
+class EqaimeCommands(ModuleBase):
     def remember_portal(
         self, company_id: int, invoices: Iterable[PortalInvoice], seen_at: str | None = None
     ) -> int:

@@ -76,9 +76,11 @@ def in_file(folder, number):
 
 def test_without_the_flag_there_is_nothing_that_writes(folder):
     companies = Companies(Workspace(folder))
-    tools = Server("modern-gl", "test", build_tools(companies)).handle(
+    answer = Server("modern-gl", "test", build_tools(companies)).handle(
         {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
-    )["result"]["tools"]
+    )
+    assert answer is not None
+    tools = answer["result"]["tools"]
     companies.close()
     assert not {t["name"] for t in tools} & {"create_draft", "update_draft", "delete_draft"}
     assert all(t["annotations"]["readOnlyHint"] for t in tools)
@@ -95,6 +97,7 @@ def test_a_draft_is_made_never_posted_and_the_ai_is_its_author(server, folder):
 
     doc, authors = in_file(folder, 7)
     assert doc.status == "draft" and doc.postings[0].amount == 50000
+    assert authors is not None
     assert authors.entered_by == "AI · Claude" and authors.posted_by is None
     # a draft is not in the books: 531 still closes February at Ct 700
     osv = call(server, "trial_balance", date_from="2026-02-01", date_to="2026-02-28")

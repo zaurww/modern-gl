@@ -3,15 +3,17 @@ as counted; the user types what differs and posts the difference with one button
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSettings, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
 from modern_gl.application.default_accounts import COST_OF_GOODS, default_account
 from modern_gl.application.inventory import Inventory, StockCountResult
 from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.preferences import STOCK_COUNT_WAREHOUSE, prefs
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.stock_count_page.model import (
     AMOUNT,
     BOOK,
@@ -25,20 +27,20 @@ from modern_gl.desktop.stock_count_page.model import (
 from modern_gl.desktop.widgets import (
     PageHeader,
     button,
+    caption,
     date_edit,
     edited_date,
     enter_goes_on,
     money,
 )
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.reporting.inventory import item_choices, stock_balances, warehouse_choices
 
-WAREHOUSE_SETTING = "stock_count/warehouse"  # the warehouse counted last
 WIDTHS = {ITEM: 320, UNIT: 70, BOOK: 120, QUANTITY: 120, DIFFERENCE: 120, AMOUNT: 140}
 
 
-class StockCountPage(QWidget):
+class StockCountPage(PageWidget):
     key = ("stock_count",)
     posted = Signal()  # the stock changed: «Склад» reads it again
     open_inventory_document = Signal(int)
@@ -72,8 +74,7 @@ class StockCountPage(QWidget):
         root.addWidget(self.error)
         self._build_footer(root)
         self.model.changed.connect(self._show_totals)
-        for keys in ("Ctrl+Return", "Ctrl+Enter"):
-            QShortcut(QKeySequence(keys), self).activated.connect(self.post)
+        bind(self, "post", self.post)
         self.refresh()
 
     def _build_bar(self, root: QVBoxLayout) -> None:
@@ -83,7 +84,7 @@ class StockCountPage(QWidget):
         self.warehouse.setFixedWidth(200)
         for choice in warehouse_choices(self.s.conn, self.s.company_id):
             self.warehouse.addItem(choice.label, choice.id)
-        remembered = QSettings().value(WAREHOUSE_SETTING, -1, type=int)
+        remembered = prefs().chosen_id(STOCK_COUNT_WAREHOUSE)
         self.warehouse.setCurrentIndex(max(self.warehouse.findData(remembered), 0))
         self.date = date_edit(self.s.working_date)
         self.date.setFixedWidth(130)
@@ -98,11 +99,11 @@ class StockCountPage(QWidget):
         self.add_item.setToolTip(tr("Товар, которого по учёту на складе нет, а нашёлся"))
         for item in item_choices(self.s.conn, self.s.company_id):
             self.add_item.addItem(item.label, item.id)
-        account_caption = self._caption(tr("Недостача — на счёт"))
+        account_caption = caption(tr("Недостача — на счёт"))
         for widget in (
-            self._caption(tr("Склад")),
+            caption(tr("Склад")),
             self.warehouse,
-            self._caption(tr("Дата")),
+            caption(tr("Дата")),
             self.date,
             account_caption,
             self.account,
@@ -117,18 +118,11 @@ class StockCountPage(QWidget):
         self.date.dateChanged.connect(lambda _d: self.refresh())
         self.add_item.activated.connect(lambda _i: self._add_item())
 
-    @staticmethod
-    def _caption(text: str) -> QLabel:
-        label = QLabel(text)
-        label.setObjectName("secondary")
-        return label
-
     def _build_footer(self, root: QVBoxLayout) -> None:
         footer = QHBoxLayout()
         footer.addWidget(self.add_item)  # under the lines: one more line
         footer.addSpacing(16)
-        self.totals = QLabel()
-        self.totals.setObjectName("secondary")
+        self.totals = caption()
         footer.addWidget(self.totals, 1)
         # the documents the last count made: quiet links to them
         self.made: dict[str, int | None] = {"surplus": None, "shortage": None}
@@ -160,7 +154,7 @@ class StockCountPage(QWidget):
     # ---- the count ---------------------------------------------------------------------
 
     def _warehouse_chosen(self) -> None:
-        QSettings().setValue(WAREHOUSE_SETTING, self.warehouse.currentData())
+        prefs().set_chosen_id(STOCK_COUNT_WAREHOUSE, self.warehouse.currentData())
         self.refresh()
 
     def refresh(self) -> None:
@@ -242,8 +236,8 @@ class StockCountPage(QWidget):
             "shortage": result.shortage_document_id,
         }
         for which, widget, text in (
-            ("surplus", self.open_surplus, "Оприходование излишков №{n}"),
-            ("shortage", self.open_shortage, "Списание недостачи №{n}"),
+            ("surplus", self.open_surplus, N_("Оприходование излишков №{n}")),
+            ("shortage", self.open_shortage, N_("Списание недостачи №{n}")),
         ):
             document_id = self.made[which]
             widget.setVisible(document_id is not None)

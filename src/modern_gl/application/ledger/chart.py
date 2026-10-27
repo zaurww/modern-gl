@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from modern_gl.application.common import insert, pad_subconto, where_used
+from modern_gl.application.common import pad_subconto, where_used
 from modern_gl.application.ledger.account_types import AccountTypeCommands
 from modern_gl.application.ledger.base import account_label, clean_code
 from modern_gl.domain.accounts import ACCOUNT_ROLES, ROLE_TYPES
 from modern_gl.domain.currency import CURRENCY_ONLY, NO_CURRENCY, currency_mode
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import IntegrityError, Row, transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, insert, transaction
 
 
 def _inherited(
@@ -34,7 +34,9 @@ def _inherited(
 
 
 class ChartCommands(AccountTypeCommands):
-    def add_account(
+    """Use cases of the chart of accounts: add, change, hide; each one transaction, audited."""
+
+    def add_account(  # noqa: PLR0913 the account form's fields, keyword-only
         self,
         company_id: int,
         code: str | None,
@@ -142,6 +144,7 @@ class ChartCommands(AccountTypeCommands):
             ) from e
 
     def account_id(self, company_id: int, code: str) -> int:
+        """The id of the account with this code; NotFoundError if there is none."""
         return self._account(company_id, code)["id"]
 
     def update_account(

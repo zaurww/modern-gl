@@ -18,6 +18,7 @@ from modern_gl.application.inventory.model import (
     IssueLine,
     LandedCostCharge,
     LandedCostTarget,
+    ReceiptHeader,
     ReceiptLine,
     SaleLine,
     TransferLine,
@@ -69,7 +70,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
             self._require_inventory_draft(company_id, document_id)
             self._post_in_sequence(company_id, document_id)
 
-    def post_receipt(
+    def post_receipt(  # noqa: PLR0913 the public form of ReceiptHeader, by keyword
         self,
         company_id: int,
         doc_date: date | str,
@@ -86,27 +87,33 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         invoice: str = "",
         invoice_kind: str = "",
     ) -> int:
-        """Post a receipt/opening balance (or a mədaxil, D91) and its Dr inventory / Cr
-        offset entries (and Dr input VAT / Cr offset for the lines' VAT). A line without an
-        item with an `expense_date` is an expense of that earlier month (D65)."""
+        """Post a receipt/opening balance (or a mədaxil, D91): `post_new_receipt` with
+        its `ReceiptHeader`."""
+        header = ReceiptHeader(
+            doc_date,
+            credit_account_id,
+            credit_subconto,
+            memo,
+            opening,
+            incoming_reason,
+            vat_rate,
+            currency_id,
+            currency_rate,
+            invoice,
+            invoice_kind,
+        )
+        return self.post_new_receipt(company_id, header, lines)
+
+    def post_new_receipt(
+        self, company_id: int, header: ReceiptHeader, lines: Sequence[ReceiptLine]
+    ) -> int:
+        """A receipt posted at once: Dr inventory / Cr offset (and Dr input VAT / Cr offset
+        for the lines' VAT). A line without an item with an `expense_date` is an expense of
+        that earlier month (D65)."""
         if not lines:
             raise ValidationError(tr("складской документ без строк"))
         with transaction(self.conn):
-            inv_id = self.create_receipt_draft(
-                company_id,
-                doc_date,
-                lines,
-                credit_account_id,
-                credit_subconto,
-                memo,
-                opening=opening,
-                incoming_reason=incoming_reason,
-                vat_rate=vat_rate,
-                currency_id=currency_id,
-                currency_rate=currency_rate,
-                invoice=invoice,
-                invoice_kind=invoice_kind,
-            )
+            inv_id = self.save_receipt_draft(company_id, header, lines)
             self._post_in_sequence(company_id, inv_id)
         return inv_id
 
@@ -170,7 +177,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
             self._post_in_sequence(company_id, inv_id)
         return inv_id
 
-    def post_landed_cost(
+    def post_landed_cost(  # noqa: PLR0913 one charge: a short form of the landed cost draft
         self,
         company_id: int,
         doc_date: date | str,
@@ -221,16 +228,16 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         is posted again, keeping its number and its GL document, and every later warehouse
         document is recalculated. Any error rolls everything back."""
         with transaction(self.conn):
-            doc = self._document(company_id, document_id)
+            doc = self._inventory_document(company_id, document_id)
             if doc["status"] != "posted":
                 raise ValidationError(tr("складской документ не проведён"))
-            self._require_open_period(doc)
+            self._require_inventory_open(doc)
             snapshot = self._snapshot(doc)
             later = self._withdraw_after(company_id, doc)
             self._withdraw(company_id, doc)
             yield
             edited = self._require_inventory_draft(company_id, document_id)
-            self._require_open_period(edited)
+            self._require_inventory_open(edited)
             later += self._withdraw_after(company_id, edited)  # it may have moved earlier
             self._apply_in_order(company_id, document_id, later)
             self._audit(company_id, "inventory_document", document_id, "repost", snapshot)
@@ -239,7 +246,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         """Return a posted warehouse document to an editable draft in an open period.
         Later documents are recalculated without it."""
         with transaction(self.conn):
-            doc = self._document(company_id, document_id)
+            doc = self._inventory_document(company_id, document_id)
             if doc["status"] != "posted":
                 raise ValidationError(tr("складской документ уже является черновиком"))
             snapshot = self._snapshot(doc)
@@ -250,7 +257,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         """Remove an inventory document (a posted one in an open period), with a full
         audit copy. Later documents are recalculated without it."""
         with transaction(self.conn):
-            doc = self._document(company_id, document_id)
+            doc = self._inventory_document(company_id, document_id)
             snapshot = self._snapshot(doc)
             if doc["status"] == "posted":
                 self._unpost(company_id, doc)
@@ -267,13 +274,13 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
 
     def _post_in_sequence(self, company_id: int, document_id: int) -> None:
         """Post a draft into its place in the date order, recalculating later documents."""
-        doc = self._document(company_id, document_id)
+        doc = self._inventory_document(company_id, document_id)
         self._apply_in_order(company_id, document_id, self._withdraw_after(company_id, doc))
 
     def _unpost(self, company_id: int, doc: Row) -> None:
         """Take a posted document out of the sequence: it becomes a draft without GL
         postings, and the documents after it are recalculated without it."""
-        self._require_open_period(doc)
+        self._require_inventory_open(doc)
         later = self._withdraw_after(company_id, doc)
         self._withdraw(company_id, doc)
         gl_document_id = doc["gl_document_id"]
@@ -350,9 +357,9 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
     ) -> None:
         """Post `document_id` and the withdrawn `later` documents in date order. A later
         document that no longer fits (not enough stock…) names itself in the error."""
-        docs = [self._document(company_id, i) for i in dict.fromkeys(later)]
+        docs = [self._inventory_document(company_id, i) for i in dict.fromkeys(later)]
         if document_id is not None:
-            docs.append(self._document(company_id, document_id))
+            docs.append(self._inventory_document(company_id, document_id))
         with self._keeping_catalog():  # the catalog is read once for all of them
             self._apply_sorted(company_id, document_id, docs)
 
@@ -425,7 +432,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         its existing GL document, which keeps its number."""
         if not postings:
             raise ValidationError(tr("складской документ не создал проводок"))
-        doc = self._document(company_id, inventory_document_id)
+        doc = self._inventory_document(company_id, inventory_document_id)
         gl_document_id = doc["gl_document_id"]
         if gl_document_id is None:
             gl_document_id = self.ledger.post_new(company_id, doc_date, postings, memo)

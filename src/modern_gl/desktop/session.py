@@ -15,6 +15,7 @@ from modern_gl.desktop.background import Background
 from modern_gl.domain.company import STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.infrastructure import cbar
+from modern_gl.infrastructure.company_file import LOCAL, place_of
 from modern_gl.infrastructure.db import Connection
 
 
@@ -36,6 +37,8 @@ class Session:
     path: Path | None = None
     large: bool = False
     background: Background = field(default_factory=Background)
+    # the company was closed: a read still on its way is not shown (its file is closed)
+    closed: bool = False
     # when the newest backup of the company was made (D97); None — none yet
     last_backup: Callable[[], datetime | None] = lambda: None
     # official rates of a day {code: (rate, nominal)}; tests put a stub here (no network)
@@ -51,7 +54,16 @@ class Session:
         """Read `job` for `owner` — in the background for a large company's file (the
         result comes to `done` later, True is returned), at once otherwise."""
         path = None if self.read_only else self.path  # viewing: a snapshot in memory
-        return self.background.run(owner, self.conn, path, self.large, job, done, failed)
+
+        def shown(result: Any) -> None:
+            if not self.closed:
+                done(result)
+
+        def told(error: LedgerError) -> None:
+            if not self.closed:
+                failed(error)
+
+        return self.background.run(owner, self.conn, path, self.large, job, shown, told)
 
     def notify_undoable(self, message: str, undo: Callable[[], None]) -> None:
         """What was just done, and how to take it back (a toast's «Undo», D86)."""
@@ -59,6 +71,14 @@ class Session:
             self.notify(message)
         else:
             self.notify_undo(message, undo)
+
+    @property
+    def file_place(self) -> str:
+        """Where the open file lies — LOCAL, NETWORK or CLOUD: a live file on a network or
+        cloud folder is slower and not for two at once (D25); a snapshot (D80) is local."""
+        if self.read_only or self.path is None:
+            return LOCAL
+        return place_of(self.path)
 
     @property
     def layers(self) -> list[tuple[str, str]]:

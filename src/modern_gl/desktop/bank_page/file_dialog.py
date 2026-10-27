@@ -20,6 +20,7 @@ from modern_gl.application.bank.statement import place_balance
 from modern_gl.desktop.bank_page.import_rows import ImportRows
 from modern_gl.desktop.import_window import ImportWindow, say
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.widgets import caption
 from modern_gl.domain.dates import date_range
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
@@ -79,8 +80,7 @@ class BankFileDialog(ImportWindow):
             text = " · ".join(
                 (file.bank, file.iban, file.currency, date_range(file.date_from, file.date_to, "–"))
             )
-            about = QLabel(f"{file.file_name}\n{text}")
-            about.setObjectName("secondary")
+            about = caption(f"{file.file_name}\n{text}")
             grid.addWidget(about, n, 0)
             box = QComboBox()
             box.addItem(tr("— выберите счёт —"), None)

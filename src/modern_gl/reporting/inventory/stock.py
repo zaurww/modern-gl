@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from modern_gl.application import attention
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.common import group_path
 from modern_gl.application.inventory.amounts import unit_price
@@ -203,7 +204,7 @@ def _last_purchases(conn: Connection, company_id: int) -> dict[int, tuple[int | 
     return {r["item_id"]: (unit_price(r["amount"], r["quantity"]), r["warehouse_id"]) for r in rows}
 
 
-@attention_source
+@attention_source(attention.BELOW_MINIMUM)
 def items_below_minimum(conn: Connection, company_id: int, day: str) -> list[Attention]:
     """«Bu gün»: goods to buy — under their minimum stock."""
     count = len(below_minimum(conn, company_id, day))
@@ -407,7 +408,7 @@ def stock_card(
     return result
 
 
-@attention_source
+@attention_source(attention.STOCK)
 def negative_stock(conn: Connection, company_id: int, day: str) -> list[Attention]:
     """«Bu gün» (D86): goods that went below zero on a warehouse."""
     count = sum(1 for b in stock_balances(conn, company_id, day) if b.quantity < 0)

@@ -7,17 +7,13 @@ from __future__ import annotations
 from fractions import Fraction
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
-    QApplication,
     QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QTableView,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.currencies import rate_on
@@ -27,6 +23,8 @@ from modern_gl.application.queries import (
     list_templates,
     recent_subconto,
 )
+from modern_gl.desktop.grid_editing import EditableRows, GridEditing
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import (
     DT,
     EntryHints,
@@ -36,11 +34,13 @@ from modern_gl.desktop.postings import (
 )
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import legend
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
     Chip,
     MenuItem,
     button,
+    caption,
     date_edit,
     edited_date,
     money,
@@ -48,15 +48,21 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.i18n import tr
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   "
-    "Ins — строка   ·   F9 — копия строки   ·   "
-    "Del — удалить строку   ·   # — шаблон   ·   Ctrl+V — вставить из Excel   ·   "
-    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести   ·   Ctrl+Shift+Enter — провести и новый"
+HINT = (  # the keys of the page, under its table
+    "next_field",
+    "previous_field",
+    "insert",
+    "duplicate_row",
+    "delete",
+    "template",
+    "paste_rows",
+    "save",
+    "post",
+    "post_and_new",
 )
 
 
-class DocumentForm(QWidget):
+class DocumentForm(GridEditing, PageWidget):
     saved = Signal(int)  # document id
     open_document = Signal(int)
     copy_requested = Signal(object)  # DocumentData to prefill a new document
@@ -65,6 +71,15 @@ class DocumentForm(QWidget):
     title_changed = Signal()
     new_requested = Signal()  # posted with Ctrl+Shift+Enter: the next document, please
     open_inventory_document = Signal(int)  # the warehouse document that made this one
+
+    INSERT_COLUMN = DT  # a new line: its debit account, typed at once
+    EDIT_INSERTED = True
+
+    def _grid(self) -> QTableView:
+        return self.table
+
+    def _rows(self) -> EditableRows:
+        return self.model
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -121,14 +136,13 @@ class DocumentForm(QWidget):
         self.amount.setPlaceholderText("0.00")
         self.amount_caption = QLabel(tr("Сумма операции"))
         for label, w in ((tr("Дата"), self.date), (tr("Книга"), self.layer)):
-            caption = QLabel(label)
-            caption.setObjectName("secondary")
-            meta.addWidget(caption)
+            title = caption(label)
+            meta.addWidget(title)
             meta.addWidget(w)
             meta.addSpacing(10)
             # one book until parallel books are turned on (D63): no field to pass by
             if w is self.layer and not self.s.parallel_books:
-                caption.hide()
+                title.hide()
                 w.hide()
         self.amount_caption.setObjectName("secondary")
         meta.addWidget(self.amount_caption)
@@ -170,7 +184,7 @@ class DocumentForm(QWidget):
 
     def _build_total(self, root: QVBoxLayout) -> None:
         bottom = QHBoxLayout()
-        self.hint = QLabel(tr(HINT))
+        self.hint = QLabel(legend(*HINT))
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)
         self.hint.setWordWrap(True)  # never widens the window
@@ -178,8 +192,7 @@ class DocumentForm(QWidget):
         keep.setRetainSizeWhenHidden(True)  # a posted document: "Итого" stays by the total
         self.hint.setSizePolicy(keep)
         bottom.addWidget(self.hint, 1)
-        total_caption = QLabel(tr("Итого"))
-        total_caption.setObjectName("secondary")
+        total_caption = caption(tr("Итого"))
         bottom.addWidget(total_caption)
         self.total = QLabel()
         self.total.setFont(fonts().total)
@@ -218,27 +231,6 @@ class DocumentForm(QWidget):
         edit.setFont(fonts().title)
         edit.setPlaceholderText(tr("Содержание операции"))
         return edit
-
-    def _shortcut(self, keys: str, fn) -> None:
-        sc = QShortcut(QKeySequence(keys), self)
-        sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        sc.activated.connect(fn)
-
-    def _grid_shortcut(self, keys: str, fn, while_editing: bool = False) -> None:
-        sc = QShortcut(QKeySequence(keys), self.table)
-        sc.setContext(
-            Qt.ShortcutContext.WidgetWithChildrenShortcut
-            if while_editing
-            else Qt.ShortcutContext.WidgetShortcut
-        )
-        sc.activated.connect(fn)
-
-    def _finish_editing(self) -> None:
-        """Commit and close an open cell editor, so a row action sees what was typed."""
-        editor = QApplication.focusWidget()
-        if self.table.state() == QAbstractItemView.State.EditingState and editor is not None:
-            self.table.commitData(editor)
-            self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
 
     def _rate_for(self, currency_id: int) -> Fraction | None:
         """Manat per unit of a currency on the document date (the latest one before it)."""

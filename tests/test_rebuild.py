@@ -28,13 +28,11 @@ from modern_gl.domain.accounts import COST_OF_SALES
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
-from tests.test_bank import firm as bank_firm  # noqa: F401 — a fixture
-from tests.test_bank import postings as bank_postings
-from tests.test_bank import usd_fee
-from tests.test_conversion import firm as conversion_firm  # noqa: F401 — a fixture
-from tests.test_conversion import postings as conversion_postings
-from tests.test_conversion import sale as currency_sale
-from tests.test_sales import make_shop, two_lines
+from tests.helpers.bank import postings as bank_postings
+from tests.helpers.bank import usd_fee
+from tests.helpers.conversion import postings as conversion_postings
+from tests.helpers.conversion import sale as currency_sale
+from tests.helpers.sales import make_shop, two_lines
 
 
 def audit_count(conn, action: str) -> int:
@@ -76,7 +74,7 @@ def test_rebuild_of_a_whole_year_changes_nothing(year):
     assert audit_count(ledger.conn, "repost") == reposts
 
 
-def test_bank_follows_a_fixed_rate(ledger, bank_firm):  # noqa: F811
+def test_bank_follows_a_fixed_rate(ledger, bank_firm):
     f = bank_firm
     cid = f["cid"]
     op_id = ledger.bank.save_bank_operation(cid, usd_fee(f), post=True)
@@ -94,7 +92,7 @@ def test_bank_follows_a_fixed_rate(ledger, bank_firm):  # noqa: F811
     assert rebuild_postings(ledger, cid, "2026-03-01") == []
 
 
-def test_closed_period_is_not_rebuilt(ledger, bank_firm):  # noqa: F811
+def test_closed_period_is_not_rebuilt(ledger, bank_firm):
     f = bank_firm
     cid = f["cid"]
     op_id = ledger.bank.save_bank_operation(cid, usd_fee(f), post=True)
@@ -105,7 +103,7 @@ def test_closed_period_is_not_rebuilt(ledger, bank_firm):  # noqa: F811
     assert [p.amount for p in bank_postings(ledger, f, op_id)] == [340]
 
 
-def test_an_error_names_the_document_and_changes_nothing(ledger, bank_firm):  # noqa: F811
+def test_an_error_names_the_document_and_changes_nothing(ledger, bank_firm):
     f = bank_firm
     cid = f["cid"]
     ledger.bank.save_bank_operation(cid, usd_fee(f), post=True)
@@ -121,7 +119,7 @@ def test_an_error_names_the_document_and_changes_nothing(ledger, bank_firm):  # 
     assert audit_count(ledger.conn, "repost") == 0
 
 
-def test_conversion_follows_a_fixed_rate(ledger, conn, conversion_firm):  # noqa: F811
+def test_conversion_follows_a_fixed_rate(ledger, conn, conversion_firm):
     f = conversion_firm
     cid, acc = f["cid"], f["acc"]
     data = currency_sale(f, target_date="2026-03-03", fees=())
@@ -144,7 +142,7 @@ def test_conversion_follows_a_fixed_rate(ledger, conn, conversion_firm):  # noqa
     ]
 
 
-def test_a_conversion_error_names_the_conversion(ledger, conn, conversion_firm):  # noqa: F811
+def test_a_conversion_error_names_the_conversion(ledger, conn, conversion_firm):
     f = conversion_firm
     cid = f["cid"]
     conversion = load_conversion(

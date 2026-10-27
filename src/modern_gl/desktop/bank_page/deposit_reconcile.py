@@ -31,9 +31,9 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.dates import date_range, next_day
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-TITLE = "Сверка ƏDV depozit с порталом"
+TITLE = N_("Сверка ƏDV depozit с порталом")
 
 
 class DepositReconcileDialog(ImportWindow):
@@ -54,7 +54,7 @@ class DepositReconcileDialog(ImportWindow):
         self.place = place
         self.today = today or date.today()
         self.fetch = DepositFetch(self, session, sign_in, self.today)
-        self.fetch.progress.connect(lambda text: self.status.setText(text))
+        self.fetch.progress.connect(self.status.setText)
         self.fetch.loaded.connect(self._fetched)
         self.fetch.failed.connect(self._failed)
         self.fetched: DepositFetched | None = None

@@ -11,11 +11,12 @@ Revaluation on 31.03 at 1.72:
 
 from __future__ import annotations
 
+import re
 from fractions import Fraction
 
 import pytest
 
-from modern_gl.application.currencies import latest_rates, list_currencies, rate_on
+from modern_gl.application.currencies import Rate, latest_rates, list_currencies, rate_on
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.currency import (
     CURRENCY_ONLY,
@@ -28,56 +29,19 @@ from modern_gl.domain.currency import (
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure import cbar
 from modern_gl.reporting.reports import account_card, trial_balance
+from tests.helpers.currency import post_example
 
 
 @pytest.fixture
-def books(ledger):
-    cid = ledger.create_company("ООО Валюта")
-    banks = ledger.add_subconto_kind(cid, "bank_account", "Банковские счета")
-    parties = ledger.add_subconto_kind(cid, "counterparty", "Контрагенты")
-    bank = ledger.add_subconto_value(cid, banks, "Kapital Bank USD")
-    supplier = ledger.add_subconto_value(cid, parties, "Supplier Ltd")
-    acc = {
-        "41": ledger.add_account(cid, "41", "Товары", account_class="asset"),
-        "51": ledger.add_account(cid, "51", "Расчётный счёт", account_class="asset"),
-        "52": ledger.add_account(
-            cid, "52", "Валютный счёт", account_class="asset", subconto=[banks], currency=True
-        ),
-        "60": ledger.add_account(
-            cid,
-            "60",
-            "Поставщики",
-            account_class="liability",
-            two_sided=True,
-            subconto=[parties],
-            currency=True,
-        ),
-        "80": ledger.add_account(cid, "80", "Прибыли и убытки", account_class="equity"),
-    }
-    usd = ledger.currency_id(cid, "USD")
-    ledger.set_rate(cid, "USD", "2026-03-01", parse_rate("1.7"))
-    ledger.set_rate(cid, "USD", "2026-03-20", parse_rate("1.71"))
-    ledger.set_rate(cid, "USD", "2026-03-31", parse_rate("1.72"))
-    return cid, acc, usd, bank, supplier
+def books(currency_books):
+    return currency_books
 
 
-def post_example(ledger, books):
-    cid, acc, usd, bank, supplier = books
-    ledger.post_new(
-        cid,
-        "2026-03-05",
-        [PostingInput(acc["52"], acc["51"], "1700.00", (bank,), (), "", usd, "1000.00")],
-    )
-    ledger.post_new(
-        cid,
-        "2026-03-10",
-        [PostingInput(acc["41"], acc["60"], "850.00", (), (supplier,), "", usd, "500.00")],
-    )
-    ledger.post_new(
-        cid,
-        "2026-03-20",
-        [PostingInput(acc["60"], acc["52"], "513.00", (supplier,), (bank,), "", usd, "300.00")],
-    )
+def known_rate(conn, cid: int, currency_id: int, day: str) -> Rate:
+    """The rate on a day that has one (`rate_on` is None before the first rate)."""
+    rate = rate_on(conn, cid, currency_id, day)
+    assert rate is not None
+    return rate
 
 
 def test_rates_are_exact():
@@ -92,7 +56,7 @@ def test_rates_are_exact():
     assert to_base(12_345, unit_rate(1_700_000)) == 20_987
     assert to_base(-12_345, unit_rate(1_700_000)) == -20_987
     for bad in ("0", "-1.7", "abc", "1.1234567"):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=re.escape(bad)):
             parse_rate(bad)
 
 
@@ -109,10 +73,10 @@ def test_new_company_has_usual_currencies(ledger, conn):
 def test_rate_on_a_day_is_the_latest_one_before_it(ledger, conn, books):
     cid, _, usd, _, _ = books
     assert rate_on(conn, cid, usd, "2026-02-28") is None
-    assert rate_on(conn, cid, usd, "2026-03-19").rate == 1_700_000
-    assert rate_on(conn, cid, usd, "2026-03-20").rate == 1_710_000
+    assert known_rate(conn, cid, usd, "2026-03-19").rate == 1_700_000
+    assert known_rate(conn, cid, usd, "2026-03-20").rate == 1_710_000
     ledger.set_rate(cid, usd, "2026-03-20", parse_rate("1.705"))  # replaced, not added
-    assert rate_on(conn, cid, usd, "2026-03-25").rate == 1_705_000
+    assert known_rate(conn, cid, usd, "2026-03-25").rate == 1_705_000
     assert latest_rates(conn, cid)[usd].rate_date == "2026-03-31"
     ledger.delete_rate(cid, usd, "2026-03-31")
     assert latest_rates(conn, cid)[usd].rate_date == "2026-03-20"
@@ -279,14 +243,14 @@ def test_cbar_rates_are_parsed_without_metals():
         "EUR": (1_984_500, 1),
         "JPY": (1_130_100, 100),
     }
-    with pytest.raises(cbar.RatesUnavailable):
+    with pytest.raises(cbar.RatesUnavailableError):
         cbar.parse(b"<html>not found</html>")
 
 
 def test_imported_rates_go_to_the_company_currencies(ledger, conn):
     cid = ledger.create_company("ООО")
     assert ledger.import_rates(cid, "2026-10-17", cbar.parse(CBAR_XML)) == 2  # USD, EUR
-    eur = rate_on(conn, cid, ledger.currency_id(cid, "EUR"), "2026-10-17")
+    eur = known_rate(conn, cid, ledger.currency_id(cid, "EUR"), "2026-10-17")
     assert (eur.rate, eur.nominal, eur.source) == (1_984_500, 1, "cbar")
 
 
@@ -339,6 +303,6 @@ def test_split_shared_file_keeps_each_company_currencies(tmp_path):
     c, cid = open_company(files[0])
     try:
         assert len(list_currencies(c, cid)) == 5
-        assert rate_on(c, cid, Ledger(c).currency_id(cid, "USD"), "2026-03-02").rate == 1_700_000
+        assert known_rate(c, cid, Ledger(c).currency_id(cid, "USD"), "2026-03-02").rate == 1_700_000
     finally:
         c.close()

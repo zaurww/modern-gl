@@ -26,11 +26,4 @@ AZ: dict[str, str] = {
     "строка {line}: расход за {month} должен быть раньше месяца документа": (
         "sətir {line}: {month} xərci sənədin ayından əvvəl olmalıdır"
     ),
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия строки   ·   "
-    "F8 — разделить строку   ·   Del — удалить строку   ·   Ctrl+V — вставить из Excel   ·   "
-    "Ctrl+S — сохранить   ·   Ctrl+Enter — провести": (
-        "Enter, Tab — irəli   ·   Shift+Tab — geri   ·   Ins — sətir   ·   F9 — sətrin surəti   ·   "
-        "F8 — sətri böl   ·   Del — sətri sil   ·   Ctrl+V — Excel-dən yapışdır   ·   "
-        "Ctrl+S — saxla   ·   Ctrl+Enter — keçir"
-    ),
 }

@@ -13,7 +13,6 @@ from PySide6.QtCore import (
 
 from modern_gl.application.queries import PostingData
 from modern_gl.application.table_text import POSTING_HEADERS, subconto_header
-from modern_gl.application.table_text import header_names as header_names  # for the grids
 from modern_gl.i18n import fold
 
 DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO, INVOICE = 0, 4, 8, 9, 10, 11, 12, 13
@@ -56,7 +55,7 @@ def column_role(col: int) -> tuple[str, int | None]:
     return names.get(col, "memo"), None
 
 
-class UnknownValue(LookupError):
+class UnknownValueError(LookupError):
     """A subconto name that is not in its directory (yet)."""
 
     def __init__(self, kind_id: int, text: str) -> None:

@@ -23,6 +23,7 @@ from modern_gl.application.conversion.calc import (
 )
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import transaction
 
 
 class FileConversionCommands(BankImportCommands):
@@ -88,21 +89,16 @@ class FileConversionCommands(BankImportCommands):
         self, company_id: int, data: ConversionInput, existing: int | None, post: bool
     ) -> tuple[str, str, int]:
         """Saved: posted when both sides are known and `post`, else a draft (and why)."""
-        from modern_gl.application.conversion import ConversionModule
-
-        conversions = ConversionModule(self.conn, self.actor)
+        conversions = self.ledger.conversion
         why = ""
         if data.source is None or data.target is None:
             why = tr("вторая сторона — в выписке другого счёта")
         elif post:
-            self.conn.execute("SAVEPOINT bank_file_conversion")
             try:
-                saved = conversions.save_conversion(company_id, data, existing, post=True)
-                self.conn.execute("RELEASE bank_file_conversion")
+                with transaction(self.conn):  # a savepoint: what did not post is undone
+                    saved = conversions.save_conversion(company_id, data, existing, post=True)
                 return POSTED, "", self._conversion_document(company_id, saved)
             except LedgerError as e:
-                self.conn.execute("ROLLBACK TO bank_file_conversion")
-                self.conn.execute("RELEASE bank_file_conversion")
                 why = str(e)
         saved = conversions.save_conversion(company_id, data, existing, post=False)
         return (

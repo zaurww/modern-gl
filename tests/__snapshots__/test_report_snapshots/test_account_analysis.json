@@ -1,0 +1,16 @@
+[
+  {
+    "corr_code": "531",
+    "corr_id": 6,
+    "corr_name": "Поставщики",
+    "credit": 0,
+    "debit": 50000
+  },
+  {
+    "corr_code": "721",
+    "corr_id": 7,
+    "corr_name": "Адм. расходы",
+    "credit": 30000,
+    "debit": 0
+  }
+]

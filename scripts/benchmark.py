@@ -22,6 +22,7 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 
+from modern_gl.application.journal import JournalFilter, documents_before
 from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.queries import find_documents, list_documents
 from modern_gl.demo_data import create_demo_company
@@ -110,6 +111,12 @@ def measure(path: Path) -> list[tuple[float, str]]:
         "ОСВ по субконто 60, год": lambda: reports.subconto_balance(conn, cid, a60, *year),
         "Журнал: все документы": lambda: list_documents(conn, cid),
         "Журнал: год": lambda: list_documents(conn, cid, *year),
+        "Журнал: порция года (страница, D168)": lambda: documents_before(
+            conn, JournalFilter(cid, *year), None
+        ),
+        "Журнал: поиск по году, не найдено": lambda: documents_before(
+            conn, JournalFilter(cid, *year, "zzzz"), None
+        ),
         "E-qaimə, год": lambda: invoices.invoice_report(conn, cid, *year),
         "E-qaimə неоплаченные": lambda: invoices.invoice_report(conn, cid, *year, open_only=True),
         "Банк: все выписки": lambda: [

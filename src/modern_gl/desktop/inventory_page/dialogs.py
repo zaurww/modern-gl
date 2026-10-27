@@ -24,7 +24,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.reporting.inventory import (
     ItemDetails,
     item_details,
@@ -202,7 +202,9 @@ class InventorySettingsDialog(QDialog):
         form = QFormLayout(self)
         self.input_vat = self._account_list(INPUT_VAT, tr("— не указан —"))
         form.addRow(tr("Счёт НДС к возмещению"), self.input_vat)
-        form.addRow(self._hint("Поступление с НДС: Дт этот счёт [поставщик] / Кт счёт расчётов."))
+        form.addRow(
+            self._hint(N_("Поступление с НДС: Дт этот счёт [поставщик] / Кт счёт расчётов."))
+        )
         sale = QLabel(tr("Продажа"))
         sale.setFont(fonts().heading)
         form.addRow(sale)
@@ -217,9 +219,11 @@ class InventorySettingsDialog(QDialog):
         self._build_incoming(form)
         form.addRow(
             self._hint(
-                "Продажа: Дт счёт покупателя / Кт выручка (с НДС, если НДС начисляется "
-                "с другого счёта); НДС — Дт счёт начисления / Кт НДС к уплате; "
-                "товар — Дт себестоимость / Кт счёт товара."
+                N_(
+                    "Продажа: Дт счёт покупателя / Кт выручка (с НДС, если НДС начисляется "
+                    "с другого счёта); НДС — Дт счёт начисления / Кт НДС к уплате; "
+                    "товар — Дт себестоимость / Кт счёт товара."
+                )
             )
         )
         buttons = QDialogButtonBox(
@@ -240,7 +244,7 @@ class InventorySettingsDialog(QDialog):
             empty = tr("— прочие доходы —") if other_income else tr("— не указан —")
             self.incoming_roles[role] = self._account_list(role, empty)
             form.addRow(tr(name), self.incoming_roles[role])
-        form.addRow(self._hint("Оприходование: Дт счёт товара / Кт счёт причины."))
+        form.addRow(self._hint(N_("Оприходование: Дт счёт товара / Кт счёт причины.")))
 
     def _account_list(self, role: str, empty: str) -> QComboBox:
         combo = QComboBox()

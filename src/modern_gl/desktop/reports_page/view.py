@@ -12,17 +12,17 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QAction, QCursor, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCursor
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
-    QLabel,
     QMenu,
     QStackedLayout,
     QVBoxLayout,
     QWidget,
 )
 
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.period_field import PeriodField
 from modern_gl.desktop.reports_page.column_choice import ColumnChoice
 from modern_gl.desktop.reports_page.export import copy_to_clipboard, save_to_excel
@@ -32,10 +32,12 @@ from modern_gl.desktop.reports_page.table import (
     ReportModel,
 )
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
     PageHeader,
+    caption,
     class_name,
     ru_date,
     type_choices,
@@ -43,7 +45,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.dates import month_days
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.reports import COMMON, IFRS, TAX
 
@@ -51,12 +53,12 @@ BOOKS = [("Общий учёт", COMMON), ("МСФО", IFRS), ("Налоговы
 
 # (group over a Dt/Kt pair, side, attribute)
 TURNOVER_COLUMNS = [
-    ("Сальдо на начало", "Дт", "opening_dt"),
-    ("Сальдо на начало", "Кт", "opening_ct"),
-    ("Обороты", "Дт", "turnover_dt"),
-    ("Обороты", "Кт", "turnover_ct"),
-    ("Сальдо на конец", "Дт", "closing_dt"),
-    ("Сальдо на конец", "Кт", "closing_ct"),
+    (N_("Сальдо на начало"), N_("Дт"), "opening_dt"),
+    (N_("Сальдо на начало"), N_("Кт"), "opening_ct"),
+    (N_("Обороты"), N_("Дт"), "turnover_dt"),
+    (N_("Обороты"), N_("Кт"), "turnover_ct"),
+    (N_("Сальдо на конец"), N_("Дт"), "closing_dt"),
+    (N_("Сальдо на конец"), N_("Кт"), "closing_ct"),
 ]
 
 
@@ -102,7 +104,7 @@ def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:
 type MenuAction = tuple[str, Callable[[], None] | list[MenuAction | None]]
 
 
-class ReportPage(QWidget):
+class ReportPage(PageWidget):
     """Base: header, parameters, table/empty state, footer."""
 
     open_document = Signal(int)
@@ -137,8 +139,7 @@ class ReportPage(QWidget):
         self.stack.addWidget(self.empty)
 
         # a report's message (totals, "Dt and Kt agree") is read before its detail
-        self.footer = QLabel()
-        self.footer.setObjectName("secondary")
+        self.footer = caption()
         self.footer.setWordWrap(True)  # a long hint must not keep the window wide
         if self.summary_on_top:
             root.addWidget(self.footer)
@@ -147,15 +148,9 @@ class ReportPage(QWidget):
             root.addLayout(self.stack, 1)
             root.addWidget(self.footer)
 
-        for keys, fn in (
-            ("F5", self.refresh),
-            ("Ctrl+C", lambda: copy_to_clipboard(self)),
-            ("Return", self._drill_current),
-            ("Enter", self._drill_current),
-        ):
-            sc = QShortcut(QKeySequence(keys), self)
-            sc.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            sc.activated.connect(fn)
+        bind(self, "refresh", self.refresh)
+        bind(self, "copy_report", lambda: copy_to_clipboard(self))
+        self._bind_open()
 
     def _build_period_bar(self, root: QVBoxLayout) -> None:
         """Period and book, for the reports that have them."""
@@ -174,9 +169,8 @@ class ReportPage(QWidget):
             self.book.setCurrentIndex(self.params.book)
             self.book.setFixedWidth(170)
             self.book.currentIndexChanged.connect(lambda _i: self.refresh())
-            for caption, w in ((tr("Период"), self.period), (tr("Книга"), self.book)):
-                label = QLabel(caption)
-                label.setObjectName("secondary")
+            for text, w in ((tr("Период"), self.period), (tr("Книга"), self.book)):
+                label = caption(text)
                 bar.addWidget(label)
                 bar.addWidget(w)
                 bar.addSpacing(6)
@@ -231,6 +225,11 @@ class ReportPage(QWidget):
     def drill(self, row: Any) -> None:
         pass
 
+    def _bind_open(self) -> None:
+        """Enter anywhere on the page opens the current row; a page with an entry line
+        (the bank) binds it to the table only."""
+        bind(self, "open", self._drill_current)
+
     def menu_actions(self, row: Any) -> list[MenuAction | None]:
         return []
 
@@ -262,9 +261,6 @@ class ReportPage(QWidget):
     def choose_columns(self, at) -> None:
         if self.choosable_columns:
             self.columns_choice().popup(self.model.all_columns, self, at)
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()

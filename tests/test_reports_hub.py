@@ -5,37 +5,25 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
 
-from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.main_window import report_places as places
 from modern_gl.desktop.reports_hub import HUB, AccountPrompt, ReportsPage, catalog
 from modern_gl.desktop.reports_page import StatementsPage
 from modern_gl.desktop.reports_page.account import CardPage
-from modern_gl.infrastructure.db import connect
-
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
-    theme.apply(QApplication.instance())
+def window(qtbot, tmp_path, make_demo):
+    make_demo(tmp_path / "ДЕМО ООО.gl")
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win
@@ -239,12 +227,10 @@ def test_a_warehouse_only_company_has_no_reports_of_the_books(window):
     assert ("osv",) not in window.pages
 
 
-def test_viewing_offers_nothing_that_writes(qtbot, tmp_path):
+def test_viewing_offers_nothing_that_writes(qtbot, tmp_path, make_demo):
     ws = Workspace(tmp_path / "data")
     path = ws.new_path("ДЕМО ООО")
-    conn = connect(path)
-    create_demo_company(Ledger(conn))
-    conn.close()
+    make_demo(path)
     win = MainWindow(ws)
     qtbot.addWidget(win)
     win.view_company(path)

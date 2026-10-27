@@ -23,6 +23,8 @@ class ValueDetails:
 
 
 class SubcontoDetailCommands(SubcontoCommands):
+    """Use cases of the element's window: the element and its details in one transaction."""
+
     def add_detailed_value(
         self, company_id: int, kind_id: int, name: str, details: ValueDetails
     ) -> int:

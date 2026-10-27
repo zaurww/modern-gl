@@ -40,7 +40,7 @@ from modern_gl.application.bank.operations import (
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED, BANK_FEE
 from modern_gl.i18n import tr, trd
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import dry_run, transaction
 
 
 @dataclass
@@ -75,13 +75,8 @@ class BankFileCommands(FileConversionCommands):
         self, company_id: int, files: Sequence[BankFile], places: Mapping[str, BankPlace]
     ) -> FileImported:
         """What the import would do, nothing written: the import itself, rolled back."""
-        with transaction(self.conn):
-            self.conn.execute("SAVEPOINT bank_file_preview")
-            try:
-                done = self._import_files(company_id, files, places, None, True)
-            finally:
-                self.conn.execute("ROLLBACK TO bank_file_preview")
-                self.conn.execute("RELEASE bank_file_preview")
+        with dry_run(self.conn):
+            done = self._import_files(company_id, files, places, None, True)
         done.rows = [replace(row, document_id=None) for row in done.rows]
         return done
 
@@ -210,7 +205,7 @@ class BankFileCommands(FileConversionCommands):
             return self._payment_lines(company_id, op, counterparty, new_party)
         if op.kind == FEE:  # as the last fee, else the settings' account, item «Комиссия банка»
             before = previous_lines(self.conn, company_id, op.place, op, None)
-            fee = before[0].account_id if before else self.account_role(company_id, BANK_FEE)
+            fee = before[0].account_id if before else self.ledger.account_role(company_id, BANK_FEE)
             if fee is None:
                 return unknown, tr("не задан счёт комиссий банка")
             subconto = before[0].subconto if before else ()
@@ -272,7 +267,7 @@ class BankFileCommands(FileConversionCommands):
             day=op.day,
             invoices=invoices,
             # the ƏDV paid ahead stays on the settlement account (D145)
-            advance_account=None if op.pays_vat else self.account_role(company_id, role),
+            advance_account=None if op.pays_vat else self.ledger.account_role(company_id, role),
         )
         if op.pays_vat:
             lines = [replace(line, pays_vat=True) for line in lines]

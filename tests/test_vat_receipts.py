@@ -10,12 +10,8 @@ from datetime import date
 from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.vat_liability import vat_liability
 from modern_gl.reporting.vat_receipts import vat_receipts, warning
-from tests.test_invoices import firm as invoice_firm  # noqa: F401 — Альфа, Бета, 51, 54, 62
-from tests.test_vat_credit import post
-
-
-def party(v, who: str) -> tuple[int, int]:
-    return (v[who], v["Д-1" if who == "Альфа" else "Общий"])
+from tests.helpers.vat_credit import post
+from tests.helpers.vat_receipts import party
 
 
 def sell(ledger, cid, acc, v, who: str, day: str, total: str, vat: str, number: str) -> int:
@@ -29,12 +25,12 @@ def sell(ledger, cid, acc, v, who: str, day: str, total: str, vat: str, number: 
 def receive(ledger, cid, acc, v, who: str, day: str, amount: str, number: str | None = None):
     """Dt 51 / Kt 62 — the money to the bank account."""
     line = PostingInput(
-        acc["51"], acc["62"], amount, (v["Kapital"],), party(v, who), invoice=number
+        acc["51"], acc["62"], amount, (v["Kapital"],), party(v, who), invoice=number or ""
     )
     return post(ledger, cid, day, line)
 
 
-def test_buyers_money_against_their_eqaime(invoice_firm):  # noqa: F811
+def test_buyers_money_against_their_eqaime(invoice_firm):
     """Бета: on 10.01 236 to the bank without a number — the ƏDV came with the value;
     owed 18% × 236 = 42.48. On 20.01 two e-qaimə close it: MS01 and MS02, 100 + 18 each.
     The advance pays both (oldest first): nothing open, ƏDV carried 36; owed 42.48 —
@@ -91,7 +87,7 @@ def test_buyers_money_against_their_eqaime(invoice_firm):  # noqa: F811
     assert february.total.tax == vat_liability(conn, cid, "2026-02-01", "2026-02-28").owed
 
 
-def test_money_on_the_deposit_and_an_honest_advance_warn_nothing(invoice_firm):  # noqa: F811
+def test_money_on_the_deposit_and_an_honest_advance_warn_nothing(invoice_firm):
     """Бета on 10.01: 100 to the bank and 18 to the ƏDV deposit, no number — owed
     max(18; 18% × 100) = 18. MS05 of 20.01, 100 + 18, closes it: carried 18 = owed, no
     warning. A buyer with nothing in the period and nothing open is not shown (Альфа)."""
@@ -110,7 +106,7 @@ def test_money_on_the_deposit_and_an_honest_advance_warn_nothing(invoice_firm): 
     assert vat_receipts(conn, cid, "2026-02-01", "2026-02-28").parties == []
 
 
-def test_the_eqaimes_vat_paid_to_the_settlement_account(invoice_firm):  # noqa: F811
+def test_the_eqaimes_vat_paid_to_the_settlement_account(invoice_firm):
     """MS07 of 10.03, 100 + 18; on 15.03 Бета pays 118 to the bank naming it: owed
     min(18; 18 × min(118, 100)/100) = 18 — right, but the 18 beyond the value came to the
     settlement account, the deposit got nothing: min(118 − 100; 18 − 0) = 18, a warning.
@@ -124,7 +120,7 @@ def test_the_eqaimes_vat_paid_to_the_settlement_account(invoice_firm):  # noqa: 
     assert warning(beta) == "ƏDV e-qaimə пришёл на расчётный счёт, не на депозит"
 
 
-def test_the_page_shows_buyers_and_leads_to_documents(invoice_firm, qtbot):  # noqa: F811
+def test_the_page_shows_buyers_and_leads_to_documents(invoice_firm, qtbot):
     """January: Бета with MS01 under it; a double click on the e-qaimə opens its document,
     on the buyer — the card of the buyer."""
     from modern_gl.application.catalog import Catalog

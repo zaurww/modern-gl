@@ -27,7 +27,9 @@ from modern_gl.application.inventory.model import (
     PURCHASE_RETURN,
     RETURN_TYPES,
     SALE_RETURN,
+    Movement,
     ReturnLine,
+    StoredLine,
 )
 from modern_gl.application.inventory.sales import SaleCommands
 from modern_gl.application.ledger import PostingInput
@@ -47,7 +49,7 @@ from modern_gl.infrastructure.db import Row, transaction
 
 
 class ReturnCommands(SaleCommands):
-    def create_return_draft(
+    def create_return_draft(  # noqa: PLR0913 the return form's fields, like a purchase («Долг» 9)
         self,
         company_id: int,
         doc_date: date | str,
@@ -76,7 +78,7 @@ class ReturnCommands(SaleCommands):
             )
         return document_id
 
-    def update_return_draft(
+    def update_return_draft(  # noqa: PLR0913 the return form's fields, like a purchase («Долг» 9)
         self,
         company_id: int,
         document_id: int,
@@ -105,7 +107,7 @@ class ReturnCommands(SaleCommands):
                 party_subconto,
             )
 
-    def post_return(
+    def post_return(  # noqa: PLR0913 the return form's fields, like a purchase («Долг» 9)
         self,
         company_id: int,
         doc_date: date | str,
@@ -177,21 +179,15 @@ class ReturnCommands(SaleCommands):
             account_id = source.party_account_id or party_account_id
             if account_id is not None:
                 self._account(company_id, account_id)
-            line_id = self._insert_line(
-                document_id,
-                company_id,
-                line_no,
-                source.item_id,
-                self._draft_warehouse(company_id, source.warehouse_id),
-                None,
-                draft_quantity(item, source.quantity, line_no),
-                0 if blank(source.amount) else positive_amount(source.amount, line_no),
-                0,
-                0,
-                account_id,
-                pad_subconto(source.party_subconto or party_subconto),
-                None,
-                source.memo.strip(),
+            stored = StoredLine(
+                line_no=line_no,
+                item_id=source.item_id,
+                warehouse_id=self._draft_warehouse(company_id, source.warehouse_id),
+                quantity=draft_quantity(item, source.quantity, line_no),
+                amount=0 if blank(source.amount) else positive_amount(source.amount, line_no),
+                offset_account_id=account_id,
+                offset_subconto=pad_subconto(source.party_subconto or party_subconto),
+                memo=source.memo.strip(),
                 line_id=source.line_id,
                 vat_amount=(
                     0
@@ -200,6 +196,7 @@ class ReturnCommands(SaleCommands):
                 ),
                 cost_subconto=sale_sc,
             )
+            line_id = self._insert_line(document_id, company_id, stored)
             if source.returned_line_id is not None:
                 self.conn.execute(
                     "INSERT INTO inventory_returns "
@@ -327,9 +324,12 @@ class ReturnCommands(SaleCommands):
         cost = self._cost(company_id, item, warehouse, line["quantity"], doc["id"])
         self._consume_receipts(company_id, doc["id"], line["id"], item["id"], line["quantity"])
         self._insert_movement(
-            company_id, doc["id"], line["id"], doc["doc_date"], item["id"], warehouse["id"],
-            "issue", -line["quantity"], -cost,
-        )  # fmt: skip
+            company_id,
+            doc["id"],
+            line["id"],
+            doc["doc_date"],
+            Movement(item["id"], warehouse["id"], "issue", -line["quantity"], -cost),
+        )
         self.conn.execute(
             "UPDATE inventory_lines SET inventory_amount = ? WHERE id = ?", (cost, line["id"])
         )
@@ -383,9 +383,12 @@ class ReturnCommands(SaleCommands):
             (cost, cost_id, line["id"]),
         )
         self._insert_movement(
-            company_id, doc["id"], line["id"], doc["doc_date"], item["id"], warehouse["id"],
-            "receipt", line["quantity"], cost,
-        )  # fmt: skip
+            company_id,
+            doc["id"],
+            line["id"],
+            doc["doc_date"],
+            Movement(item["id"], warehouse["id"], "receipt", line["quantity"], cost),
+        )
         values = self._sale_values(company_id, line)
         customer = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
         memo = line["memo"] or item["name"]

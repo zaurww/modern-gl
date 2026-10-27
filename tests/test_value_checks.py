@@ -58,7 +58,7 @@ def guarded(conn: sqlite3.Connection, table: str, column: str) -> bool:
 
 
 @pytest.mark.parametrize(
-    "kind, pattern",
+    ("kind", "pattern"),
     [("даты", DATE_COLUMNS), ("время", TIME_COLUMNS), ("флаг", FLAG_COLUMNS)],
 )
 def test_every_column_of_its_kind_is_checked(kind, pattern):
@@ -106,7 +106,7 @@ def test_a_day_is_the_users_day():
 
 
 @pytest.mark.parametrize(
-    "table, column, value",
+    ("table", "column", "value"),
     [
         ("accounts", "active", 2),
         ("accounts", "is_group", 5),

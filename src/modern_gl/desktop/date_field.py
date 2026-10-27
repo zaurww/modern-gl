@@ -207,7 +207,7 @@ class CalendarWindow(QFrame):
         self.today_button.setEnabled(self.days.days.allowed(today))
         foot.addWidget(self.today_button)
         foot.addStretch(1)
-        keys = QLabel(tr("← → ↑ ↓ — день"))
+        keys = QLabel(tr("← → ↑ ↓ — день"))  # widgets imports this module: no caption()
         keys.setObjectName("secondary")
         foot.addWidget(keys)
         root.addLayout(foot)

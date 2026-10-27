@@ -3,17 +3,15 @@
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
+from PySide6.QtWidgets import QPushButton
 
-from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import list_documents
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.trade import PURCHASE, SALE, trade_documents
+from tests.helpers.qt import running_app
 
 # what changes a company: none of it is shown while viewing
 WRITES = [
@@ -35,28 +33,18 @@ WRITES = [
 ]
 
 
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
-
-
 @pytest.fixture
-def company(tmp_path):
+def company(tmp_path, make_demo):
     ws = Workspace(tmp_path / "data")
     path = ws.new_path("ДЕМО ООО")
-    conn = connect(path)
-    create_demo_company(Ledger(conn))
-    conn.close()
+    make_demo(path)
     return ws, path
 
 
 @pytest.fixture
 def viewer(qtbot, company):
     ws, path = company
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(ws)
     qtbot.addWidget(win)
     win.view_company(path)

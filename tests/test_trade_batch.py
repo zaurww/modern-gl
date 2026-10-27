@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QItemSelectionModel, Qt
-from PySide6.QtWidgets import QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import STANDARD_VAT_RATE, ReceiptLine, SaleLine
@@ -19,9 +18,11 @@ from modern_gl.desktop.batch_post_dialog import BatchPostDialog
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.reporting.trade import PURCHASE
-from tests.test_sale_subconto import postings_46, sales_groups
-from tests.test_sales import Shop, make_shop
-from tests.test_uniform_entry import shown
+from tests.helpers.sale_subconto import postings_46, sales_groups
+from tests.helpers.sales import Shop, make_shop
+from tests.helpers.uniform_entry import shown
+
+pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
 
 @pytest.fixture
@@ -30,11 +31,7 @@ def shop(conn) -> Shop:
 
 
 @pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
-    )
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+def batch_dialog_posts(monkeypatch):
     monkeypatch.setattr(BatchPostDialog, "exec", lambda self: 1)  # «Провести», empty
 
 

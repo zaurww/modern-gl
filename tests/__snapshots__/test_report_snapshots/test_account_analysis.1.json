@@ -1,0 +1,16 @@
+[
+  {
+    "corr_code": "221",
+    "corr_id": 3,
+    "corr_name": "Банк 1",
+    "credit": 0,
+    "debit": 200000
+  },
+  {
+    "corr_code": "222",
+    "corr_id": 4,
+    "corr_name": "Банк 2",
+    "credit": 200000,
+    "debit": 0
+  }
+]

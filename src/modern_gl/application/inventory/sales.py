@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import date
 
-from modern_gl.application.common import pad_subconto
+from modern_gl.application.common import account_kinds, pad_subconto
 from modern_gl.application.inventory.amounts import (
     blank,
     draft_quantity,
@@ -14,7 +14,7 @@ from modern_gl.application.inventory.amounts import (
     positive_amount,
     service_quantity,
 )
-from modern_gl.application.inventory.model import SALE_ROLE_NAMES, SaleLine
+from modern_gl.application.inventory.model import SALE_ROLE_NAMES, Movement, SaleLine, StoredLine
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import COST_OF_SALES, OUTPUT_VAT, SALES_REVENUE, SALES_VAT
@@ -65,7 +65,7 @@ class SaleCommands(StockCommands):
             )
         return document_id
 
-    def update_sale_draft(
+    def update_sale_draft(  # noqa: PLR0913 the sale form's header fields, by keyword
         self,
         company_id: int,
         document_id: int,
@@ -129,21 +129,19 @@ class SaleCommands(StockCommands):
             self._insert_line(
                 document_id,
                 company_id,
-                line_no,
-                source.item_id,
-                warehouse_id,
-                None,
-                quantity,
-                amount,
-                0,
-                0,
-                account_id,
-                pad_subconto(source.customer_subconto or customer_subconto),
-                None,
-                source.memo.strip(),
-                line_id=source.line_id,
-                vat_amount=vat,
-                cost_subconto=sale_sc,
+                StoredLine(
+                    line_no,
+                    source.item_id,
+                    warehouse_id,
+                    quantity,
+                    source.memo.strip(),
+                    amount=amount,
+                    offset_account_id=account_id,
+                    offset_subconto=pad_subconto(source.customer_subconto or customer_subconto),
+                    line_id=source.line_id,
+                    vat_amount=vat,
+                    cost_subconto=sale_sc,
+                ),
             )
 
     def fill_sale_subconto(
@@ -183,7 +181,7 @@ class SaleCommands(StockCommands):
                 continue
             account = self._account(company_id, account_id)
             codes = self._account_kind_codes(company_id, account)
-            for kind_id, code in zip(self._account_kind_ids(account), codes, strict=True):
+            for kind_id, code in zip(account_kinds(account), codes, strict=True):
                 if kind_id not in (None, *result) and code not in {"item", "warehouse"}:
                     result.append(kind_id)
         return result
@@ -239,7 +237,7 @@ class SaleCommands(StockCommands):
         account = self._account(company_id, account_id)
         result = self._by_kind(company_id, account_id, values)
         for position, (kind_id, value_id) in enumerate(
-            zip(self._account_kind_ids(account), result, strict=True)
+            zip(account_kinds(account), result, strict=True)
         ):
             if kind_id is None or value_id is not None:
                 continue
@@ -280,11 +278,7 @@ class SaleCommands(StockCommands):
             doc["id"],
             line["id"],
             doc["doc_date"],
-            item["id"],
-            warehouse["id"],
-            "issue",
-            -line["quantity"],
-            -amount,
+            Movement(item["id"], warehouse["id"], "issue", -line["quantity"], -amount),
         )
         return PostingInput(
             cost_id,

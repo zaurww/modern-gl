@@ -7,22 +7,21 @@ from fractions import Fraction
 from functools import partial
 
 from PySide6.QtCore import QPersistentModelIndex, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
     QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QTableView,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import load_document, opening_document
+from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.opening_postings import CREDIT_AMOUNT, OpeningPostingsModel, OpeningRow
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import (
     AMOUNT,
     CT,
@@ -32,11 +31,13 @@ from modern_gl.desktop.postings import (
     PostingsTable,
 )
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind, legend
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
     Chip,
     PageHeader,
     button,
+    caption,
     date_edit,
     edited_date,
     enter_goes_on,
@@ -47,15 +48,21 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr, trd
 
-HINT = (
-    "Enter, Tab — дальше   ·   Shift+Tab — назад   ·   Ins — строка   ·   F9 — копия   ·   "
-    "Del — удалить   ·   Ctrl+V — вставить из Excel   ·   Ctrl+Enter — провести"
-)
+HINT = ("next_field", "previous_field", "insert", "duplicate_row", "delete", "paste_rows", "post")
 
 
-class OpeningBalancesPage(QWidget):
+class OpeningBalancesPage(GridEditing, PageWidget):
     key = ("opening",)
     saved = Signal(int)
+
+    INSERT_COLUMN = DT  # a new line: its debit account, typed at once
+    EDIT_INSERTED = True
+
+    def _grid(self) -> QTableView:
+        return self.table
+
+    def _rows(self) -> EditableRows:
+        return self.model
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -97,9 +104,8 @@ class OpeningBalancesPage(QWidget):
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
-        caption = QLabel(tr("Остатки на начало дня"))
-        caption.setObjectName("secondary")
-        meta.addWidget(caption)
+        title = caption(tr("Остатки на начало дня"))
+        meta.addWidget(title)
         self.date = date_edit(date(self.s.working_date.year, 1, 1))
         self.date.setFixedWidth(130)
         meta.addWidget(self.date)
@@ -134,25 +140,16 @@ class OpeningBalancesPage(QWidget):
         for column in range(CT, CT + 4):  # the counter-account is always the same
             self.table.setColumnHidden(column, True)
         self.table.setColumnWidth(CREDIT_AMOUNT, self.table.columnWidth(AMOUNT))
-        for keys, fn, editing in (
-            ("Ins", self._insert_row, True),
-            ("F9", self._duplicate_row, True),
-            ("Del", self._remove_row, False),
-            ("Ctrl+V", self.paste, False),
-            ("Ctrl+C", self.copy, False),
-        ):
-            shortcut = QShortcut(QKeySequence(keys), self.table)
-            shortcut.setContext(
-                Qt.ShortcutContext.WidgetWithChildrenShortcut
-                if editing
-                else Qt.ShortcutContext.WidgetShortcut
-            )
-            shortcut.activated.connect(fn)
+        bind(self.table, "insert", self._insert_row)
+        bind(self.table, "duplicate_row", self._duplicate_row)
+        bind(self.table, "delete", self._remove_row)
+        bind(self.table, "paste_rows", self.paste)
+        bind(self.table, "copy_rows", self.copy)
         root.addWidget(self.table, 1)
 
     def _build_totals(self, root: QVBoxLayout, control_code: str) -> None:
         totals = QHBoxLayout()
-        hint = QLabel(tr(HINT))
+        hint = QLabel(legend(*HINT))
         hint.setObjectName("tertiary")
         hint.setFont(fonts().small)
         hint.setWordWrap(True)
@@ -198,15 +195,18 @@ class OpeningBalancesPage(QWidget):
         self.date.dateChanged.connect(self._changed)
         self.date.dateChanged.connect(self._date_changed)
         self.model.changed.connect(self._changed)
-        self._shortcut("Ctrl+S", lambda: self.save(post=False))
-        self._shortcut("Ctrl+Return", lambda: self.save(post=True))
-        self._shortcut("Ctrl+Enter", lambda: self.save(post=True))
+        bind(self, "save", lambda: self.save(post=False))
+        bind(self, "post", lambda: self.save(post=True))
 
     def title(self) -> str:
         return tr("Начальные остатки")
 
     def is_dirty(self) -> bool:
         return self.dirty
+
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
 
     def focus_table(self) -> None:
         self.table.setFocus()
@@ -215,11 +215,6 @@ class OpeningBalancesPage(QWidget):
         """Enter in the date goes on as Tab does: into the table."""
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
-
-    def _shortcut(self, keys: str, fn) -> None:
-        shortcut = QShortcut(QKeySequence(keys), self)
-        shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-        shortcut.activated.connect(fn)
 
     def _rate_for(self, currency_id: int) -> Fraction | None:
         day = edited_date(self.date) - timedelta(days=1)  # the day of the GL document
@@ -296,39 +291,10 @@ class OpeningBalancesPage(QWidget):
         self.error.setText(message)
         self.error.show()
 
-    def _finish_editing(self) -> None:
-        editor = QApplication.focusWidget()
-        if self.table.state() == QAbstractItemView.State.EditingState and editor is not None:
-            self.table.commitData(editor)
-            self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
-
     def _edit(self, row: int, column: int) -> None:
         index = self.model.index(row, column)
         self.table.setCurrentIndex(index)
         self.table.edit(index)
-
-    def _insert_row(self) -> None:
-        if self.model.read_only:
-            return
-        self._finish_editing()
-        current = self.table.currentIndex()
-        self._edit(self.model.insert_row(current.row() + 1 if current.isValid() else None), DT)
-
-    def _duplicate_row(self) -> None:
-        current = self.table.currentIndex()
-        if self.model.read_only or not current.isValid():
-            return
-        self._finish_editing()
-        row = self.model.duplicate_row(current.row())
-        self.table.setCurrentIndex(self.model.index(row, current.column()))
-
-    def _remove_row(self) -> None:
-        current = self.table.currentIndex()
-        if self.model.read_only or not current.isValid():
-            return
-        self.model.remove_row(current.row())
-        row = min(current.row(), self.model.rowCount() - 1)
-        self.table.setCurrentIndex(self.model.index(row, current.column()))
 
     def close_difference(self) -> None:
         """A line on the side that makes the totals agree; the account is the user's choice

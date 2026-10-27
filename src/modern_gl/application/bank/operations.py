@@ -6,8 +6,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
+from modern_gl.application.common import batches
 from modern_gl.domain.errors import NotFoundError
-from modern_gl.i18n import tr, trd
+from modern_gl.i18n import N_, tr, trd
 from modern_gl.infrastructure.db import Connection
 
 IN, OUT = "in", "out"  # mədaxil: money comes to the bank account; məxaric: it leaves
@@ -24,11 +25,11 @@ SUPPLIER, CUSTOMER, TAX, SALARY, FEE, TRANSFER, OTHER = (
 KINDS = (
     (SUPPLIER, "Поставщик"),
     (CUSTOMER, "Покупатель"),
-    (TAX, "Налоги"),
-    (SALARY, "Зарплата"),
+    (TAX, N_("Налоги")),
+    (SALARY, N_("Зарплата")),
     (FEE, "Комиссия банка"),
     (TRANSFER, "Перевод между своими счетами"),
-    (OTHER, "Прочее"),
+    (OTHER, N_("Прочее")),
 )
 KIND_NAMES = dict(KINDS)
 # A line's account when nothing was paid to the counterparty before: the first account
@@ -97,44 +98,64 @@ class BankOperation(BankOperationInput):
 
 
 def load_bank_operation(conn: Connection, company_id: int, operation_id: int) -> BankOperation:
-    r = conn.execute(
-        "SELECT o.*, d.number, d.doc_date, d.memo, d.status FROM bank_operations o "
-        "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
-        "WHERE o.company_id = ? AND o.id = ?",
-        (company_id, operation_id),
-    ).fetchone()
-    if r is None:
+    found = load_bank_operations(conn, company_id, [operation_id])
+    if operation_id not in found:
         raise NotFoundError(tr("документ {id} не найден", id=operation_id))
-    lines = tuple(
-        BankLine(
-            x["account_id"],
-            x["amount"],
-            (x["sc1"], x["sc2"], x["sc3"]),
-            x["invoice"],
-            bool(x["pays_vat"]),
+    return found[operation_id]
+
+
+def load_bank_operations(
+    conn: Connection, company_id: int, operation_ids: Sequence[int]
+) -> dict[int, BankOperation]:
+    """The operations by id, two queries a part of `BATCH` (a rebuild of the year, the
+    lines moved to another account); an id the company has not is left out."""
+    found: dict[int, BankOperation] = {}
+    for part in batches(list(dict.fromkeys(operation_ids))):
+        found.update(_load_part(conn, company_id, part))
+    return found
+
+
+def _load_part(conn: Connection, company_id: int, ids: Sequence[int]) -> dict[int, BankOperation]:
+    marks = ", ".join("?" * len(ids))
+    lines: dict[int, list[BankLine]] = {}
+    for x in conn.execute(
+        f"SELECT * FROM bank_operation_lines WHERE company_id = ? AND operation_id IN ({marks}) "
+        "ORDER BY operation_id, line_no",
+        (company_id, *ids),
+    ):
+        lines.setdefault(x["operation_id"], []).append(
+            BankLine(
+                x["account_id"],
+                x["amount"],
+                (x["sc1"], x["sc2"], x["sc3"]),
+                x["invoice"],
+                bool(x["pays_vat"]),
+            )
         )
-        for x in conn.execute(
-            "SELECT * FROM bank_operation_lines WHERE company_id = ? AND operation_id = ? "
-            "ORDER BY line_no",
-            (company_id, operation_id),
+    return {
+        r["id"]: BankOperation(
+            doc_date=r["doc_date"],
+            direction=r["direction"],
+            account_id=r["account_id"],
+            lines=tuple(lines.get(r["id"], ())),
+            kind=r["kind"],
+            subconto=(r["sc1"], r["sc2"], r["sc3"]),
+            currency_id=r["currency_id"],
+            counterparty_id=r["counterparty_id"],
+            memo=r["memo"],
+            reference=r["reference"],
+            id=r["id"],
+            document_id=r["document_id"],
+            number=r["number"],
+            status=r["status"],
         )
-    )
-    return BankOperation(
-        doc_date=r["doc_date"],
-        direction=r["direction"],
-        account_id=r["account_id"],
-        lines=lines,
-        kind=r["kind"],
-        subconto=(r["sc1"], r["sc2"], r["sc3"]),
-        currency_id=r["currency_id"],
-        counterparty_id=r["counterparty_id"],
-        memo=r["memo"],
-        reference=r["reference"],
-        id=r["id"],
-        document_id=r["document_id"],
-        number=r["number"],
-        status=r["status"],
-    )
+        for r in conn.execute(
+            "SELECT o.*, d.number, d.doc_date, d.memo, d.status FROM bank_operations o "
+            "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
+            f"WHERE o.company_id = ? AND o.id IN ({marks})",
+            (company_id, *ids),
+        )
+    }
 
 
 def find_bank_operation(conn: Connection, company_id: int, reference: str) -> int | None:

@@ -13,7 +13,7 @@ from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.eqaime.portal import fetch_list, rechecks, usual_span
 from modern_gl.application.inventory import ReceiptLine
 from modern_gl.application.ledger import Ledger, PostingInput
-from modern_gl.domain.eqaime import ALL, ON_APPROVAL, PortalInvoice, portal_invoice
+from modern_gl.domain.eqaime import ALL, ON_APPROVAL, portal_invoice
 from modern_gl.domain.period_input import describe
 from modern_gl.domain.periods import (
     DAY,
@@ -43,9 +43,8 @@ from modern_gl.reporting.eqaime_reconciliation import (
     reconcile,
     reconciled_through,
 )
-from tests.test_eqaime_import import FakePortal
-
-ALFA_TIN, BETA_TIN = "1111111111", "2222222222"
+from tests.helpers.eqaime import FakePortal
+from tests.helpers.eqaime_reconciliation import ALFA_TIN, BETA_TIN, on_portal
 
 
 @pytest.fixture
@@ -95,18 +94,6 @@ class Firm:
                 )
             ],
         )
-
-
-def on_portal(
-    number: str,
-    day: str,
-    total: int,
-    vat: int,
-    status: str = "approved",
-    tin: str = ALFA_TIN,
-    outgoing: bool = False,
-) -> PortalInvoice:
-    return PortalInvoice(number, outgoing, day, status, tin, "Alfa MMC", total, vat)
 
 
 def test_a_list_row_is_read_with_its_totals():
@@ -370,7 +357,7 @@ def test_a_sale_in_the_classic_chart(conn):
     """A sale with e-qaimə MS2601001 (see test_sales): Dt 62 / Kt 46 70.80 + 29.50 = 100.30
     with ƏDV; the ƏDV is Dt 46 / Kt 68.2 15.30 — not on the customer's account. Paid
     later (Dt 51 / Kt 62) with the same number: not the e-qaimə's amount."""
-    from tests.test_sales import make_shop, two_lines
+    from tests.helpers.sales import make_shop, two_lines
 
     shop = make_shop(conn, "classic")
     shop.receipt("2026-01-10", "10", "120")
@@ -409,7 +396,7 @@ def test_reconciliation_dialog(firm, qtbot, monkeypatch):
     from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
     from modern_gl.desktop.session import Session
     from modern_gl.reporting.eqaime_reconciliation import reconciled_periods
-    from tests.test_eqaime_import import fake_token
+    from tests.helpers.eqaime import fake_token
 
     firm.purchase("2026-03-05", "MT01", "1000", "180")
     mt04 = firm.purchase("2026-03-12", "MT04", "100", "18")
@@ -484,7 +471,7 @@ def test_a_document_shows_its_status_on_the_portal(conn, qtbot):
     once approved, nothing; cancelled — in red."""
     from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
     from modern_gl.desktop.session import Session
-    from tests.test_sales import make_shop
+    from tests.helpers.sales import make_shop
 
     shop = make_shop(conn, "classic")
     doc = shop.inventory.create_receipt_draft(
@@ -521,8 +508,8 @@ def test_import_takes_e_qaime_awaiting_approval_and_warns_of_changes(conn, qtbot
     from modern_gl.desktop import eqaime_import_page
     from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
     from modern_gl.desktop.session import Session
-    from tests.test_eqaime_import import fake_token, received
-    from tests.test_sales import make_shop
+    from tests.helpers.eqaime import fake_token, received
+    from tests.helpers.sales import make_shop
 
     shop = make_shop(conn, "classic")
     shop.ledger.eqaime.remember_portal(

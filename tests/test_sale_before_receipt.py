@@ -13,7 +13,7 @@ from modern_gl.desktop.inventory_document_page import (
     InventoryDocumentPage,
 )
 from modern_gl.desktop.session import Session
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 Q = 10**6
 
@@ -63,6 +63,7 @@ def test_the_missing_goods_come_in_as_a_purchase_awaiting_its_e_qaime(conn, qtbo
     assert sale.btn_shortage.isVisibleTo(sale)
     purchase = InventoryDocumentPage(sale.s, doc_type="receipt")
     qtbot.addWidget(purchase)
+    assert sale.doc is not None
     assert purchase.fill_shortage(sale.doc.id)
     (line,) = purchase.model.rows
     assert (line.item_id, line.warehouse_id, line.quantity, line.amount) == (
@@ -74,7 +75,7 @@ def test_the_missing_goods_come_in_as_a_purchase_awaiting_its_e_qaime(conn, qtbo
     assert line.offset_subconto[0] == shop.supplier[0]
     assert purchase._awaits() and purchase.date.date().toString("dd.MM.yyyy") == "25.01.2026"
     assert purchase.save(post=True), purchase.error.text()
-    assert purchase.doc.awaits_invoice
+    assert purchase.doc is not None and purchase.doc.awaits_invoice
     assert sale.save(post=True), sale.error.text()
     (goods,) = [p for p in shop.postings(sale.doc.id) if p[:2] == ("46", "41")]
     assert goods[2] == 14_400

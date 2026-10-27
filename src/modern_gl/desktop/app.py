@@ -11,19 +11,26 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import cast
 
-from PySide6.QtCore import QSettings, QStandardPaths
+from PySide6.QtCore import QStandardPaths
 from PySide6.QtWidgets import QApplication
 
 from modern_gl import demo_year, i18n
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
 from modern_gl.demo_data import create_demo_company
-from modern_gl.desktop import qt_texts, theme
-from modern_gl.desktop.backups_dialog import MIRROR_SETTING
+from modern_gl.desktop import crash_dialog, qt_texts, theme
 from modern_gl.desktop.cell_editing import select_whole_on_entry
 from modern_gl.desktop.main_window import MainWindow
+from modern_gl.desktop.preferences import (
+    COMPANY_FILES,
+    DATA_DIR,
+    LANGUAGE,
+    MIRROR_SETTING,
+    THEME,
+    prefs,
+)
+from modern_gl.infrastructure import logs
 from modern_gl.infrastructure.db import connect
 
 
@@ -55,20 +62,22 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Modern GL")
     app.setOrganizationName("ModernGL")
-    settings = QSettings()
-    theme.use_theme(str(settings.value("theme", theme.DEFAULT_THEME)))
+    crash_dialog.install()  # before anything else can fail
+    remembered = prefs()
+    theme.use_theme(remembered.text(THEME, theme.DEFAULT_THEME))
     theme.apply(app)
     qt_texts.install(app)
     select_whole_on_entry(app)
-    lang = str(settings.value("language", i18n.DEFAULT))
+    lang = remembered.text(LANGUAGE, i18n.DEFAULT)
     i18n.set_language(lang if lang in i18n.LANGUAGES else i18n.DEFAULT)
 
     args = sys.argv[1:]
     if "--data" in args and args.index("--data") + 1 < len(args):
-        settings.setValue("data_dir", args[args.index("--data") + 1])
-    folder = Path(str(settings.value("data_dir", "") or default_folder()))
-    files = cast(list[str], settings.value("company_files", [], type=list))
-    mirror = str(settings.value(MIRROR_SETTING, "") or "")
+        remembered.set(DATA_DIR, args[args.index("--data") + 1])
+    folder = Path(remembered.text(DATA_DIR) or default_folder())
+    logs.start(folder)
+    files = remembered.texts(COMPANY_FILES)
+    mirror = remembered.text(MIRROR_SETTING)
     workspace = Workspace(folder, files, mirror or None)
     if "--demo" in args and not workspace.companies():
         add_demo_company(workspace)
@@ -77,7 +86,7 @@ def main() -> int:
         if flag in args and all(c.name != name for c in workspace.companies()):
             add_demo_company(workspace, years)
 
-    window = MainWindow(workspace, settings)
+    window = MainWindow(workspace, remembered.store)
     if not window.start():
         return 0
     window.show()

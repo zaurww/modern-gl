@@ -6,7 +6,9 @@ A text the program writes into a company's documents (a posting's «Комисс
 `trd(...)`: in the company's language of documents (D152), whatever the interface is —
 switched, it would make every document of a module look changed to a rebuild.
 
-Missing translations fall back to Russian; tests/test_i18n.py checks none are missing.
+A key kept in a constant and translated later (`tr(title)`) is marked where it is written:
+`N_("Журнал")`. Missing translations fall back to Russian; tests/test_i18n.py checks none
+are missing and none are left without a tr/trd/N_ in the code.
 """
 
 from __future__ import annotations
@@ -21,7 +23,7 @@ _document: str | None = None  # the open company's language of documents; None �
 
 
 def set_language(code: str) -> None:
-    global _current
+    global _current  # noqa: PLW0603 the interface language is the process's state
     if code not in LANGUAGES:
         raise ValueError(f"unknown language {code!r}")
     _current = code
@@ -31,13 +33,19 @@ def language() -> str:
     return _current
 
 
-def tr(source: str, /, **values) -> str:
+def N_(source: str, /) -> str:  # noqa: N802 the gettext name, known to translators
+    """A translation key kept for later: `NAMES = [N_("Журнал")]`, then `tr(NAMES[0])`.
+    It changes nothing; tests/test_i18n.py reads these as it reads tr("…")."""
+    return source
+
+
+def tr(source: str, /, **values: object) -> str:
     return _translate(_current, source, values)
 
 
 def set_document_language(code: str | None) -> None:
     """The open company's language of documents (application.document_language)."""
-    global _document
+    global _document  # noqa: PLW0603 the open company's language, like _current
     if code is not None and code not in LANGUAGES:
         raise ValueError(f"unknown language {code!r}")
     _document = code
@@ -47,12 +55,12 @@ def document_language() -> str:
     return _document or _current
 
 
-def trd(source: str, /, **values) -> str:
+def trd(source: str, /, **values: object) -> str:
     """A text written into a document: in the company's language of documents."""
     return _translate(document_language(), source, values)
 
 
-def _translate(code: str, source: str, values: dict) -> str:
+def _translate(code: str, source: str, values: dict[str, object]) -> str:
     template = _CATALOGS[code].get(source, source)
     return template.format(**values) if values else template
 

@@ -4,12 +4,12 @@ and subconto. Lines with different ones show their own («Разные по ст
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 
 from modern_gl.desktop.inventory_document_page.form import InventoryDocumentForm
 from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.pick import PickBox
-from modern_gl.desktop.widgets import button
+from modern_gl.desktop.widgets import button, caption
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
@@ -25,13 +25,11 @@ class PartyPart(InventoryDocumentForm):
     def _build_party(self, root: QVBoxLayout) -> None:
         row = QHBoxLayout()
         row.setSpacing(8)
-        self.party_caption = QLabel(tr(CAPTIONS.get(self.doc_type, "Поставщик")))
-        self.party_caption.setObjectName("secondary")
+        self.party_caption = caption(tr(CAPTIONS.get(self.doc_type, "Поставщик")))
         self.party = PickBox(tr("кто — название или VÖEN"))
         self.party.setFixedWidth(300)
         self.party.can_add = True  # a new one is added right here, as in a cell
-        self.contract_caption = QLabel(tr("Договор"))
-        self.contract_caption.setObjectName("secondary")
+        self.contract_caption = caption(tr("Договор"))
         self.contract = PickBox(tr("без договора"))
         self.contract.setFixedWidth(220)
         self.contract.can_add = True

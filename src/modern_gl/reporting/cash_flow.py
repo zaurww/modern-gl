@@ -12,6 +12,7 @@ from modern_gl.application.books import COMMON, book_params, docs_cte
 from modern_gl.domain.accounts import ACCOUNT_TYPES
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.period_input import Period
+from modern_gl.i18n import N_
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.columns import Amounts
 from modern_gl.reporting.report_common import _accounts
@@ -42,9 +43,9 @@ FINANCING = frozenset(
     }
 )
 ACTIVITIES = (
-    ("Операционная деятельность", "Чистый поток от операционной деятельности"),
-    ("Инвестиционная деятельность", "Чистый поток от инвестиционной деятельности"),
-    ("Финансовая деятельность", "Чистый поток от финансовой деятельности"),
+    (N_("Операционная деятельность"), N_("Чистый поток от операционной деятельности")),
+    (N_("Инвестиционная деятельность"), N_("Чистый поток от инвестиционной деятельности")),
+    (N_("Финансовая деятельность"), N_("Чистый поток от финансовой деятельности")),
 )
 
 
@@ -70,7 +71,7 @@ def cash_flow(
     accounts = _accounts(conn, company_id)
     opening, closing, flows, by_account = _read(conn, company_id, columns, layers, accounts)
     names = Names.read(conn, company_id) if detail != TYPES else None
-    lines = [Line("Деньги на начало периода", opening, "subtotal")]
+    lines = [Line(N_("Деньги на начало периода"), opening, "subtotal")]
     net = Amounts()
     for index, (title, subtotal) in enumerate(ACTIVITIES):
         lines.append(Line(title, kind="heading"))
@@ -82,7 +83,7 @@ def cash_flow(
                 if names is not None:
                     lines.extend(names.account_lines(by_account[account_type]))
         if index == 0 and flows.get(UNTYPED):
-            lines.append(Line("Счета без типа", flows[UNTYPED], account_type=UNTYPED))
+            lines.append(Line(N_("Счета без типа"), flows[UNTYPED], account_type=UNTYPED))
             result += flows[UNTYPED]
             if names is not None:
                 lines.extend(names.account_lines(by_account[UNTYPED]))
@@ -91,8 +92,8 @@ def cash_flow(
             continue
         lines.append(Line(subtotal, result, "subtotal"))
         net += result
-    lines.append(Line("Изменение денег за период", net, "subtotal"))
-    lines.append(Line("Деньги на конец периода", closing, "total"))
+    lines.append(Line(N_("Изменение денег за период"), net, "subtotal"))
+    lines.append(Line(N_("Деньги на конец периода"), closing, "total"))
     return Statement(lines, closing - opening - net)
 
 

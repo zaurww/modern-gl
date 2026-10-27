@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from modern_gl.application.bank import OUT, TAX, BankLine, BankOperationInput
 from modern_gl.application.bank.deposit_reconciliation import (
     BOOKS_ONLY,
@@ -28,25 +30,14 @@ from modern_gl.application.bank.deposit_reconciliation import (
     reconciled_periods,
 )
 from modern_gl.i18n import tr
-from tests.test_vat_deposit_import import deposit_session, firm, operations
+from tests.helpers.deposit import fee
+from tests.helpers.qt import tree_item
+from tests.helpers.vat_deposit import operations
 
-__all__ = ["deposit_session", "firm"]
 
-
-def fee(ledger, firm, day: str = "2026-10-03", amount: int = 500) -> int:
-    place = firm["place"]
-    return ledger.bank.save_bank_operation(
-        firm["cid"],
-        BankOperationInput(
-            doc_date=day,
-            direction=OUT,
-            account_id=place.account_id,
-            subconto=place.subconto,
-            kind=TAX,
-            lines=(BankLine(firm["acc"]["68.2"], amount),),
-        ),
-        post=True,
-    )
+@pytest.fixture
+def firm(deposit_firm):
+    return deposit_firm
 
 
 def test_the_period_by_the_portal_and_by_the_books(ledger, firm):
@@ -187,6 +178,7 @@ def test_the_window_reconciles_loads_the_missing_and_marks(qtbot, ledger, firm, 
     dialog.reconcile()
     qtbot.waitUntil(lambda: dialog.seen is not None, timeout=5000)
     seen = dialog.seen
+    assert seen is not None
     assert [row.state for row in seen.rows] == [SAME, SAME, SAME, PORTAL_ONLY, PORTAL_ONLY]
     assert not dialog.load_missing.isHidden()
     # the closing: portal 1 000.00, books 594.00 − 12.44 − 940.00 = −358.44; the difference
@@ -195,6 +187,7 @@ def test_the_window_reconciles_loads_the_missing_and_marks(qtbot, ledger, firm, 
 
     dialog.load_missing.click()
     assert dialog.changed
+    assert dialog.seen is not None
     assert [row.state for row in dialog.seen.rows] == [SAME, SAME, SAME, SAME, DIFFERENT]
     assert dialog.load_missing.isHidden()
 
@@ -202,6 +195,6 @@ def test_the_window_reconciles_loads_the_missing_and_marks(qtbot, ledger, firm, 
     [period] = reconciled_periods(ledger.conn, cid, place)
     assert (period.date_from, period.date_to) == ("2026-10-01", "2026-10-03")
     assert dialog.history.text() == tr("Сверено с порталом: {periods}.", periods="01.10–03.10.2026")
-    item = dialog.rows.topLevelItem(0)
-    dialog.rows.itemDoubleClicked.emit(item, 0)
+    dialog.rows.itemDoubleClicked.emit(tree_item(dialog.rows, 0), 0)
+    assert dialog.seen is not None and dialog.seen.rows[0].line is not None
     assert dialog.chosen_document == dialog.seen.rows[0].line.document_id

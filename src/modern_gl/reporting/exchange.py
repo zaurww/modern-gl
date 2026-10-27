@@ -7,6 +7,7 @@ directory elements by name."""
 from __future__ import annotations
 
 from datetime import date
+from typing import Any
 
 from modern_gl.application.books import BOOKS, book_params
 from modern_gl.application.exchange import FORMAT, VERSION
@@ -23,7 +24,7 @@ def documents_file(
     date_from: date | str,
     date_to: date | str,
     book: str = "common",
-) -> dict:
+) -> dict[str, Any]:
     """The posted documents of the period in the book, ready for `json.dump`."""
     params = book_params(conn, company_id, date_from, date_to, BOOKS[book])
     accounts = {a: r["code"] or r["name"] for a, r in _accounts(conn, company_id).items()}

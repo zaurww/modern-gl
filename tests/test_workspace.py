@@ -7,9 +7,10 @@ from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import TRASH, Workspace
 from modern_gl.demo_data import create_demo_company
 from modern_gl.infrastructure.company_file import open_company
-from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, latest_version
+from modern_gl.infrastructure.db import connect, latest_version
 from modern_gl.reporting.reports import trial_balance
 from tests.conftest import build_demo
+from tests.helpers.workspace import file_at_version
 
 
 def test_one_file_per_company(tmp_path):
@@ -121,21 +122,6 @@ def test_split_leaves_no_row_of_another_company(tmp_path):
     for name, cid in (("Alfa", first), ("Beta", second)):
         others = {t: ids - {cid} for t, ids in company_ids_by_table(by_name[name]).items()}
         assert {t: ids for t, ids in others.items() if ids} == {}, name
-
-
-def file_at_version(path: Path, version: int, companies: list[str]) -> None:
-    """A shared file as an older program left it: the migrations up to `version`."""
-    old = sqlite3.connect(path, isolation_level=None)
-    old.execute("PRAGMA foreign_keys = OFF")
-    for migration in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        number = int(migration.name.split("_", 1)[0])
-        if number > version:
-            break
-        sql = migration.read_text(encoding="utf-8")
-        old.executescript(f"BEGIN;\n{sql}\nPRAGMA user_version = {number};\nCOMMIT;")
-    for name in companies:
-        old.execute("INSERT INTO companies (name, created_at) VALUES (?, 'now')", (name,))
-    old.close()
 
 
 @pytest.mark.parametrize("version", range(1, latest_version() + 1))

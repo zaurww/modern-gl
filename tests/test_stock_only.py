@@ -4,7 +4,6 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_mode
@@ -23,13 +22,7 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import connect
-
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
@@ -45,10 +38,11 @@ def workspace(tmp_path):
 
 @pytest.fixture
 def window(qtbot, workspace):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(workspace)
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 3, 5)
     win.show()
     yield win

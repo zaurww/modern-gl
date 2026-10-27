@@ -11,7 +11,7 @@ from pathlib import Path
 from modern_gl.application.ledger import Ledger
 from modern_gl.demo_year import create_year_demo
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, latest_version
-from tests.test_workspace import file_at_version
+from tests.helpers.workspace import file_at_version
 
 REBUILT = 47
 REBUILT_TABLES = (
@@ -73,6 +73,9 @@ def company_of_version(path: Path, version: int) -> None:
     sql = (MIGRATIONS_DIR / "0048_ifrs_types.sql").read_text(encoding="utf-8")
     old.executescript(sql[sql.index("CREATE TABLE") : sql.index("-- 09 and 77")])
     try:
+        # one transaction: in autocommit mode every row of the copy would be its own
+        # commit with a sync of the file — minutes instead of seconds
+        old.execute("BEGIN")
         copy_rows(today, old)
         old.executemany(
             "UPDATE inventory_documents SET expense_date = ?, accrual_document_id = ? WHERE id = ?",
@@ -81,6 +84,7 @@ def company_of_version(path: Path, version: int) -> None:
             ).fetchall(),
         )
         post_again(today, old)
+        old.execute("COMMIT")
     finally:
         old.close()
         today.close()

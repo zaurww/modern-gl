@@ -18,7 +18,6 @@ the balance on the portal now 1 000.00. Hand-calculated:
 
 from __future__ import annotations
 
-import json
 from datetime import date
 from decimal import Decimal
 
@@ -33,7 +32,6 @@ from modern_gl.application.bank import (
     TRANSFER,
     BankLine,
     BankOperationInput,
-    BankPlace,
     bank_statements,
     load_bank_operation,
 )
@@ -44,122 +42,18 @@ from modern_gl.application.bank.deposit_import import (
     invoices_in,
     loaded_already,
     loaded_spans,
-    parse_operation,
     portal_loads,
 )
 from modern_gl.application.bank.imported import DRAFT, POSTED
-from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.etaxes import EtaxesClient, Response, TokenExpired
-
-OWN_TIN = "1400000001"
-
-
-def raw(
-    moment: str,
-    income: object,
-    expense: object,
-    *,
-    tin: str = "1100000001",
-    name: str = '"ALFA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ',
-    kind: str = "SUB_TO_SUB",
-    destination: str = "TAXPAYER",
-    receipt: str = "2619000000000000",
-    explanation: str = "ƏDV köçürməsi",
-    invoices: list | None = None,
-    status: str = "SUCCESS",
-) -> dict:
-    return {
-        "id": f"id{moment}",
-        "tin": tin,
-        "name": name,
-        "operationDate": moment,
-        "operationType": kind,
-        "paymentType": "INCOME" if income is not None else "EXPENSE",
-        "account": "CURRENT" if kind == "CURRENT_TO_SUB" else "MAIN",
-        "destination": destination,
-        "income": income,
-        "expense": expense,
-        "receiptNumber": receipt,
-        "explanation": explanation,
-        "operationStatus": status,
-        "documentKind": "INVOICE" if invoices else "ADVANCE",
-        "invoices": invoices,
-    }
-
-
-BETA = "2222222222"
-BETA_NAME = '"BETA" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ'
-PORTAL = [
-    raw(
-        "20261001101500",
-        Decimal("594"),
-        None,
-        receipt="2619000000000001",
-        invoices=[
-            {"serialNumber": "MT260812000002", "vat": Decimal("54")},
-            {"serialNumber": "MT260411000001", "vat": Decimal("540")},
-        ],
-        tin=BETA,
-        name=BETA_NAME,
-    ),
-    raw(
-        "20261002090000",
-        None,
-        Decimal("12.44"),
-        receipt="2619000000000002",
-        invoices=[{"serialNumber": "MT261011000003", "vat": Decimal("12.4369")}],
-    ),
-    raw(
-        "20261002120000",
-        None,
-        Decimal("940"),
-        tin="1602473621",
-        name="MİLLİ GƏLİRLƏR BAŞ İDARƏSİ",
-        kind="SUB_TO_BUDGET",
-        destination="BUDGET",
-        receipt="2619000000000003",
-    ),
-    raw(
-        "20261003100000",
-        Decimal("90"),
-        None,
-        kind="CURRENT_TO_SUB",
-        destination="BANK",
-        receipt="nb",
-        explanation="29.09.26 TARIXLI MT260912\n395884 QAIMEYE ESASEN",
-        tin=BETA,
-        name=BETA_NAME,
-    ),
-    raw(
-        "20261003110000",
-        Decimal("200"),
-        None,
-        tin=OWN_TIN,
-        name="ÖZÜMÜZ MMC",
-        kind="CURRENT_TO_SUB",
-        destination="BANK",
-        receipt="nb",
-    ),
-    raw("20261003120000", Decimal("50"), None, receipt="2619000000000004", status="REJECTED"),
-]
+from modern_gl.infrastructure.etaxes import EtaxesClient, TokenExpiredError
+from tests.helpers.qt import tree_item
+from tests.helpers.vat_deposit import OWN_TIN, PORTAL, FakeDepositPortal, as_json, operations, raw
 
 
 @pytest.fixture
-def firm(ledger):
-    cid = ledger.create_company("ООО Депозит")
-    apply_chart_template(ledger, cid, "1c77", "ru")
-    acc = {code: ledger.account_id(cid, code) for code in ("55", "60.1", "62.1", "68.2", "51")}
-    ledger.set_account_type(cid, acc["55"], "vat_deposit")
-    deposit = ledger.bank.add_bank_account(cid, "ƏDV depozit", acc["55"], "vat_deposit")
-    place = BankPlace(acc["55"], deposit, "ƏDV depozit", "55", None, "", "vat_deposit")
-    alfa = ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "counterparty"), "Альфа")
-    ledger.set_subconto_value_tax(cid, alfa, "1100000001")
-    return {"cid": cid, "acc": acc, "place": place, "alfa": alfa}
-
-
-def operations():
-    return [parse_operation(r, OWN_TIN) for r in PORTAL]
+def firm(deposit_firm):
+    return deposit_firm
 
 
 def test_an_operation_of_the_portal():
@@ -336,33 +230,6 @@ def test_a_payment_entered_by_hand_is_marked_not_doubled(ledger, firm):
 # ---- the portal ---------------------------------------------------------------------
 
 
-class FakeDepositPortal:
-    """Answers like new.e-taxes.gov.az: the balance, the operations in pages of 50."""
-
-    def __init__(
-        self, rows: list[dict], balance: str = "1000", read_at: str = "", token: str = "good"
-    ) -> None:
-        self.rows, self.balance, self.token, self.calls = rows, balance, token, []
-        self.read_at = read_at or "2026-10-03T23:00:00.123456789"
-
-    def __call__(self, method, url, headers, body):
-        request = json.loads(body) if body else None
-        self.calls.append((method, url, request))
-        if headers["x-authorization"] != f"Bearer {self.token}":
-            return Response(401, b"")
-        if url.endswith("/accountInfo"):
-            answer = {"mainAccount": float(self.balance), "informationOn": self.read_at}
-            return Response(200, json.dumps(answer).encode())
-        page = self.rows[request["offset"] : request["offset"] + request["maxCount"]]
-        more = request["offset"] + request["maxCount"] < len(self.rows)
-        return Response(200, json.dumps({"operations": page, "hasMore": more}).encode())
-
-
-def as_json(rows: list[dict]) -> list[dict]:
-    """The rows as the portal sends them: numbers, not Decimal."""
-    return json.loads(json.dumps(rows, default=float))
-
-
 def test_the_client_pages_the_operations():
     rows = [raw(f"202610010{i:05d}", 1, None) for i in range(60)]
     portal = FakeDepositPortal(as_json(rows))
@@ -376,7 +243,7 @@ def test_the_client_pages_the_operations():
         "2026-10-23",
     )
     assert client.vat_deposit_balance() == (Decimal("1000.0"), "2026-10-03T23:00:00.123456789")
-    with pytest.raises(TokenExpired):
+    with pytest.raises(TokenExpiredError):
         EtaxesClient("old", send=portal).vat_deposit_balance()
 
 
@@ -481,7 +348,7 @@ def test_a_day_loaded_on_that_day_is_not_closed():
 
 def test_the_sign_in_window_says_what_it_waits_for():
     from modern_gl.desktop.portal_login import waiting_for
-    from tests.test_eqaime_import import fake_token
+    from tests.helpers.eqaime import fake_token
 
     assert waiting_for(None) == tr("Ждём входа на портал…")
     assert waiting_for(fake_token(lifetime=-10)) == tr(
@@ -495,28 +362,6 @@ def test_the_sign_in_window_says_what_it_waits_for():
     )
     assert waiting_for(fake_token(OWN_TIN), OWN_TIN) == ""
     assert waiting_for(fake_token(OWN_TIN)) == ""  # the company's VÖEN not known yet
-
-
-@pytest.fixture
-def deposit_session(ledger, firm, monkeypatch):
-    from modern_gl.application.catalog import Catalog
-    from modern_gl.desktop import portal_login
-    from modern_gl.desktop.bank_page import deposit_fetch as fetch
-    from modern_gl.desktop.session import Session
-    from tests.test_eqaime_import import fake_token
-
-    cid = firm["cid"]
-    messages: list[str] = []
-    s = Session(
-        ledger.conn, ledger, cid, "ООО Депозит", Catalog(ledger.conn, cid), notify=messages.append
-    )
-    s.working_date = date(2026, 10, 5)
-    ledger.set_company_tax_id(cid, OWN_TIN)  # the portal's firm (D113)
-    token = fake_token(OWN_TIN)
-    portal = FakeDepositPortal(as_json(PORTAL), token=token)
-    monkeypatch.setattr(fetch, "EtaxesClient", lambda token: EtaxesClient(token, send=portal))
-    portal_login.forget_token()
-    return s, messages, token, portal
 
 
 def test_the_window_loads_the_period_chosen(qtbot, firm, deposit_session):
@@ -552,7 +397,7 @@ def test_the_window_loads_the_period_chosen(qtbot, firm, deposit_session):
         + "."
     )
 
-    dialog.rows.topLevelItem(1).setCheckState(0, Qt.CheckState.Unchecked)
+    tree_item(dialog.rows, 1).setCheckState(0, Qt.CheckState.Unchecked)
     assert tr(", после загрузки будет {after} ₼", after="-12.44") in dialog.balances.text()
     dialog.post_button.click()
     assert dialog.step == DONE  # what became of them: in the window, not closed
@@ -676,7 +521,7 @@ def test_the_window_warns_of_a_reconciled_period_changed(qtbot, ledger, firm, de
     portal's too (in 794.00 → 884.00, closing 910.00 → 1 000.00) — D118."""
     from modern_gl.application.bank.deposit_reconciliation import reconcile_deposit
     from modern_gl.desktop.bank_page.portal import PREVIEW, DepositDialog
-    from tests.test_deposit_reconciliation import fee
+    from tests.helpers.deposit import fee
 
     s, _messages, token, _portal = deposit_session
     cid, place = firm["cid"], firm["place"]

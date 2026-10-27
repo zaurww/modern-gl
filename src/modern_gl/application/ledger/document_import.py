@@ -13,11 +13,13 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 
-class _Discard(Exception):
+class _DiscardError(Exception):
     """Rolls back an import that had problems or was only a check."""
 
 
 class DocumentImportCommands(DocumentCommands):
+    """Use case of importing many documents at once (Excel, the exchange file)."""
+
     def import_documents(
         self,
         company_id: int,
@@ -43,9 +45,8 @@ class DocumentImportCommands(DocumentCommands):
         try:
             with transaction(self.conn):
                 created: list[int] = []
-                for kind_id, name, owner in new_values:
-                    if owner is not None and owner < 0:
-                        owner = created[-owner - 1]
+                for kind_id, name, ref in new_values:
+                    owner = created[-ref - 1] if ref is not None and ref < 0 else ref
                     created.append(
                         self.add_subconto_value(company_id, kind_id, name, owner_id=owner)
                     )
@@ -76,8 +77,8 @@ class DocumentImportCommands(DocumentCommands):
                     if doc_id is not None and sourced:
                         self._mark_source(company_id, doc_id, source, doc.external_id)
                 if outcome.errors or check_only:
-                    raise _Discard
-        except _Discard:
+                    raise _DiscardError
+        except _DiscardError:
             outcome.ids = []
         return outcome
 
@@ -125,16 +126,15 @@ class DocumentImportCommands(DocumentCommands):
     def _import_one(
         self, index: int, outcome: ImportOutcome, create: Callable[[], int]
     ) -> int | None:
-        """One document under its own savepoint: its problem is noted and undone."""
-        self.conn.execute("SAVEPOINT import_document")
-        doc_id = None
+        """One document in a transaction of its own (a savepoint inside the import's):
+        its problem is noted and undone."""
         try:
-            doc_id = create()
-            outcome.ids.append(doc_id)
+            with transaction(self.conn):
+                doc_id = create()
         except LedgerError as e:
-            self.conn.execute("ROLLBACK TO import_document")
             outcome.errors.append((index, str(e)))
-        self.conn.execute("RELEASE import_document")
+            return None
+        outcome.ids.append(doc_id)
         return doc_id
 
     def _mark_source(self, company_id: int, doc_id: int, source: str, external_id: str) -> None:

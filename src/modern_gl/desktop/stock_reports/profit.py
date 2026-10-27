@@ -9,14 +9,15 @@ from decimal import Decimal
 
 from PySide6.QtCore import Signal
 
+from modern_gl.desktop.preferences import GROSS_PROFIT_VIEW
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.stock_reports.common import INDENT, quantity_column, view_switch
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.inventory import BY_CUSTOMER, BY_ITEM, ProfitRow, gross_profit
 
-VIEW_SETTING = "reports/gross_profit_view"
+VIEW_SETTING = GROSS_PROFIT_VIEW
 
 
 def margin_text(row: ProfitRow) -> str:
@@ -34,7 +35,9 @@ class GrossProfitPage(ReportPage):
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Валовая прибыль по товарам"), params)
         switch, self.view = view_switch(
-            VIEW_SETTING, [(BY_ITEM, "По товарам"), (BY_CUSTOMER, "По покупателям")], self.refresh
+            VIEW_SETTING,
+            [(BY_ITEM, N_("По товарам")), (BY_CUSTOMER, N_("По покупателям"))],
+            self.refresh,
         )
         self.add_to_bar(switch)
         self.empty.say(tr("Нет продаж"), tr("За период проведённых продаж не было."))

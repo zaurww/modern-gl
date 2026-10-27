@@ -11,23 +11,7 @@ from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.workspace import Workspace
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
-
-
-def company(ws: Workspace, name: str = "Firma"):
-    path = ws.create(name, chart=None)
-    conn, cid = ws.open(path)
-    ledger = Ledger(conn)
-    a = ledger.add_account(cid, "50", "Касса", account_class="asset")
-    b = ledger.add_account(cid, "80", "Капитал", account_class="equity")
-    return path, conn, ledger, cid, (a, b)
-
-
-def documents(path) -> int:
-    conn = sqlite3.connect(path)
-    try:
-        return conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    finally:
-        conn.close()
+from tests.helpers.backup import company, documents
 
 
 def test_backup_is_a_checked_copy_and_only_the_newest_are_kept(tmp_path):
@@ -63,6 +47,7 @@ def test_restore_brings_back_the_backup_and_keeps_the_current_file(tmp_path):
     ledger.post_new(cid, "2026-03-02", [PostingInput(a, b, "200")])
     conn.close()
 
+    assert saved is not None
     safety = ws.restore(saved, path)
     assert documents(path) == 1
     assert documents(safety) == 2  # the restore itself can be undone
@@ -176,14 +161,17 @@ def test_window_backs_up_on_close_and_restores(qtbot, tmp_path, monkeypatch):
     win = MainWindow(ws)
     qtbot.addWidget(win)
     win.start()
+    assert win.ledger is not None
     win.ledger.post_new(cid, "2026-03-02", [PostingInput(a, b, "200")])
     win.shutdown()
     [first] = ws.backups(path)
     assert documents(first.path) == 2
 
     win.start()
+    assert win.ledger is not None
     win.ledger.post_new(cid, "2026-03-03", [PostingInput(a, b, "300")])
     assert win.restore_from(first.path, path)
+    assert win.conn is not None
     assert win.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 2
     win.shutdown()
 

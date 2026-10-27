@@ -22,7 +22,7 @@ import re
 from datetime import date, timedelta
 
 from modern_gl.domain.dates import date_range, month_days, month_title
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import N_, fold, tr
 
 Period = tuple[date, date]
 
@@ -35,7 +35,7 @@ MONTH_STEMS = (
     ("фев", "fev", "feb"),
     ("мар", "mar"),
     ("апр", "apr"),
-    ("май", "мая", "may"),
+    (N_("май"), "мая", "may"),
     ("июн", "iyn", "iyun", "jun"),
     ("июл", "iyl", "iyul", "jul"),
     ("авг", "avq", "aug"),
@@ -48,14 +48,17 @@ QUARTER_WORDS = ("кв", "квартал", "q", "r", "rub")
 
 
 def month_bounds(year: int, month: int) -> Period:
+    """The first and the last day of a month."""
     return month_days(year, month)
 
 
 def quarter_bounds(year: int, quarter: int) -> Period:
+    """The first and the last day of a quarter (1..4)."""
     return month_bounds(year, 3 * quarter - 2)[0], month_bounds(year, 3 * quarter)[1]
 
 
 def quarter_of(day: date) -> int:
+    """The quarter (1..4) of a day."""
     return (day.month - 1) // 3 + 1
 
 
@@ -74,7 +77,7 @@ def _presets(today: date) -> dict[str, Period]:
             monday - timedelta(days=7),
             monday - timedelta(days=1),
         ),
-        ("м", "мес", "месяц", "этот месяц", "ay", "bu ay", "this month"): month_bounds(
+        (N_("м"), "мес", "месяц", "этот месяц", "ay", "bu ay", "this month"): month_bounds(
             today.year, today.month
         ),
         ("пм", "прошлый месяц", "ka", "kecen ay", "lm", "last month"): month_bounds(

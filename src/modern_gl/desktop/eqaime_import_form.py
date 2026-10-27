@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QHBoxLayout,
@@ -27,24 +27,25 @@ from modern_gl.application.inventory import Inventory
 from modern_gl.desktop.import_window import ImportWindow, say
 from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.period_field import portal_period
+from modern_gl.desktop.portal_worker import PortalRun
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 COLUMNS = [
-    "Дата",
-    "E-qaimə",
-    "Контрагент / строка",
-    "VÖEN / код",
-    "Вид",
-    "Сумма",
-    "ƏDV",
-    "Расход за",
-    "Станет",
+    N_("Дата"),
+    N_("E-qaimə"),
+    N_("Контрагент / строка"),
+    N_("VÖEN / код"),
+    N_("Вид"),
+    N_("Сумма"),
+    N_("ƏDV"),
+    N_("Расход за"),
+    N_("Станет"),
 ]
-EXPENSE_MONTH = COLUMNS.index("Расход за")
-BECOMES = COLUMNS.index("Станет")
+EXPENSE_MONTH = COLUMNS.index(N_("Расход за"))
+BECOMES = COLUMNS.index(N_("Станет"))
 
 
 class EqaimeImportForm(ImportWindow):
@@ -64,7 +65,7 @@ class EqaimeImportForm(ImportWindow):
         self.plans: list[InvoicePlan] = []
         self.created: list[int] = []
         self.attached: list[int] = []  # waiting purchases given their e-qaimə (D119)
-        self.worker: QThread | None = None
+        self.portal_run: PortalRun | None = None
         self.resize(1180, 720)
         self.company = self.subtitle
         self.period_field = portal_period(today or date.today())

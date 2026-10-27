@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from modern_gl.application import attention
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.domain.dates import ru_date
 from modern_gl.i18n import tr
@@ -80,7 +81,7 @@ def trade_documents(
     return [TradeDocument(**dict(r)) for r in reversed(rows.fetchall())]
 
 
-@attention_source
+@attention_source(attention.AWAITING_INVOICES)
 def awaiting_invoices(conn: Connection, company_id: int, day: str) -> list[Attention]:
     """«Bu gün» (D86): purchases whose goods came before their e-qaimə (D119) — a
     forgotten one is ƏDV not taken; the oldest one's day tells how long they wait."""

@@ -22,6 +22,8 @@ from modern_gl.application.inventory.model import (
     ALLOCATION_METHODS,
     LandedCostCharge,
     LandedCostTarget,
+    Movement,
+    StoredLine,
 )
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.application.ledger import PostingInput
@@ -185,19 +187,15 @@ class LandedCostCommands(StockCommands):
             self._insert_line(
                 document_id,
                 company_id,
-                line_no,
-                receipt["item_id"],
-                receipt["warehouse_id"],
-                None,
-                0,
-                amount,
-                0,
-                0,
-                None,
-                (),
-                receipt["id"],
-                "",
-                line_id=target.line_id,
+                StoredLine(
+                    line_no,
+                    receipt["item_id"],
+                    receipt["warehouse_id"],
+                    0,
+                    amount=amount,
+                    source_receipt_line_id=receipt["id"],
+                    line_id=target.line_id,
+                ),
             )
         self.conn.execute("DELETE FROM landed_cost_charges WHERE document_id = ?", (document_id,))
         for line_no, charge in enumerate(charges, 1):
@@ -428,11 +426,7 @@ class LandedCostCommands(StockCommands):
                 inv_id,
                 line_id,
                 doc_date,
-                item["id"],
-                warehouse_id,
-                "landed_cost",
-                0,
-                share,
+                Movement(item["id"], warehouse_id, "landed_cost", 0, share),
             )
             postings.append(
                 (

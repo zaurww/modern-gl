@@ -15,13 +15,13 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 from modern_gl.domain.eqaime import TURNOVER
 from modern_gl.i18n import language, tr
 
 BASE_URL = "https://new.e-taxes.gov.az"
-PORTAL_TOKEN_KEY = "aztax-jwt"  # where the portal page keeps the token
+PORTAL_TOKEN_KEY = "aztax-jwt"  # noqa: S105 the key's name in the page's storage, not a token
 INBOX = "/api/po/invoice/public/v2/invoice/find.inbox"  # received: purchases
 OUTBOX = "/api/po/invoice/public/v2/invoice/find.outbox"  # sent: sales
 DETAIL = "/api/po/invoice/public/v2/invoice/"
@@ -39,24 +39,32 @@ class PortalError(Exception):
         self.code = code  # the HTTP status, 0 if the portal was not reached
 
 
-class TokenExpired(PortalError):
-    pass
+class TokenExpiredError(PortalError):
+    """The portal no longer accepts the token: the user signs in again."""
 
 
 @dataclass(frozen=True)
 class Response:
+    """What the portal answered: the HTTP status and the raw body."""
+
     status: int
     body: bytes
 
 
 # (method, url, headers, body) -> response; replaced in tests
 Send = Callable[[str, str, dict[str, str], bytes | None], Response]
+JsonObject = dict[str, Any]  # an object of the portal's JSON, as `json.loads` gives it
 
 
 def urllib_send(method: str, url: str, headers: dict[str, str], body: bytes | None) -> Response:
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    """Send a request with urllib; an HTTP error is an answer (status, body), not raised.
+    No connection — OSError."""
+    if not url.startswith("https://"):
+        raise ValueError(f"the portal is reached only over https: {url}")
+    # S310: the scheme is checked just above
+    request = urllib.request.Request(url, data=body, headers=headers, method=method)  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=90) as answer:
+        with urllib.request.urlopen(request, timeout=90) as answer:  # noqa: S310
             return Response(answer.status, answer.read())
     except urllib.error.HTTPError as exc:
         return Response(exc.code, exc.read())
@@ -75,18 +83,22 @@ def _said(body: bytes) -> str:
     except (ValueError, AttributeError):
         message = None
     if isinstance(message, dict):
-        message = message.get(language()) or message.get("az") or next(iter(message.values()), "")
+        texts = cast(dict[str, object], message)  # a JSON object: {"az": …, "ru": …}
+        message = texts.get(language()) or texts.get("az") or next(iter(texts.values()), "")
     if isinstance(message, str) and message:
         return message
     return body[:120].decode(errors="replace")
 
 
 class EtaxesClient:
+    """The e-taxes.gov.az portal with a signed-in token: e-qaimə lists and details, the ƏDV
+    deposit. Raises TokenExpiredError (401) and PortalError (other errors, no connection)."""
+
     def __init__(self, token: str, send: Send = urllib_send) -> None:
         self.token = token
         self.send = send
 
-    def _call(self, method: str, path: str, body: dict | None = None) -> Any:
+    def _call(self, method: str, path: str, body: dict[str, object] | None = None) -> Any:
         headers = {
             "x-authorization": f"Bearer {self.token}",  # not Authorization: the portal's way
             "Accept": "application/json",
@@ -98,7 +110,7 @@ class EtaxesClient:
         except OSError as exc:
             raise PortalError(tr("портал недоступен: {error}", error=exc)) from exc
         if answer.status == 401:
-            raise TokenExpired(tr("вход на портал истёк — войдите ещё раз"))
+            raise TokenExpiredError(tr("вход на портал истёк — войдите ещё раз"))
         if answer.status >= 400:
             raise PortalError(
                 tr("портал ответил {code}: {text}", code=answer.status, text=_said(answer.body)),
@@ -112,7 +124,7 @@ class EtaxesClient:
         date_from: date,
         date_to: date,
         statuses: tuple[str, ...] = APPROVED,
-    ) -> Iterator[dict]:
+    ) -> Iterator[JsonObject]:
         """The e-qaimə list rows of a period: received (purchases) or sent (sales)."""
         for status in statuses:
             offset = 0
@@ -142,13 +154,13 @@ class EtaxesClient:
                         "actionOwner": None,
                     },
                 )
-                page = data.get("invoices") or []  # not «content»: the portal's field
+                page: list[JsonObject] = data.get("invoices") or []  # not «content»
                 yield from page
                 if not data.get("hasMore") or not page:
                     break
                 offset += PAGE_SIZE
 
-    def detail(self, invoice_id: str, source_system: str) -> dict:
+    def detail(self, invoice_id: str, source_system: str) -> JsonObject:
         """One e-qaimə with its lines (items)."""
         data = self._call("GET", f"{DETAIL}{invoice_id}?sourceSystem={source_system or 'avis'}")
         return data.get("invoice", data)
@@ -159,7 +171,7 @@ class EtaxesClient:
         data = self._call("GET", VAT_ACCOUNT)
         return Decimal(str(data.get("mainAccount") or 0)), str(data.get("informationOn") or "")
 
-    def vat_deposit_operations(self, date_from: date, date_to: date) -> Iterator[dict]:
+    def vat_deposit_operations(self, date_from: date, date_to: date) -> Iterator[JsonObject]:
         """The operations of the ƏDV deposit account in a period, all statuses."""
         offset = 0
         while True:
@@ -182,7 +194,7 @@ class EtaxesClient:
                     "paymentTypes": None,
                 },
             )
-            page = data.get("operations") or []
+            page: list[JsonObject] = data.get("operations") or []
             yield from page
             if not data.get("hasMore") or not page:
                 break

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QModelIndex, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QStackedWidget,
     QWidget,
@@ -13,6 +12,7 @@ from modern_gl.application.inventory import INCOMING_REASONS, format_quantity
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.reports_page.report_table import ReportTable, SelectionMode
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import EmptyState, ru_date
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
@@ -59,10 +59,7 @@ class MovementsPart(InventoryForm):
         self.card_model = ReportModel()
         self.card = ReportTable(self.card_model, SelectionMode.SingleSelection)  # as the stock
         self.card.doubleClicked.connect(self._open_movement)
-        for keys in ("Return", "Enter"):  # only on the list
-            shortcut = QShortcut(QKeySequence(keys), self.card)
-            shortcut.setContext(Qt.ShortcutContext.WidgetShortcut)
-            shortcut.activated.connect(lambda: self._open_movement(self.card.currentIndex()))
+        bind(self.card, "open_row", lambda: self._open_movement(self.card.currentIndex()))
         self.card_empty = EmptyState(
             "↕",
             tr("Выберите товар"),

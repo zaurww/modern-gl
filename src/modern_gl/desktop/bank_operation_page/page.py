@@ -11,7 +11,6 @@ from dataclasses import replace
 from datetime import date
 
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QMessageBox,
@@ -38,6 +37,7 @@ from modern_gl.desktop.bank_operation_page.folded import FoldedPart
 from modern_gl.desktop.bank_operation_page.lines import LinesPart
 from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
     MenuItem,
     edited_date,
@@ -93,18 +93,12 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.btn_delete.clicked.connect(self.delete)
         self.btn_unpost.clicked.connect(self.unpost)
         self.btn_gl.clicked.connect(self._open_gl)
-        for keys, fn in (
-            ("Ctrl+S", lambda: self.save(post=self.posted)),
-            ("Ctrl+Return", lambda: self.save(post=True)),
-            ("Ctrl+Enter", lambda: self.save(post=True)),
-            ("Ins", self._insert_line),
-            ("F6", self._fee_key),
-            ("F9", self._duplicate_line),
-            ("Ctrl+Del", self._remove_current_line),
-        ):
-            shortcut = QShortcut(QKeySequence(keys), self)
-            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
-            shortcut.activated.connect(fn)
+        bind(self, "save", lambda: self.save(post=self.posted))
+        bind(self, "post", lambda: self.save(post=True))
+        bind(self, "insert", self._insert_line)
+        bind(self, "fee", self._fee_key)
+        bind(self, "duplicate_row", self._duplicate_line)
+        bind(self, "remove_line", self._remove_current_line)
         self.direction.buttonClicked.connect(self._direction_changed)
         self.account.activated.connect(self._bank_account_changed)
         self.bank.activated.connect(self._bank_chosen)

@@ -9,7 +9,7 @@ from modern_gl.infrastructure.backup import BackupError
 from modern_gl.infrastructure.db import Error, connect, is_read_only, latest_version
 from modern_gl.reporting.reports import trial_balance
 from tests.conftest import build_demo
-from tests.test_workspace import file_at_version
+from tests.helpers.workspace import file_at_version
 
 
 def demo_file(path):

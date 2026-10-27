@@ -18,9 +18,9 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.desktop.bank_page import BankPage
 from modern_gl.desktop.bank_page.entry import ONE, TWO
 from modern_gl.desktop.session import Session
-from tests.test_bank_ui import acc, setup_company, value
-from tests.test_entry_keys import focused, shown_list, type_text
-from tests.test_uniform_entry import shown
+from tests.helpers.bank_ui import acc, setup_company, value
+from tests.helpers.entry_keys import focused, shown_list, type_text
+from tests.helpers.uniform_entry import shown
 
 
 @pytest.fixture

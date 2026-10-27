@@ -7,35 +7,24 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
 
-from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import find_documents, list_documents
 from modern_gl.application.workspace import Workspace
-from modern_gl.demo_data import create_demo_company
 from modern_gl.desktop import theme
 from modern_gl.desktop.command_palette import CommandPalette
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.main_window import MainWindow
-from modern_gl.infrastructure.db import connect
-
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
-    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
-def window(qtbot, tmp_path):
-    conn = connect(tmp_path / "ДЕМО ООО.gl")
-    create_demo_company(Ledger(conn))
-    conn.close()
-    theme.apply(QApplication.instance())
+def window(qtbot, tmp_path, make_demo):
+    make_demo(tmp_path / "ДЕМО ООО.gl")
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win
@@ -86,7 +75,7 @@ def test_typing_an_account_code_opens_its_card(window, qtbot):
     p.search.setText("60")
     shown = titles(p, "Счета")
     assert shown[0].startswith("60  ")  # the code typed comes first
-    while p.current_entry().group != "Счета":
+    while (entry := p.current_entry()) is None or entry.group != "Счета":
         qtbot.keyClick(p.search, Qt.Key.Key_Down)
     qtbot.keyClick(p.search, Qt.Key.Key_Return)
     page = window.stack.currentWidget()
@@ -106,7 +95,8 @@ def test_counterparty_opens_in_its_directory_folded_letters(window):
     page = window.pages[("directories",)]
     assert isinstance(page, DirectoriesPage)
     assert page.kind_id() == kind
-    assert page._current_value().id == value.id
+    current = page._current_value()
+    assert current is not None and current.id == value.id
 
 
 def test_document_found_by_number_opens(window):
