@@ -58,8 +58,9 @@ libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`). Скринш
    Вид страниц и отчётов — `docs/DESIGN.md`.
 3. `docs/ENGINEERING.md` — инженерные правила и чек-лист новой функции; раздел «Долг» —
    известные отступления и план.
-4. `docs/DECISIONS.md` — журнал решений `D1…D138`, только добавление. На номера ссылаются
-   код и документы; при расхождении решение важнее остальных документов.
+4. `docs/decisions/` — решения `D1…D152`, файл на решение (статус, контекст, решение,
+   последствия), индекс `README.md` там же; только добавление. На номера ссылаются код и
+   документы; при расхождении решение важнее остальных документов.
 5. `docs/STATUS.md` — что есть и что дальше; `docs/CODE_QUALITY.md` — размер и обзоры кода;
    документы модулей — `INVENTORY.md`, `REPORTING.md`, `BOOKS.md`, `EQAIME_RECONCILIATION.md`,
    `ASSISTANT.md`; `docs/history/` — летопись сессий.
@@ -79,7 +80,7 @@ libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`). Скринш
 | ƏDV, ƏDV DH | НДС; ƏDV depozit hesabı — депозитный счёт НДС на портале |
 | VÖEN | ИНН компании или контрагента |
 | «Bu gün», «Diqqət tələb edir», «Geri al» | экраны и кнопки: «Сегодня», «Требует внимания», «Отменить» |
-| D<номер> | решение в `docs/DECISIONS.md` |
+| D<номер> | решение в `docs/decisions/` (`D072-…`) |
 
 ## Языки
 
@@ -96,7 +97,7 @@ libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`). Скринш
 | Слои только вниз; ядро не читает таблиц и кода модулей; нет SQL в виджетах; движок только в `infrastructure`; окно не открывает транзакцию | `tests/test_architecture.py` |
 | Схема: `company_id`, составные ключи, индексы, типы, неизменные миграции | `tests/test_database.py` |
 | Размер кода 600 / 500 / 80 | `tests/test_code_size.py` |
-| Документы остаются короткими | `tests/test_docs_size.py` |
+| Документы остаются короткими; решения — в одном формате, индекс актуален | `tests/test_docs_size.py`, `tests/test_decisions.py` |
 | Переводы на каждый текст | `tests/test_i18n.py` |
 | Режим «только просмотр» ничего не пишет | `tests/test_read_only_ui.py` |
 | Перестроение проводок модулей ничего не меняет | `tests/test_rebuild.py` |
@@ -107,7 +108,7 @@ libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`). Скринш
 Пройти чек-лист в `docs/ENGINEERING.md`: свой пакет и таблицы, точки подключения
 (`document_owners`, `rebuild_postings`, `attention_source`, команды Ctrl+K, роли счетов,
 место в боковой панели), тест с ручными цифрами, зелёные `ruff`, `pyright`, `pytest`.
-Решение — записью в `docs/DECISIONS.md`.
+Решение — файлом в `docs/decisions/` (`D-new-<slug>.md` в ветке).
 
 ## Лицензии ресурсов
 

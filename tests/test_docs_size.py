@@ -6,9 +6,9 @@ A document over its limit is shortened first: the done leaves STATUS, the past g
 docs/history, a detail moves to the module's own document.
 
 `uv run python tests/test_docs_size.py` prints each document's size against its limit.
+Decisions (docs/decisions) are checked by tests/test_decisions.py.
 """
 
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
@@ -25,24 +25,9 @@ LIMITS = {
     "docs/DESIGN.md": 8_000,
 }
 
-# a decision is a short record: the choice, the user's words, where it lives in the code;
-# the long story goes to the module's document. Older entries stay as they were written.
-DECISION_LIMIT = 1_200
-SHORT_DECISIONS_FROM = 109
-
 
 def sizes() -> dict[str, int]:
     return {name: len((ROOT / name).read_text(encoding="utf-8")) for name in LIMITS}
-
-
-def long_decisions() -> list[str]:
-    text = (ROOT / "docs" / "DECISIONS.md").read_text(encoding="utf-8")
-    found = []
-    for line in text.splitlines():
-        match = re.match(r"\| D(\d+) \|", line)
-        if match and int(match[1]) >= SHORT_DECISIONS_FROM and len(line) > DECISION_LIMIT:
-            found.append(f"D{match[1]}: {len(line)} characters, allowed {DECISION_LIMIT}")
-    return found
 
 
 def test_session_documents_stay_short() -> None:
@@ -54,12 +39,6 @@ def test_session_documents_stay_short() -> None:
     assert not over, "\n".join(over)
 
 
-def test_new_decisions_stay_short() -> None:
-    assert not long_decisions(), "\n".join(long_decisions())
-
-
 if __name__ == "__main__":
     for name, size in sizes().items():
         print(f"{size:6} / {LIMITS[name]:<6} {size * 100 // LIMITS[name]:3}%  {name}")
-    for line in long_decisions():
-        print("!", line)
