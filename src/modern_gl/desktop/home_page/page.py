@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from modern_gl.application.attention import POST_DRAFTS, Attention
 from modern_gl.desktop.home_page.rows import Line, Section
@@ -19,6 +19,7 @@ from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.company_file import LOCAL
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.overview import (
     DayRate,
@@ -75,6 +76,7 @@ class HomePage(PageWidget):
         row.addStretch(1)
         self.header = PageHeader(tr("Сегодня"))
         self.column.addWidget(self.header)
+        self.column.addWidget(self._place_note())
         self.body = QVBoxLayout()
         self.body.setSpacing(0)
         self.column.addLayout(self.body)
@@ -84,6 +86,19 @@ class HomePage(PageWidget):
 
     def title(self) -> str:
         return tr("Сегодня")
+
+    def _place_note(self) -> QLabel:
+        """An amber plate, no window (D86): the file lies on a network or cloud folder."""
+        self.place_note = QLabel(
+            tr(
+                "Файл открыт с сетевой или облачной папки — работает медленнее, двоим "
+                "одновременно открывать нельзя"
+            )
+        )
+        self.place_note.setObjectName("warning")
+        self.place_note.setWordWrap(True)
+        self.place_note.setVisible(self.s.file_place != LOCAL)
+        return self.place_note
 
     def activated(self) -> None:
         self.refresh()

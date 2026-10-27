@@ -166,8 +166,10 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D-new | Обработчик падений и журнал программы | принято | [D-new-crash-log.md](D-new-crash-log.md) |
 | D-new | Инструменты разработки: CI на Windows, покрытие, свойства, снимки, релиз | принято | [D-new-dev-tooling.md](D-new-dev-tooling.md) |
 | D-new | Чужой SQLite-файл не принимается; WAL после миграций; «файл занят» | принято | [D-new-foreign-file.md](D-new-foreign-file.md) |
+| D-new | Журнал читается порциями, поиск — в запросе | принято | [D-new-journal-paging.md](D-new-journal-paging.md) |
 | D-new | Модули — композиция, не наследование ядра (уточняет D123) | принято | [D-new-module-composition.md](D-new-module-composition.md) |
 | D-new | Вложенная транзакция — savepoint | принято | [D-new-nested-savepoint.md](D-new-nested-savepoint.md) |
+| D-new | Сетевая или облачная папка: без WAL, предупреждение и замок файла | принято | [D-new-network-folder-lock.md](D-new-network-folder-lock.md) |
 | D-new | Протокол страницы | принято | [D-new-page-protocol.md](D-new-page-protocol.md) |
 | D-new | Проводка как значение — PostingRecord | принято | [D-new-posting-record.md](D-new-posting-record.md) |
 | D-new | Настройки пользователя — Preferences | принято | [D-new-preferences.md](D-new-preferences.md) |
