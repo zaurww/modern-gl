@@ -114,30 +114,6 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
 
-    def _insert_row(self) -> None:
-        if self.model.read_only:
-            return
-        self._finish_editing()
-        current = self.table.currentIndex()
-        at = current.row() + 1 if current.isValid() else None
-        row = self.model.insert_row(at)
-        self.table.setCurrentIndex(self.model.index(row, 0))
-
-    def _duplicate_row(self) -> None:
-        self._finish_editing()
-        current = self.table.currentIndex()
-        if self.model.read_only or not current.isValid():
-            return
-        row = self.model.duplicate_row(current.row())
-        self.table.setCurrentIndex(self.model.index(row, 0))
-
-    def _remove_row(self) -> None:
-        self._finish_editing()
-        current = self.table.currentIndex()
-        if self.model.read_only or not current.isValid():
-            return
-        self.model.remove_row(current.row())
-
     def _set_new(self) -> None:
         self.number.setText(tr("Новый"))
         self.status.set(tr("Новый"), "blue")

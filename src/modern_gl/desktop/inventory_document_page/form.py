@@ -12,12 +12,10 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
-    QApplication,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QTableView,
     QVBoxLayout,
 )
 
@@ -27,6 +25,7 @@ from modern_gl.application.inventory import (
     InventoryDocumentData,
     default_vat_rate,
 )
+from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.inventory_document_page.columns import (
     DOCUMENT_TYPES,
     HINT,
@@ -60,11 +59,19 @@ AWAITING = "awaiting"  # the basis box: a purchase waiting for its e-qaimə (D11
 GAP = 16  # between the groups of the header: a document fits a 1366 px screen
 
 
-class InventoryDocumentForm(PageWidget):
+class InventoryDocumentForm(GridEditing, PageWidget):
     saved = Signal(int)
     close_requested = Signal()
     title_changed = Signal()
     open_gl_document = Signal(int)
+
+    DUPLICATE_COLUMN = 0  # the copy of a line: on its item
+
+    def _grid(self) -> QTableView:
+        return self.table
+
+    def _rows(self) -> EditableRows:
+        return self.model
 
     def __init__(self, session: Session, doc_type: str) -> None:
         super().__init__()
@@ -263,12 +270,6 @@ class InventoryDocumentForm(PageWidget):
         root.addLayout(actions)
 
     # ---- what the parts ask of the fields --------------------------------------------
-
-    def _finish_editing(self) -> None:
-        editor = QApplication.focusWidget()
-        if self.table.state() == QAbstractItemView.State.EditingState and editor is not None:
-            self.table.commitData(editor)
-            self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
 
     def _shown(self, column: int) -> bool:
         return not self.table.isColumnHidden(column)

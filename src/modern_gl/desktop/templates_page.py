@@ -16,11 +16,13 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QStackedLayout,
+    QTableView,
     QVBoxLayout,
 )
 
 from modern_gl.application.ledger import TemplateLine
 from modern_gl.application.queries import TemplateData, list_templates, load_template
+from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.page import PageWidget
@@ -155,12 +157,18 @@ class TemplatesPage(PageWidget):
         self.refresh()
 
 
-class TemplatePage(PageWidget):
+class TemplatePage(GridEditing, PageWidget):
     """Edit one entry template (or make a new one): name, memo, lines with formulas."""
 
     saved = Signal(int)  # template id
     close_requested = Signal()
     title_changed = Signal()
+
+    def _grid(self) -> QTableView:
+        return self.table
+
+    def _rows(self) -> EditableRows:
+        return self.model
 
     def __init__(self, session: Session, template_id: int | None = None) -> None:
         super().__init__()
@@ -262,8 +270,8 @@ class TemplatePage(PageWidget):
         self.name.textEdited.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
         bind(self, "save", self.save)
-        bind(self.table, "insert", self._insert_row)
-        bind(self.table, "duplicate_row", self._duplicate_row)
+        bind(self, "insert", self._insert_row)
+        bind(self, "duplicate_row", self._duplicate_row)
         bind(self.table, "delete", self._remove_row)
 
     @property
@@ -349,19 +357,3 @@ class TemplatePage(PageWidget):
         self.dirty = False
         self.saved.emit(self.template_id)
         self.close_requested.emit()
-
-    def _insert_row(self) -> None:
-        cur = self.table.currentIndex()
-        row = self.model.insert_row(cur.row() + 1 if cur.isValid() else None)
-        self.table.setCurrentIndex(self.model.index(row, 0))
-
-    def _duplicate_row(self) -> None:
-        cur = self.table.currentIndex()
-        if cur.isValid():
-            row = self.model.duplicate_row(cur.row())
-            self.table.setCurrentIndex(self.model.index(row, cur.column()))
-
-    def _remove_row(self) -> None:
-        cur = self.table.currentIndex()
-        if cur.isValid():
-            self.model.remove_row(cur.row())

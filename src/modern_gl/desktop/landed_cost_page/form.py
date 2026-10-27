@@ -7,9 +7,6 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
-    QApplication,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -20,6 +17,7 @@ from modern_gl.application.inventory import (
     Inventory,
     InventoryDocumentData,
 )
+from modern_gl.desktop.grid_editing import finish_editing
 from modern_gl.desktop.landed_cost_page.columns import (
     HINT,
     HINT_TYPED,
@@ -186,8 +184,4 @@ class LandedCostForm(PageWidget):
         self.error.show()
 
     def _finish_editing(self) -> None:
-        editor = QApplication.focusWidget()
-        for table in (self.charges_table, self.targets_table):
-            if table.state() == QAbstractItemView.State.EditingState and editor is not None:
-                table.commitData(editor)
-                table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
+        finish_editing(self.charges_table, self.targets_table)

@@ -22,7 +22,6 @@ from modern_gl.desktop.document_page.templates import TemplatesPart
 from modern_gl.desktop.history_dialog import HistoryDialog
 from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.postings import (
-    DT,
     PostingRow,
 )
 from modern_gl.desktop.reason_dialog import ask_reason, confirm_delete
@@ -346,29 +345,3 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
         """Enter in the title, date, book or operation amount goes on as Tab does."""
         if not enter_goes_on(self, event):
             super().keyPressEvent(event)
-
-    def _insert_row(self) -> None:
-        if self.model.read_only:
-            return
-        self._finish_editing()
-        cur = self.table.currentIndex()
-        row = self.model.insert_row(cur.row() + 1 if cur.isValid() else None)
-        idx = self.model.index(row, DT)
-        self.table.setCurrentIndex(idx)
-        self.table.edit(idx)
-
-    def _duplicate_row(self) -> None:
-        cur = self.table.currentIndex()
-        if self.model.read_only or not cur.isValid():
-            return
-        self._finish_editing()
-        row = self.model.duplicate_row(cur.row())
-        self.table.setCurrentIndex(self.model.index(row, cur.column()))
-
-    def _remove_row(self) -> None:
-        cur = self.table.currentIndex()
-        if self.model.read_only or not cur.isValid():
-            return
-        self.model.remove_row(cur.row())
-        row = min(cur.row(), self.model.rowCount() - 1)
-        self.table.setCurrentIndex(self.model.index(row, cur.column()))

@@ -8,13 +8,11 @@ from fractions import Fraction
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QAbstractItemDelegate,
-    QAbstractItemView,
-    QApplication,
     QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QTableView,
     QVBoxLayout,
 )
 
@@ -25,6 +23,7 @@ from modern_gl.application.queries import (
     list_templates,
     recent_subconto,
 )
+from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import (
     DT,
@@ -62,7 +61,7 @@ HINT = (  # the keys of the page, under its table
 )
 
 
-class DocumentForm(PageWidget):
+class DocumentForm(GridEditing, PageWidget):
     saved = Signal(int)  # document id
     open_document = Signal(int)
     copy_requested = Signal(object)  # DocumentData to prefill a new document
@@ -71,6 +70,15 @@ class DocumentForm(PageWidget):
     title_changed = Signal()
     new_requested = Signal()  # posted with Ctrl+Shift+Enter: the next document, please
     open_inventory_document = Signal(int)  # the warehouse document that made this one
+
+    INSERT_COLUMN = DT  # a new line: its debit account, typed at once
+    EDIT_INSERTED = True
+
+    def _grid(self) -> QTableView:
+        return self.table
+
+    def _rows(self) -> EditableRows:
+        return self.model
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -224,13 +232,6 @@ class DocumentForm(PageWidget):
         edit.setFont(fonts().title)
         edit.setPlaceholderText(tr("Содержание операции"))
         return edit
-
-    def _finish_editing(self) -> None:
-        """Commit and close an open cell editor, so a row action sees what was typed."""
-        editor = QApplication.focusWidget()
-        if self.table.state() == QAbstractItemView.State.EditingState and editor is not None:
-            self.table.commitData(editor)
-            self.table.closeEditor(editor, QAbstractItemDelegate.EndEditHint.NoHint)
 
     def _rate_for(self, currency_id: int) -> Fraction | None:
         """Manat per unit of a currency on the document date (the latest one before it)."""
