@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.currencies import CurrencyInfo, Rate, latest_rates, list_rates
 from modern_gl.application.default_accounts import EXCHANGE_GAIN, EXCHANGE_LOSS, default_account
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -81,7 +82,7 @@ def _buttons(dlg: QDialog, lay: QVBoxLayout) -> None:
     lay.addWidget(buttons)
 
 
-class CurrenciesPage(QWidget):
+class CurrenciesPage(PageWidget):
     key = ("currencies",)
     open_document = Signal(int)
 
@@ -168,9 +169,6 @@ class CurrenciesPage(QWidget):
 
     def title(self) -> str:
         return tr("Валюты")
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()

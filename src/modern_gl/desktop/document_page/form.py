@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.currencies import rate_on
@@ -27,6 +26,7 @@ from modern_gl.application.queries import (
     list_templates,
     recent_subconto,
 )
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import (
     DT,
     EntryHints,
@@ -56,7 +56,7 @@ HINT = (
 )
 
 
-class DocumentForm(QWidget):
+class DocumentForm(PageWidget):
     saved = Signal(int)  # document id
     open_document = Signal(int)
     copy_requested = Signal(object)  # DocumentData to prefill a new document

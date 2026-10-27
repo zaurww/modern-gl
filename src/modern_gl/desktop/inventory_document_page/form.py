@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.inventory import (
@@ -42,6 +41,7 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
     InventoryLinesDelegate,
     InventoryLinesTable,
 )
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
@@ -60,7 +60,7 @@ AWAITING = "awaiting"  # the basis box: a purchase waiting for its e-qaimə (D11
 GAP = 16  # between the groups of the header: a document fits a 1366 px screen
 
 
-class InventoryDocumentForm(QWidget):
+class InventoryDocumentForm(PageWidget):
     saved = Signal(int)
     close_requested = Signal()
     title_changed = Signal()

@@ -5,11 +5,12 @@ from __future__ import annotations
 
 from PySide6.QtCore import QSettings, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout
 
 from modern_gl.application.default_accounts import COST_OF_GOODS, default_account
 from modern_gl.application.inventory import Inventory, StockCountResult
 from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.stock_count_page.model import (
@@ -38,7 +39,7 @@ WAREHOUSE_SETTING = "stock_count/warehouse"  # the warehouse counted last
 WIDTHS = {ITEM: 320, UNIT: 70, BOOK: 120, QUANTITY: 120, DIFFERENCE: 120, AMOUNT: 140}
 
 
-class StockCountPage(QWidget):
+class StockCountPage(PageWidget):
     key = ("stock_count",)
     posted = Signal()  # the stock changed: «Склад» reads it again
     open_inventory_document = Signal(int)

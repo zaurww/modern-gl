@@ -306,6 +306,13 @@ class BankPage(BankActions):
     def title(self) -> str:
         return tr("Банк")
 
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
+
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh()
+
     def fetch(self, conn: Connection) -> BankData:
         return self.job()(conn)
 

@@ -18,7 +18,6 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QStackedLayout,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.authorship import journal_authors
@@ -29,6 +28,7 @@ from modern_gl.application.queries import (
     list_documents,
 )
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.reason_dialog import confirm_delete
 from modern_gl.desktop.session import Session
@@ -142,7 +142,7 @@ class JournalModel(QAbstractTableModel):
         return None
 
 
-class JournalPage(QWidget):
+class JournalPage(PageWidget):
     key = ("journal",)
     open_document = Signal(int)
     new_document = Signal()
@@ -234,8 +234,12 @@ class JournalPage(QWidget):
     def title(self) -> str:
         return tr("Журнал")
 
-    def is_dirty(self) -> bool:
-        return False
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
+
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh(select_id=doc_id)
 
     def refresh(self, select_id: int | None = None) -> None:
         """The documents of the year read (in the background for a large company) and

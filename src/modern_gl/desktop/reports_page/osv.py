@@ -80,6 +80,9 @@ class OsvPage(ReportPage):
     def title(self) -> str:
         return tr("ОСВ")
 
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh()
+
     @staticmethod
     def _with_subconto(rows: list[OsvRow], subconto) -> list[OsvRow]:
         """Insert the rows of every subconto under each account, as in 1C: a counterparty,

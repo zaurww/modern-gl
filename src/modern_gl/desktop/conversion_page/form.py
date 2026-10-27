@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.conversion import Conversion
@@ -18,6 +17,7 @@ from modern_gl.desktop import icons
 from modern_gl.desktop.conversion_page.common import BASE
 from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.side_panel import SidePanel, Stat
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -30,7 +30,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.i18n import tr
 
 
-class ConversionForm(QWidget):
+class ConversionForm(PageWidget):
     saved = Signal(int)  # the GL document
     close_requested = Signal()
     title_changed = Signal()

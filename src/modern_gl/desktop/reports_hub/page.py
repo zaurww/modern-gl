@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.desktop.home_page.rows import Line, Section, heading
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_hub import catalog
 from modern_gl.desktop.reports_hub.catalog import Report
 from modern_gl.desktop.reports_hub.tiles import ReportTile
@@ -41,7 +42,7 @@ def place(grid: QGridLayout, tiles: list[ReportTile]) -> None:
         tile.setVisible(tile.matched)
 
 
-class ReportsPage(QWidget):
+class ReportsPage(PageWidget):
     key = catalog.HUB
     open_report = Signal(str)  # a report's id: the window opens it (and remembers it)
     pins_changed = Signal()
@@ -73,9 +74,6 @@ class ReportsPage(QWidget):
 
     def title(self) -> str:
         return tr("Отчёты")
-
-    def is_dirty(self) -> bool:
-        return False
 
     # ---- the parts ---------------------------------------------------------------------
 

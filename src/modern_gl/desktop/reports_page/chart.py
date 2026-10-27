@@ -110,6 +110,9 @@ class ChartPage(ReportPage):
     def title(self) -> str:
         return tr("План счетов")
 
+    def on_postings_changed(self, doc_id: int) -> None:
+        self.refresh()
+
     def build(self) -> None:
         cat = self.s.catalog
         self.header.subtitle.setText(tr("{n} счетов", n=len(cat.accounts)))

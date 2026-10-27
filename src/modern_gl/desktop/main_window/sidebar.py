@@ -126,18 +126,6 @@ PageT = TypeVar("PageT", bound=QWidget)
 
 
 @runtime_checkable
-class TitledPage(Protocol):
-    """A page shown as an item in the sidebar's "Open" section."""
-
-    def title(self) -> str: ...
-
-
-@runtime_checkable
-class FocusablePage(Protocol):
-    def focus_table(self) -> None: ...
-
-
-@runtime_checkable
 class NavKeyed(Protocol):
     """A place shown in the sidebar under another key (a view of the statements, D114)."""
 

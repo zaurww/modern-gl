@@ -18,13 +18,13 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QStackedLayout,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.ledger import TemplateLine
 from modern_gl.application.queries import TemplateData, list_templates, load_template
 from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import PostingRow, PostingsDelegate, PostingsModel, PostingsTable
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
@@ -44,7 +44,7 @@ from modern_gl.i18n import tr
 PREVIEW_AMOUNT = 100000  # the editor shows what the lines give for S = 1 000.00
 
 
-class TemplatesPage(QWidget):
+class TemplatesPage(PageWidget):
     key = ("templates",)
     use_template = Signal(int)  # template id: new document from it
     edit_template = Signal(object)  # template id, or None for a new one
@@ -100,9 +100,6 @@ class TemplatesPage(QWidget):
 
     def title(self) -> str:
         return tr("Шаблоны")
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()
@@ -164,7 +161,7 @@ class TemplatesPage(QWidget):
         self.refresh()
 
 
-class TemplatePage(QWidget):
+class TemplatePage(PageWidget):
     """Edit one entry template (or make a new one): name, memo, lines with formulas."""
 
     saved = Signal(int)  # template id

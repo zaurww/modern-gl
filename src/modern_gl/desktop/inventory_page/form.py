@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.inventory import Inventory
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
@@ -65,7 +66,7 @@ OPERATIONS = (
 )
 
 
-class InventoryForm(QWidget):
+class InventoryForm(PageWidget):
     key = ("inventory",)
     open_inventory_document = Signal(int)
     new_inventory_document = Signal(str)
@@ -181,8 +182,9 @@ class InventoryForm(QWidget):
     def title(self) -> str:
         return tr("Склад")
 
-    def is_dirty(self) -> bool:
-        return False
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
 
     def operation(self, operation: str) -> None:
         self.new_inventory_document.emit(operation)

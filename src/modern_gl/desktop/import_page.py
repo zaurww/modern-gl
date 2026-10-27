@@ -19,13 +19,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QStackedLayout,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application import journal_import
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.journal_import import ImportPlan, Row
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -38,7 +38,7 @@ from modern_gl.infrastructure.table_files import from_clipboard, read_rows
 COLUMNS_HINT = "Дата · Документ · Дебет · Субконто · Кредит · Субконто · Сумма · Содержание"
 
 
-class ImportPage(QWidget):
+class ImportPage(PageWidget):
     key = ("import",)
     imported = Signal(list)  # ids of the new documents
 
@@ -111,9 +111,6 @@ class ImportPage(QWidget):
 
     def title(self) -> str:
         return tr("Импорт из Excel")
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()

@@ -16,13 +16,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.currencies import rate_on
 from modern_gl.application.queries import load_document, opening_document
 from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.opening_postings import CREDIT_AMOUNT, OpeningPostingsModel, OpeningRow
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import (
     AMOUNT,
     CT,
@@ -53,7 +53,7 @@ HINT = (
 )
 
 
-class OpeningBalancesPage(QWidget):
+class OpeningBalancesPage(PageWidget):
     key = ("opening",)
     saved = Signal(int)
 
@@ -207,6 +207,10 @@ class OpeningBalancesPage(QWidget):
 
     def is_dirty(self) -> bool:
         return self.dirty
+
+    def activated(self) -> None:
+        self.refresh()
+        self.focus_table()
 
     def focus_table(self) -> None:
         self.table.setFocus()

@@ -36,6 +36,7 @@ from modern_gl.application.queries import company_name, company_tax_id, posting_
 from modern_gl.application.workspace import SUFFIX, TRASH, Workspace
 from modern_gl.desktop import theme
 from modern_gl.desktop.background import LARGE
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.portal_company import ask_tax_id
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
@@ -538,7 +539,7 @@ class CompanyFiles(QMainWindow):
         if reopen:
             self._reopen()
 
-    def _dirty_pages(self) -> list[QWidget]:
+    def _dirty_pages(self) -> list[PageWidget]:
         raise NotImplementedError
 
     def _current_place(self) -> tuple | None:

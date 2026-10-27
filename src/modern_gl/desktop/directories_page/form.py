@@ -13,12 +13,12 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QStackedLayout,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.desktop.icons import icon
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -29,7 +29,7 @@ from modern_gl.i18n import sort_key, tr
 KIND_ROLE = Qt.ItemDataRole.UserRole
 
 
-class DirectoriesForm(QWidget):
+class DirectoriesForm(PageWidget):
     def __init__(self, session: Session) -> None:
         super().__init__()
         self.setObjectName("page")
@@ -110,8 +110,9 @@ class DirectoriesForm(QWidget):
     def title(self) -> str:
         return tr("Справочники")
 
-    def is_dirty(self) -> bool:
-        return False
+    def activated(self) -> None:
+        self.refresh(keep_value=True)  # elements added elsewhere (e-qaimə import…)
+        self.focus_table()
 
     def focus_table(self) -> None:
         self.table.setFocus()

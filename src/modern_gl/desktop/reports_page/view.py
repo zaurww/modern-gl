@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.period_field import PeriodField
 from modern_gl.desktop.reports_page.column_choice import ColumnChoice
 from modern_gl.desktop.reports_page.export import copy_to_clipboard, save_to_excel
@@ -102,7 +103,7 @@ def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:
 type MenuAction = tuple[str, Callable[[], None] | list[MenuAction | None]]
 
 
-class ReportPage(QWidget):
+class ReportPage(PageWidget):
     """Base: header, parameters, table/empty state, footer."""
 
     open_document = Signal(int)
@@ -262,9 +263,6 @@ class ReportPage(QWidget):
     def choose_columns(self, at) -> None:
         if self.choosable_columns:
             self.columns_choice().popup(self.model.all_columns, self, at)
-
-    def is_dirty(self) -> bool:
-        return False
 
     def focus_table(self) -> None:
         self.table.setFocus()

@@ -7,13 +7,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QListWidgetItem, QMenu, QWidget
+from PySide6.QtWidgets import QListWidgetItem, QMenu
 
 from modern_gl.desktop import icons
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
 from modern_gl.desktop.main_window.open_pages import OpenPages
 from modern_gl.desktop.main_window.sidebar import KEY_ROLE
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_hub import (
     BY_ID,
     HUB,
@@ -52,7 +53,7 @@ ACCOUNT_REPORTS = ("subconto", "card", "analysis")  # they ask the account first
 
 
 class ReportPlaces(OpenPages):
-    def _report_place(self, key) -> QWidget:
+    def _report_place(self, key) -> PageWidget:
         """ОСВ, the statements, the chart of accounts or «Все отчёты»."""
         s = self.open_session
         if key == HUB:
@@ -95,7 +96,7 @@ class ReportPlaces(OpenPages):
                 if i in offered
             ]
         )
-        current = self.stack.currentWidget()
+        current = self.current_page()
         if current is not None:
             self._select_nav(self._key_of(current), current)
         hub = self.pages.get(HUB)
@@ -179,7 +180,7 @@ class ReportPlaces(OpenPages):
             super()._on_nav(current, previous)
             return
         self.open_catalog_report(PIN_KEYS[key])
-        page = self.stack.currentWidget()
+        page = self.current_page()
         if page is not None:
             self._select_nav(self._key_of(page), page)
 

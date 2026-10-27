@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QHBoxLayout, QScrollArea, QVBoxLayout, QWidget
 
 from modern_gl.application.attention import POST_DRAFTS, Attention
 from modern_gl.desktop.home_page.rows import Line, Section
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import PageHeader, button, hide_when_viewing, money, ru_date
 from modern_gl.domain.currency import format_rate
@@ -41,7 +42,8 @@ class Overview:
 COLUMN = 640  # one narrow column: read top to bottom, not across a wide screen
 
 
-class HomePage(QWidget):
+class HomePage(PageWidget):
+    key = ("home",)
     open_place = Signal(object)  # a sidebar place: («journal»,), («bank»,)…
     open_backups = Signal()  # «Резервные копии» of the company menu (D97)
 
@@ -82,6 +84,9 @@ class HomePage(QWidget):
 
     def title(self) -> str:
         return tr("Сегодня")
+
+    def activated(self) -> None:
+        self.refresh()
 
     def refresh(self) -> None:
         """The three lists read (in the background for a large company) and shown."""

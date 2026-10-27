@@ -14,7 +14,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QVBoxLayout,
-    QWidget,
 )
 
 from modern_gl.application.inventory import (
@@ -27,6 +26,7 @@ from modern_gl.desktop.landed_cost_page.columns import (
 )
 from modern_gl.desktop.landed_cost_page.models import ChargesModel, TargetsModel
 from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
+from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
@@ -38,7 +38,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.i18n import tr
 
 
-class LandedCostForm(QWidget):
+class LandedCostForm(PageWidget):
     saved = Signal(int)
     close_requested = Signal()
     title_changed = Signal()
