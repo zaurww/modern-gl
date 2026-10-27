@@ -11,7 +11,7 @@ from modern_gl.application.inventory import (
     SaleLine,
 )
 from modern_gl.application.ledger import Ledger, PostingInput
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 def create_demo_company(ledger: Ledger, name: str | None = None) -> int:
@@ -41,7 +41,7 @@ class _Demo:
         self.rent = self._value("cost_item", tr("Аренда офиса"))
         self.employee = self._value("employee", tr("Мамедов Р."))
         self.inventory = Inventory(ledger.conn, actor=ledger.actor)
-        package = self.inventory.add_unit(cid, "уп.", tr("Упаковка"), precision=0)
+        package = self.inventory.add_unit(cid, N_("уп."), tr("Упаковка"), precision=0)
         self.paper_item = self.inventory.add_item(
             cid,
             tr("Бумага офисная А4"),

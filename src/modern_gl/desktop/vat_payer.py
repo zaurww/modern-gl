@@ -13,9 +13,9 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.period_input import parse_date
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-TITLE = "Плательщик ƏDV"
+TITLE = N_("Плательщик ƏDV")
 # the reports that count by the day (page keys)
 VAT_REPORTS = ("vat_liability", "vat_credit", "vat_receipts", "vat_payments")
 

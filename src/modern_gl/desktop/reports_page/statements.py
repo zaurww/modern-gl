@@ -21,7 +21,7 @@ from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import segments
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.cash_flow import cash_flow
 from modern_gl.reporting.profit_loss import profit_and_loss
@@ -37,11 +37,11 @@ from modern_gl.reporting.statements import (
 BALANCE, PROFIT, CASH = "balance", "profit", "cash"
 # the parts of the balance sheet: their subtotal reads «Итого: …»
 SECTIONS = (
-    "Оборотные активы",
-    "Долгосрочные активы",
-    "Краткосрочные обязательства",
-    "Долгосрочные обязательства",
-    "Капитал",
+    N_("Оборотные активы"),
+    N_("Долгосрочные активы"),
+    N_("Краткосрочные обязательства"),
+    N_("Долгосрочные обязательства"),
+    N_("Капитал"),
 )
 INDENT = "      "
 
@@ -54,14 +54,19 @@ class StatementsPage(ReportPage):
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Финансовая отчётность"), params)
         views, self.view_buttons = segments(
-            [(BALANCE, "Баланс"), (PROFIT, "Прибыли и убытки"), (CASH, "Движение денег")],
+            [
+                (BALANCE, N_("Баланс")),
+                (PROFIT, N_("Прибыли и убытки")),
+                (CASH, N_("Движение денег")),
+            ],
             self.refresh,
         )
         self.balance_button = self.view_buttons[BALANCE]
         self.profit_button = self.view_buttons[PROFIT]
         self.cash_button = self.view_buttons[CASH]
         details, self.detail_buttons = segments(
-            [(TYPES, "Кратко"), (ACCOUNTS, "По счетам"), (ITEMS, "По статьям")], self.refresh
+            [(TYPES, N_("Кратко")), (ACCOUNTS, N_("По счетам")), (ITEMS, N_("По статьям"))],
+            self.refresh,
         )
         remembered = prefs()
         view = remembered.view(STATEMENTS_VIEW, BALANCE)
@@ -77,7 +82,7 @@ class StatementsPage(ReportPage):
         return tr("Финансовая отчётность")
 
     def export_title(self) -> str:
-        names = {BALANCE: "Баланс", PROFIT: "Прибыли и убытки", CASH: "Движение денег"}
+        names = {BALANCE: N_("Баланс"), PROFIT: N_("Прибыли и убытки"), CASH: N_("Движение денег")}
         return tr(names[self.view])
 
     def show_view(self, view: str) -> None:

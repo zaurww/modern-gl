@@ -36,7 +36,7 @@ from modern_gl.desktop.widgets import (
     caption,
     date_edit,
 )
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 class LandedCostForm(PageWidget):
@@ -143,7 +143,7 @@ class LandedCostForm(PageWidget):
         self.totals: dict[str, QLabel] = {}
         for key, text in (
             ("vat", "НДС"),
-            ("allocated", "Распределено"),
+            ("allocated", N_("Распределено")),
             ("total", "Расходы"),
         ):
             label = caption(tr(text))

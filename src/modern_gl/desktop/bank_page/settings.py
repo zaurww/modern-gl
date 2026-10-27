@@ -15,7 +15,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED, BANK_FEE
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 class BankSettingsDialog(QDialog):
@@ -24,9 +24,9 @@ class BankSettingsDialog(QDialog):
     an advance stays on the settlement account without an e-qaimə."""
 
     ROLES = (
-        (BANK_FEE, "Счёт комиссии банка", "— не указан —"),
-        (ADVANCE_PAID, "Авансы выданные", "— на счёте поставщика —"),
-        (ADVANCE_RECEIVED, "Авансы полученные", "— на счёте покупателя —"),
+        (BANK_FEE, N_("Счёт комиссии банка"), "— не указан —"),
+        (ADVANCE_PAID, N_("Авансы выданные"), N_("— на счёте поставщика —")),
+        (ADVANCE_RECEIVED, N_("Авансы полученные"), N_("— на счёте покупателя —")),
     )
 
     def __init__(self, session: Session, parent=None) -> None:

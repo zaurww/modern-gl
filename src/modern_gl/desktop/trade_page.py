@@ -27,7 +27,7 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import N_, fold, tr
 from modern_gl.reporting.trade import PURCHASE, SALE, TradeDocument, trade_documents
 
 
@@ -47,22 +47,22 @@ KINDS = {
     PURCHASE: TradeKind(
         PURCHASE,
         ("purchases",),
-        "Покупки",
-        "+ Покупка",
-        "Поставщик",
-        "Покупок пока нет",
-        "Товары, услуги и ОС от поставщика.",
-        "Проведено покупок: {total}",
+        N_("Покупки"),
+        N_("+ Покупка"),
+        N_("Поставщик"),
+        N_("Покупок пока нет"),
+        N_("Товары, услуги и ОС от поставщика."),
+        N_("Проведено покупок: {total}"),
     ),
     SALE: TradeKind(
         SALE,
         ("sales",),
-        "Продажи",
-        "+ Продажа",
-        "Покупатель",
-        "Продаж пока нет",
-        "Товары и услуги покупателю.",
-        "Проведено продаж: {total}",
+        N_("Продажи"),
+        N_("+ Продажа"),
+        N_("Покупатель"),
+        N_("Продаж пока нет"),
+        N_("Товары и услуги покупателю."),
+        N_("Проведено продаж: {total}"),
     ),
 }
 

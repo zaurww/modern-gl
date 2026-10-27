@@ -45,7 +45,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.dates import month_days
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting.reports import COMMON, IFRS, TAX
 
@@ -53,12 +53,12 @@ BOOKS = [("Общий учёт", COMMON), ("МСФО", IFRS), ("Налоговы
 
 # (group over a Dt/Kt pair, side, attribute)
 TURNOVER_COLUMNS = [
-    ("Сальдо на начало", "Дт", "opening_dt"),
-    ("Сальдо на начало", "Кт", "opening_ct"),
-    ("Обороты", "Дт", "turnover_dt"),
-    ("Обороты", "Кт", "turnover_ct"),
-    ("Сальдо на конец", "Дт", "closing_dt"),
-    ("Сальдо на конец", "Кт", "closing_ct"),
+    (N_("Сальдо на начало"), N_("Дт"), "opening_dt"),
+    (N_("Сальдо на начало"), N_("Кт"), "opening_ct"),
+    (N_("Обороты"), N_("Дт"), "turnover_dt"),
+    (N_("Обороты"), N_("Кт"), "turnover_ct"),
+    (N_("Сальдо на конец"), N_("Дт"), "closing_dt"),
+    (N_("Сальдо на конец"), N_("Кт"), "closing_ct"),
 ]
 
 

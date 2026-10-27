@@ -63,7 +63,7 @@ from modern_gl.desktop.widgets import (
     segments,
 )
 from modern_gl.domain.periods import MONTH, span_period
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 
 
@@ -161,7 +161,7 @@ class BankPage(BankActions):
         self.period_field = PeriodField(span_period(MONTH, today), today)
         self.period_field.changed.connect(self.refresh)
         box, self.view_buttons = segments(
-            [(DAYS, "По дням"), (LINES, "Все операции")], self._view_chosen
+            [(DAYS, N_("По дням")), (LINES, N_("Все операции"))], self._view_chosen
         )
         self.view_buttons[DAYS].setChecked(True)
         self.bar_box = QWidget()

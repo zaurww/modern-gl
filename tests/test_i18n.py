@@ -13,7 +13,12 @@ from modern_gl.i18n_az import AZ, PARTS
 from tests.helpers.texts import CYRILLIC
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
-TR = ("tr", "trd")  # the interface's and the documents' language (D152)
+# the interface's and the documents' language (D152); N_ — a key kept for a later tr()
+TR = ("tr", "trd", "N_")
+# layers another session works in now: their keys in constants are marked N_ when the
+# branches meet (docs/history/sessions/2026-10-27-audit-desktop.md); until then a string
+# constant there counts as the key's use
+NOT_MARKED_YET = ("application", "reporting")
 
 
 def tr_keys() -> dict[str, str]:
@@ -30,6 +35,16 @@ def tr_keys() -> dict[str, str]:
                     if isinstance(c, ast.Constant) and isinstance(c.value, str):
                         keys[c.value] = f"{path.name}:{node.lineno}"
     return keys
+
+
+def constants_not_marked_yet() -> set[str]:
+    found = set()
+    for layer in NOT_MARKED_YET:
+        for path in (SRC / layer).rglob("*.py"):
+            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    found.add(node.value)
+    return found
 
 
 def placeholders(s: str) -> set[str]:
@@ -52,6 +67,14 @@ def test_a_key_is_translated_in_one_file_only():
 def test_every_tr_string_has_azerbaijani_translation():
     missing = {k: where for k, where in tr_keys().items() if k not in AZ and CYRILLIC & set(k)}
     assert not missing, missing
+
+
+def test_every_azerbaijani_key_is_used():
+    """A key with no tr/trd/N_ in the code is dead (its text was changed or removed) — or
+    a constant later given to tr(VAR) without N_, which this test could not check."""
+    used = set(tr_keys()) | constants_not_marked_yet()
+    unused = sorted(k for k in AZ if k not in used)
+    assert not unused, unused
 
 
 def test_translations_keep_placeholders():

@@ -32,9 +32,9 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.dates import date_range
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-TITLE = "ƏDV depozit с портала"
+TITLE = N_("ƏDV depozit с портала")
 PERIOD, PREVIEW, DONE = "period", "preview", "done"  # the window's steps
 
 

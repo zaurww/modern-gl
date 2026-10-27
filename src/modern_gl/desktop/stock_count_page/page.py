@@ -34,7 +34,7 @@ from modern_gl.desktop.widgets import (
     money,
 )
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.reporting.inventory import item_choices, stock_balances, warehouse_choices
 
 WIDTHS = {ITEM: 320, UNIT: 70, BOOK: 120, QUANTITY: 120, DIFFERENCE: 120, AMOUNT: 140}
@@ -236,8 +236,8 @@ class StockCountPage(PageWidget):
             "shortage": result.shortage_document_id,
         }
         for which, widget, text in (
-            ("surplus", self.open_surplus, "Оприходование излишков №{n}"),
-            ("shortage", self.open_shortage, "Списание недостачи №{n}"),
+            ("surplus", self.open_surplus, N_("Оприходование излишков №{n}")),
+            ("shortage", self.open_shortage, N_("Списание недостачи №{n}")),
         ):
             document_id = self.made[which]
             widget.setVisible(document_id is not None)

@@ -31,21 +31,21 @@ from modern_gl.desktop.portal_worker import PortalRun
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 COLUMNS = [
-    "Дата",
-    "E-qaimə",
-    "Контрагент / строка",
-    "VÖEN / код",
-    "Вид",
-    "Сумма",
-    "ƏDV",
-    "Расход за",
-    "Станет",
+    N_("Дата"),
+    N_("E-qaimə"),
+    N_("Контрагент / строка"),
+    N_("VÖEN / код"),
+    N_("Вид"),
+    N_("Сумма"),
+    N_("ƏDV"),
+    N_("Расход за"),
+    N_("Станет"),
 ]
-EXPENSE_MONTH = COLUMNS.index("Расход за")
-BECOMES = COLUMNS.index("Станет")
+EXPENSE_MONTH = COLUMNS.index(N_("Расход за"))
+BECOMES = COLUMNS.index(N_("Станет"))
 
 
 class EqaimeImportForm(ImportWindow):

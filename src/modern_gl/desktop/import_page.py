@@ -31,10 +31,10 @@ from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import EmptyState, PageHeader, button, caption, money
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.table_files import from_clipboard, read_rows
 
-COLUMNS_HINT = "Дата · Документ · Дебет · Субконто · Кредит · Субконто · Сумма · Содержание"
+COLUMNS_HINT = N_("Дата · Документ · Дебет · Субконто · Кредит · Субконто · Сумма · Содержание")
 
 
 class ImportPage(PageWidget):

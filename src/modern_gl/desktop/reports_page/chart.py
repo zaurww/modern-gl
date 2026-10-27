@@ -29,7 +29,7 @@ from modern_gl.desktop.widgets import (
 )
 from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 # the columns that narrow in a narrow window, in this order, and how far
 NARROWING = (("subconto", 200), ("type", 180), ("name", 240))
@@ -172,7 +172,7 @@ class ChartPage(ReportPage):
 
     def toggle_hidden(self, acc) -> None:
         self.s.ledger.set_account_active(self.s.company_id, acc.id, not acc.active)
-        message = "Счёт {code} снова виден" if not acc.active else "Счёт {code} скрыт"
+        message = N_("Счёт {code} снова виден") if not acc.active else N_("Счёт {code} скрыт")
         self._after_change(acc.id, tr(message, code=acc.short))
 
     def delete_account(self, acc: AccountInfo | None) -> None:

@@ -20,9 +20,17 @@ from modern_gl.desktop.reports_page import Column
 from modern_gl.desktop.widgets import ru_date
 from modern_gl.domain.dates import date_range
 from modern_gl.domain.money import format_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-WEEKDAYS = ("понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье")
+WEEKDAYS = (
+    N_("понедельник"),
+    N_("вторник"),
+    N_("среда"),
+    N_("четверг"),
+    N_("пятница"),
+    N_("суббота"),
+    N_("воскресенье"),
+)
 
 
 @dataclass(frozen=True)

@@ -41,9 +41,9 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import caption
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-HELP = (
+HELP = N_(
     "Enter — провести   ·   Shift+Enter — черновик   ·   Ctrl+Enter — открыть в форме   ·   "
     "↑ — прошлые строки   ·   «+Имя» — новый элемент справочника   ·   Esc — скрыть список"
 )

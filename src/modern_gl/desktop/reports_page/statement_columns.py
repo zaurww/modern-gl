@@ -11,7 +11,7 @@ from modern_gl.desktop.reports_page.table import Column, figure
 from modern_gl.desktop.widgets import MenuItem, button, menu_button, trailing_icon
 from modern_gl.domain.dates import month_title
 from modern_gl.domain.period_input import Period, describe, month_bounds, quarter_of
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.reporting.columns import (
     COMPARISONS,
     MONTHS,
@@ -26,12 +26,12 @@ from modern_gl.reporting.columns import (
 from modern_gl.reporting.statements import Line
 
 CHOICES = (
-    (ONE, "Один период"),
-    (MONTHS, "По месяцам"),
-    (QUARTERS, "По кварталам"),
+    (ONE, N_("Один период")),
+    (MONTHS, N_("По месяцам")),
+    (QUARTERS, N_("По кварталам")),
     None,
-    (PREVIOUS, "С прошлым периодом"),
-    (YEAR_AGO, "С прошлым годом"),
+    (PREVIOUS, N_("С прошлым периодом")),
+    (YEAR_AGO, N_("С прошлым годом")),
 )
 
 

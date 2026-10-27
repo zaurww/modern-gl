@@ -4,7 +4,7 @@ import calendar
 import re
 from datetime import date, datetime, timedelta
 
-from modern_gl.i18n import tr, upper
+from modern_gl.i18n import N_, tr, upper
 
 
 def iso_date(value: date | str) -> str:
@@ -37,18 +37,18 @@ def date_range(first: date | str, last: date | str, sep: str = " — ") -> str:
 
 
 _MONTHS = (
-    "январь",
-    "февраль",
-    "март",
-    "апрель",
-    "май",
-    "июнь",
-    "июль",
-    "август",
-    "сентябрь",
-    "октябрь",
-    "ноябрь",
-    "декабрь",
+    N_("январь"),
+    N_("февраль"),
+    N_("март"),
+    N_("апрель"),
+    N_("май"),
+    N_("июнь"),
+    N_("июль"),
+    N_("август"),
+    N_("сентябрь"),
+    N_("октябрь"),
+    N_("ноябрь"),
+    N_("декабрь"),
 )
 
 

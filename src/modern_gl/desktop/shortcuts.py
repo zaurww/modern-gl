@@ -14,7 +14,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QWidget
 
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 class Scope(Enum):
@@ -53,56 +53,58 @@ KEYS: dict[str, Key] = {
     k.id: k
     for k in (
         # ---- the window ----------------------------------------------------------------
-        _k("new_document", "Ctrl+N", Scope.WINDOW, "новый документ"),
-        _k("close_page", ("Ctrl+W", "Ctrl+F4"), Scope.WINDOW, "закрыть"),
-        _k("palette", "Ctrl+K", Scope.WINDOW, "поиск и команды"),
-        _k("quick_entry", "Ctrl+L", Scope.WINDOW, "быстрая строка"),
-        _k("go_journal", "Ctrl+1", Scope.WINDOW, "Журнал"),
-        _k("go_osv", "Ctrl+2", Scope.WINDOW, "ОСВ"),
-        _k("go_chart", "Ctrl+3", Scope.WINDOW, "План счетов"),
-        _k("go_directories", "Ctrl+4", Scope.WINDOW, "Справочники"),
-        _k("go_templates", "Ctrl+5", Scope.WINDOW, "Шаблоны"),
-        _k("go_inventory", "Ctrl+6", Scope.WINDOW, "Склад"),
-        _k("go_currencies", "Ctrl+7", Scope.WINDOW, "Валюты"),
+        _k("new_document", "Ctrl+N", Scope.WINDOW, N_("новый документ")),
+        _k("close_page", ("Ctrl+W", "Ctrl+F4"), Scope.WINDOW, N_("закрыть")),
+        _k("palette", "Ctrl+K", Scope.WINDOW, N_("поиск и команды")),
+        _k("quick_entry", "Ctrl+L", Scope.WINDOW, N_("быстрая строка")),
+        _k("go_journal", "Ctrl+1", Scope.WINDOW, N_("Журнал")),
+        _k("go_osv", "Ctrl+2", Scope.WINDOW, N_("ОСВ")),
+        _k("go_chart", "Ctrl+3", Scope.WINDOW, N_("План счетов")),
+        _k("go_directories", "Ctrl+4", Scope.WINDOW, N_("Справочники")),
+        _k("go_templates", "Ctrl+5", Scope.WINDOW, N_("Шаблоны")),
+        _k("go_inventory", "Ctrl+6", Scope.WINDOW, N_("Склад")),
+        _k("go_currencies", "Ctrl+7", Scope.WINDOW, N_("Валюты")),
         _k("go_invoices", "Ctrl+8", Scope.WINDOW, "E-qaimələr"),
-        _k("go_opening", "Ctrl+9", Scope.WINDOW, "Начальные остатки"),
-        _k("go_purchases", "Ctrl+0", Scope.WINDOW, "Покупки"),
-        _k("go_sales", "Ctrl+-", Scope.WINDOW, "Продажи"),
-        _k("go_bank", "Ctrl+B", Scope.WINDOW, "Банк"),
+        _k("go_opening", "Ctrl+9", Scope.WINDOW, N_("Начальные остатки")),
+        _k("go_purchases", "Ctrl+0", Scope.WINDOW, N_("Покупки")),
+        _k("go_sales", "Ctrl+-", Scope.WINDOW, N_("Продажи")),
+        _k("go_bank", "Ctrl+B", Scope.WINDOW, N_("Банк")),
         # ---- a page and everything in it ------------------------------------------------
-        _k("save", "Ctrl+S", Scope.PAGE, "сохранить"),
-        _k("post", CTRL_ENTER, Scope.PAGE, "провести"),
+        _k("save", "Ctrl+S", Scope.PAGE, N_("сохранить")),
+        _k("post", CTRL_ENTER, Scope.PAGE, N_("провести")),
         _k(
             "post_and_new",
             ("Ctrl+Shift+Return", "Ctrl+Shift+Enter"),
             Scope.PAGE,
-            "провести и новый",
+            N_("провести и новый"),
         ),
-        _k("insert", "Ins", Scope.PAGE, "строка"),  # a line of a document; in a list — a new item
-        _k("duplicate_row", "F9", Scope.PAGE, "копия строки"),
-        _k("split_row", "F8", Scope.PAGE, "разделить строку"),
-        _k("fee", "F6", Scope.PAGE, "комиссия"),
-        _k("remove_line", "Ctrl+Del", Scope.PAGE, "убрать строку"),
-        _k("edit", "F2", Scope.PAGE, "изменить"),
-        _k("open", ENTER, Scope.PAGE, "открыть"),
-        _k("refresh", "F5", Scope.PAGE, "обновить"),
-        _k("find", "Ctrl+F", Scope.PAGE, "поиск"),
-        _k("copy_report", "Ctrl+C", Scope.PAGE, "копировать для Excel"),
-        _k("paste", "Ctrl+V", Scope.PAGE, "вставить"),
-        _k("previous", "Alt+Left", Scope.PAGE, "предыдущая"),
-        _k("next", "Alt+Right", Scope.PAGE, "следующая"),
-        _k("up", ("Backspace", "Alt+Up"), Scope.PAGE, "на уровень выше"),
+        _k(
+            "insert", "Ins", Scope.PAGE, N_("строка")
+        ),  # a line of a document; in a list — a new item
+        _k("duplicate_row", "F9", Scope.PAGE, N_("копия строки")),
+        _k("split_row", "F8", Scope.PAGE, N_("разделить строку")),
+        _k("fee", "F6", Scope.PAGE, N_("комиссия")),
+        _k("remove_line", "Ctrl+Del", Scope.PAGE, N_("убрать строку")),
+        _k("edit", "F2", Scope.PAGE, N_("изменить")),
+        _k("open", ENTER, Scope.PAGE, N_("открыть")),
+        _k("refresh", "F5", Scope.PAGE, N_("обновить")),
+        _k("find", "Ctrl+F", Scope.PAGE, N_("поиск")),
+        _k("copy_report", "Ctrl+C", Scope.PAGE, N_("копировать для Excel")),
+        _k("paste", "Ctrl+V", Scope.PAGE, N_("вставить")),
+        _k("previous", "Alt+Left", Scope.PAGE, N_("предыдущая")),
+        _k("next", "Alt+Right", Scope.PAGE, N_("следующая")),
+        _k("up", ("Backspace", "Alt+Up"), Scope.PAGE, N_("на уровень выше")),
         # ---- the table only (not while a cell is edited: there the keys type) -----------
-        _k("delete", "Del", Scope.GRID, "удалить строку"),
-        _k("open_row", ENTER, Scope.GRID, "открыть"),
-        _k("copy_document", "F9", Scope.GRID, "копия документа"),
-        _k("add_charge", "Ins", Scope.GRID, "новый расход"),
-        _k("copy_rows", "Ctrl+C", Scope.GRID, "копировать"),
-        _k("paste_rows", "Ctrl+V", Scope.GRID, "вставить из Excel"),
+        _k("delete", "Del", Scope.GRID, N_("удалить строку")),
+        _k("open_row", ENTER, Scope.GRID, N_("открыть")),
+        _k("copy_document", "F9", Scope.GRID, N_("копия документа")),
+        _k("add_charge", "Ins", Scope.GRID, N_("новый расход")),
+        _k("copy_rows", "Ctrl+C", Scope.GRID, N_("копировать")),
+        _k("paste_rows", "Ctrl+V", Scope.GRID, N_("вставить из Excel")),
         # ---- typed into the table, not shortcuts ----------------------------------------
-        _k("next_field", ("Return", "Tab"), Scope.TYPED, "дальше"),
-        _k("previous_field", "Shift+Tab", Scope.TYPED, "назад"),
-        _k("template", "#", Scope.TYPED, "шаблон"),
+        _k("next_field", ("Return", "Tab"), Scope.TYPED, N_("дальше")),
+        _k("previous_field", "Shift+Tab", Scope.TYPED, N_("назад")),
+        _k("template", "#", Scope.TYPED, N_("шаблон")),
     )
 }
 

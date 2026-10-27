@@ -38,7 +38,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
 from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import to_minor
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 class LinesClipboard(InventoryLinesBase):
@@ -152,7 +152,7 @@ class LinesClipboard(InventoryLinesBase):
             if key in SALE_KEYS:
                 return str(self.headerData(self.columns.index(key), Qt.Orientation.Horizontal))
             if key in SUBCONTO_KEYS:
-                caption = "Субконто" if key in SC_KEYS else "Субконто затрат"
+                caption = "Субконто" if key in SC_KEYS else N_("Субконто затрат")
                 return f"{tr(caption)} {key[-1]}"
             return tr(HEADERS[key])
 

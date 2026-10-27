@@ -42,9 +42,9 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.dates import month_title
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.invoice import EQAIME
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
-PARTY_MISSING = {"receipt": "Укажите поставщика", "sale": "Укажите покупателя"}
+PARTY_MISSING = {"receipt": N_("Укажите поставщика"), "sale": N_("Укажите покупателя")}
 
 
 class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart):

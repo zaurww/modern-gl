@@ -28,7 +28,7 @@ from modern_gl.domain.eqaime import ON_APPROVAL, PortalInvoice, status_label
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import format_minor
 from modern_gl.domain.periods import full_month
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
 from modern_gl.reporting.eqaime_reconciliation import (
     AMOUNTS,
@@ -48,16 +48,25 @@ from modern_gl.reporting.eqaime_reconciliation import (
     reconciled_through,
 )
 
-COLUMNS = ["Дата", "E-qaimə", "Контрагент", "На портале", "Портал", "Книга", "Разница", ""]
+COLUMNS = [
+    N_("Дата"),
+    N_("E-qaimə"),
+    N_("Контрагент"),
+    N_("На портале"),
+    N_("Портал"),
+    N_("Книга"),
+    N_("Разница"),
+    "",
+]
 GROUP_TITLES = {
-    MISSING: "Есть на портале, нет в книге",
-    VOID_IN_BOOKS: "В книге, но на портале не действует",
-    NOT_ON_PORTAL: "В книге, на портале не найдена",
-    AMOUNTS: "Суммы различаются",
-    PERIOD: "Другой период",
-    PARTY: "Другой контрагент",
-    PENDING: "Ожидает подтверждения или в процессе",
-    MATCHED: "Совпадает",
+    MISSING: N_("Есть на портале, нет в книге"),
+    VOID_IN_BOOKS: N_("В книге, но на портале не действует"),
+    NOT_ON_PORTAL: N_("В книге, на портале не найдена"),
+    AMOUNTS: N_("Суммы различаются"),
+    PERIOD: N_("Другой период"),
+    PARTY: N_("Другой контрагент"),
+    PENDING: N_("Ожидает подтверждения или в процессе"),
+    MATCHED: N_("Совпадает"),
 }
 AMOUNT_COLUMNS = (4, 5, 6)
 

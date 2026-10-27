@@ -15,16 +15,16 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import caption
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 
 class ConversionAccountsDialog(QDialog):
     """The accounts conversions post to (account roles, D34)."""
 
     ROLES = (
-        (FX_TRANSIT, "Переводы в пути"),
-        (FX_GAIN, "Доход от курсовой разницы"),
-        (FX_LOSS, "Убыток от курсовой разницы"),
+        (FX_TRANSIT, N_("Переводы в пути")),
+        (FX_GAIN, N_("Доход от курсовой разницы")),
+        (FX_LOSS, N_("Убыток от курсовой разницы")),
         (BANK_FEE, "Комиссия банка"),
     )
 

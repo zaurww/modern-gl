@@ -46,10 +46,10 @@ from modern_gl.desktop.widgets import (
     trailing_icon,
 )
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 
-COLUMNS = ["Дата", "№", "Содержание", "Книга", "Автор", "Сумма", ""]
+COLUMNS = [N_("Дата"), N_("№"), N_("Содержание"), N_("Книга"), N_("Автор"), N_("Сумма"), ""]
 DATE, NUMBER, MEMO, BOOK, AUTHOR, TOTAL, STATUS = range(7)
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
