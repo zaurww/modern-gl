@@ -13,6 +13,8 @@ from modern_gl.application.inventory.accruals import AccrualCommands
 from modern_gl.application.inventory.landed_cost import LandedCostCommands
 from modern_gl.application.inventory.model import (
     INCOMING_TYPES,
+    RETURN_TYPES,
+    SALE_RETURN,
     IssueLine,
     LandedCostCharge,
     LandedCostTarget,
@@ -21,7 +23,7 @@ from modern_gl.application.inventory.model import (
     TransferLine,
 )
 from modern_gl.application.inventory.movements import MovementCommands
-from modern_gl.application.inventory.sales import SaleCommands
+from modern_gl.application.inventory.returns import ReturnCommands
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.domain.dates import ru_date
@@ -39,6 +41,8 @@ _SEQUENCE_RANK = {
     "transfer": 3,
     "issue": 3,
     "sale": 3,
+    "sale_return": 1,  # goods back from a customer arrive
+    "purchase_return": 3,  # goods back to the supplier leave
 }
 
 
@@ -55,7 +59,7 @@ explain_owner(
 )
 
 
-class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, AccrualCommands):
+class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, AccrualCommands):
     def post_document(self, company_id: int, document_id: int) -> None:
         """Post a saved warehouse draft and calculate all derived amounts atomically.
 
@@ -334,6 +338,12 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
                 "WHERE document_id = ?",
                 (document_id,),
             )
+        elif doc["doc_type"] in RETURN_TYPES:  # the price is typed; the cost is calculated
+            self.conn.execute(
+                "UPDATE inventory_lines SET inventory_amount = 0, cost_account_id = NULL "
+                "WHERE document_id = ?",
+                (document_id,),
+            )
 
     def _apply_in_order(
         self, company_id: int, document_id: int | None, later: Sequence[int]
@@ -376,6 +386,10 @@ class PostingCommands(MovementCommands, SaleCommands, LandedCostCommands, Accrua
             postings = self._apply_landed_cost(company_id, doc, lines)
         elif doc["doc_type"] == "sale":
             postings = self._apply_sale(company_id, doc, lines)
+        elif doc["doc_type"] in RETURN_TYPES:
+            postings = self._apply_return(company_id, doc, lines)
+            if doc["doc_type"] == SALE_RETURN:  # what came back may be issued again
+                self._forget_receipts(company_id, lines)
         else:
             postings = [self._apply_line(company_id, doc, line) for line in lines]
             if doc["doc_type"] in INCOMING_TYPES:
