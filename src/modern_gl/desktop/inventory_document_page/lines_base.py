@@ -35,7 +35,9 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
+    GOODS,
     ITEM,
+    KIND,
     MEMO,
     PRICE,
     QUANTITY,
@@ -46,6 +48,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     SC1,
     SC2,
     SC3,
+    SERVICE,
     SEVERAL_MONTHS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
@@ -95,6 +98,8 @@ RETURNS = {"purchase_return", "sale_return"}
 
 class InventoryLinesBase(QAbstractTableModel):
     changed = Signal()
+    # «Товар» chosen in «Вид» of a service line: the page makes it an item (row)
+    goods_wanted = Signal(int)
 
     def __init__(
         self,
@@ -152,6 +157,7 @@ class InventoryLinesBase(QAbstractTableModel):
         else:
             self.columns = [
                 ITEM,
+                *([KIND] if doc_type == "receipt" else []),
                 WAREHOUSE,
                 QUANTITY,
                 UNIT,
@@ -184,6 +190,8 @@ class InventoryLinesBase(QAbstractTableModel):
             return [(item.id, item.label) for item in self.items.values()]
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return [(warehouse.id, warehouse.label) for warehouse in self.warehouses.values()]
+        if key == KIND:
+            return [(GOODS, tr("Товар")), (SERVICE, tr("Услуга"))]
         if key == ACCOUNT:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         if key == EXPENSE:  # goods come to a stock account through the warehouse only
@@ -360,6 +368,8 @@ class InventoryLinesBase(QAbstractTableModel):
         return not lines or not all(self.is_service(i) for i in lines)
 
     def applies(self, row: int, key: str) -> bool:
+        if key == KIND:  # a line begun: an empty one becomes goods by its item
+            return not self.rows[row].is_empty()
         if key in {WAREHOUSE, UNIT} and self.is_service(row):
             return False
         if key in ESC_KEYS | {EXPENSE, EXPENSE_MONTH} and not self.is_service(row):

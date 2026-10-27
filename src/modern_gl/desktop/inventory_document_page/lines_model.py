@@ -24,8 +24,10 @@ from modern_gl.desktop.inventory_document_page.columns import (
     CURRENCY_AMOUNT,
     EXPENSE,
     EXPENSE_MONTH,
+    GOODS,
     HEADERS,
     ITEM,
+    KIND,
     MEMO,
     NUMBER_KEYS,
     PARTY_HEADERS,
@@ -36,6 +38,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     SALE_KEYS,
     SC1,
     SC_KEYS,
+    SERVICE,
     STORED_FIELDS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
@@ -144,6 +147,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
         if role == Qt.ItemDataRole.EditRole:
             return self._edit_value(index.row(), key)
         if role == Qt.ItemDataRole.DisplayRole:
+            if key == KIND:
+                return self._kind_text(index.row())
             return self._display_text(index.row(), key)
         if role == Qt.ItemDataRole.TextAlignmentRole and key in NUMBER_KEYS:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
@@ -159,6 +164,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
         row = self.rows[row_index]
         if key == ITEM:
             return row.item_id
+        if key == KIND:
+            return None if row.is_empty() else self._kind(row_index)
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return row.warehouse_id if key == WAREHOUSE else row.to_warehouse_id
         if key in {ACCOUNT, EXPENSE}:
@@ -233,7 +240,14 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
             return False
         row = self.rows[index.row()]
         key = self.key(index)
-        if key in {PRICE, CURRENCY_AMOUNT, AMOUNT, VAT}:
+        if key == KIND:
+            if value == GOODS and self.is_service(index.row()):
+                self.goods_wanted.emit(index.row())  # an item is made by the page
+                return True
+            if value != SERVICE or self.is_service(index.row()):
+                return True  # as it was
+            self.make_service(index.row())
+        elif key in {PRICE, CURRENCY_AMOUNT, AMOUNT, VAT}:
             self._set_money(row, key, value)
         elif key == ACCOUNT:
             self._set_account(row, value)
@@ -260,6 +274,37 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
         )
         self.changed.emit()
         return True
+
+    def _kind(self, row_index: int) -> int:
+        return SERVICE if self.is_service(row_index) else GOODS
+
+    def _kind_text(self, row_index: int) -> str:
+        if self.rows[row_index].is_empty():
+            return ""
+        return tr("Услуга") if self._kind(row_index) == SERVICE else tr("Товар")
+
+    def make_service(self, row_index: int) -> None:
+        """Goods made a service: the line keeps what it is as its text and goes to an
+        account — the one this service had the last time, if it was bought before."""
+        row = self.rows[row_index]
+        item = self.items.get(row.item_id) if row.item_id is not None else None
+        row.memo = row.memo.strip() or (item.label if item else "")
+        row.item_id = row.warehouse_id = None
+        self._remember_expense(row_index)
+
+    def make_goods(self, items: dict[int, int], warehouse_id: int | None) -> None:
+        """Service lines made goods: row -> its item, from (to) `warehouse_id`; the
+        account the service went to is dropped."""
+        self.refresh_choices()
+        for row_index, item_id in items.items():
+            row = self.rows[row_index]
+            row.item_id = item_id
+            row.warehouse_id = row.warehouse_id or warehouse_id
+            row.expense_account_id, row.expense_date = None, None
+            row.expense_subconto = [None, None, None]
+        self.beginResetModel()
+        self.endResetModel()
+        self.changed.emit()
 
     def _set_money(self, row: InventoryGridRow, key: str, value: int | None) -> None:
         """A price, an amount (in manat or in the currency) or the VAT typed into a line."""

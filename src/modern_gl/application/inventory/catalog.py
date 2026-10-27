@@ -10,7 +10,7 @@ from modern_gl.application.inventory.base import InventoryBase
 from modern_gl.application.inventory.model import INCOMING_REASONS, QUANTITY_SCALE, UsualUnit
 from modern_gl.domain.accounts import FX_GAIN
 from modern_gl.domain.errors import ValidationError
-from modern_gl.i18n import tr
+from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import IntegrityError, transaction
 
 
@@ -208,6 +208,42 @@ class CatalogCommands(InventoryBase):
                 self.add_warehouse(company_id, first_warehouse)
             self.set_min_quantity(company_id, item_id, min_quantity)
         return item_id
+
+    def add_named_items(
+        self,
+        company_id: int,
+        names: list[str],
+        unit: int | UsualUnit,
+        inventory_account_id: int,
+        *,
+        first_warehouse: str | None = None,
+    ) -> list[int]:
+        """Purchase lines made goods, in one transaction: an item for each name, in the
+        same order. A name an active item has already takes that item, the same name twice
+        is one item — nothing is added twice."""
+        with transaction(self.conn):
+            known = {
+                fold(row["name"]): row["id"]
+                for row in self.conn.execute(
+                    "SELECT i.id, v.name FROM inventory_items i "
+                    "JOIN subconto_values v ON v.company_id = i.company_id "
+                    "AND v.id = i.subconto_value_id WHERE i.company_id = ? AND v.active = 1",
+                    (company_id,),
+                )
+            }
+            result = []
+            for name in names:
+                key = fold(name.strip())
+                if key not in known:
+                    known[key] = self.add_new_item(
+                        company_id,
+                        name,
+                        unit,
+                        inventory_account_id,
+                        first_warehouse=first_warehouse,
+                    )
+                result.append(known[key])
+        return result
 
     def _usual_unit(self, company_id: int, unit: UsualUnit) -> int:
         row = self.conn.execute(

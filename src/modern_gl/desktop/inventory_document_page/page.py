@@ -22,6 +22,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     InventoryGridRow,
 )
 from modern_gl.desktop.inventory_document_page.filling import RETURN_OF, FillingPart
+from modern_gl.desktop.inventory_document_page.goods_lines import GoodsLinesPart
 from modern_gl.desktop.inventory_document_page.header import HeaderPart
 from modern_gl.desktop.inventory_document_page.lines_model import (
     InventoryLinesModel,
@@ -55,7 +56,7 @@ PARTY_MISSING = {
 
 
 class InventoryDocumentPage(
-    HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart, FillingPart
+    HeaderPart, PartyPart, ClipboardPart, NewValuesPart, GoodsLinesPart, SplitPart, FillingPart
 ):
     def __init__(
         self,
@@ -83,6 +84,7 @@ class InventoryDocumentPage(
         )
         self._connect_delegate()
         self.model.changed.connect(self._changed)
+        self._connect_goods()
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
         self.vat_rate.activated.connect(self._vat_rate_changed)
@@ -236,6 +238,7 @@ class InventoryDocumentPage(
         self._connect_delegate()
         self.table.setItemDelegate(self.delegate)
         self.model.changed.connect(self._changed)
+        self._connect_goods()
 
     def _apply_mode(self, read_only: bool) -> None:
         self.memo.setReadOnly(read_only)

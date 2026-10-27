@@ -38,6 +38,9 @@ SALE1 = "sale1"
 SALE2 = "sale2"
 SALE3 = "sale3"
 MEMO = "memo"
+# a receipt's line is goods (through a warehouse) or a service (to an account): the choice
+KIND = "kind"
+GOODS, SERVICE = 1, 0
 SC_KEYS = {SC1, SC2, SC3}  # the subconto of the line's offset (supplier, customer) account
 ESC_KEYS = {ESC1, ESC2, ESC3}
 SALE_KEYS = {SALE1, SALE2, SALE3}
@@ -51,7 +54,7 @@ STORED_FIELDS = {
     AMOUNT: "amount",
     MEMO: "memo",
 }
-LIST_KEYS = {ITEM, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
+LIST_KEYS = {ITEM, KIND, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
 # the name of a line keeps this much; these columns narrow first, down to NARROW_MIN
 ITEM_MIN = 300
 NARROW_MIN = 84
@@ -63,6 +66,7 @@ VAT_DOCUMENTS = INVENTORY_VAT_DOCUMENTS  # kept here for the pages
 
 HEADERS = {
     ITEM: "Товар",
+    KIND: "Вид",
     WAREHOUSE: "Склад",
     TO_WAREHOUSE: "Склад-получатель",
     QUANTITY: "Количество",
