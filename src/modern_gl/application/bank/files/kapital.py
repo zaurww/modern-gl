@@ -137,7 +137,7 @@ def _line(cells: dict[str, str], file_name: str, n: int) -> FileLine:
 
 
 def other_side(text: str) -> tuple[str, str, str]:
-    """«AZ71AZRT… / RST GLOBAL MMC / 1005735471» -> (IBAN, name, VÖEN); abroad the last
+    """«AZ71AZRT… / Nümunə MMC / 1234567890» -> (IBAN, name, VÖEN); abroad the last
     part is no VÖEN («LLC 'VIAL-CAS-BEL' / NOVODVORSKIJ S») or empty («SHENZHEN … /»):
     it stays in the name."""
     text = text.strip()
