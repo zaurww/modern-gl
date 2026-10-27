@@ -162,3 +162,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D150 | Склад: отчёты — ведомость, карточка товара, валовая прибыль; операции — после решения | принято | [D150-inventory-reports.md](D150-inventory-reports.md) |
 | D151 | Ввод склада: контрагент в шапке, инвентаризация, все товары на «Склад» | принято | [D151-inventory-entry-party-stock-count.md](D151-inventory-entry-party-stock-count.md) |
 | D152 | Язык документов — настройка компании, а не интерфейса | принято | [D152-document-language-company.md](D152-document-language-company.md) |
+| D-new | Решения — файл на решение в формате ADR | принято | [D-new-adr-decision-files.md](D-new-adr-decision-files.md) |

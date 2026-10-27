@@ -8,12 +8,25 @@ context and decision together within 1 200 characters — the long story belongs
 module's own document; «Последствия» is pointers to code and tests, not prose.
 """
 
+import importlib.util
 import re
 from pathlib import Path
 
-from scripts import decisions_index
-
 ROOT = Path(__file__).parent.parent
+
+
+def _load_index_script():
+    """`scripts/decisions_index.py` as a module, whether run by pytest or directly."""
+    spec = importlib.util.spec_from_file_location(
+        "decisions_index", ROOT / "scripts" / "decisions_index.py"
+    )
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+decisions_index = _load_index_script()
 DECISIONS = ROOT / "docs" / "decisions"
 SECTIONS = ("## Контекст", "## Решение", "## Последствия")
 DECISION_LIMIT = 1_200
@@ -25,7 +38,8 @@ def _files() -> list[Path]:
 
 
 def _number(path: Path) -> str:
-    return path.name.split("-")[0]
+    """`D072` or `D-new` / `D-new2` from the file name."""
+    return re.match(r"D\d{3}|D-new\d*", path.name)[0]  # type: ignore[index]
 
 
 def _sections(text: str) -> dict[str, str]:
