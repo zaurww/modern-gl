@@ -71,12 +71,14 @@ class InventoryForm(QWidget):
     new_inventory_document = Signal(str)
     open_landed_report = Signal()
     open_report = Signal(str)  # a warehouse report of «Все отчёты»
+    buy_missing = Signal(object)  # the items under their minimum: a purchase of them
 
     def __init__(self, session: Session) -> None:
         super().__init__()
         self.setObjectName("page")
         self.s = session
         self.inventory = Inventory(session.conn, actor=session.ledger.actor)
+        self.low: list = []  # the items under their minimum stock (`refresh`)
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 30, 40, 24)
         root.setSpacing(14)
@@ -99,6 +101,11 @@ class InventoryForm(QWidget):
         add_item = self.header.primary(tr("+ Товар"), self.add_item)
         more = self.header.more(  # what is set up once, rarely
             lambda: [
+                *(
+                    [(tr("Купить до минимума: {n}", n=len(self.low)), self._buy_missing), None]
+                    if self.low
+                    else []
+                ),
                 (self._idle_mark() + tr("Товары без остатка"), self._toggle_idle),
                 None,
                 (tr("+ Единица"), self.add_unit),
@@ -186,6 +193,9 @@ class InventoryForm(QWidget):
 
     def operation(self, operation: str) -> None:
         self.new_inventory_document.emit(operation)
+
+    def _buy_missing(self) -> None:
+        self.buy_missing.emit(list(self.low))
 
     def idle_shown(self) -> bool:
         """Items with nothing in stock are listed too (muted) — a new item is seen at once;

@@ -20,6 +20,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     VAT_DOCUMENTS,
     InventoryGridRow,
 )
+from modern_gl.desktop.inventory_document_page.filling import RETURN_OF, FillingPart
 from modern_gl.desktop.inventory_document_page.header import HeaderPart
 from modern_gl.desktop.inventory_document_page.lines_model import (
     InventoryLinesModel,
@@ -31,7 +32,6 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
 )
 from modern_gl.desktop.inventory_document_page.new_values import NewValuesPart
 from modern_gl.desktop.inventory_document_page.party import PartyPart
-from modern_gl.desktop.inventory_document_page.returning import RETURN_OF, ReturningPart
 from modern_gl.desktop.inventory_document_page.splits import SplitPart
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
@@ -54,7 +54,7 @@ PARTY_MISSING = {
 
 
 class InventoryDocumentPage(
-    HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart, ReturningPart
+    HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart, FillingPart
 ):
     def __init__(
         self,

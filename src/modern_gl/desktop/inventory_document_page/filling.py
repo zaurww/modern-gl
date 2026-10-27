@@ -1,19 +1,21 @@
-"""A return made from its purchase or sale: «Оформить возврат» on the posted document opens
-a return filled with what is left to return of each line — at its price, with its ƏDV,
-the supplier (customer) in the header; the user keeps what comes back."""
+"""New documents that start filled: a return made from its purchase or sale («Оформить
+возврат» — what is left to return of each line, at its price, with its ƏDV, the supplier
+in the header), a purchase of what is under its minimum stock (at the last price)."""
 
 from __future__ import annotations
 
+from modern_gl.application.inventory import line_amount
 from modern_gl.desktop.inventory_document_page.columns import InventoryGridRow
 from modern_gl.desktop.inventory_document_page.form import InventoryDocumentForm
 from modern_gl.domain.money import round_ratio
 from modern_gl.i18n import tr
+from modern_gl.reporting.inventory import BelowMinimum
 
 # what each document is returned by
 RETURN_OF = {"receipt": "purchase_return", "sale": "sale_return"}
 
 
-class ReturningPart(InventoryDocumentForm):
+class FillingPart(InventoryDocumentForm):
     def fill_return_of(self, document_id: int) -> bool:
         """The lines of the document still to return; False — nothing is left."""
         source = self.inventory.load_document(self.s.company_id, document_id)
@@ -46,6 +48,24 @@ class ReturningPart(InventoryDocumentForm):
         self._show_party()
         self._changed()
         return True
+
+    def fill_missing(self, missing: list[BelowMinimum]) -> None:
+        """A purchase of what is under the minimum: up to it, at the last price, to the
+        warehouse the item last came to; the supplier is chosen in the header."""
+        rows = [
+            InventoryGridRow(
+                m.item_id,
+                m.warehouse_id,
+                None,
+                m.missing,
+                None if m.last_price is None else line_amount(m.last_price, m.missing),
+            )
+            for m in missing
+        ]
+        self.memo.setText(tr("Покупка до минимального остатка"))
+        self._use_lines(rows, False, self._chosen_vat_rate(), self.model.doc_date)
+        self._show_party()
+        self._changed()
 
     # ---- made by the page ------------------------------------------------------------
 

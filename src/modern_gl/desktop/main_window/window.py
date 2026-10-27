@@ -227,6 +227,7 @@ class MainWindow(ReportPlaces):
             page.new_inventory_document.connect(self.new_inventory_document)
             page.open_landed_report.connect(self.open_landed_report)
             page.open_report.connect(self.open_catalog_report)
+            page.buy_missing.connect(self.buy_missing)
             return page
         if key in (("purchases",), ("sales",)):
             page = TradePage(s, PURCHASE if key == ("purchases",) else SALE)
@@ -345,6 +346,16 @@ class MainWindow(ReportPlaces):
         page.title_changed.connect(lambda p=page: self._retitle(p))
         if isinstance(page, InventoryDocumentPage):
             page.make_return.connect(self.new_return)
+
+    def buy_missing(self, missing) -> None:
+        """A purchase of what is under its minimum stock, filled; the supplier to choose."""
+        if self._viewing():
+            return
+        page = InventoryDocumentPage(self.open_session, doc_type="receipt")
+        page.fill_missing(missing)
+        self._wire_inventory_document(page)
+        self._add_page(page.key, page, open_item=True)
+        self._activate(page.key)
 
     def new_return(self, doc_type: str, source_id: int) -> None:
         """A return filled from its purchase (sale): what is left to return of each line."""

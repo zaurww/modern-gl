@@ -18,6 +18,7 @@ from modern_gl.application.inventory import (
     USUAL_UNITS,
     Inventory,
     UsualUnit,
+    format_quantity,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
@@ -97,6 +98,14 @@ class ItemDialog(QDialog):
         if self.group.count() > 1:  # the directory has groups
             form.addRow(tr("Группа"), self.group)
         form.addRow(tr("Единица измерения"), self.units)
+        self.minimum = QLineEdit(
+            format_quantity(item.min_quantity, item.precision) if item and item.min_quantity else ""
+        )
+        self.minimum.setPlaceholderText(tr("не задан"))
+        self.minimum.setToolTip(
+            tr("Меньше этого на всех складах — «Bu gün» напомнит купить, «Склад» покажет")
+        )
+        form.addRow(tr("Минимальный остаток"), self.minimum)
         if not session.stock_only:  # a warehouse only (D90): the first stock account, unseen
             form.addRow(tr("Счёт запасов"), self.accounts)
         self._add_notes(form)
@@ -159,10 +168,11 @@ class ItemDialog(QDialog):
                     code,
                     group_id=group,
                     first_warehouse=tr(FIRST_WAREHOUSE) if self.first_warehouse else None,
+                    min_quantity=self.minimum.text().strip() or None,
                 )
             else:
                 self._update(group, int(unit), account, code)
-        except LedgerError as exc:
+        except (LedgerError, ValueError) as exc:  # a minimum that is no number
             QMessageBox.warning(self, self.caption, str(exc))
             return
         self.accept()
@@ -170,7 +180,14 @@ class ItemDialog(QDialog):
     def _update(self, group: int | None, unit: int, account: int, code: str | None) -> None:
         assert self.item is not None
         self.inventory.edit_item(
-            self.s.company_id, self.item.id, self.name.text(), code, group, unit, account
+            self.s.company_id,
+            self.item.id,
+            self.name.text(),
+            code,
+            group,
+            unit,
+            account,
+            self.minimum.text().strip() or None,
         )
 
 
