@@ -2,7 +2,6 @@
 
 import pytest
 from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QMessageBox
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import list_documents
@@ -12,13 +11,6 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.journal_page import AUTHOR, JournalPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
-
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
 
 
 @pytest.fixture

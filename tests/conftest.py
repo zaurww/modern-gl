@@ -65,6 +65,27 @@ def own_settings(tmp_path_factory):
     )
 
 
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "questions(answer): what QMessageBox.question answers in this test module"
+    )
+
+
+@pytest.fixture(autouse=True)
+def no_modal_dialogs(monkeypatch, request):
+    """A modal message box would block a headless test forever: warnings and notes are
+    shown to nobody, a question is answered «Discard» — or as the module's
+    `pytestmark = pytest.mark.questions("Yes")` says. A test that wants another answer
+    patches QMessageBox itself (after this, so it wins)."""
+    from PySide6.QtWidgets import QMessageBox
+
+    marker = request.node.get_closest_marker("questions")
+    answer = getattr(QMessageBox.StandardButton, marker.args[0] if marker else "Discard")
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(lambda *a, **k: answer))
+    for name in ("warning", "information", "critical"):
+        monkeypatch.setattr(QMessageBox, name, staticmethod(lambda *a, **k: None))
+
+
 @pytest.fixture(autouse=True, scope="session")
 def fields_as_in_the_app(qapp):
     """The application-wide behaviour of fields that `app.main` installs."""

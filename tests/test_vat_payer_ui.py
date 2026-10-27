@@ -3,6 +3,7 @@ deposit (D145): the ƏDV part is a line of its own, marked ƏDV, and is credited
 
 from __future__ import annotations
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication
 
@@ -10,9 +11,10 @@ from modern_gl.application.bank import load_bank_operation
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.vat import credit_events, purchase_facts, rule_for
 from modern_gl.desktop.bank_operation_page.common import FROM_BANK
-from tests.test_bank_ui import acc, choose, key, no_modal_dialogs, session, shown_page, typed, value
+from tests.test_bank_ui import acc, choose, key, session, shown_page, typed, value
 
-__all__ = ["no_modal_dialogs", "session"]  # the fixtures of the bank's form tests
+__all__ = ["session"]  # the fixture of the bank's form tests
+pytestmark = pytest.mark.questions("Yes")
 
 
 def test_the_payment_form_pays_the_vat_from_the_bank(qtbot, session):

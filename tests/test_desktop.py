@@ -28,14 +28,6 @@ from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.reports import trial_balance
 
 
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    """A modal dialog would block a headless test forever: answer 'discard/no'."""
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
-
-
 @pytest.fixture
 def workspace(tmp_path):
     ws = Workspace(tmp_path / "data")

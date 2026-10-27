@@ -6,7 +6,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit
 
 from modern_gl.application.bank import (
     IN,
@@ -32,13 +32,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.db import connect
 
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
-    )
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
+pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
 
 def setup_company(ledger: Ledger) -> int:

@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
@@ -17,14 +17,6 @@ from modern_gl.desktop.reports_hub import HUB, AccountPrompt, ReportsPage, catal
 from modern_gl.desktop.reports_page import StatementsPage
 from modern_gl.desktop.reports_page.account import CardPage
 from modern_gl.infrastructure.db import connect
-
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
 
 
 @pytest.fixture

@@ -3,7 +3,7 @@
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import list_documents
@@ -33,14 +33,6 @@ WRITES = [
     "E-qaimə с портала…",
     "+",
 ]
-
-
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    monkeypatch.setattr(
-        QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Discard)
-    )
-    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: None))
 
 
 @pytest.fixture

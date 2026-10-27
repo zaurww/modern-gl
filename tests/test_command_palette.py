@@ -20,13 +20,6 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
 
 
-@pytest.fixture(autouse=True)
-def no_modal_dialogs(monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
-    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
-
-
 @pytest.fixture
 def window(qtbot, tmp_path):
     conn = connect(tmp_path / "ДЕМО ООО.gl")
