@@ -137,3 +137,34 @@ def test_assets_named_alike_are_one_and_made_in_one_go(shop):
         shop.company_id, kind, ["Ofis stolu", "Printer", "ofis STOLU"]
     )
     assert ids[0] == ids[2] and ids[0] != ids[1]
+
+
+def test_a_cost_item_pasted_or_chosen_goes_to_the_lines_of_its_account(shop, conn, qtbot):
+    """The furniture lines to 26: «Ofis» copied and pasted on one goes to the other (the
+    same account, a category), not to the 08 lines (an asset is each line's own); pasted,
+    a service line gets no warehouse even in a company of one («line 25: a service has no
+    warehouse» before)."""
+    office = shop.ledger.add_subconto_value(shop.company_id, kind_id(shop, "cost_item"), "Ofis")
+    page = purchase_page(shop, conn, qtbot)
+    model = page.model
+    typed(page, 0, EXPENSE, "08")
+    select(page, EXPENSE, [2, 3])
+    typed(page, 2, EXPENSE, "26")
+
+    page.table.setCurrentIndex(model.index(3, model.columns.index(ESC1)))
+    page.paste("Ofis\r\n")  # one cell copied from the line above
+    assert [row.expense_subconto[0] for row in model.rows] == [None, None, office, office]
+    assert [row.warehouse_id for row in model.rows] == [None] * 4
+
+
+def test_one_value_pasted_goes_into_every_line_selected(shop, conn, qtbot):
+    """«26» copied once and pasted with the two furniture lines selected: both take it."""
+    page = purchase_page(shop, conn, qtbot)
+    model = page.model
+    typed(page, 0, EXPENSE, "08")
+    select(page, EXPENSE, [2, 3])
+    page.paste("26")
+    assert [row.expense_account_id for row in model.rows] == [shop.acc["08"]] * 2 + [
+        shop.acc["26"]
+    ] * 2
+    assert [row.warehouse_id for row in model.rows] == [None] * 4

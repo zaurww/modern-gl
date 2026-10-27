@@ -143,7 +143,11 @@ class LinesClipboard(InventoryLinesBase):
         if MEMO in pasted and self.editable(MEMO):
             self.setData(self.index(row_index, self.columns.index(MEMO)), pasted[MEMO])
         row = self.rows[row_index]
-        if row.warehouse_id is None and len(self.warehouses) == 1:  # the only one there is
+        if (  # the only one there is; a service line comes to no warehouse
+            row.warehouse_id is None
+            and len(self.warehouses) == 1
+            and self.applies(row_index, WAREHOUSE)
+        ):
             row.warehouse_id = next(iter(self.warehouses))
 
     def copy_text(self, shown) -> str:

@@ -285,9 +285,9 @@ class InventoryLinesTable(QTableView):
     def setItemDelegate(self, delegate) -> None:
         super().setItemDelegate(delegate)
         if isinstance(delegate, InventoryLinesDelegate):  # a new model comes with a new one
-            delegate.selected_rows = self._selected_rows
+            delegate.selected_rows = self.selected_rows
 
-    def _selected_rows(self, index: QModelIndex) -> list[int]:
+    def selected_rows(self, index: QModelIndex) -> list[int]:
         """The lines selected in the edited cell's column (or whole), the cell's among them."""
         rows = {
             i.row() for i in self.selectionModel().selectedIndexes() if i.column() == index.column()

@@ -159,6 +159,10 @@ PASTE_ORDER = [
     CURRENCY_AMOUNT,
     AMOUNT,
     VAT,
+    EXPENSE,
+    ESC1,
+    ESC2,
+    ESC3,
     EXPENSE_MONTH,
 ]
 

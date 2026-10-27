@@ -35,7 +35,7 @@ class ClipboardPart(InventoryDocumentForm):
         self.error.hide()
         current = self.table.currentIndex()
         row, column = (current.row(), current.column()) if current.isValid() else (0, 0)
-        result = self.model.paste(text, row, column, self._shown)
+        result = self._paste_into(text, row, column)
         problems = list(result.errors)
         if result.unknown:
             try:
@@ -52,6 +52,24 @@ class ClipboardPart(InventoryDocumentForm):
                 "\n".join(problems[:6]) + (f"\n{tr('и ещё {n}', n=more)}" if more > 0 else "")
             )
         self.s.notify(tr("Вставлено строк: {n}", n=result.rows))
+
+    def _paste_into(self, text: str, row: int, column: int) -> InventoryPaste:
+        """The lines pasted from `row`; one value copied (a cost item) goes into every
+        line selected in the column, as in Excel."""
+        current = self.model.index(row, column)
+        value = text.strip("\r\n")
+        one = "\t" not in value and "\n" not in value  # one cell copied, not lines
+        rows = self.table.selected_rows(current) if one else []
+        if len(rows) < 2:
+            return self.model.paste(text, row, column, self._shown)
+        result = InventoryPaste()
+        for target in rows:
+            part = self.model.paste(text, target, column, self._shown)
+            result.errors += part.errors
+            result.unknown += part.unknown
+            result.units.update(part.units)
+        result.rows = len(rows)
+        return result
 
     def _add_unknown(self, result: InventoryPaste) -> bool:
         """Add the new items, warehouses and subconto in one go and put them in place."""

@@ -1,5 +1,6 @@
 """One value for many lines of a purchase: an account chosen on one service line goes to
-the others still without one (ten lines of one e-qaimə for one expense are typed once);
+the others still without one, a cost item to the lines of that account without one (ten
+lines of one e-qaimə for one expense are typed once);
 a value picked with several lines selected goes to all of them; a fixed asset (an
 intangible) of each line is its own element, named by the line (D172)."""
 
@@ -22,14 +23,31 @@ MANY_KEYS = LIST_KEYS - {ITEM, KIND}
 
 class LineSpread(InventoryLinesBase):
     def spread_expense_account(self, row_index: int) -> None:
-        """The line's account to the service lines without an account; its subconto is
-        not taken along — each line's element is its own."""
+        """The line's account to the service lines without an account."""
         source = self.rows[row_index]
         if source.expense_account_id is None:
             return
         for index, row in enumerate(self.rows):
             if index != row_index and row.expense_account_id is None and self.is_service(index):
                 row.expense_account_id = source.expense_account_id
+        self._all_rows_changed()
+
+    def spread_expense_subconto(self, row_index: int, position: int) -> None:
+        """A category (a cost item) of the line to the lines of the same account where it
+        is empty; an asset (`PER_LINE_KINDS`) is each line's own and is not spread."""
+        source = self.rows[row_index]
+        value = source.expense_subconto[position]
+        key = f"esc{position + 1}"
+        if source.expense_account_id is None or value is None or self.is_per_line(row_index, key):
+            return
+        for index, row in enumerate(self.rows):
+            if (
+                index != row_index
+                and self.is_service(index)
+                and row.expense_account_id == source.expense_account_id
+                and row.expense_subconto[position] is None
+            ):
+                row.expense_subconto[position] = value
         self._all_rows_changed()
 
     def set_on_rows(self, rows: list[int], key: str, value: object, like: int) -> None:

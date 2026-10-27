@@ -284,6 +284,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineSpread):
         self._subconto_of(self.rows[row_index], key)[int(key[-1]) - 1] = value
         if key in SC_KEYS:
             self._remember_expense(row_index)
+        if key in ESC_KEYS:
+            self.spread_expense_subconto(row_index, int(key[-1]) - 1)
 
     def _kind(self, row_index: int) -> int:
         return SERVICE if self.is_service(row_index) else GOODS
