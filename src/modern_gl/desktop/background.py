@@ -10,17 +10,21 @@ journal and a year's card take 1–2.5 s; at the demo year's ~8 000 every report
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from contextlib import suppress
 from pathlib import Path
+from traceback import format_exception
 from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
 from shiboken6 import isValid
 
+from modern_gl.desktop import crash_dialog
 from modern_gl.domain.errors import LedgerError
 from modern_gl.infrastructure.db import Connection, connect_reader
 
+logger = logging.getLogger(__name__)
 LARGE = 20_000  # postings of a company: from here on, reports are read in the background
 
 Job = Callable[[Connection], Any]
@@ -50,6 +54,9 @@ class _Worker(QRunnable):
             result: object = self.job(conn)
             signal = self.relay.done
         except LedgerError as e:
+            result, signal = e, self.relay.failed
+        except Exception as e:  # a failure of the program: the window must not go with it
+            logger.exception("background read failed")
             result, signal = e, self.relay.failed
         finally:
             conn.close()
@@ -112,8 +119,13 @@ class Background:
 
     def _failed(self, key: int, run: int, error: object) -> None:
         handler = self._take(key, run)
-        if handler is not None:
+        if handler is None:
+            return
+        if isinstance(error, LedgerError):
             handler[1](error)
+        elif isinstance(error, BaseException):
+            # not the page's business: the user sees what happened, the page stays
+            crash_dialog.show_crash("".join(format_exception(error)))
 
     def wait(self) -> None:
         """Every queued read finished (their results still go through the event loop):

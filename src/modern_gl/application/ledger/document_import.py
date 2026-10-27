@@ -125,16 +125,15 @@ class DocumentImportCommands(DocumentCommands):
     def _import_one(
         self, index: int, outcome: ImportOutcome, create: Callable[[], int]
     ) -> int | None:
-        """One document under its own savepoint: its problem is noted and undone."""
-        self.conn.execute("SAVEPOINT import_document")
-        doc_id = None
+        """One document in a transaction of its own (a savepoint inside the import's):
+        its problem is noted and undone."""
         try:
-            doc_id = create()
-            outcome.ids.append(doc_id)
+            with transaction(self.conn):
+                doc_id = create()
         except LedgerError as e:
-            self.conn.execute("ROLLBACK TO import_document")
             outcome.errors.append((index, str(e)))
-        self.conn.execute("RELEASE import_document")
+            return None
+        outcome.ids.append(doc_id)
         return doc_id
 
     def _mark_source(self, company_id: int, doc_id: int, source: str, external_id: str) -> None:

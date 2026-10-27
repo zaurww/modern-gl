@@ -10,6 +10,7 @@ import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
 
 from modern_gl.domain.errors import LedgerError, ReadOnlyError
@@ -19,6 +20,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 # The mark of a company file in the SQLite header ('MGL1', set by migration 0046); 0 is an
 # empty or an older file of ours, anything else is another program's database.
 APPLICATION_ID = int.from_bytes(b"MGL1", "big")
+BUSY_TIMEOUT = 5.0  # seconds a connection waits for another program's lock on the file
 
 # A row is read both by name (row["code"]) and by position (row[0]) and has .keys()
 Connection = sqlite3.Connection
@@ -33,18 +35,37 @@ class NewerFileError(LedgerError):
     leaves it untouched (D148)."""
 
 
-def connect(path: str | Path) -> sqlite3.Connection:
-    """Open a ledger database and bring its schema up to date."""
+class BusyError(LedgerError):
+    """Another program holds the file's write lock longer than BUSY_TIMEOUT."""
+
+
+@contextmanager
+def _busy_is_an_error_for_the_user() -> Iterator[None]:
+    try:
+        yield
+    except sqlite3.OperationalError as e:
+        if "locked" not in str(e) and "busy" not in str(e):
+            raise
+        raise BusyError(
+            tr("Файл компании занят другой программой — закройте её и повторите")
+        ) from e
+
+
+def connect(path: str | Path, timeout: float = BUSY_TIMEOUT) -> sqlite3.Connection:
+    """Open a ledger database and bring its schema up to date. A file another program
+    keeps locked for longer than `timeout` is a BusyError, with a message for the user."""
     # isolation_level=None: no implicit transactions, we open them explicitly.
-    conn = sqlite3.connect(path, isolation_level=None)
+    conn = sqlite3.connect(path, isolation_level=None, timeout=timeout)
     conn.row_factory = sqlite3.Row
     try:
-        _check_application_id(conn)  # before anything touches another program's file
-        _check_not_newer(conn, path)  # before WAL or a migration writes to it
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
-        migrate(conn)
+        with _busy_is_an_error_for_the_user():
+            _check_application_id(conn)  # before anything touches another program's file
+            _check_not_newer(conn, path)  # before a migration writes to it
+            conn.execute("PRAGMA foreign_keys = ON")
+            migrate(conn)
+            # after the migrations: one that fails leaves the file's header as it was
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
     except BaseException:
         conn.close()
         raise
@@ -52,8 +73,16 @@ def connect(path: str | Path) -> sqlite3.Connection:
 
 
 def _check_application_id(conn: sqlite3.Connection) -> None:
+    """Another program's database is refused before a migration touches it. 0 is what
+    any program leaves by default, so it passes only for a new (empty) file or a file of
+    ours written before 0046 — one with the companies table."""
     found = conn.execute("PRAGMA application_id").fetchone()[0]
-    if found not in (0, APPLICATION_ID):
+    if found == APPLICATION_ID:
+        return
+    tables = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+    ).fetchall()
+    if found != 0 or (tables and ("companies",) not in [tuple(t) for t in tables]):
         raise sqlite3.DatabaseError(tr("это не файл компании Modern GL"))
 
 
@@ -85,7 +114,7 @@ def close(conn: sqlite3.Connection) -> None:
 def connect_reader(path: str | Path) -> sqlite3.Connection:
     """A second connection to an open company's file, for reading in a worker thread
     (desktop.background): read-only, no migration; WAL lets it read beside the writer."""
-    conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True, timeout=BUSY_TIMEOUT)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -108,6 +137,7 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
         if found != ["ok"]:
             raise sqlite3.DatabaseError("; ".join(found))
         conn.row_factory = sqlite3.Row
+        _check_application_id(conn)
         _check_not_newer(conn, path)
         conn.execute("PRAGMA foreign_keys = ON")
         migrate(conn)
@@ -124,22 +154,53 @@ def is_read_only(conn: sqlite3.Connection) -> bool:
     return bool(conn.execute("PRAGMA query_only").fetchone()[0])
 
 
+_SAVEPOINTS = count(1)  # names of nested blocks: unique, so an inner one never hides an outer
+
+
 @contextmanager
 def transaction(conn: sqlite3.Connection) -> Iterator[None]:
-    """Run the block atomically. Joins the outer transaction if one is already open.
+    """Run the block atomically. Inside an open transaction the block is a savepoint of
+    its own (D-new): its failure undoes the block only, the outer transaction goes on —
+    a loop that keeps the documents that posted and reports the ones that did not.
     A company open for viewing refuses at once, with a message for the user."""
     if conn.in_transaction:
-        yield
+        with _savepoint(conn, undo=False):
+            yield
         return
     if is_read_only(conn):
         raise ReadOnlyError(tr("Компания открыта только для просмотра — изменения не сохраняются"))
-    conn.execute("BEGIN IMMEDIATE")
+    with _busy_is_an_error_for_the_user():
+        conn.execute("BEGIN IMMEDIATE")
     try:
         yield
     except BaseException:
         conn.execute("ROLLBACK")
         raise
-    conn.execute("COMMIT")
+    with _busy_is_an_error_for_the_user():
+        conn.execute("COMMIT")
+
+
+@contextmanager
+def dry_run(conn: sqlite3.Connection) -> Iterator[None]:
+    """Run the block and undo it whatever happens: a preview that is the real thing
+    rolled back, so the two cannot differ. Joins an open transaction like `transaction`."""
+    with transaction(conn), _savepoint(conn, undo=True):
+        yield
+
+
+@contextmanager
+def _savepoint(conn: sqlite3.Connection, undo: bool) -> Iterator[None]:
+    name = f"sp_{next(_SAVEPOINTS)}"
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        yield
+    except BaseException:
+        conn.execute(f"ROLLBACK TO {name}")
+        conn.execute(f"RELEASE {name}")
+        raise
+    if undo:
+        conn.execute(f"ROLLBACK TO {name}")
+    conn.execute(f"RELEASE {name}")
 
 
 def insert(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) -> int:

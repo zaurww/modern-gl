@@ -20,10 +20,11 @@ from modern_gl import demo_year, i18n
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
 from modern_gl.demo_data import create_demo_company
-from modern_gl.desktop import qt_texts, theme
+from modern_gl.desktop import crash_dialog, qt_texts, theme
 from modern_gl.desktop.backups_dialog import MIRROR_SETTING
 from modern_gl.desktop.cell_editing import select_whole_on_entry
 from modern_gl.desktop.main_window import MainWindow
+from modern_gl.infrastructure import logs
 from modern_gl.infrastructure.db import connect
 
 
@@ -55,6 +56,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Modern GL")
     app.setOrganizationName("ModernGL")
+    crash_dialog.install()  # before anything else can fail
     settings = QSettings()
     theme.use_theme(str(settings.value("theme", theme.DEFAULT_THEME)))
     theme.apply(app)
@@ -67,6 +69,7 @@ def main() -> int:
     if "--data" in args and args.index("--data") + 1 < len(args):
         settings.setValue("data_dir", args[args.index("--data") + 1])
     folder = Path(str(settings.value("data_dir", "") or default_folder()))
+    logs.start(folder)
     files = cast(list[str], settings.value("company_files", [], type=list))
     mirror = str(settings.value(MIRROR_SETTING, "") or "")
     workspace = Workspace(folder, files, mirror or None)

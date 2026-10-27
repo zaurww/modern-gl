@@ -9,7 +9,15 @@ import sqlite3
 import pytest
 
 from modern_gl.demo_data import create_demo_company
-from modern_gl.infrastructure.db import APPLICATION_ID, MIGRATIONS_DIR, close, connect
+from modern_gl.infrastructure.db import (
+    APPLICATION_ID,
+    MIGRATIONS_DIR,
+    BusyError,
+    close,
+    connect,
+    open_snapshot,
+    transaction,
+)
 
 # A migration is never edited once written (CLAUDE.md); a new one is added here with its hash.
 FROZEN = {
@@ -307,8 +315,68 @@ def test_a_company_file_declares_itself(tmp_path):
     assert foreign.with_name("other.gl-wal").exists() is False  # the file was not touched
 
 
+def test_another_programs_file_with_the_default_id_is_refused(tmp_path):
+    """application_id 0 is what every other program leaves: a file with tables of its
+    own is not ours and stays byte for byte as it was (no migration is run on it)."""
+    foreign = tmp_path / "notes.gl"
+    with sqlite3.connect(foreign) as other:
+        other.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, text TEXT)")
+        other.execute("INSERT INTO notes (text) VALUES ('hello')")
+    other.close()
+    before = hashlib.sha256(foreign.read_bytes()).hexdigest()
+    with pytest.raises(sqlite3.DatabaseError, match="не файл компании"):
+        connect(foreign)
+    with pytest.raises(sqlite3.DatabaseError, match="не файл компании"):
+        open_snapshot(foreign)
+    assert hashlib.sha256(foreign.read_bytes()).hexdigest() == before
+    assert not foreign.with_name("notes.gl-wal").exists()
+
+
+def test_an_empty_file_and_an_old_file_of_ours_are_accepted(tmp_path):
+    empty = tmp_path / "new.gl"
+    close(connect(empty))  # a new file: no tables, application_id 0
+    old = tmp_path / "old.gl"
+    with sqlite3.connect(old) as ours:  # before 0046: our tables, application_id 0
+        ours.execute("CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+    ours.close()
+    with pytest.raises(sqlite3.DatabaseError, match="already exists"):
+        connect(old)  # the mark is accepted; the schema has no version: 0001 fails on it
+
+
 def test_demo_company_is_consistent(ledger):
     create_demo_company(ledger)
     conn = ledger.conn
     assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+
+def test_a_locked_file_is_told_in_the_users_words(tmp_path):
+    """Another connection (another program) keeps the write lock: after the timeout the
+    write is refused with a message for the user, not with a traceback (D-new)."""
+    path = tmp_path / "shared.gl"
+    first = connect(path)
+    second = connect(path, timeout=0.2)
+    try:
+        first.execute("BEGIN IMMEDIATE")
+        with pytest.raises(BusyError, match="занят другой программой"), transaction(second):
+            pass
+        first.execute("ROLLBACK")
+        with transaction(second):  # free again
+            pass
+    finally:
+        close(first)
+        close(second)
+
+
+def test_a_failed_update_leaves_the_file_header_as_it_was(tmp_path):
+    """The move to WAL comes after the migrations: a file whose update failed is byte for
+    byte what the older program wrote («файл не изменён» is true)."""
+    path = tmp_path / "old.gl"
+    with sqlite3.connect(path) as ours:
+        ours.execute("CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+    ours.close()
+    before = hashlib.sha256(path.read_bytes()).hexdigest()
+    with pytest.raises(sqlite3.DatabaseError, match="already exists"):
+        connect(path)
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == before
+    assert not path.with_name("old.gl-wal").exists()

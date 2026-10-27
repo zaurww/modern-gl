@@ -6,6 +6,7 @@ Figures — the golden example of conftest (hand-calculated there): February 202
 
 import io
 import json
+import re
 
 import pytest
 
@@ -188,3 +189,15 @@ def test_chart_says_current_or_long_term(server, folder):
         a["code"]: a["term"] for a in call(server, "chart_of_accounts", company="alfa")["accounts"]
     }
     assert (terms["101"], terms["102"], terms["201"]) == ("long_term", "current", "")
+
+
+def test_the_server_tells_the_programs_version():
+    """One version, pyproject.toml's, as the package is installed (not a copy here)."""
+    from modern_gl.assistant.server import program_version
+
+    told = program_version()
+    assert told == "0.0.0" or re.fullmatch(r"\d+\.\d+\.\d+", told), told
+    info = Server("modern-gl", told, []).handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}
+    )
+    assert info["result"]["serverInfo"] == {"name": "modern-gl", "version": told}

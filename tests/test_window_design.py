@@ -53,6 +53,7 @@ OTHER_DIALOGS = {
     "BatchCostDialog",
     "BatchPostDialog",
     "CommandPalette",
+    "CrashDialog",
     "ConversionAccountsDialog",
     "HistoryDialog",
     "InventorySettingsDialog",
