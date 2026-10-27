@@ -11,3 +11,6 @@ __pycache__/
 
 # worktrees of parallel sessions (D131)
 .claude/worktrees/
+coverage.xml
+.coverage
+.coverage.*

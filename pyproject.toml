@@ -17,6 +17,7 @@ dev = [
     "pytest-xdist>=3.8.0",
     "hypothesis>=6.170.12",
     "syrupy>=6.1.1",
+    "pytest-cov>=7.1.0",
 ]
 
 [build-system]
@@ -29,6 +30,13 @@ packages = ["src/modern_gl"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.coverage.run]
+source = ["src/modern_gl"]
+
+[tool.coverage.report]
+# the measured figure minus 3 (docs/history/sessions/2026-10-27-audit-tooling.md)
+fail_under = 87
 
 [tool.pyright]
 include = ["src"]
