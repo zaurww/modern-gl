@@ -1,0 +1,16 @@
+# Локальные проверки перед коммитом — те же, что в CI (docs/CODE_QUALITY.md, раздел 1).
+# Подключение: `uv run --with pre-commit pre-commit install` (или `pipx run pre-commit install`).
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        types: [python]
+        pass_filenames: false
