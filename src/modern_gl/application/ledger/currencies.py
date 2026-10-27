@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 
-from modern_gl.application.common import insert
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.domain.currency import check_code, currency_name
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import IntegrityError, transaction
+from modern_gl.infrastructure.db import IntegrityError, insert, transaction
 
 
 class CurrencyCommands(LedgerBase):

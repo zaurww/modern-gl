@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import date
 from decimal import Decimal
 
-from modern_gl.application.common import insert, now, pad_subconto
+from modern_gl.application.common import now, pad_subconto
 from modern_gl.application.inventory.amounts import typed_rate
 from modern_gl.application.inventory.base import InventoryBase
 from modern_gl.application.inventory.model import (
@@ -18,12 +18,14 @@ from modern_gl.application.inventory.model import (
     LandedCostTarget,
     ReceiptLine,
     SaleLine,
+    StoredLine,
     TransferLine,
 )
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import EQAIME, KINDS, normalize_invoice
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import insert
 
 # the columns of a line a draft writes, in the order _insert_line gives their values
 LINE_COLUMNS = (
@@ -213,49 +215,27 @@ class DraftCommands(InventoryBase):
     def _draft_warehouse(self, company_id: int, warehouse_id: int | None) -> int | None:
         return None if warehouse_id is None else self._warehouse(company_id, warehouse_id)["id"]
 
-    def _insert_line(
-        self,
-        document_id: int,
-        company_id: int,
-        line_no: int,
-        item_id: int | None,
-        warehouse_id: int | None,
-        to_warehouse_id: int | None,
-        quantity: int,
-        amount: int,
-        inventory_amount: int,
-        expense_amount: int,
-        offset_account_id: int | None,
-        offset_subconto: Sequence[int | None],
-        source_receipt_line_id: int | None,
-        memo: str,
-        *,
-        line_id: int | None = None,
-        vat_amount: int = 0,
-        currency_amount: int | None = None,
-        cost_account_id: int | None = None,
-        cost_subconto: Sequence[int | None] = (),
-        expense_date: str | None = None,
-    ) -> int:
+    def _insert_line(self, document_id: int, company_id: int, line: StoredLine) -> int:
         values = (
-            line_no,
-            item_id,
-            warehouse_id,
-            to_warehouse_id,
-            quantity,
-            amount,
-            inventory_amount,
-            expense_amount,
-            offset_account_id,
-            *pad_subconto(offset_subconto),
-            source_receipt_line_id,
-            memo,
-            vat_amount,
-            currency_amount,
-            cost_account_id,
-            *pad_subconto(cost_subconto),
-            expense_date,
+            line.line_no,
+            line.item_id,
+            line.warehouse_id,
+            line.to_warehouse_id,
+            line.quantity,
+            line.amount,
+            line.inventory_amount,
+            line.expense_amount,
+            line.offset_account_id,
+            *pad_subconto(line.offset_subconto),
+            line.source_receipt_line_id,
+            line.memo,
+            line.vat_amount,
+            line.currency_amount,
+            line.cost_account_id,
+            *pad_subconto(line.cost_subconto),
+            line.expense_date,
         )
+        line_id = line.line_id
         if line_id is not None:  # an edited line keeps its id: landed cost refers to it
             updated = self.conn.execute(
                 f"UPDATE inventory_lines SET {', '.join(f'{c} = ?' for c in LINE_COLUMNS)} "

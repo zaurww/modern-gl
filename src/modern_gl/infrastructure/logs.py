@@ -24,7 +24,7 @@ _crash_file = None  # kept open: faulthandler writes to its descriptor
 def start(folder: Path, level: int = logging.INFO) -> Path:
     """Log into `folder/log/`; returns the log file's path. A folder that cannot be written
     (a read-only share) leaves the program without a log file, not without the program."""
-    global _crash_file
+    global _crash_file  # noqa: PLW0603 kept open for faulthandler for the whole run
     log_dir = Path(folder) / "log"
     try:
         log_dir.mkdir(parents=True, exist_ok=True)

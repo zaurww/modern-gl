@@ -233,7 +233,7 @@ def set_theme(name: str, dark: bool = False) -> str:
     """Switch the palette to a theme (an unknown name: the default); returns its name.
     `dark` — the system is dark: «as the system» takes the dark theme.
     The look changes once apply() runs and the pages are built again."""
-    global _current, _shown
+    global _current, _shown  # noqa: PLW0603 the theme is the process's state
     _current = name if name in THEMES or name == SYSTEM_THEME else DEFAULT_THEME
     _shown = SYSTEM_PAIR[dark] if _current == SYSTEM_THEME else _current
     base, changes = Palette(), THEMES[_shown][1]

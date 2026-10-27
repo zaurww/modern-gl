@@ -5,13 +5,12 @@ end by the bank. Neither changes a posting: lines are read from postings."""
 from __future__ import annotations
 
 from modern_gl.application.bank.accounts import ACCOUNT_KINDS
-from modern_gl.application.common import insert
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import insert, transaction
 
 KIND_CODES = {kind for kind, _ in ACCOUNT_KINDS}
 
@@ -48,7 +47,7 @@ class BankStatementCommands(ModuleBase):
             )
         return value_id
 
-    def set_bank_account(
+    def set_bank_account(  # noqa: PLR0913 the bank account form's fields, keyword-only
         self,
         company_id: int,
         account_id: int,

@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from modern_gl.application.common import insert, pad_subconto
+from modern_gl.application.common import pad_subconto
 from modern_gl.application.ledger.base import LedgerBase
 from modern_gl.application.ledger.inputs import TemplateLine
 from modern_gl.domain import formula as formulas
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import insert, transaction
 
 
 class TemplateCommands(LedgerBase):

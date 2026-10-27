@@ -8,7 +8,13 @@ from datetime import date
 
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.inventory.amounts import draft_quantity, money
-from modern_gl.application.inventory.model import INCOMING_TYPES, IssueLine, TransferLine
+from modern_gl.application.inventory.model import (
+    INCOMING_TYPES,
+    IssueLine,
+    Movement,
+    StoredLine,
+    TransferLine,
+)
 from modern_gl.application.inventory.receipts import ReceiptDraftCommands
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.errors import ValidationError
@@ -127,19 +133,16 @@ class MovementCommands(ReceiptDraftCommands):
             self._insert_line(
                 document_id,
                 company_id,
-                line_no,
-                item["id"],
-                warehouse_id,
-                None,
-                quantity,
-                0,
-                0,
-                0,
-                source.expense_account_id,
-                expense_sc,
-                None,
-                source.memo.strip(),
-                line_id=source.line_id,
+                StoredLine(
+                    line_no,
+                    item["id"],
+                    warehouse_id,
+                    quantity,
+                    source.memo.strip(),
+                    offset_account_id=source.expense_account_id,
+                    offset_subconto=expense_sc,
+                    line_id=source.line_id,
+                ),
             )
 
     def _write_transfer_draft(
@@ -160,19 +163,15 @@ class MovementCommands(ReceiptDraftCommands):
             self._insert_line(
                 document_id,
                 company_id,
-                line_no,
-                item["id"],
-                from_warehouse_id,
-                to_warehouse_id,
-                quantity,
-                0,
-                0,
-                0,
-                None,
-                (),
-                None,
-                source.memo.strip(),
-                line_id=source.line_id,
+                StoredLine(
+                    line_no,
+                    item["id"],
+                    from_warehouse_id,
+                    quantity,
+                    source.memo.strip(),
+                    to_warehouse_id=to_warehouse_id,
+                    line_id=source.line_id,
+                ),
             )
 
     def _apply_line(self, company_id: int, doc: Row, line: Row) -> PostingInput:
@@ -213,11 +212,13 @@ class MovementCommands(ReceiptDraftCommands):
             doc["id"],
             line["id"],
             doc["doc_date"],
-            item["id"],
-            warehouse["id"],
-            "receipt" if doc["doc_type"] == "incoming" else doc["doc_type"],
-            line["quantity"],
-            amount,
+            Movement(
+                item["id"],
+                warehouse["id"],
+                "receipt" if doc["doc_type"] == "incoming" else doc["doc_type"],
+                line["quantity"],
+                amount,
+            ),
         )
         in_currency = doc["currency_id"] is not None and doc["doc_type"] == "receipt"
         return PostingInput(
@@ -249,11 +250,7 @@ class MovementCommands(ReceiptDraftCommands):
             doc["id"],
             line["id"],
             doc["doc_date"],
-            item["id"],
-            warehouse["id"],
-            "issue",
-            -line["quantity"],
-            -amount,
+            Movement(item["id"], warehouse["id"], "issue", -line["quantity"], -amount),
         )
         return PostingInput(
             line["offset_account_id"],
@@ -286,11 +283,9 @@ class MovementCommands(ReceiptDraftCommands):
                 doc["id"],
                 line["id"],
                 doc["doc_date"],
-                item["id"],
-                target["id"],
-                movement_type,
-                sign * line["quantity"],
-                sign * amount,
+                Movement(
+                    item["id"], target["id"], movement_type, sign * line["quantity"], sign * amount
+                ),
             )
         return PostingInput(
             item["inventory_account_id"],

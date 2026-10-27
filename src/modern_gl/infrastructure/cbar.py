@@ -26,7 +26,7 @@ TIMEOUT = 15  # seconds
 METALS = {"XAU", "XAG", "XPT", "XPD"}  # quoted per troy ounce, not currencies of payment
 
 
-class RatesUnavailable(LedgerError):
+class RatesUnavailableError(LedgerError):
     pass
 
 
@@ -34,9 +34,10 @@ def parse(xml: bytes) -> dict[str, tuple[int, int]]:
     """{code: (rate in millionths of a manat, nominal)} of the foreign currencies;
     bank metals (gold, silver…) are skipped."""
     try:
-        root = ET.fromstring(xml)
+        # cbar.az's answer over TLS; Python 3.12's expat refuses billion-laughs expansion
+        root = ET.fromstring(xml)  # noqa: S314
     except ET.ParseError as e:
-        raise RatesUnavailable(tr("ЦБА прислал не то, что ожидалось: {error}", error=e)) from e
+        raise RatesUnavailableError(tr("ЦБА прислал не то, что ожидалось: {error}", error=e)) from e
     rates = {}
     for valute in root.iter("Valute"):
         code = (valute.get("Code") or "").strip().upper()
@@ -50,23 +51,27 @@ def parse(xml: bytes) -> dict[str, tuple[int, int]]:
         except (TypeError, ValueError):
             continue
     if not rates:
-        raise RatesUnavailable(tr("в ответе ЦБА нет курсов валют"))
+        raise RatesUnavailableError(tr("в ответе ЦБА нет курсов валют"))
     return rates
 
 
 def fetch(day: date) -> dict[str, tuple[int, int]]:
-    """Download and parse the rates of a day. Raises RatesUnavailable with a message
+    """Download and parse the rates of a day. Raises RatesUnavailableError with a message
     for the user when there is no connection or no rates for that day."""
-    request = urllib.request.Request(URL.format(day=day), headers={"User-Agent": "Modern GL"})
+    url = URL.format(day=day)
+    if not url.startswith("https://"):
+        raise ValueError(f"cbar.az is reached only over https: {url}")
+    # S310: the scheme is checked just above
+    request = urllib.request.Request(url, headers={"User-Agent": "Modern GL"})  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:  # noqa: S310
             body = response.read()
     except urllib.error.HTTPError as e:
-        raise RatesUnavailable(
+        raise RatesUnavailableError(
             tr("ЦБА: нет курсов на {date} ({error})", date=f"{day:%d.%m.%Y}", error=e.code)
         ) from e
     except (urllib.error.URLError, TimeoutError, OSError) as e:
-        raise RatesUnavailable(
+        raise RatesUnavailableError(
             tr("Не удалось связаться с сайтом ЦБА (cbar.az): {error}", error=e)
         ) from e
     return parse(body)

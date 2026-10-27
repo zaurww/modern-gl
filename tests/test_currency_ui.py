@@ -160,7 +160,7 @@ def test_currencies_page_loads_cbar_rates_and_revalues(session, qtbot):
 
 
 def test_no_connection_is_reported_once(session, qtbot):
-    from modern_gl.infrastructure.cbar import RatesUnavailable
+    from modern_gl.infrastructure.cbar import RatesUnavailableError
 
     page = CurrenciesPage(session)
     qtbot.addWidget(page)
@@ -168,7 +168,7 @@ def test_no_connection_is_reported_once(session, qtbot):
 
     def offline(day):
         calls.append(day)
-        raise RatesUnavailable("Не удалось связаться с сайтом ЦБА (cbar.az): offline")
+        raise RatesUnavailableError("Не удалось связаться с сайтом ЦБА (cbar.az): offline")
 
     page.fetch = offline
     assert page.load_rates(date(2026, 3, 1), date(2026, 3, 10)) == 0

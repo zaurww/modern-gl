@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from fractions import Fraction
 
@@ -26,7 +27,7 @@ def test_to_minor(value, expected):
 
 @pytest.mark.parametrize("value", ["1.005", "abc", "", "NaN", "Infinity"])
 def test_to_minor_rejects(value):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=re.escape(value)):
         to_minor(value)
 
 

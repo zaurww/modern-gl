@@ -59,8 +59,7 @@ def write_xlsx(table: ReportTable, path: str | Path) -> None:
     from openpyxl.worksheet.properties import Outline
 
     book = Workbook()
-    sheet = book.active
-    assert sheet is not None
+    sheet = book.worksheets[0]  # a new book has one sheet
     sheet.title = sheet_name(table.title)
     level_column = table.leveled
     headers = [c.caption for c in table.columns] + ([tr("Уровень")] if level_column else [])

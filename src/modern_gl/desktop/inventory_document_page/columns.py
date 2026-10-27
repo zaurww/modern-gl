@@ -150,7 +150,7 @@ PASTE_ORDER = [
 ]
 
 
-class UnknownName(LookupError):
+class UnknownNameError(LookupError):
     """A pasted name that is not in its list yet: an item, a warehouse or a subconto."""
 
     def __init__(self, key: str, text: str, kind_id: int | None = None) -> None:

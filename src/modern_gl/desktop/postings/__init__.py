@@ -27,7 +27,7 @@ keyboard entry is not shifted.
 
 from __future__ import annotations
 
-from modern_gl.application.table_text import plain_number
+from modern_gl.application.table_text import header_names, plain_number
 from modern_gl.desktop.postings.columns import (
     AMOUNT,
     CT,
@@ -42,7 +42,6 @@ from modern_gl.desktop.postings.columns import (
     EntryHints,
     PostingRow,
     header_columns,
-    header_names,
 )
 from modern_gl.desktop.postings.model import PostingsModel
 from modern_gl.desktop.postings.table import PostingsDelegate, PostingsTable

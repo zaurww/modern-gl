@@ -64,7 +64,7 @@ class PortalLoginDialog(QDialog):
         top = QHBoxLayout()
         top.addWidget(hint, 1)
         reload = button(tr("Обновить страницу"), "flat")
-        reload.clicked.connect(lambda: self.view.reload())
+        reload.clicked.connect(self.view.reload)
         top.addWidget(reload)
         root.addLayout(top)
         self.state = QLabel(waiting_for(None, company))  # what the window waits for now

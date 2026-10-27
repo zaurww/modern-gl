@@ -23,7 +23,7 @@ from modern_gl.application.conversion.commands import (
     BANK_FEE_ITEM,
     EXCHANGE_DIFFERENCE,
     ConversionCommands,
-    MissingAccountRole,
+    MissingAccountRoleError,
 )
 
 
@@ -41,7 +41,7 @@ __all__ = [
     "ConversionInput",
     "ConversionModule",
     "ConversionSide",
-    "MissingAccountRole",
+    "MissingAccountRoleError",
     "bank_rate",
     "calculate",
     "fee_date",

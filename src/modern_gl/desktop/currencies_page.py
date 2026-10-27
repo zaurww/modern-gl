@@ -403,7 +403,7 @@ class CurrenciesPage(PageWidget):
                         loaded += 1
                 except LedgerError as e:
                     problems.append(str(e))
-                    if isinstance(e, cbar.RatesUnavailable) and "cbar.az" in str(e):
+                    if isinstance(e, cbar.RatesUnavailableError) and "cbar.az" in str(e):
                         break  # no connection: do not try every other day
                 day += timedelta(days=1)
         finally:

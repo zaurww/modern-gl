@@ -38,7 +38,7 @@ def _name_subconto(
     }
 
 
-def subconto_balance(
+def subconto_balance(  # noqa: PLR0913 the report's settings, as the other reports take them
     conn: Connection,
     company_id: int,
     account: int | str,

@@ -88,7 +88,7 @@ def adding_label(text: str) -> str:
 
 def names_it(label: str, text: str) -> bool:
     """The list item is the typed name itself (a counterparty's label adds its VÖEN)."""
-    return fold(label.split("  ·  ")[0]) == fold(text)
+    return fold(label.split("  ·  ", 1)[0]) == fold(text)
 
 
 def resolve_choice(choices: list[tuple[int, str]], text: str) -> int | None:

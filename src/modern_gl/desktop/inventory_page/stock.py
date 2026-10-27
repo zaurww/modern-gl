@@ -56,8 +56,8 @@ def grouped(balances: list[StockBalance]) -> list[StockBalance | StockGroup]:
     if not any(b.group for b in balances):
         return list(balances)
     rows: list[StockBalance | StockGroup] = []
-    for group, members in groupby(balances, key=lambda b: b.group):
-        members = list(members)
+    for group, grouped in groupby(balances, key=lambda b: b.group):
+        members = list(grouped)
         rows.append(StockGroup(group or tr("Без группы"), sum(b.amount for b in members)))
         rows.extend(members)
     return rows
@@ -83,7 +83,7 @@ class StockPart(InventoryForm):
             "",
             "",
             (
-                (tr("+ Товар"), lambda: self.add_item()),
+                (tr("+ Товар"), lambda: self.add_item()),  # noqa: PLW0108 late-bound: a test replaces it
                 (tr("+ Покупка"), lambda: self.operation("receipt")),
                 (tr("Начальные остатки"), lambda: self.operation("opening")),
             ),

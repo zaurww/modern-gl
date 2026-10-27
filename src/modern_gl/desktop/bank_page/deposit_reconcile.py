@@ -54,7 +54,7 @@ class DepositReconcileDialog(ImportWindow):
         self.place = place
         self.today = today or date.today()
         self.fetch = DepositFetch(self, session, sign_in, self.today)
-        self.fetch.progress.connect(lambda text: self.status.setText(text))
+        self.fetch.progress.connect(self.status.setText)
         self.fetch.loaded.connect(self._fetched)
         self.fetch.failed.connect(self._failed)
         self.fetched: DepositFetched | None = None

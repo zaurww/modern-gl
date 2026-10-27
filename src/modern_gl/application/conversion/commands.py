@@ -82,7 +82,7 @@ explain_owner(
 )
 
 
-class MissingAccountRole(ValidationError):
+class MissingAccountRoleError(ValidationError):
     """No account for a role of conversions: the form asks for it on the spot."""
 
     def __init__(self, role: str, message: str) -> None:
@@ -400,7 +400,7 @@ class ConversionCommands(ModuleBase):
     def _role_account(self, company_id: int, role: str, missing: str) -> Row:
         account_id = self.ledger.account_role(company_id, role)
         if account_id is None:
-            raise MissingAccountRole(
+            raise MissingAccountRoleError(
                 role, missing + ". " + tr("Выберите его в «Счета конвертации» (меню «⋯»).")
             )
         return self._account(company_id, account_id)

@@ -11,6 +11,7 @@ Revaluation on 31.03 at 1.72:
 
 from __future__ import annotations
 
+import re
 from fractions import Fraction
 
 import pytest
@@ -48,7 +49,7 @@ def test_rates_are_exact():
     assert to_base(12_345, unit_rate(1_700_000)) == 20_987
     assert to_base(-12_345, unit_rate(1_700_000)) == -20_987
     for bad in ("0", "-1.7", "abc", "1.1234567"):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=re.escape(bad)):
             parse_rate(bad)
 
 
@@ -235,7 +236,7 @@ def test_cbar_rates_are_parsed_without_metals():
         "EUR": (1_984_500, 1),
         "JPY": (1_130_100, 100),
     }
-    with pytest.raises(cbar.RatesUnavailable):
+    with pytest.raises(cbar.RatesUnavailableError):
         cbar.parse(b"<html>not found</html>")
 
 

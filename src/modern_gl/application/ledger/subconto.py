@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from modern_gl.application.common import insert, where_used
+from modern_gl.application.common import where_used
 from modern_gl.application.ledger.base import LedgerBase, account_label
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import fold, tr
-from modern_gl.infrastructure.db import IntegrityError, Row, transaction
+from modern_gl.infrastructure.db import IntegrityError, Row, insert, transaction
 
 
 class SubcontoCommands(LedgerBase):

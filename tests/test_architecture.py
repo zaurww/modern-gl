@@ -304,3 +304,61 @@ def test_every_package_has_a_layer():
     names = {p.stem if p.is_file() else p.name for p in SRC.iterdir() if not p.name.startswith("_")}
     known = {name for names in LAYERS for name in names}
     assert names - known == set(), f"не в LAYERS: {sorted(names - known)}"
+
+
+# SQL is built only from identifiers the code itself names; values go as `?` parameters.
+# Ruff's S608 cannot tell the two apart and is off (pyproject.toml); this guards the direct
+# way text could reach SQL: a str (or unannotated) parameter put into an SQL f-string.
+# A parameter that only ever carries an identifier is listed here with whom it comes from.
+SQL_WORDS = re.compile(r"\b(SELECT|INSERT|UPDATE|DELETE|WHERE)\b")
+IDENTIFIER_PARAMS: dict[tuple[str, str, str], str] = {
+    ("application/books.py", "docs_cte", "columns"): "columns of the CTE, from the callers",
+    ("application/books.py", "docs_cte", "status"): "a quoted status constant",
+    ("application/inventory/landed_cost.py", "allocated_sql", "company"): "a table alias",
+    ("application/inventory/landed_cost.py", "allocated_sql", "document"): "a table alias",
+    ("application/inventory/landed_cost.py", "allocated_sql", "line"): "a table alias",
+    ("application/ledger/account_types.py", "_with_followers", "same"): "a column condition",
+    ("application/ledger/module.py", "rebuild_each", "table"): "a module's table name",
+    ("application/ledger/validation.py", "_rows_by_id", "table"): "a table name constant",
+}
+
+
+def _text_params(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Parameters that may carry text: annotated with str, or not annotated."""
+    a = fn.args
+    found = set()
+    for arg in (*a.posonlyargs, *a.args, *a.kwonlyargs):
+        note = ast.unparse(arg.annotation) if arg.annotation else ""
+        if arg.arg not in ("self", "cls") and (not note or re.search(r"\bstr\b", note)):
+            found.add(arg.arg)
+    return found
+
+
+def _params_in_sql(path: Path) -> set[tuple[str, str, str]]:
+    found = set()
+    for fn in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        params = _text_params(fn)
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.JoinedStr):
+                continue
+            text = "".join(v.value for v in node.values if isinstance(v, ast.Constant))
+            if not SQL_WORDS.search(text):
+                continue
+            for value in node.values:
+                if isinstance(value, ast.FormattedValue):
+                    names = {n.id for n in ast.walk(value.value) if isinstance(n, ast.Name)}
+                    found |= {(rel(path), fn.name, p) for p in names & params}
+    return found
+
+
+def test_sql_takes_values_as_parameters_not_text():
+    found = set().union(*(_params_in_sql(p) for p in files()))
+    new = found - IDENTIFIER_PARAMS.keys()
+    assert not new, (
+        f"текстовый параметр функции вставлен в SQL: {sorted(new)} — значение передайте "
+        "параметром `?`; если это имя столбца или таблицы из кода — внесите в IDENTIFIER_PARAMS"
+    )
+    gone = IDENTIFIER_PARAMS.keys() - found
+    assert not gone, f"уберите из IDENTIFIER_PARAMS: {sorted(gone)}"

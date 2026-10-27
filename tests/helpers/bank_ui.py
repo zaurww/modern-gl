@@ -104,5 +104,5 @@ def shown_page(qtbot, session: Session) -> BankOperationPage:
     page.show()
     qtbot.waitExposed(page)
     page.activateWindow()
-    qtbot.waitUntil(lambda: page.counterparty_edit.hasFocus())
+    qtbot.waitUntil(page.counterparty_edit.hasFocus)
     return page

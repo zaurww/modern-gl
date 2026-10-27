@@ -9,7 +9,7 @@ from datetime import date
 from modern_gl.application.common import fill_subconto
 from modern_gl.application.inventory.amounts import format_quantity, money
 from modern_gl.application.inventory.drafts import DraftCommands
-from modern_gl.application.inventory.model import INCOMING_SQL
+from modern_gl.application.inventory.model import INCOMING_SQL, Movement
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.dates import iso_date
@@ -40,12 +40,10 @@ class StockCommands(DraftCommands):
         document_id: int,
         line_id: int,
         doc_date: date | str,
-        item_id: int,
-        warehouse_id: int,
-        movement_type: str,
-        quantity: int,
-        amount: int,
+        movement: Movement,
     ) -> None:
+        item_id, warehouse_id = movement.item_id, movement.warehouse_id
+        quantity, amount = movement.quantity, movement.amount
         self.conn.execute(
             "INSERT INTO stock_movements (company_id, document_id, line_id, doc_date, item_id, "
             "warehouse_id, movement_type, quantity, amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -56,7 +54,7 @@ class StockCommands(DraftCommands):
                 iso_date(doc_date),
                 item_id,
                 warehouse_id,
-                movement_type,
+                movement.movement_type,
                 quantity,
                 amount,
             ),

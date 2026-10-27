@@ -487,7 +487,7 @@ def test_a_name_nothing_is_called_stays_in_the_field(qtbot, session):
     typed("xyz")
     key(qtbot, Qt.Key.Key_Return)
     assert page.kind.hasFocus() and page.kind.currentData() == SUPPLIER
-    qtbot.waitUntil(lambda: page.error.isVisible())
+    qtbot.waitUntil(page.error.isVisible)
     assert page.error.text() == "«xyz» нет в списке"
 
 
@@ -684,7 +684,7 @@ def test_rates_not_loaded_leave_the_note_and_tell_why(qtbot, session):
     """One «Загрузить курс ЦБА» for the document, the bank operation and the conversion
     (desktop/rate_note): an error is shown on the form, no toast; then a toast with how
     many rates came."""
-    from modern_gl.infrastructure.cbar import RatesUnavailable
+    from modern_gl.infrastructure.cbar import RatesUnavailableError
 
     page = new_page(qtbot, session)
     choose(page.account, "52  Валютные счета")
@@ -692,7 +692,7 @@ def test_rates_not_loaded_leave_the_note_and_tell_why(qtbot, session):
     session.notify = told.append
 
     def unavailable(day):
-        raise RatesUnavailable("cbar.az не отвечает")
+        raise RatesUnavailableError("cbar.az не отвечает")
 
     session.fetch_rates = unavailable
     page.load_rates()

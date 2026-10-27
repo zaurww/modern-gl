@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from modern_gl.application.common import insert, where_used
+from modern_gl.application.common import where_used
 from modern_gl.application.inventory.base import InventoryBase
 from modern_gl.application.inventory.model import INCOMING_REASONS, QUANTITY_SCALE, UsualUnit
 from modern_gl.domain.accounts import FX_GAIN
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import IntegrityError, transaction
+from modern_gl.infrastructure.db import IntegrityError, insert, transaction
 
 
 class CatalogCommands(InventoryBase):

@@ -45,7 +45,7 @@ from modern_gl.desktop.postings.columns import (
     MEMO,
     RATE,
     EntryHints,
-    UnknownValue,
+    UnknownValueError,
     column_role,
 )
 from modern_gl.desktop.postings.model import PostingsModel
@@ -163,7 +163,7 @@ class PostingsDelegate(QStyledItemDelegate):
             return
         try:
             value = model.parse(index.row(), index.column(), editor.text())
-        except UnknownValue as e:
+        except UnknownValueError as e:
             if editor.property("gl_add") and self.add_value is not None:
                 owner = model.owner_at(index.row(), index.column())
                 model.setData(index, self.add_value(e.kind_id, e.text, owner))

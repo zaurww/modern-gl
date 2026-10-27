@@ -161,6 +161,42 @@ class TransferLine:
 
 
 @dataclass(frozen=True)
+class StoredLine:
+    """A row of `inventory_lines` as a draft writes it (`_insert_line`); `line_id` — an
+    edited line keeps its id."""
+
+    line_no: int
+    item_id: int | None
+    warehouse_id: int | None
+    quantity: int
+    memo: str = ""
+    to_warehouse_id: int | None = None
+    amount: int = 0
+    inventory_amount: int = 0
+    expense_amount: int = 0
+    offset_account_id: int | None = None
+    offset_subconto: Sequence[int | None] = ()
+    source_receipt_line_id: int | None = None
+    line_id: int | None = None
+    vat_amount: int = 0
+    currency_amount: int | None = None
+    cost_account_id: int | None = None
+    cost_subconto: Sequence[int | None] = ()
+    expense_date: str | None = None
+
+
+@dataclass(frozen=True)
+class Movement:
+    """What a posted line moves: a row of `stock_movements` (`_insert_movement`)."""
+
+    item_id: int
+    warehouse_id: int
+    movement_type: str
+    quantity: int
+    amount: int
+
+
+@dataclass(frozen=True)
 class LandedCostTarget:
     """A receipt line of the batch; `amount` is its share in the manual allocation."""
 
