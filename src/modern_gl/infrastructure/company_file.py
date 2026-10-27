@@ -56,6 +56,8 @@ def open_company(path: Path) -> tuple[Connection, int]:
 
 
 def first_company(conn: Connection, path: Path) -> int:
+    """The id of the oldest company in an open file; closes the connection and raises
+    DatabaseError when the file has none."""
     row = conn.execute("SELECT id FROM companies ORDER BY id LIMIT 1").fetchone()
     if row is None:
         conn.close()
@@ -139,8 +141,10 @@ NETWORK_FS = {
 }
 NETWORK_FUSE = ("sshfs", "rclone", "s3fs", "davfs", "gvfs", "glusterfs", "onedriver", "smb")
 # a folder a sync client keeps in step with a cloud: its name in the path
-CLOUD_FOLDERS = ("dropbox", "google drive", "googledrive", "my drive", "icloud drive")
-CLOUD_FOLDERS += ("iclouddrive", "mobile documents", "cloudstorage", "yandex.disk", "yandexdisk")
+CLOUD_FOLDERS = (
+    *("dropbox", "google drive", "googledrive", "my drive", "icloud drive"),
+    *("iclouddrive", "mobile documents", "cloudstorage", "yandex.disk", "yandexdisk"),
+)
 DRIVE_REMOTE = 4  # GetDriveTypeW: a network drive
 
 
@@ -209,12 +213,15 @@ class FileInUseError(LedgerError):
 
 @dataclass(frozen=True)
 class Holder:
+    """Who holds a lock file: the process, its machine and its user."""
+
     pid: int
     host: str
     user: str
 
     @staticmethod
     def me() -> Holder:
+        """This program."""
         return Holder(os.getpid(), socket.gethostname(), _user())
 
 
@@ -223,6 +230,7 @@ WRITING = 5.0  # seconds a just-made lock file may stay empty: its maker is writ
 
 
 def lock_path(path: Path) -> Path:
+    """The lock file of a company file: `<file>.gl.lock` beside it."""
     return path.with_name(path.name + ".lock")
 
 

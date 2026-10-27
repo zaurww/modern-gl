@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt
 from modern_gl.application.catalog import Catalog
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.reports import subconto_balance
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
@@ -137,7 +138,7 @@ def test_tags_of_another_company_are_refused(tagged):
 
 @pytest.fixture
 def session(qtbot, monkeypatch):
-    from PySide6.QtWidgets import QApplication, QMessageBox
+    from PySide6.QtWidgets import QMessageBox
 
     from modern_gl.application.chart_csv import apply_chart_template
     from modern_gl.application.ledger import Ledger
@@ -148,7 +149,7 @@ def session(qtbot, monkeypatch):
     monkeypatch.setattr(
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
     )
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("Firma")

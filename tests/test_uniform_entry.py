@@ -18,7 +18,7 @@ from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage
 from tests.helpers.bank_ui import setup_company
-from tests.helpers.entry_keys import focused, items, shown_list, type_text
+from tests.helpers.entry_keys import editor, focused, items, shown_list, type_text
 from tests.helpers.sales import make_shop
 from tests.helpers.uniform_entry import shown
 
@@ -108,7 +108,7 @@ def edit_warehouse(page) -> QLineEdit:
     page.table.setFocus()
     page.table.setCurrentIndex(index)
     page.table.edit(index)
-    return focused()
+    return editor()
 
 
 def test_a_new_warehouse_is_added_from_the_list(qtbot, receipt):

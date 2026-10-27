@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import QPersistentModelIndex
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QDialog
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -21,13 +21,14 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.templates_page import TemplatePage
 from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
 
 @pytest.fixture
 def session(qtbot):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("Firma")

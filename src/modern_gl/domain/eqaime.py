@@ -42,6 +42,7 @@ _LABELS = {
 
 
 def status_label(status: str) -> str:
+    """The portal status of an e-qaimə in the interface language; an unknown one as is."""
     return tr(_LABELS[status]) if status in _LABELS else status
 
 
@@ -86,7 +87,7 @@ def portal_invoice(row: Mapping[str, Any], outgoing: bool) -> PortalInvoice | No
     if not number:
         return None
     party_key = "receiver" if outgoing else "sender"
-    party = row.get(party_key) or {}
+    party: Mapping[str, Any] = row.get(party_key) or {}
     vat = portal_minor(row.get("vat"))
     total = row.get("amount")
     return PortalInvoice(

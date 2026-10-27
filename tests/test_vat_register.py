@@ -52,19 +52,42 @@ def test_the_register_of_a_month(invoice_firm):
     doc_b = buy(ledger, cid, acc, v, "2026-03-07", "500", "90", "MT2603009")
     pay(ledger, cid, acc, v, "2026-03-28", "500", "MT2603009")
     pay(ledger, cid, acc, v, "2026-03-28", "90", "MT2603009", deposit=True)
-    declared = dict(invoice="12345", invoice_kind="customs")
     doc_c = post(
         ledger,
         cid,
         "2026-03-10",
-        PostingInput(acc["26"], acc["60"], "2000", (v["Аренда"],), alfa, **declared),
-        PostingInput(acc["19"], acc["76"], "360", (v["Бета"],), customs, **declared),
+        PostingInput(
+            acc["26"],
+            acc["60"],
+            "2000",
+            (v["Аренда"],),
+            alfa,
+            invoice="12345",
+            invoice_kind="customs",
+        ),
+        PostingInput(
+            acc["19"],
+            acc["76"],
+            "360",
+            (v["Бета"],),
+            customs,
+            invoice="12345",
+            invoice_kind="customs",
+        ),
     )
     post(
         ledger,
         cid,
         "2026-03-12",
-        PostingInput(acc["76"], acc["51"], "360", customs, (v["Kapital"],), **declared),
+        PostingInput(
+            acc["76"],
+            acc["51"],
+            "360",
+            customs,
+            (v["Kapital"],),
+            invoice="12345",
+            invoice_kind="customs",
+        ),
     )
     post(
         ledger,

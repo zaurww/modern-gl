@@ -16,7 +16,7 @@ from fractions import Fraction
 
 import pytest
 
-from modern_gl.application.currencies import latest_rates, list_currencies, rate_on
+from modern_gl.application.currencies import Rate, latest_rates, list_currencies, rate_on
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.currency import (
     CURRENCY_ONLY,
@@ -35,6 +35,13 @@ from tests.helpers.currency import post_example
 @pytest.fixture
 def books(currency_books):
     return currency_books
+
+
+def known_rate(conn, cid: int, currency_id: int, day: str) -> Rate:
+    """The rate on a day that has one (`rate_on` is None before the first rate)."""
+    rate = rate_on(conn, cid, currency_id, day)
+    assert rate is not None
+    return rate
 
 
 def test_rates_are_exact():
@@ -66,10 +73,10 @@ def test_new_company_has_usual_currencies(ledger, conn):
 def test_rate_on_a_day_is_the_latest_one_before_it(ledger, conn, books):
     cid, _, usd, _, _ = books
     assert rate_on(conn, cid, usd, "2026-02-28") is None
-    assert rate_on(conn, cid, usd, "2026-03-19").rate == 1_700_000
-    assert rate_on(conn, cid, usd, "2026-03-20").rate == 1_710_000
+    assert known_rate(conn, cid, usd, "2026-03-19").rate == 1_700_000
+    assert known_rate(conn, cid, usd, "2026-03-20").rate == 1_710_000
     ledger.set_rate(cid, usd, "2026-03-20", parse_rate("1.705"))  # replaced, not added
-    assert rate_on(conn, cid, usd, "2026-03-25").rate == 1_705_000
+    assert known_rate(conn, cid, usd, "2026-03-25").rate == 1_705_000
     assert latest_rates(conn, cid)[usd].rate_date == "2026-03-31"
     ledger.delete_rate(cid, usd, "2026-03-31")
     assert latest_rates(conn, cid)[usd].rate_date == "2026-03-20"
@@ -243,7 +250,7 @@ def test_cbar_rates_are_parsed_without_metals():
 def test_imported_rates_go_to_the_company_currencies(ledger, conn):
     cid = ledger.create_company("ООО")
     assert ledger.import_rates(cid, "2026-10-17", cbar.parse(CBAR_XML)) == 2  # USD, EUR
-    eur = rate_on(conn, cid, ledger.currency_id(cid, "EUR"), "2026-10-17")
+    eur = known_rate(conn, cid, ledger.currency_id(cid, "EUR"), "2026-10-17")
     assert (eur.rate, eur.nominal, eur.source) == (1_984_500, 1, "cbar")
 
 
@@ -296,6 +303,6 @@ def test_split_shared_file_keeps_each_company_currencies(tmp_path):
     c, cid = open_company(files[0])
     try:
         assert len(list_currencies(c, cid)) == 5
-        assert rate_on(c, cid, Ledger(c).currency_id(cid, "USD"), "2026-03-02").rate == 1_700_000
+        assert known_rate(c, cid, Ledger(c).currency_id(cid, "USD"), "2026-03-02").rate == 1_700_000
     finally:
         c.close()

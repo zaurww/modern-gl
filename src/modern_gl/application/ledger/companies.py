@@ -17,7 +17,11 @@ from modern_gl.infrastructure.db import insert, transaction
 
 
 class CompanyCommands(LedgerBase):
+    """Use cases of a company: create, rename, its VÖEN and closed period."""
+
     def create_company(self, name: str, base_currency: str = "AZN") -> int:
+        """A new company with its books (layers) and default currencies; returns its id.
+        One transaction, audited."""
         with transaction(self.conn):
             company_id = insert(
                 self.conn,

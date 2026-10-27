@@ -7,7 +7,6 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.journal import (
@@ -22,6 +21,7 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.session import Session
 from modern_gl.infrastructure.db import transaction
+from tests.helpers.qt import running_app
 
 GENERATED = 2_100
 YEAR = ("2026-01-01", "2026-12-31")
@@ -105,7 +105,7 @@ def test_the_search_finds_what_the_other_columns_show(demo):
 
 @pytest.fixture
 def page(qtbot, big):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn, cid = big.ledger.conn, big.company_id
     s = Session(conn, big.ledger, cid, "ООО Тест", Catalog(conn, cid), notify=lambda m: None)
     s.working_date = date(2026, 6, 1)

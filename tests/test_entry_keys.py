@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QLineEdit, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -19,7 +19,8 @@ from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.postings import AMOUNT, CT, DT, PostingsTable
 from modern_gl.desktop.session import Session
 from modern_gl.infrastructure.db import connect
-from tests.helpers.entry_keys import focused, items, shown_list, type_text
+from tests.helpers.entry_keys import editor, focused, items, shown_list, type_text
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +39,7 @@ def books():
 
 @pytest.fixture
 def page(qtbot, books):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("Firma")
@@ -60,7 +61,8 @@ def editing_at(page: DocumentPage, col: int) -> bool:
     return (
         table.state() == PostingsTable.State.EditingState
         and table.currentIndex().column() == col
-        and focused().parent() is table.viewport()
+        and (widget := focused()) is not None
+        and widget.parent() is table.viewport()
     )
 
 
@@ -151,7 +153,7 @@ def test_a_refused_name_keeps_the_cursor_in_its_cell(page, qtbot):
     m.setData(m.index(0, DT), account(page, "20"))
     table.setCurrentIndex(m.index(0, DT + 1))
     table.edit(m.index(0, DT + 1))
-    focused().setText("Elave")  # typed with the list closed
+    editor().setText("Elave")  # typed with the list closed
     qtbot.keyClick(focused(), Qt.Key.Key_Return)
     qtbot.waitUntil(lambda: table.state() == PostingsTable.State.EditingState)
     assert table.currentIndex().column() == DT + 1

@@ -92,7 +92,8 @@ def test_purchase_and_cross_currency(ledger, conn, firm):
         (acc["91.2"], acc["57"], 500, None),
         (acc["52"], acc["57"], 170_000, 100_000),
     ]
-    assert bank_rate(purchase) is not None and float(bank_rate(purchase)) == 1.705
+    rate = bank_rate(purchase)
+    assert rate is not None and float(rate) == 1.705
 
     cross = ConversionInput(
         doc_date="2026-03-02",
@@ -145,6 +146,7 @@ def test_draft_may_lack_a_side_and_has_no_postings(ledger, conn, firm):
     conversion_id = ledger.conversion.save_conversion(cid, draft, post=False)
     conversion = load_conversion(conn, cid, conversion_id)
     assert conversion.status == "draft" and conversion.target is None
+    assert draft.source is not None
     assert conversion.source == replace(draft.source, subconto=(firm["usd_bank"], None, None))
     assert load_document(conn, cid, conversion.document_id).postings == []
     with pytest.raises(ValidationError, match="на какой счёт зачислено"):

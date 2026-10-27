@@ -28,6 +28,8 @@ OWNER_TEXTS: dict[str, OwnerText] = {}
 
 
 def explain_owner(module: str, text: OwnerText) -> None:
+    """Register a module's words for a refusal to change its GL document (see OWNER_TEXTS);
+    the module calls it on import."""
     OWNER_TEXTS[module] = text
 
 
@@ -45,6 +47,9 @@ def _owner_text(role: str, number: int, owner: DocumentOwner) -> str:
 
 
 class DocumentCommands(PostingChecks):
+    """Use cases of GL documents: drafts, posting, unposting, deleting and storno (D5, D19,
+    D32). Each is one transaction; a document a module owns is refused here."""
+
     def create_draft(
         self,
         company_id: int,
@@ -53,6 +58,9 @@ class DocumentCommands(PostingChecks):
         memo: str = "",
         layer: str = "common",
     ) -> int:
+        """A new draft with its postings (amounts in manat, see PostingInput); returns its id.
+        A malformed amount is a ValidationError naming the line; the accounting checks run
+        when it is posted. Audited."""
         with transaction(self.conn):
             doc_id = self._insert_document(company_id, doc_date, memo, layer)
             self._insert_postings(company_id, doc_id, postings)
@@ -69,6 +77,8 @@ class DocumentCommands(PostingChecks):
         memo: str = "",
         layer: str = "common",
     ) -> None:
+        """Replace a draft's date, memo, layer and postings. ValidationError for a posted
+        document. Audited."""
         with transaction(self.conn):
             self._require_draft(self._document(company_id, doc_id))
             self.conn.execute(
@@ -81,6 +91,7 @@ class DocumentCommands(PostingChecks):
             self._audit(company_id, "document", doc_id, "update_draft", {})
 
     def delete_draft(self, company_id: int, doc_id: int) -> None:
+        """Delete a draft (a posted document must be unposted first: ValidationError)."""
         with transaction(self.conn):
             self._require_draft(self._document(company_id, doc_id))
             self.delete_document(company_id, doc_id)
@@ -261,6 +272,8 @@ class DocumentCommands(PostingChecks):
         return {**header, "postings": postings}
 
     def post(self, company_id: int, doc_id: int) -> None:
+        """Post a draft: its postings are checked (balanced accounts, subconto, currency) and
+        the period must be open — ValidationError / PeriodClosedError otherwise. Audited."""
         with transaction(self.conn):
             self._post(company_id, doc_id)
 

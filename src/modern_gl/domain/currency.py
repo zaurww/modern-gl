@@ -71,6 +71,7 @@ def currency_name(code: str, lang: str | None = None) -> str:
 
 
 def check_code(code: str) -> str:
+    """A currency code normalized ("usd " -> "USD"); ValueError unless three Latin letters."""
     code = code.strip().upper()
     if len(code) != 3 or not code.isalpha() or not code.isascii():
         raise ValueError(tr("код валюты — три латинские буквы (USD, EUR…): {code}", code=code))

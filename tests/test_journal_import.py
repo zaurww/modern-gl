@@ -24,6 +24,8 @@ from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.db import connect
 from modern_gl.infrastructure.table_files import from_clipboard, read_rows
 from modern_gl.reporting.reports import trial_balance
+from tests.helpers.excel import active_sheet
+from tests.helpers.qt import running_app
 
 HEAD = "Дата\tДокумент\tДебет\tСубконто\tКредит\tСубконто\tСубконто\tСумма\tСодержание"
 TABLE = "\n".join(
@@ -133,7 +135,8 @@ def test_new_elements_when_allowed(books):
     [doc_id] = run(ledger, cid, plan, post=False)
     doc = load_document(conn, cid, doc_id)
     assert doc.status == "draft"
-    assert Catalog(conn, cid).value(doc.postings[0].debit_subconto[0]).name == "Реклама"
+    item = doc.postings[0].debit_subconto[0]
+    assert item is not None and Catalog(conn, cid).value(item).name == "Реклама"
 
 
 def test_currency_rows(books):
@@ -165,7 +168,7 @@ def test_excel_and_csv_files(books, tmp_path):
 
     _conn, _ledger, _cid, cat = books
     book = Workbook()
-    sheet = book.active
+    sheet = active_sheet(book)
     sheet.append(["Дата", "Дебет", "Кредит", "Сумма", "Содержание"])
     sheet.append([datetime(2026, 3, 5), 50, 80, 1180.5, "Взнос"])
     sheet.append([datetime(2026, 3, 6), "68.2", 80, 12, None])
@@ -190,13 +193,12 @@ def test_rates_are_not_needed_for_manat_rows(books):
 
 @pytest.fixture
 def import_page(qtbot, books):
-    from PySide6.QtWidgets import QApplication
 
     from modern_gl.desktop import theme
     from modern_gl.desktop.import_page import ImportPage
     from modern_gl.desktop.session import Session
 
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn, ledger, cid, cat = books
     s = Session(conn, ledger, cid, "Firma", cat, notify=lambda m: None)
     page = ImportPage(s)

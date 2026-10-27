@@ -39,6 +39,7 @@ from tests.helpers.bank_ui import (
     typed,
     value,
 )
+from tests.helpers.qt import running_app
 
 pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
@@ -293,7 +294,7 @@ def test_bank_page_goes_from_the_accounts_to_a_statement(qtbot, session):
 def test_a_large_company_reads_the_statements_in_the_background(qtbot, tmp_path):
     """Debt 6: the same levels, read by a worker; the entry line gets the cursor only once
     the statement it belongs to is shown."""
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     path = tmp_path / "bank.gl"
     conn = connect(path)
     ledger = Ledger(conn, actor="test")
@@ -338,7 +339,7 @@ def test_a_new_statement_and_a_new_card(qtbot, session, monkeypatch):
 
 
 def test_the_journal_opens_the_operation(qtbot, tmp_path):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     workspace = Workspace(tmp_path / "data")
     conn = connect(workspace.new_path("ООО Банк"))
     setup_company(Ledger(conn))
@@ -373,8 +374,9 @@ def test_the_journal_opens_the_operation(qtbot, tmp_path):
         win.close_current()  # Esc / Ctrl+W: back to the statement
         assert win.stack.currentWidget() is bank
         win.open_document(doc.document_id)  # from the journal or a report
-        assert isinstance(win.stack.currentWidget(), BankOperationPage)
-        win.stack.currentWidget().btn_gl.click()
+        operation = win.stack.currentWidget()
+        assert isinstance(operation, BankOperationPage)
+        operation.btn_gl.click()
         gl = win.stack.currentWidget()
         assert isinstance(gl, DocumentPage) and gl.model.read_only
 
@@ -651,6 +653,7 @@ def test_the_vat_part_goes_from_the_deposit_account(qtbot, session):
     assert page.check.isVisibleTo(page)
     page.line_rows[0].invoice.setText("MT7")
     assert page.save(post=True), page.error.text()
+    assert page.doc is not None
     bank_lines = [(x.account_id, x.amount, x.invoice) for x in page.doc.lines]
     assert bank_lines == [(acc(session, "60.1"), 100_000, "MT7")]
     on_deposit = session.conn.execute(

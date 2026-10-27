@@ -15,6 +15,7 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, header_columns, plain_number
 from modern_gl.desktop.session import Session
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture(autouse=True)
@@ -26,7 +27,7 @@ def yes_to_dialogs(monkeypatch):
 
 @pytest.fixture
 def page(qtbot):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("Firma")

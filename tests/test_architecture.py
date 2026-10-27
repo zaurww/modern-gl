@@ -343,7 +343,7 @@ def _params_in_sql(path: Path) -> set[tuple[str, str, str]]:
         for node in ast.walk(fn):
             if not isinstance(node, ast.JoinedStr):
                 continue
-            text = "".join(v.value for v in node.values if isinstance(v, ast.Constant))
+            text = "".join(str(v.value) for v in node.values if isinstance(v, ast.Constant))
             if not SQL_WORDS.search(text):
                 continue
             for value in node.values:

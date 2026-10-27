@@ -101,7 +101,7 @@ def test_a_balance_line_opens_into_its_accounts(books):
 
     conn, cid = books
     sheet = balance_sheet(conn, cid, "2026-02-28", detail=ACCOUNTS)
-    rows = [(ln.kind, code(ln), ln.amount) for ln in sheet.lines]
+    rows: list[tuple[str, str, object]] = [(ln.kind, code(ln), ln.amount) for ln in sheet.lines]
     fixed = rows.index(("line", "Основные средства", 290_000))
     assert rows[fixed + 1 : fixed + 3] == [("account", "01", 300_000), ("account", "02", -10_000)]
     advance = rows.index(("line", "Авансы выданные", 50_000))

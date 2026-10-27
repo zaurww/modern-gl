@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QCompleter, QDialog, QLabel, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -54,6 +54,7 @@ from modern_gl.reporting.inventory import (
 )
 from modern_gl.reporting.reports import trial_balance
 from tests.helpers.inventory import InventoryDemo
+from tests.helpers.qt import cell_editor, completer_of, popup_of
 
 
 def test_inventory_migration_upgrades_v6_database(tmp_path):
@@ -104,7 +105,7 @@ def test_quantity_is_exact_and_rejects_float():
     assert to_quantity("1 234,567") == 1_234_567_000
     assert format_quantity(to_quantity("140"), 0) == "140"
     with pytest.raises(TypeError):
-        to_quantity(1.5)
+        to_quantity(1.5)  # pyright: ignore[reportArgumentType]  # a float must be refused
     with pytest.raises(ValueError, match="больше 6"):
         to_quantity("1.0000001")
 
@@ -868,7 +869,7 @@ def _type_in_cell(qtbot, page: InventoryDocumentPage, row: int, key: str, text: 
     index = page.model.index(row, page.model.columns.index(key))
     page.table.setCurrentIndex(index)
     page.table.edit(index)
-    editor = page.table.indexWidget(index)
+    editor = cell_editor(page.table, index)
     editor.setText(text)
     qtbot.keyClick(editor, Qt.Key.Key_Tab)
 
@@ -896,10 +897,10 @@ def test_inventory_account_cell_lists_a_group_and_holds_on_it(inventory_demo, le
     index = page.model.index(0, page.model.columns.index(ACCOUNT))
     page.table.setCurrentIndex(index)
     page.table.edit(index)
-    editor = page.table.indexWidget(index)
+    editor = cell_editor(page.table, index)
     editor.setText(group.code)
     editor.textEdited.emit(editor.text())
-    popup = editor.findChild(QCompleter).popup()
+    popup = popup_of(completer_of(editor))
     assert popup.model().rowCount() == len(subs)
     assert not popup.currentIndex().isValid()  # not the first subaccount behind the back
 
@@ -942,11 +943,14 @@ def test_inventory_grid_tab_commits_adds_counterparty_and_saves_unfinished_draft
     model.setData(model.index(0, model.columns.index(ACCOUNT)), demo.payable_account)
     _type_in_cell(qtbot, page, 0, SC1, "Новый поставщик")
     qtbot.waitUntil(lambda: model.rows[0].offset_subconto[0] is not None)
-    added = session.catalog.value(model.rows[0].offset_subconto[0])
+    added_id = model.rows[0].offset_subconto[0]
+    assert added_id is not None
+    added = session.catalog.value(added_id)
     assert added.name == "Новый поставщик"
 
     model.insert_row()  # a prefilled trailing row is not a line
     assert page.save(post=False), page.error.text()
+    assert page.doc is not None
     assert page.doc.status == "draft"
     assert len(page.doc.lines) == 1
     line = page.doc.lines[0]

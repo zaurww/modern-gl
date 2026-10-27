@@ -6,7 +6,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import document_year, document_years
@@ -16,6 +15,7 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.journal_page import JournalPage, shown_year
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 
 def test_the_year_shown():
@@ -46,10 +46,11 @@ def old_doc(tmp_path):
 
 @pytest.fixture
 def window(qtbot, tmp_path, old_doc):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 3, 5)
     win.show_place(("journal",))
     win.show()

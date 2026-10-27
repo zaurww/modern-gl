@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QDialog, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -15,6 +15,7 @@ from modern_gl.desktop.directories_page import DirectoriesPage, ValueDialog
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
@@ -77,7 +78,7 @@ def session(qtbot, books, monkeypatch):
     monkeypatch.setattr(
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
     )
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn, ledger, cid, _ = books
     messages: list[str] = []
     return Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=messages.append)

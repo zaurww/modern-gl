@@ -6,7 +6,6 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from modern_gl.application.period import closed_through, drafts_through, period_ends
 from modern_gl.application.workspace import Workspace
@@ -15,6 +14,7 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.period_dialog import PeriodDialog
 from modern_gl.desktop.widgets import to_qdate
 from modern_gl.domain.errors import LedgerError
+from tests.helpers.qt import running_app
 
 pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 
@@ -49,10 +49,11 @@ def test_drafts_through_counts_the_drafts_up_to_the_day(demo):
 @pytest.fixture
 def window(qtbot, tmp_path, make_demo):
     make_demo(tmp_path / "ДЕМО ООО.gl")
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(Workspace(tmp_path))
     qtbot.addWidget(win)
     win.start()
+    assert win.session is not None
     win.session.working_date = date(2026, 2, 28)
     win.show()
     yield win

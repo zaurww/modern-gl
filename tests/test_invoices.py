@@ -16,6 +16,7 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.reporting.invoices import invoice_report
 from modern_gl.reporting.reports import account_card, subconto_balance
+from tests.helpers.qt import running_app
 
 
 @pytest.fixture
@@ -246,7 +247,6 @@ def test_invoice_number_fills_related_postings_without_overwriting(firm):
 
 
 def test_page_finds_an_invoice_by_vöen(firm, qtbot):
-    from PySide6.QtWidgets import QApplication
 
     from modern_gl.desktop import theme
     from modern_gl.desktop.invoices_page import InvoicesPage
@@ -255,7 +255,7 @@ def test_page_finds_an_invoice_by_vöen(firm, qtbot):
 
     conn, ledger, cid, acc, v = firm
     purchase_sale_payment(ledger, cid, acc, v)
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     s = Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda _m: None)
     page = InvoicesPage(s, ReportParams(date(2026, 3, 1), date(2026, 3, 31)))
     qtbot.addWidget(page)
@@ -316,7 +316,6 @@ def test_warehouse_receipt_carries_its_e_qaime_or_declaration(firm):
 
 
 def test_receipt_form_shows_and_saves_the_basis(firm, qtbot):
-    from PySide6.QtWidgets import QApplication
 
     from modern_gl.application.inventory import Inventory, ReceiptLine
     from modern_gl.desktop import theme
@@ -337,7 +336,7 @@ def test_receipt_form_shows_and_saves_the_basis(firm, qtbot):
         (v["Альфа"], v["Д-1"]),
         invoice="MT9",
     )
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     s = Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda _m: None)
     page = InventoryDocumentPage(s, doc_type="receipt")
     qtbot.addWidget(page)

@@ -13,6 +13,8 @@ from modern_gl.infrastructure.db import IntegrityError, insert, transaction
 
 
 class CurrencyCommands(LedgerBase):
+    """Use cases of currencies and their rates (millionths of a manat per nominal)."""
+
     def add_currency(self, company_id: int, code: str, name: str | None = None) -> int:
         """Add a currency (USD, EUR…). The base currency (manat) is not one of them."""
         try:
@@ -35,9 +37,11 @@ class CurrencyCommands(LedgerBase):
         return currency_id
 
     def currency_id(self, company_id: int, code: str) -> int:
+        """The id of a currency by its code (USD, EUR…); NotFoundError if it is not added."""
         return self._currency(company_id, code)["id"]
 
     def set_currency_active(self, company_id: int, currency: int | str, active: bool) -> None:
+        """Show or hide a currency in lists; its rates and postings stay. Audited."""
         with transaction(self.conn):
             cur = self._currency(company_id, currency)
             self.conn.execute(
@@ -87,6 +91,7 @@ class CurrencyCommands(LedgerBase):
             )
 
     def delete_rate(self, company_id: int, currency: int | str, day: date | str) -> None:
+        """Remove the currency's rate of one day (the previous rate then applies). Audited."""
         with transaction(self.conn):
             cur = self._currency(company_id, currency)
             day = iso_date(day)

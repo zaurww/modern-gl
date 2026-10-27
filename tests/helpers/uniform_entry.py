@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication
-
 from modern_gl.desktop import theme
+from tests.helpers.qt import running_app
 
 
 def shown(qtbot, page):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     qtbot.addWidget(page)
     page.show()
     page.activateWindow()

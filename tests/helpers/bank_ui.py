@@ -16,6 +16,7 @@ from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 
 def setup_company(ledger: Ledger) -> int:
@@ -48,7 +49,7 @@ def setup_company(ledger: Ledger) -> int:
 
 @pytest.fixture(name="bank_session")
 def session(qtbot):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = setup_company(ledger)

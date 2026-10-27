@@ -9,8 +9,10 @@ from PySide6.QtWidgets import (
     QCompleter,
     QDialog,
     QInputDialog,
+    QLineEdit,
     QMessageBox,
     QPushButton,
+    QWidget,
 )
 
 from modern_gl.application.ledger import PostingInput
@@ -21,9 +23,11 @@ from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.main_window import SIDEBAR_KEYS, NavDelegate
 from modern_gl.desktop.opening_balances_page import CREDIT_AMOUNT, OpeningBalancesPage
+from modern_gl.desktop.opening_postings import OpeningPostingsModel, OpeningRow
 from modern_gl.desktop.postings import AMOUNT, CT, DT, MEMO, PostingRow
 from modern_gl.desktop.reports_page import NAME_MAX, NAME_MIN, OsvPage, SectionRow, figure
 from modern_gl.reporting.reports import trial_balance
+from tests.helpers.qt import completer_of, completions, focused, popup_of
 
 
 @pytest.fixture
@@ -40,12 +44,19 @@ def current_page(win):
     return win.stack.currentWidget()
 
 
+def opening_rows(model: OpeningPostingsModel) -> list[OpeningRow]:
+    """The lines of the opening balances form, each with its side (`on_credit`)."""
+    rows = [r for r in model.rows if isinstance(r, OpeningRow)]
+    assert len(rows) == len(model.rows)
+    return rows
+
+
 def type_into_cell(qtbot, page: DocumentPage, row: int, col: int, text: str) -> None:
     table = page.table
     idx = page.model.index(row, col)
     table.setCurrentIndex(idx)
     table.edit(idx)
-    editor = QApplication.focusWidget()
+    editor = focused(QLineEdit)
     editor.setText(text)
     qtbot.keyClick(editor, Qt.Key.Key_Return)
 
@@ -68,14 +79,14 @@ def test_opening_balances_have_their_own_page(window):
     model.setData(model.index(0, AMOUNT), 100_000)
     model.insert_row()
     model.setData(model.index(1, DT), cat.by_code["80"].id)
-    assert model.rows[1].on_credit  # a capital account starts in "Кредит"
+    assert opening_rows(model)[1].on_credit  # a capital account starts in "Кредит"
     model.setData(model.index(1, CREDIT_AMOUNT), 100_000)
     assert model.totals() == (100_000, 100_000)
     assert page.btn_difference.isHidden()
 
     assert page.save(post=True)
     assert page.status.text() == "Проведён"
-    reloaded = [(r.debit, r.amount, r.on_credit) for r in page.model.rows]
+    reloaded = [(r.debit, r.amount, r.on_credit) for r in opening_rows(page.model)]
     assert reloaded == [
         (cat.by_code["50"].id, 100_000, False),
         (cat.by_code["80"].id, 100_000, True),
@@ -103,7 +114,7 @@ def test_opening_balances_paste_from_trial_balance_and_close_difference(window):
     page.paste()
 
     model = page.model
-    rows = [r for r in model.rows if not r.is_empty()]
+    rows = [r for r in opening_rows(model) if not r.is_empty()]
     assert [(r.debit, r.amount, r.on_credit) for r in rows] == [
         (cat.by_code["50"].id, 150_000, False),
         (cat.by_code["80"].id, 100_000, True),
@@ -112,7 +123,7 @@ def test_opening_balances_paste_from_trial_balance_and_close_difference(window):
     assert not page.btn_difference.isHidden()
 
     page.close_difference()  # Kt 500 on a line whose account is still to choose
-    last = model.rows[-1]
+    last = opening_rows(model)[-1]
     assert (last.amount, last.on_credit) == (50_000, True)
     model.setData(model.index(len(model.rows) - 1, DT), cat.by_code["80"].id)
     assert model.totals() == (150_000, 150_000)
@@ -127,18 +138,18 @@ def test_keyboard_entry_skips_subconto_cells_that_do_not_apply(window, qtbot):
     assert model.rows[0].debit == window.session.catalog.by_code["26"].id
     assert table.currentIndex().column() == DT + 1  # moved to its subconto
 
-    editor = QApplication.focusWidget()
+    editor = focused(QLineEdit)
     editor.setText("аренда")
     qtbot.keyClick(editor, Qt.Key.Key_Return)
     assert model.data(model.index(0, DT + 1)) == "Аренда офиса"
     assert table.currentIndex().column() == CT  # subconto 2 of 26 is skipped
 
-    editor = QApplication.focusWidget()
+    editor = focused(QLineEdit)
     editor.setText("50")
     qtbot.keyClick(editor, Qt.Key.Key_Return)  # 50 has no subconto
     assert table.currentIndex().column() == AMOUNT
 
-    editor = QApplication.focusWidget()
+    editor = focused(QLineEdit)
     editor.setText("1 234,50")
     qtbot.keyClick(editor, Qt.Key.Key_Return)
     assert model.rows[0].amount == 123450
@@ -304,14 +315,14 @@ def type_text(editor, text):
     editor.textEdited.emit(editor.text())
 
 
-def open_cell_editor(page, row, col):
+def open_cell_editor(page, row, col) -> tuple[QLineEdit, QCompleter]:
     QApplication.processEvents()  # let the new document finish focusing its title first
     idx = page.model.index(row, col)
     page.table.setCurrentIndex(idx)
     page.table.edit(idx)
     QApplication.processEvents()  # the list opens on the next event loop turn
-    editor = QApplication.focusWidget()
-    return editor, editor.findChild(QCompleter)
+    editor = focused(QLineEdit)
+    return editor, completer_of(editor)
 
 
 def test_subconto_list_opens_at_once_and_filters_from_first_letter(window, qtbot):
@@ -321,7 +332,7 @@ def test_subconto_list_opens_at_once_and_filters_from_first_letter(window, qtbot
     page.model.setData(page.model.index(0, CT), cat.by_code["60"].id)
 
     editor, completer = open_cell_editor(page, 0, CT + 1)
-    popup = completer.popup()
+    popup = popup_of(completer)
     all_counterparties = len(cat.values(cat.by_code["60"].sc_kinds[0]))
     assert popup.isVisible()
     assert completer.model().rowCount() == all_counterparties  # whole directory, like 1C
@@ -329,7 +340,7 @@ def test_subconto_list_opens_at_once_and_filters_from_first_letter(window, qtbot
     type_text(editor, "б")  # first letter already filters
     assert popup.isVisible()
     # a name not in the directory is offered last, to add it
-    assert completer.model().stringList() == ["Бета Сервис", "+ Добавить «б»"]
+    assert completions(completer) == ["Бета Сервис", "+ Добавить «б»"]
     assert popup.currentIndex().row() == 0  # best match preselected
 
     qtbot.keyClick(popup, Qt.Key.Key_Return)
@@ -340,9 +351,9 @@ def test_account_list_appears_while_typing(window, qtbot):
     window.new_document()
     page = current_page(window)
     editor, completer = open_cell_editor(page, 0, DT)
-    assert not completer.popup().isVisible()  # empty account cell: no noise
+    assert not popup_of(completer).isVisible()  # empty account cell: no noise
     qtbot.keyClicks(editor, "68")
-    assert completer.model().stringList()[:2] == [
+    assert completions(completer)[:2] == [
         "68.1  Подоходный налог",
         "68.2  Налог на добавленную стоимость",
     ]
@@ -357,9 +368,9 @@ def test_group_typed_in_full_lists_its_accounts_and_enter_takes_none(window, qtb
     subs = [a.label for a in cat.subaccounts(cat.by_code["68"])]
 
     editor, completer = open_cell_editor(page, 0, DT)
-    popup = completer.popup()
+    popup = popup_of(completer)
     qtbot.keyClicks(editor, "68")
-    assert completer.model().stringList() == subs
+    assert completions(completer) == subs
     assert not popup.currentIndex().isValid()  # not 68.1 behind the user's back
 
     qtbot.keyClick(popup, Qt.Key.Key_Return)  # stays in the cell, the list again
@@ -628,8 +639,6 @@ def test_delete_company_needs_typed_name(window, workspace, monkeypatch):
 
 
 def test_confirm_delete_dialog_unlocks_only_on_exact_name(qtbot, monkeypatch):
-    from PySide6.QtWidgets import QDialog, QLineEdit, QPushButton
-
     from modern_gl.desktop.main_window import confirm_delete
 
     seen = {}
@@ -646,7 +655,9 @@ def test_confirm_delete_dialog_unlocks_only_on_exact_name(qtbot, monkeypatch):
         return QDialog.DialogCode.Rejected
 
     monkeypatch.setattr(QDialog, "exec", fake_exec)
-    assert confirm_delete(None, "ДЕМО ООО") is False
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    assert confirm_delete(parent, "ДЕМО ООО") is False
     assert seen == {"partial": False, "exact": True}
 
 
@@ -785,7 +796,7 @@ def test_pick_from_open_list_with_arrows(window, qtbot, key):
     cat = window.session.catalog
     page.model.setData(page.model.index(0, CT), cat.by_code["60"].id)
     editor, completer = open_cell_editor(page, 0, CT + 1)
-    popup = completer.popup()
+    popup = popup_of(completer)
     assert popup.isVisible() and editor.text() == ""
     qtbot.keyClick(popup, Qt.Key.Key_Down)
     qtbot.keyClick(popup, Qt.Key.Key_Down)
@@ -799,7 +810,7 @@ def test_f9_copies_row_and_ctrl_s_saves_while_a_cell_is_edited(window, qtbot):
     window.new_document()
     page = current_page(window)
     type_into_cell(qtbot, page, 0, DT, "50")
-    editor = QApplication.focusWidget()  # 1C-style entry: the next cell is already open
+    editor = focused(QLineEdit)  # 1C-style entry: the next cell is already open
     editor.setText("51")
     qtbot.keyClick(editor, Qt.Key.Key_F9)  # what was typed is kept, then the row copied
     assert page.model.rowCount() == 2

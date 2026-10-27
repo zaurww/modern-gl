@@ -7,7 +7,7 @@ not the queries' callers."""
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import count
@@ -40,7 +40,7 @@ class BusyError(LedgerError):
 
 
 @contextmanager
-def _busy_is_an_error_for_the_user() -> Iterator[None]:
+def _busy_is_an_error_for_the_user() -> Generator[None]:
     try:
         yield
     except sqlite3.OperationalError as e:
@@ -205,6 +205,7 @@ def _in_wal_mode(path: Path) -> bool:
 
 
 def is_read_only(conn: sqlite3.Connection) -> bool:
+    """The company is open for viewing only (a snapshot, D80): every write is refused."""
     return bool(conn.execute("PRAGMA query_only").fetchone()[0])
 
 
@@ -212,7 +213,7 @@ _SAVEPOINTS = count(1)  # names of nested blocks: unique, so an inner one never 
 
 
 @contextmanager
-def transaction(conn: sqlite3.Connection) -> Iterator[None]:
+def transaction(conn: sqlite3.Connection) -> Generator[None]:
     """Run the block atomically. Inside an open transaction the block is a savepoint of
     its own (D-new): its failure undoes the block only, the outer transaction goes on —
     a loop that keeps the documents that posted and reports the ones that did not.
@@ -235,7 +236,7 @@ def transaction(conn: sqlite3.Connection) -> Iterator[None]:
 
 
 @contextmanager
-def dry_run(conn: sqlite3.Connection) -> Iterator[None]:
+def dry_run(conn: sqlite3.Connection) -> Generator[None]:
     """Run the block and undo it whatever happens: a preview that is the real thing
     rolled back, so the two cannot differ. Joins an open transaction like `transaction`."""
     with transaction(conn), _savepoint(conn, undo=True):
@@ -243,7 +244,7 @@ def dry_run(conn: sqlite3.Connection) -> Iterator[None]:
 
 
 @contextmanager
-def _savepoint(conn: sqlite3.Connection, undo: bool) -> Iterator[None]:
+def _savepoint(conn: sqlite3.Connection, undo: bool) -> Generator[None]:
     name = f"sp_{next(_SAVEPOINTS)}"
     conn.execute(f"SAVEPOINT {name}")
     try:
@@ -276,6 +277,7 @@ class ForeignKeyColumn:
 
 
 def table_names(conn: sqlite3.Connection) -> list[str]:
+    """The tables of the schema, without SQLite's own."""
     rows = conn.execute(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
     )
@@ -283,10 +285,12 @@ def table_names(conn: sqlite3.Connection) -> list[str]:
 
 
 def column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    """The columns of a table (`table` — a name from the schema, not from the user)."""
     return {r["name"] for r in conn.execute(f'PRAGMA table_info("{table}")')}
 
 
 def foreign_key_columns(conn: sqlite3.Connection, table: str) -> list[ForeignKeyColumn]:
+    """What each column of the table refers to (`table` — a name from the schema)."""
     return [
         ForeignKeyColumn(k["from"], k["table"], k["to"], k["on_delete"])
         for k in conn.execute(f'PRAGMA foreign_key_list("{table}")')
@@ -294,6 +298,7 @@ def foreign_key_columns(conn: sqlite3.Connection, table: str) -> list[ForeignKey
 
 
 def schema_version(conn: sqlite3.Connection) -> int:
+    """The number of the last migration the file has (`user_version`)."""
     return conn.execute("PRAGMA user_version").fetchone()[0]
 
 

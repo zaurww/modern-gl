@@ -18,7 +18,7 @@ the audit trail with `actor` as the author, D82) — there is no other way in.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -40,7 +40,7 @@ __all__ = [
 
 
 @contextmanager
-def open_company(path: str | Path, *, write: bool = False, actor: str = "") -> Iterator[Company]:
+def open_company(path: str | Path, *, write: bool = False, actor: str = "") -> Generator[Company]:
     """A company file. Without `write` — a snapshot: the file is not changed and may be
     open in the program at the same time. With `write` the file itself: a file of an
     older schema is backed up and updated first, as the program does."""

@@ -47,6 +47,7 @@ from modern_gl.application.bank.deposit_import import (
 from modern_gl.application.bank.imported import DRAFT, POSTED
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient, TokenExpiredError
+from tests.helpers.qt import tree_item
 from tests.helpers.vat_deposit import OWN_TIN, PORTAL, FakeDepositPortal, as_json, operations, raw
 
 
@@ -396,7 +397,7 @@ def test_the_window_loads_the_period_chosen(qtbot, firm, deposit_session):
         + "."
     )
 
-    dialog.rows.topLevelItem(1).setCheckState(0, Qt.CheckState.Unchecked)
+    tree_item(dialog.rows, 1).setCheckState(0, Qt.CheckState.Unchecked)
     assert tr(", после загрузки будет {after} ₼", after="-12.44") in dialog.balances.text()
     dialog.post_button.click()
     assert dialog.step == DONE  # what became of them: in the window, not closed

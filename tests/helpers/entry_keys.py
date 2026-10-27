@@ -2,33 +2,45 @@
 
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QAbstractItemView, QApplication, QLineEdit, QWidget
+
+from tests.helpers import qt
 
 
-def focused():
+def focused() -> QWidget | None:
     return QApplication.focusWidget()
 
 
-def type_text(editor, text: str) -> None:
+def editor() -> QLineEdit:
+    """The open cell editor (it has the focus)."""
+    return qt.focused(QLineEdit)
+
+
+def type_text(editor: QWidget | None, text: str) -> None:
+    assert isinstance(editor, QLineEdit), editor
     editor.setText(text)
     editor.textEdited.emit(text)
 
 
-def shown_list(qtbot):
-    def popup():
+def shown_list(qtbot) -> QAbstractItemView:
+    def popup() -> QAbstractItemView | None:
         return next(
             (
                 w
                 for w in QApplication.topLevelWidgets()
-                if w.objectName() == "completer" and w.isVisible()
+                if isinstance(w, QAbstractItemView)
+                and w.objectName() == "completer"
+                and w.isVisible()
             ),
             None,
         )
 
     qtbot.waitUntil(lambda: popup() is not None)
-    return popup()
+    shown = popup()
+    assert shown is not None
+    return shown
 
 
-def items(popup) -> list[str]:
+def items(popup: QAbstractItemView) -> list[str]:
     m = popup.model()
     return [m.index(i, 0).data() for i in range(m.rowCount())]

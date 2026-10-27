@@ -27,7 +27,7 @@ METALS = {"XAU", "XAG", "XPT", "XPD"}  # quoted per troy ounce, not currencies o
 
 
 class RatesUnavailableError(LedgerError):
-    pass
+    """The CBAR rates could not be had (no connection, no rates for the day)."""
 
 
 def parse(xml: bytes) -> dict[str, tuple[int, int]]:
@@ -38,7 +38,7 @@ def parse(xml: bytes) -> dict[str, tuple[int, int]]:
         root = ET.fromstring(xml)  # noqa: S314
     except ET.ParseError as e:
         raise RatesUnavailableError(tr("ЦБА прислал не то, что ожидалось: {error}", error=e)) from e
-    rates = {}
+    rates: dict[str, tuple[int, int]] = {}
     for valute in root.iter("Valute"):
         code = (valute.get("Code") or "").strip().upper()
         nominal_text = (valute.findtext("Nominal") or "").strip()

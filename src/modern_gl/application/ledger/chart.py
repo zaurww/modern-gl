@@ -34,6 +34,8 @@ def _inherited(
 
 
 class ChartCommands(AccountTypeCommands):
+    """Use cases of the chart of accounts: add, change, hide; each one transaction, audited."""
+
     def add_account(  # noqa: PLR0913 the account form's fields, keyword-only
         self,
         company_id: int,
@@ -142,6 +144,7 @@ class ChartCommands(AccountTypeCommands):
             ) from e
 
     def account_id(self, company_id: int, code: str) -> int:
+        """The id of the account with this code; NotFoundError if there is none."""
         return self._account(company_id, code)["id"]
 
     def update_account(

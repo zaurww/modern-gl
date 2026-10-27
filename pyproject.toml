@@ -40,9 +40,16 @@ source = ["src/modern_gl"]
 fail_under = 87
 
 [tool.pyright]
-include = ["src"]
+include = ["src", "tests", "scripts"]
 pythonVersion = "3.12"
 typeCheckingMode = "standard"
+# the core under strict (D-new-pyright-strict-core): no Unknown in parameters and answers;
+# application/ — later, package by package (ledger → modules)
+strict = [
+    "src/modern_gl/domain",
+    "src/modern_gl/api",
+    "src/modern_gl/infrastructure",
+]
 venvPath = "."
 venv = ".venv"
 
@@ -74,6 +81,8 @@ ignore = [
     # PLC0415 (lazy module imports are the D123 rule), PLR0911/0912/0915 (complexity is
     # already bounded by C90 <= 12 and tests/test_code_size.py), D/ANN (types: pyright).
 ]
+# docstrings of the public core (claude/audit-types): only their presence, no convention
+extend-select = ["D100", "D101", "D102", "D103", "D104", "D105"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 12
@@ -112,3 +121,8 @@ modern-gl-cli = "modern_gl.api.cli:cli"
 # временно, правит ветка claude/audit-window — убрать при слиянии
 "src/modern_gl/desktop/main_window/window.py" = ["PLW0108"]
 "src/modern_gl/desktop/main_window/company_files.py" = ["S603", "S607"]
+# docstrings of the public core (claude/audit-types): required in domain, infrastructure,
+# api and application/ledger only
+"!src/modern_gl/{domain,infrastructure,api,application/ledger}/**" = [
+    "D100", "D101", "D102", "D103", "D104", "D105",
+]

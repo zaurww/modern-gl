@@ -101,6 +101,7 @@ class ModuleDocuments:
         return self.ledger._insert_document(company_id, doc_date, memo, "common")
 
     def get(self, company_id: int, doc_id: int) -> Row:
+        """The GL document's row (with its layer code); NotFoundError if it is not there."""
         return self.ledger._document(company_id, doc_id)
 
     def set_header(self, company_id: int, doc_id: int, doc_date: date | str, memo: str) -> None:

@@ -39,7 +39,7 @@ def N_(source: str, /) -> str:  # noqa: N802 the gettext name, known to translat
     return source
 
 
-def tr(source: str, /, **values) -> str:
+def tr(source: str, /, **values: object) -> str:
     return _translate(_current, source, values)
 
 
@@ -55,12 +55,12 @@ def document_language() -> str:
     return _document or _current
 
 
-def trd(source: str, /, **values) -> str:
+def trd(source: str, /, **values: object) -> str:
     """A text written into a document: in the company's language of documents."""
     return _translate(document_language(), source, values)
 
 
-def _translate(code: str, source: str, values: dict) -> str:
+def _translate(code: str, source: str, values: dict[str, object]) -> str:
     template = _CATALOGS[code].get(source, source)
     return template.format(**values) if values else template
 

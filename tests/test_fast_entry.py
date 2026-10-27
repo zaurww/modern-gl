@@ -8,7 +8,7 @@ from datetime import date
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QLineEdit
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -21,11 +21,12 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain import formula
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import focused, running_app
 
 
 @pytest.fixture
 def s(qtbot):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     conn = connect(":memory:")
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("Firma")
@@ -92,7 +93,7 @@ def test_memo_cell_offers_the_last_memo(s, qtbot):
     m.setData(m.index(0, CT), s.catalog.by_code["60"].id)
     page.table.setCurrentIndex(m.index(0, MEMO))
     page.table.edit(m.index(0, MEMO))
-    editor = QApplication.focusWidget()
+    editor = focused(QLineEdit)
     assert editor.text() == "Аренда офиса" and editor.selectedText() == "Аренда офиса"
     qtbot.keyClick(editor, Qt.Key.Key_Return)
     assert m.rows[0].memo == "Аренда офиса"
@@ -159,6 +160,7 @@ def test_ctrl_shift_enter_posts_and_asks_for_the_next(s, qtbot):
     asked = []
     page.new_requested.connect(lambda: asked.append(True))
     page.post_and_new()
+    assert page.doc is not None
     assert page.doc.status == "posted" and asked == [True]
     assert page.doc.memo == "Взнос"  # an empty title takes the first posting's memo
 

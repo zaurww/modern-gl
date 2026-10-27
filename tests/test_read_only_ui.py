@@ -3,7 +3,7 @@
 from datetime import date
 
 import pytest
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QPushButton
 
 from modern_gl.application.queries import list_documents
 from modern_gl.application.workspace import Workspace
@@ -11,6 +11,7 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.main_window import PLACE_KEYS, MainWindow
 from modern_gl.i18n import tr
 from modern_gl.reporting.trade import PURCHASE, SALE, trade_documents
+from tests.helpers.qt import running_app
 
 # what changes a company: none of it is shown while viewing
 WRITES = [
@@ -43,7 +44,7 @@ def company(tmp_path, make_demo):
 @pytest.fixture
 def viewer(qtbot, company):
     ws, path = company
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     win = MainWindow(ws)
     qtbot.addWidget(win)
     win.view_company(path)

@@ -21,7 +21,7 @@ BOOKS = {"common": COMMON, "ifrs": IFRS, "tax": TAX}
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("company", type=Path)
     parser.add_argument("-o", "--output", type=Path)
     parser.add_argument("--book", choices=BOOKS, default="common")

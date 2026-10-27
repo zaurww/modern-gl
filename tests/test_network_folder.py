@@ -11,7 +11,6 @@ import subprocess
 import sys
 
 import pytest
-from PySide6.QtWidgets import QApplication
 
 from modern_gl.api import open_company
 from modern_gl.application.catalog import Catalog
@@ -31,6 +30,7 @@ from modern_gl.infrastructure.company_file import (
     place_of,
 )
 from modern_gl.infrastructure.db import connect
+from tests.helpers.qt import running_app
 
 POSIX = pytest.mark.skipif(sys.platform == "win32", reason="/proc/mounts: the POSIX branch")
 
@@ -91,7 +91,7 @@ def test_a_file_on_a_network_folder_has_no_wal(mounts, tmp_path):
 
 @pytest.mark.parametrize(("folder", "shown"), [("Dropbox", True), ("Yerli", False)])
 def test_bu_gun_says_the_file_is_on_a_shared_folder(qtbot, tmp_path, folder, shown):
-    theme.apply(QApplication.instance())
+    theme.apply(running_app())
     ws = Workspace(tmp_path / folder)
     conn, cid = ws.open(ws.create("Firma"))
     s = Session(conn, Ledger(conn), cid, "Firma", Catalog(conn, cid), notify=lambda m: None)

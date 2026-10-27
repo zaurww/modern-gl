@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 
 from modern_gl import i18n
@@ -20,6 +21,8 @@ from modern_gl.infrastructure.app_settings import read_settings
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one command; JSON to stdout. Returns the exit code: 0 done, 1 a problem with
+    the data (the JSON then has "error"); argparse exits with 2 on a wrong command."""
     args = _parser().parse_args(argv)
     language = args.lang or read_settings().language
     i18n.set_language(language if language in i18n.LANGUAGES else i18n.DEFAULT)
@@ -32,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     return 0 if ok else 1
 
 
-def _run(args: argparse.Namespace) -> tuple[dict, bool]:
+def _run(args: argparse.Namespace) -> tuple[Mapping[str, object], bool]:
     if args.command == "import":
         data = json.loads(Path(args.documents).read_text(encoding="utf-8"))
         with open_company(args.company, write=True, actor=args.actor) as company:
@@ -73,6 +76,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def cli() -> None:
+    """The `modern-gl-cli` entry point."""
     sys.exit(main())
 
 
