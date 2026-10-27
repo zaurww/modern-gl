@@ -65,6 +65,7 @@ class InventoryDocumentForm(QWidget):
     close_requested = Signal()
     title_changed = Signal()
     open_gl_document = Signal(int)
+    make_return = Signal(str, int)  # the return's type, the purchase (sale) it returns
 
     def __init__(self, session: Session, doc_type: str) -> None:
         super().__init__()
@@ -254,6 +255,11 @@ class InventoryDocumentForm(QWidget):
         actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_gl)
         actions.addWidget(self.btn_accrual)
+        self.btn_return = button(tr("Оформить возврат"), "flat")
+        self.btn_return.setToolTip(
+            tr("Товар вернули: возврат по этому документу — его цены и ƏDV, без лишнего ввода")
+        )
+        actions.addWidget(self.btn_return)
         actions.addStretch(1)
         self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
         self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")

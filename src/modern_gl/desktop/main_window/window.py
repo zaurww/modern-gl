@@ -343,6 +343,20 @@ class MainWindow(ReportPlaces):
         page.template_saved.connect(self.open_template)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
         page.title_changed.connect(lambda p=page: self._retitle(p))
+        if isinstance(page, InventoryDocumentPage):
+            page.make_return.connect(self.new_return)
+
+    def new_return(self, doc_type: str, source_id: int) -> None:
+        """A return filled from its purchase (sale): what is left to return of each line."""
+        if self._viewing():
+            return
+        page = InventoryDocumentPage(self.open_session, doc_type=doc_type)
+        if not page.fill_return_of(source_id):
+            self.open_session.notify(page.error.text())
+            return
+        self._wire_inventory_document(page)
+        self._add_page(page.key, page, open_item=True)
+        self._activate(page.key)
 
     def open_conversion(self, conversion_id: int) -> None:
         key = ("conversion", conversion_id)

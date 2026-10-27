@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.inventory import (
     INCOMING_TYPES,
+    RETURN_TYPES,
     vat_of,
 )
 from modern_gl.desktop.inventory_document_page.clipboard import ClipboardPart
@@ -30,6 +31,7 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
 )
 from modern_gl.desktop.inventory_document_page.new_values import NewValuesPart
 from modern_gl.desktop.inventory_document_page.party import PartyPart
+from modern_gl.desktop.inventory_document_page.returning import RETURN_OF, ReturningPart
 from modern_gl.desktop.inventory_document_page.splits import SplitPart
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
@@ -43,10 +45,17 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.invoice import EQAIME
 from modern_gl.i18n import tr
 
-PARTY_MISSING = {"receipt": "Укажите поставщика", "sale": "Укажите покупателя"}
+PARTY_MISSING = {
+    "receipt": "Укажите поставщика",
+    "sale": "Укажите покупателя",
+    "purchase_return": "Укажите поставщика",
+    "sale_return": "Укажите покупателя",
+}
 
 
-class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart):
+class InventoryDocumentPage(
+    HeaderPart, PartyPart, ClipboardPart, NewValuesPart, SplitPart, ReturningPart
+):
     def __init__(
         self,
         session: Session,
@@ -67,6 +76,7 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
         self.btn_unpost.clicked.connect(self.unpost)
         self.btn_gl.clicked.connect(self._open_gl)
         self.btn_accrual.clicked.connect(self._open_accrual)
+        self.btn_return.clicked.connect(self._make_return)
         self._connect_delegate()
         self.model.changed.connect(self._changed)
         self.memo.textEdited.connect(self._changed)
@@ -182,27 +192,13 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
                 ),
                 sale_subconto=by_sale_kinds(self.s.catalog, kinds, line.cost_subconto),
                 expense_date=line.expense_date if self.doc_type == "receipt" else None,
+                returned_line_id=line.returned_line_id,
             )
             for line in self.doc.lines
         ] or [InventoryGridRow()]
         # a posted document is edited in place, as in 1C; not while viewing (D80)
         read_only = not self.doc.editable or self.s.read_only
-        self.model = InventoryLinesModel(
-            self.s,
-            self.doc_type,
-            rows,
-            read_only=read_only,
-            vat_rate=vat_rate,
-            incoming_account=self._incoming_account(),
-            doc_date=self.doc.doc_date,
-        )
-        self.table.setModel(self.model)
-        self.table.configure_columns()
-        self.expense_columns = self._expense_columns()
-        self.delegate = InventoryLinesDelegate(self)
-        self._connect_delegate()
-        self.table.setItemDelegate(self.delegate)
-        self.model.changed.connect(self._changed)
+        self._use_lines(rows, read_only, vat_rate, self.doc.doc_date)
         if self.doc.status == "posted":
             self.status.set(tr("Проведён"), "green")
         else:
@@ -214,6 +210,28 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
         self.dirty = False
         self._show_totals()
         self.title_changed.emit()
+
+    def _use_lines(
+        self, rows: list[InventoryGridRow], read_only: bool, vat_rate: int | None, doc_date
+    ) -> None:
+        """A new model of the lines (a document loaded, a return filled), wired as the
+        first one."""
+        self.model = InventoryLinesModel(
+            self.s,
+            self.doc_type,
+            rows,
+            read_only=read_only,
+            vat_rate=vat_rate,
+            incoming_account=self._incoming_account(),
+            doc_date=doc_date,
+        )
+        self.table.setModel(self.model)
+        self.table.configure_columns()
+        self.expense_columns = self._expense_columns()
+        self.delegate = InventoryLinesDelegate(self)
+        self._connect_delegate()
+        self.table.setItemDelegate(self.delegate)
+        self.model.changed.connect(self._changed)
 
     def _apply_mode(self, read_only: bool) -> None:
         self.memo.setReadOnly(read_only)
@@ -239,6 +257,7 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
         )
         self.btn_accrual.setVisible(books and self.doc is not None and bool(self.doc.accruals))
         self.hint.setVisible(not read_only and self.doc_type != "landed_cost")
+        self.btn_return.setVisible(posted and not viewing and self.doc_type in RETURN_OF)
 
     def _show_totals(self) -> None:
         in_currency = self.model.rate is not None
@@ -348,6 +367,8 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
                 **self._invoice(),
             )
             return self.doc.id
+        if self.doc_type in RETURN_TYPES:
+            return self._save_return(inputs, document_date, memo)
         if self.doc_type == "sale":
             first = inputs[0]
             header = (first.customer_account_id, first.customer_subconto, memo)
@@ -368,6 +389,19 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
         if self.doc is None:
             return self.inventory.create_transfer_draft(company_id, document_date, inputs, memo)
         self.inventory.update_transfer_draft(company_id, self.doc.id, document_date, inputs, memo)
+        return self.doc.id
+
+    def _save_return(self, inputs, document_date, memo: str) -> int:
+        first = inputs[0]
+        header = (first.party_account_id, first.party_subconto, memo)
+        extra = {"vat_rate": self._chosen_vat_rate(), **self._invoice()}
+        if self.doc is None:
+            return self.inventory.create_return_draft(
+                self.s.company_id, document_date, self.doc_type, inputs, *header, **extra
+            )
+        self.inventory.update_return_draft(
+            self.s.company_id, self.doc.id, document_date, inputs, *header, **extra
+        )
         return self.doc.id
 
     def delete(self) -> None:
@@ -409,6 +443,10 @@ class InventoryDocumentPage(HeaderPart, PartyPart, ClipboardPart, NewValuesPart,
             )
         )
         self.saved.emit(self.doc.id)
+
+    def _make_return(self) -> None:
+        if self.doc is not None and self.doc_type in RETURN_OF:
+            self.make_return.emit(RETURN_OF[self.doc_type], self.doc.id)
 
     def _open_gl(self) -> None:
         if self.doc is not None and self.doc.gl_document_id is not None:

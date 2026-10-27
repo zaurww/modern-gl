@@ -7,6 +7,7 @@ from __future__ import annotations
 import pytest
 
 from modern_gl.application.book_invoices import book_invoices
+from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
     PURCHASE_RETURN,
     QUANTITY_FACTOR,
@@ -14,8 +15,11 @@ from modern_gl.application.inventory import (
     ReturnLine,
     SaleLine,
 )
+from modern_gl.desktop.inventory_document_page import PRICE, QUANTITY, InventoryDocumentPage
+from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
+from modern_gl.reporting.trade import PURCHASE, trade_documents
 from tests.test_sales import Shop, make_shop
 
 Q = QUANTITY_FACTOR
@@ -143,3 +147,32 @@ def test_a_return_without_its_sale_takes_the_average_and_is_recalculated(shop):
     shop.receipt("2026-01-12", "10", "100")
     assert shop.inventory.load_document(shop.company_id, doc).lines[0].inventory_amount == 1_200
     assert balance(shop) == (31, 37_200)
+
+
+def test_the_return_is_filled_from_its_purchase(shop, conn, qtbot):
+    """«Оформить возврат» on the first purchase (without ƏDV): its 10 printers at 120.00,
+    the supplier in the header. 3 go back at its price 12.00 = 36.00; they leave at the
+    average 13.00, 3.00 below the cost is other expense. The purchases list shows it as a
+    return, negative."""
+
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    purchase = InventoryDocumentPage(session, 1)
+    qtbot.addWidget(purchase)
+    assert purchase.btn_return.isVisibleTo(purchase)
+    page = InventoryDocumentPage(session, doc_type=PURCHASE_RETURN)
+    qtbot.addWidget(page)
+    assert page.fill_return_of(1)
+    (row,) = page.model.rows
+    assert (row.quantity, row.amount, row.returned_line_id) == (10 * Q, 12_000, first_line(shop, 1))
+    assert page.party.currentData() == shop.supplier[0]
+    model = page.model
+    model.setData(model.index(0, model.columns.index(QUANTITY)), 3 * Q)
+    model.setData(model.index(0, model.columns.index(PRICE)), 1_200)  # the price stays 12.00
+    page.invoice.setText("RT0003")
+    assert page.save(post=True), page.error.text()
+    assert [p[:3] for p in shop.postings(page.doc.id)] == [
+        ("60", "41", 3_600),
+        ("80", "41", 300),
+    ]
+    listed = trade_documents(conn, shop.company_id, PURCHASE)[0]
+    assert listed.is_return and (listed.amount, listed.vat) == (-3_600, 0)

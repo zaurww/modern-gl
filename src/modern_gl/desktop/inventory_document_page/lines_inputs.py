@@ -6,8 +6,10 @@ from decimal import Decimal
 
 from modern_gl.application.inventory import (
     INCOMING_TYPES,
+    RETURN_TYPES,
     IssueLine,
     ReceiptLine,
+    ReturnLine,
     SaleLine,
     TransferLine,
 )
@@ -31,7 +33,9 @@ def manats(minor: int | None) -> Decimal | None:
 class LineInputs(InventoryLinesBase):
     def to_inputs(
         self, complete: bool = True
-    ) -> list[ReceiptLine] | list[IssueLine] | list[TransferLine] | list[SaleLine]:
+    ) -> (
+        list[ReceiptLine] | list[IssueLine] | list[TransferLine] | list[SaleLine] | list[ReturnLine]
+    ):
         """Lines for saving. A draft (complete=False) needs only the item of each line."""
         rows = [row for row in self.rows if not row.is_empty()]
         if not rows:
@@ -47,6 +51,22 @@ class LineInputs(InventoryLinesBase):
             quantity = None if row.quantity is None else Decimal(row.quantity).scaleb(-6)
             if self.doc_type == "sale":
                 result.append(self._sale_line(row, quantity))
+                continue
+            if self.doc_type in RETURN_TYPES:
+                result.append(
+                    ReturnLine(
+                        item_id,
+                        row.warehouse_id,
+                        quantity,
+                        manats(row.amount),
+                        manats(row.vat_amount),
+                        row.memo.strip(),
+                        row.offset_account_id,
+                        tuple(row.offset_subconto),
+                        row.line_id,
+                        row.returned_line_id,
+                    )
+                )
                 continue
             if self.doc_type in INCOMING_TYPES:
                 result.append(self._receipt_line(row, quantity))
@@ -120,7 +140,8 @@ class LineInputs(InventoryLinesBase):
             if row.to_warehouse_id is None:
                 raise ValidationError(tr("строка {line}: не указан склад-получатель", line=line_no))
             return
-        if self.doc_type in {*INCOMING_TYPES, "sale"} and (row.amount is None or row.amount <= 0):
+        priced = {*INCOMING_TYPES, "sale", *RETURN_TYPES}
+        if self.doc_type in priced and (row.amount is None or row.amount <= 0):
             raise ValidationError(tr("строка {line}: не указана сумма", line=line_no))
         if self.rate is not None and not row.currency_amount:
             raise ValidationError(tr("строка {line}: не указана сумма в валюте", line=line_no))

@@ -81,8 +81,16 @@ def by_sale_kinds(catalog, kinds: list[int], values) -> list[int | None]:
 
 
 # the account a new line's offset starts with, by the document (debt 11: by type, not 60/62/46)
-OFFSET_PURPOSE = {"opening": SUPPLIER, "receipt": SUPPLIER, "sale": CUSTOMER}
-PARTY_DOCUMENTS = {"receipt", "sale"}  # the documents with a supplier or customer
+OFFSET_PURPOSE = {
+    "opening": SUPPLIER,
+    "receipt": SUPPLIER,
+    "sale": CUSTOMER,
+    "purchase_return": SUPPLIER,
+    "sale_return": CUSTOMER,
+}
+# the documents with a supplier or customer
+PARTY_DOCUMENTS = {"receipt", "sale", "purchase_return", "sale_return"}
+RETURNS = {"purchase_return", "sale_return"}
 
 
 class InventoryLinesBase(QAbstractTableModel):
@@ -137,6 +145,10 @@ class InventoryLinesBase(QAbstractTableModel):
             ]
         elif doc_type == "landed_cost":
             self.columns = [ITEM, WAREHOUSE, QUANTITY, UNIT, AMOUNT, MEMO]
+        elif doc_type in RETURNS:  # goods only, at the price of the return
+            self.columns = [
+                ITEM, WAREHOUSE, QUANTITY, UNIT, PRICE, AMOUNT, VAT, ACCOUNT, SC1, SC2, SC3, MEMO
+            ]  # fmt: skip
         else:
             self.columns = [
                 ITEM,
@@ -391,7 +403,7 @@ class InventoryLinesBase(QAbstractTableModel):
     def editable(self, key: str) -> bool:
         if key in {UNIT}:
             return False
-        if key in {PRICE, AMOUNT} and self.doc_type not in {*INCOMING_TYPES, "sale"}:
+        if key in {PRICE, AMOUNT} and self.doc_type not in {*INCOMING_TYPES, "sale", *RETURNS}:
             return False
         if key == VAT and self.doc_type not in VAT_DOCUMENTS:
             return False

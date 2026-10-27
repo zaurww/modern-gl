@@ -90,7 +90,12 @@ SALE_HEADERS = {ITEM: "Товар / услуга", MEMO: "Содержание"}
 # a receipt line without an item: a service, a fixed asset or any expense bought
 RECEIPT_HEADERS = {ITEM: "Товар / услуга / ОС", MEMO: "Содержание"}
 # the first subconto of the offset account, when the account itself is not shown (D90)
-PARTY_HEADERS = {"receipt": "Поставщик", "sale": "Покупатель"}
+PARTY_HEADERS = {
+    "receipt": "Поставщик",
+    "sale": "Покупатель",
+    "purchase_return": "Поставщик",
+    "sale_return": "Покупатель",
+}
 
 DOCUMENT_TYPES = {
     "opening": "Начальные остатки",
@@ -100,6 +105,8 @@ DOCUMENT_TYPES = {
     "sale": "Продажа",
     "transfer": "Перемещение",
     "landed_cost": "Дополнительные расходы",
+    "purchase_return": "Возврат поставщику",
+    "sale_return": "Возврат от покупателя",
 }
 
 HINT = (
@@ -193,6 +200,7 @@ class InventoryGridRow:
     sale_subconto: list[int | None] = field(default_factory=lambda: [None, None, None])
     # a receipt's service of an earlier month (D65): the last day of that month
     expense_date: str | None = None
+    returned_line_id: int | None = None  # a return's line: the purchase's (sale's) it returns
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""

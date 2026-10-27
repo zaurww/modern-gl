@@ -20,6 +20,9 @@ from modern_gl.domain.invoice import EQAIME
 from modern_gl.i18n import tr
 from modern_gl.reporting.eqaime_reconciliation import portal_status
 
+# the documents with an e-qaimə, and whether the company sends it
+OUTGOING = {"receipt": False, "sale": True, "purchase_return": True, "sale_return": False}
+
 
 class HeaderPart(InventoryDocumentForm):
     def _vat_rate_changed(self, *_args) -> None:
@@ -96,7 +99,7 @@ class HeaderPart(InventoryDocumentForm):
         self.basis.setCurrentIndex(max(self.basis.findData(AWAITING if awaits else kind), 0))
         self.invoice.setText(number)
         self.basis.setVisible(self.doc_type == "receipt")
-        self.invoice_caption.setVisible(self.doc_type == "sale")
+        self.invoice_caption.setVisible(self.doc_type in VAT_DOCUMENTS - {"receipt"})
         self.invoice.setVisible(self.doc_type in VAT_DOCUMENTS)
         self._show_awaiting()
         self._show_portal_status(kind, number)
@@ -119,8 +122,9 @@ class HeaderPart(InventoryDocumentForm):
     def _show_portal_status(self, kind: str, number: str) -> None:
         """Only what is worth a look: an approved e-qaimə shows nothing."""
         status = None
-        if kind == EQAIME and self.doc_type in ("receipt", "sale"):
-            status = portal_status(self.s.conn, self.s.company_id, self.doc_type == "sale", number)
+        if kind == EQAIME and self.doc_type in OUTGOING:
+            sent = OUTGOING[self.doc_type]  # a return to the supplier is sent by the company
+            status = portal_status(self.s.conn, self.s.company_id, sent, number)
         group = status_group(status or "")
         if status is None or group == "turnover":
             self.portal_status.hide()
@@ -132,7 +136,7 @@ class HeaderPart(InventoryDocumentForm):
     def _invoice(self) -> dict[str, str]:
         """The basis for saving: number and kind (an empty number: none)."""
         number = self.invoice.text().strip()
-        if self.doc_type == "sale":
+        if self.doc_type != "receipt":  # a sale's, a return's: always an e-qaimə
             return {"invoice": number}
         if self._awaits():
             return {"invoice": "", "invoice_kind": ""}
