@@ -82,8 +82,9 @@ i18n                       тексты: tr(), переводы
   e-qaimə и неоплаченные — `application/invoices.py` (правило — `invoice_rules`, D120).
 
 ## 6. Интерфейс
-- **Окно:** `CompanyFiles` (файл компании) ← `OpenPages` (стек страниц, Esc — назад) ←
-  `ReportPlaces` (как открываются отчёты) ← `MainWindow` (какие страницы есть).
+- **Окно:** `MainWindow` держит части полями и связывает сигналами, без крючков
+  (D-new-main-window-composition): `CompanySession` (файл компании), `PageStack` (страницы,
+  Esc — назад), `Navigator` + `ReportPlaces` (что где открывается).
 - **Страница читает в два шага:** `fetch(conn)` — только SQL, `present(data)` — заполнить;
   через `Session.read` — у большой компании в фоновом потоке (`desktop/background.py`).
   Страница при открытии ничего не пишет.
