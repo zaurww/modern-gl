@@ -15,7 +15,7 @@ from modern_gl.desktop.reports_page import ChartPage
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n_az import AZ
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 
 @pytest.fixture

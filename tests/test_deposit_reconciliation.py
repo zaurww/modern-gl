@@ -16,6 +16,8 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
+
 from modern_gl.application.bank import OUT, TAX, BankLine, BankOperationInput
 from modern_gl.application.bank.deposit_reconciliation import (
     BOOKS_ONLY,
@@ -28,25 +30,13 @@ from modern_gl.application.bank.deposit_reconciliation import (
     reconciled_periods,
 )
 from modern_gl.i18n import tr
-from tests.test_vat_deposit_import import deposit_session, firm, operations
+from tests.helpers.deposit import fee
+from tests.helpers.vat_deposit import operations
 
-__all__ = ["deposit_session", "firm"]
 
-
-def fee(ledger, firm, day: str = "2026-10-03", amount: int = 500) -> int:
-    place = firm["place"]
-    return ledger.bank.save_bank_operation(
-        firm["cid"],
-        BankOperationInput(
-            doc_date=day,
-            direction=OUT,
-            account_id=place.account_id,
-            subconto=place.subconto,
-            kind=TAX,
-            lines=(BankLine(firm["acc"]["68.2"], amount),),
-        ),
-        post=True,
-    )
+@pytest.fixture
+def firm(deposit_firm):
+    return deposit_firm
 
 
 def test_the_period_by_the_portal_and_by_the_books(ledger, firm):

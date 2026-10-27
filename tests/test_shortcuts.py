@@ -10,7 +10,7 @@ from PySide6.QtWidgets import QWidget
 from modern_gl.desktop.shortcuts import KEYS, bind, label, legend
 from modern_gl.i18n import set_language
 from modern_gl.i18n_az import AZ
-from tests.test_i18n import CYRILLIC
+from tests.helpers.texts import CYRILLIC
 
 
 def test_no_two_actions_share_keys_in_one_scope():

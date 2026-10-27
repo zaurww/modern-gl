@@ -12,7 +12,7 @@ from modern_gl.desktop.stock_count_page import StockCountPage
 from modern_gl.desktop.stock_count_page.model import QUANTITY
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 Q = QUANTITY_FACTOR
 

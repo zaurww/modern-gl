@@ -16,7 +16,7 @@ from modern_gl.desktop.backups_dialog import MIRROR_SETTING, BackupsDialog
 from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.infrastructure import backup
-from tests.test_backup import company, documents
+from tests.helpers.backup import company, documents
 
 
 def test_a_backup_goes_to_the_second_folder_too(tmp_path):

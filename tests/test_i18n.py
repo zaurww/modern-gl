@@ -10,10 +10,10 @@ from modern_gl.application.catalog import search
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.i18n import fold, set_language, tr, upper
 from modern_gl.i18n_az import AZ, PARTS
+from tests.helpers.texts import CYRILLIC
 
 SRC = Path(__file__).parent.parent / "src" / "modern_gl"
 TR = ("tr", "trd")  # the interface's and the documents' language (D152)
-CYRILLIC = set("абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ")
 
 
 def tr_keys() -> dict[str, str]:

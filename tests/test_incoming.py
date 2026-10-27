@@ -12,7 +12,7 @@ from modern_gl.domain.accounts import FX_GAIN, INCOMING_PRODUCTION, INCOMING_SUR
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances, stock_card
 from modern_gl.reporting.reports import trial_balance
-from tests.test_inventory import InventoryDemo, inventory_demo  # noqa: F401 — the fixture
+from tests.helpers.inventory import InventoryDemo
 
 
 def other_income(demo: InventoryDemo) -> int:
@@ -21,7 +21,7 @@ def other_income(demo: InventoryDemo) -> int:
     )
 
 
-def test_surplus_comes_in_against_other_income(inventory_demo, conn):  # noqa: F811
+def test_surplus_comes_in_against_other_income(inventory_demo, conn):
     demo = inventory_demo
     income = other_income(demo)
     demo.inventory.ledger.set_account_role(demo.company_id, INCOMING_SURPLUS, income)
@@ -52,7 +52,7 @@ def test_surplus_comes_in_against_other_income(inventory_demo, conn):  # noqa: F
     assert osv["46"].turnover_dt == 2_000
 
 
-def test_gift_without_an_account_of_its_own_is_other_income(inventory_demo):  # noqa: F811
+def test_gift_without_an_account_of_its_own_is_other_income(inventory_demo):
     demo = inventory_demo
     income = other_income(demo)
     assert demo.inventory.incoming_account(demo.company_id, "gift") is None
@@ -61,7 +61,7 @@ def test_gift_without_an_account_of_its_own_is_other_income(inventory_demo):  # 
     assert demo.inventory.incoming_account(demo.company_id, "production") is None
 
 
-def test_draft_keeps_its_reason_and_takes_goods_only(inventory_demo):  # noqa: F811
+def test_draft_keeps_its_reason_and_takes_goods_only(inventory_demo):
     demo = inventory_demo
     income = other_income(demo)
     inv = demo.inventory
@@ -94,7 +94,7 @@ def test_draft_keeps_its_reason_and_takes_goods_only(inventory_demo):  # noqa: F
         inv.create_receipt_draft(demo.company_id, "2026-01-15", [], income, incoming_reason="theft")
 
 
-def test_incoming_form_takes_the_reasons_account(inventory_demo, conn, qtbot):  # noqa: F811
+def test_incoming_form_takes_the_reasons_account(inventory_demo, conn, qtbot):
     demo = inventory_demo
     income, production = other_income(demo), demo.expense_account
     ledger = demo.inventory.ledger

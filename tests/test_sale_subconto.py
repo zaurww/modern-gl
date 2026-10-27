@@ -24,42 +24,13 @@ from modern_gl.desktop.inventory_document_page import (
 )
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.reports import subconto_balance
-from tests.test_sales import Shop, make_shop, sale_page
+from tests.helpers.sale_subconto import postings_46, sales_groups
+from tests.helpers.sales import Shop, make_shop, sale_page
 
 
 @pytest.fixture
 def shop(conn) -> Shop:
     return make_shop(conn, "classic")
-
-
-def sales_groups(shop: Shop, *names: str) -> tuple[int, list[int]]:
-    """A directory «Satış qrupları» on 46 and its elements."""
-    kind = shop.ledger.add_subconto_kind(shop.company_id, None, "Satış qrupları")
-    groups = [shop.ledger.add_subconto_value(shop.company_id, kind, name) for name in names]
-    shop.ledger.update_account(shop.company_id, shop.acc["46"], subconto=[kind])
-    return kind, groups
-
-
-def postings_46(shop: Shop, conn, inv_doc: int) -> list[tuple]:
-    """(Dt, Kt, amount, the sales group on the 46 side) of a document's postings."""
-    gl = shop.inventory.load_document(shop.company_id, inv_doc).gl_document_id
-    code = {v: k for k, v in shop.acc.items()}
-    acc46 = shop.acc["46"]
-    return [
-        (
-            code[p["debit_account_id"]],
-            code[p["credit_account_id"]],
-            p["amount"],
-            p["dt_sc1"]
-            if p["debit_account_id"] == acc46
-            else p["ct_sc1"]
-            if p["credit_account_id"] == acc46
-            else None,
-        )
-        for p in conn.execute(
-            "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (gl,)
-        )
-    ]
 
 
 def test_sales_group_on_46_splits_revenue_cost_and_vat(shop, conn):

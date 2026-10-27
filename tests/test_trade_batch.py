@@ -18,9 +18,9 @@ from modern_gl.desktop.batch_post_dialog import BatchPostDialog
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.trade_page import TradePage
 from modern_gl.reporting.trade import PURCHASE
-from tests.test_sale_subconto import postings_46, sales_groups
-from tests.test_sales import Shop, make_shop
-from tests.test_uniform_entry import shown
+from tests.helpers.sale_subconto import postings_46, sales_groups
+from tests.helpers.sales import Shop, make_shop
+from tests.helpers.uniform_entry import shown
 
 pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 

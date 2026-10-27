@@ -11,23 +11,7 @@ from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.application.workspace import Workspace
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
-
-
-def company(ws: Workspace, name: str = "Firma"):
-    path = ws.create(name, chart=None)
-    conn, cid = ws.open(path)
-    ledger = Ledger(conn)
-    a = ledger.add_account(cid, "50", "Касса", account_class="asset")
-    b = ledger.add_account(cid, "80", "Капитал", account_class="equity")
-    return path, conn, ledger, cid, (a, b)
-
-
-def documents(path) -> int:
-    conn = sqlite3.connect(path)
-    try:
-        return conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
-    finally:
-        conn.close()
+from tests.helpers.backup import company, documents
 
 
 def test_backup_is_a_checked_copy_and_only_the_newest_are_kept(tmp_path):

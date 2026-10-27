@@ -16,7 +16,7 @@ from modern_gl.desktop.inventory_document_page import (
     InventoryDocumentPage,
 )
 from modern_gl.desktop.session import Session
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 
 def page_of(shop: Shop, conn, qtbot, document_id=None, doc_type="receipt"):

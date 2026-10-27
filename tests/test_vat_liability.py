@@ -11,8 +11,8 @@ from modern_gl.application.vat.facts import Payment
 from modern_gl.application.vat.liability import owed
 from modern_gl.application.vat.rules import LiabilityRule
 from modern_gl.reporting.vat_liability import vat_liability
-from tests.test_invoices import firm as invoice_firm  # noqa: F401 — Альфа, Бета, 51, 54, 62
-from tests.test_vat_credit import post
+from tests.helpers.vat_credit import post
+from tests.helpers.vat_liability import receive
 
 RULE = LiabilityRule("2024-01-01")
 
@@ -29,19 +29,7 @@ def sell(ledger, cid, acc, v, day: str, total: str, vat: str, number: str) -> in
     )
 
 
-def receive(ledger, cid, acc, v, day: str, amount: str, number: str | None, deposit=False):
-    """Dt 51 / Kt 62 — the value to the bank; Dt 54 / Kt 62 — the ƏDV to the deposit."""
-    money = acc["54"] if deposit else acc["51"]
-    beta = (v["Бета"], v["Общий"])
-    return post(
-        ledger,
-        cid,
-        day,
-        PostingInput(money, acc["62"], amount, (v["Kapital"],), beta, invoice=number),
-    )
-
-
-def test_the_users_examples_and_an_advance(invoice_firm):  # noqa: F811
+def test_the_users_examples_and_an_advance(invoice_firm):
     """1) E-qaimə MS01 of 15.01: 100 + ƏDV 18. On 20.01 Бета pays 100 and ƏDV 14 —
           owed max(14; 18 × 100/100 = 18) = 18. On 05.02 the ƏDV 3 more — max(17; 18) = 18:
           nothing more, a row of 0.
@@ -111,7 +99,7 @@ def test_what_is_owed_by_the_eqaime_and_before_it():
     assert owed(free, "2026-01-10", 50_000, 0, RULE) == 0
 
 
-def test_an_advance_with_a_number_becomes_the_eqaimes_share(invoice_firm):  # noqa: F811
+def test_an_advance_with_a_number_becomes_the_eqaimes_share(invoice_firm):
     """An advance of 100 on 10.01 naming MS03 before its e-qaimə: 18% — 18. The e-qaimə of
     20.01 has no ƏDV (500 + 0): on its day nothing is owed, −18 (a correction)."""
     conn, ledger, cid, acc, v = invoice_firm
@@ -130,7 +118,7 @@ def test_an_advance_with_a_number_becomes_the_eqaimes_share(invoice_firm):  # no
     assert [Payment("2026-01-10", 10_000, 0)] == facts.receipts
 
 
-def test_the_page_shows_what_the_month_owes(invoice_firm, qtbot):  # noqa: F811
+def test_the_page_shows_what_the_month_owes(invoice_firm, qtbot):
     """January: an advance of 200 from Бета on 25.01 — 36.00; the row says «аванс», the
     footer the total. February has nothing."""
     from datetime import date

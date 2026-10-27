@@ -40,6 +40,19 @@ from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.i18n import set_document_language, set_language
 from modern_gl.infrastructure.db import connect
 
+# fixtures several test modules use (tests/helpers/): available to every test
+pytest_plugins = [
+    "tests.helpers.bank",
+    "tests.helpers.bank_ui",
+    "tests.helpers.conversion",
+    "tests.helpers.currency",
+    "tests.helpers.desktop",
+    "tests.helpers.inventory",
+    "tests.helpers.invoices",
+    "tests.helpers.statements",
+    "tests.helpers.vat_deposit",
+]
+
 
 @dataclass
 class Demo:

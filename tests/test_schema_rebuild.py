@@ -11,7 +11,7 @@ from pathlib import Path
 from modern_gl.application.ledger import Ledger
 from modern_gl.demo_year import create_year_demo
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect, latest_version
-from tests.test_workspace import file_at_version
+from tests.helpers.workspace import file_at_version
 
 REBUILT = 47
 REBUILT_TABLES = (

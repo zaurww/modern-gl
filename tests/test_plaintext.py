@@ -16,7 +16,7 @@ from modern_gl.application.ledger import PostingInput
 from modern_gl.reporting.plaintext import account_name, hledger_journal
 from modern_gl.reporting.report_common import _accounts
 from modern_gl.reporting.reports import trial_balance
-from tests.test_currency import books, post_example  # noqa: F401  (fixture)
+from tests.helpers.currency import post_example
 
 HEADER = """\
 ; ООО Тест
@@ -60,6 +60,11 @@ GOLDEN = """
     721 Адм. расходы  300.00 AZN
     201 Материалы  -300.00 AZN
 """
+
+
+@pytest.fixture
+def books(currency_books):
+    return currency_books
 
 
 def journal(demo, layers=("common",)) -> str:
@@ -116,7 +121,7 @@ def test_storno_draft_and_memo(demo):
     )
 
 
-def test_currency_side_carries_its_amount(ledger, books):  # noqa: F811
+def test_currency_side_carries_its_amount(ledger, books):
     cid = books[0]
     post_example(ledger, books)
     ledger.revalue(cid, "2026-03-31", "80")

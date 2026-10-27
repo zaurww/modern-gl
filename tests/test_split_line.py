@@ -17,7 +17,7 @@ from modern_gl.desktop.inventory_document_page import (
 from modern_gl.desktop.inventory_document_page.lines_split import portion, shares
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 PIECE = 1_000_000  # a quantity of one, in millionths
 

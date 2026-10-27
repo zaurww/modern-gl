@@ -6,10 +6,21 @@ from __future__ import annotations
 import re
 import zipfile
 
+import pytest
+
 from modern_gl.reporting.handover import handover_files, write_handover
 from modern_gl.reporting.plaintext import hledger_journal
-from tests.test_currency import books, post_example  # noqa: F401  (fixture)
-from tests.test_desktop import window, workspace  # noqa: F401  (fixtures)
+from tests.helpers.currency import post_example
+
+
+@pytest.fixture
+def books(currency_books):
+    return currency_books
+
+
+@pytest.fixture
+def window(desktop_window):
+    return desktop_window
 
 
 def test_package_of_a_company_without_parallel_books(demo):
@@ -51,7 +62,7 @@ def test_later_documents_are_included_and_set_the_year(demo):
     )
 
 
-def test_parallel_books_and_rates(ledger, books):  # noqa: F811
+def test_parallel_books_and_rates(ledger, books):
     cid = books[0]
     post_example(ledger, books)
     ledger.set_parallel_books(cid, True)
@@ -78,7 +89,7 @@ def test_zip_is_written_whole(tmp_path):
     assert [p.name for p in tmp_path.iterdir()] == [path.name]  # no .part left behind
 
 
-def test_window_hands_the_company_over(window, tmp_path, monkeypatch):  # noqa: F811
+def test_window_hands_the_company_over(window, tmp_path, monkeypatch):
     target = tmp_path / "out.zip"
     offered = []
     monkeypatch.setattr(

@@ -11,10 +11,14 @@ from modern_gl.application.bank import load_bank_operation
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.vat import credit_events, purchase_facts, rule_for
 from modern_gl.desktop.bank_operation_page.common import FROM_BANK
-from tests.test_bank_ui import acc, choose, key, session, shown_page, typed, value
+from tests.helpers.bank_ui import acc, choose, key, shown_page, typed, value
 
-__all__ = ["session"]  # the fixture of the bank's form tests
 pytestmark = pytest.mark.questions("Yes")
+
+
+@pytest.fixture
+def session(bank_session):
+    return bank_session
 
 
 def test_the_payment_form_pays_the_vat_from_the_bank(qtbot, session):
