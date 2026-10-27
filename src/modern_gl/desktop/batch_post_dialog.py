@@ -106,7 +106,7 @@ class BatchPostDialog(QDialog):
                     self.offset.addItem(a.label, a.id)
             self.account.activated.connect(lambda _: self._account_chosen())
             self.offset.activated.connect(lambda _: self._go_on(self.offset))
-            self.form.addRow(tr("Счёт затрат (Дт)"), self.account)
+            self.form.addRow(tr("Счёт (Дт)"), self.account)
             self.form.addRow(tr("Счёт расчётов (Кт)"), self.offset)
             if suggested is not None and suggested.account_id is not None:
                 self.account.setCurrentIndex(self.account.findData(suggested.account_id))

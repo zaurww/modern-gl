@@ -79,8 +79,8 @@ HEADERS = {
     SC1: "Субконто",
     SC2: "",
     SC3: "",
-    EXPENSE: "Счёт затрат",
-    ESC1: "Субконто затрат",
+    EXPENSE: "Счёт",  # a service, a fixed asset or an expense: not only costs
+    ESC1: "Субконто",
     ESC2: "",
     ESC3: "",
     EXPENSE_MONTH: "Расход за",

@@ -22,6 +22,8 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ACCOUNT,
     AMOUNT,
     CURRENCY_AMOUNT,
+    ESC1,
+    ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
     GOODS,
@@ -57,6 +59,7 @@ from modern_gl.desktop.inventory_document_page.lines_base import (
 from modern_gl.desktop.inventory_document_page.lines_clipboard import LinesClipboard
 from modern_gl.desktop.inventory_document_page.lines_inputs import LineInputs
 from modern_gl.desktop.inventory_document_page.lines_split import LineSplits
+from modern_gl.desktop.inventory_document_page.lines_spread import LineSpread
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     money,
@@ -73,7 +76,7 @@ from modern_gl.reporting.inventory import (
 __all__ = ["InventoryLinesBase", "InventoryLinesModel", "by_sale_kinds", "sale_kinds"]
 
 
-class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
+class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineSpread):
     def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
@@ -110,6 +113,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
         if key in SALE_KEYS:
             kind_id = self.sale_kind(key)
             return self.s.catalog.kinds[kind_id] if kind_id else ""
+        if key in ESC_KEYS:  # «Əsas vəsaitlər», «Xərc maddələri» — what the lines agree on
+            return self._kind_header(key) or (tr(HEADERS[key]) if key == ESC1 else "")
         if key in SUBCONTO_KEYS and (key[-1] != "1" or self.accounts_hidden):
             return self._kind_header(key)
         return tr(HEADERS[key])
@@ -255,11 +260,10 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
         elif key == EXPENSE:
             row.expense_account_id = value
             self._drop_foreign(value, row.expense_subconto)
+            self.spread_expense_account(index.row())
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
         elif key in SUBCONTO_KEYS:
-            self._subconto_of(row, key)[int(key[-1]) - 1] = value
-            if key in SC_KEYS:
-                self._remember_expense(index.row())
+            self._set_subconto(index.row(), key, value)
         elif key == EXPENSE_MONTH:
             row.expense_date = None if value is None else month_from_code(value)
         elif key == QUANTITY and self.doc_type in RETURNS and row.amount and row.quantity:
@@ -274,6 +278,13 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits):
         )
         self.changed.emit()
         return True
+
+    def _set_subconto(self, row_index: int, key: str, value: int | None) -> None:
+        self._subconto_of(self.rows[row_index], key)[int(key[-1]) - 1] = value
+        if key in SC_KEYS:
+            self._remember_expense(row_index)
+        if key in ESC_KEYS:
+            self.spread_expense_subconto(row_index, int(key[-1]) - 1)
 
     def _kind(self, row_index: int) -> int:
         return SERVICE if self.is_service(row_index) else GOODS
