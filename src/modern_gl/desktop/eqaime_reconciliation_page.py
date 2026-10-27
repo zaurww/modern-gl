@@ -10,15 +10,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
 
 from modern_gl.application.eqaime.portal import fetch_list, read_again, rechecks, usual_span
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
-from modern_gl.desktop.eqaime_portal_loader import PortalLoader, changes_warning
+from modern_gl.desktop.eqaime_portal_loader import changes_warning
 from modern_gl.desktop.import_window import FiguresGrid, ImportWindow, restyle, say, signed
 from modern_gl.desktop.period_field import portal_period
+from modern_gl.desktop.portal_worker import PortalRun, run_on_portal
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import money
@@ -93,7 +94,7 @@ class EqaimeReconciliationDialog(ImportWindow):
         self.outcome: Reconciliation | None = None
         self.chosen_document: int | None = None  # double-clicked: the caller opens it
         self.period = (session.working_date, session.working_date)  # of the last load
-        self.worker: QThread | None = None
+        self.portal_run: PortalRun | None = None
         self.today = today or date.today()
         self.company = self.subtitle
         self.through = self.subtitle_note  # «Сверено по 20.10.2026»
@@ -195,22 +196,17 @@ class EqaimeReconciliationDialog(ImportWindow):
         self.load_button.setEnabled(False)
         self.status.setText(tr("Загрузка с портала…"))
         skipped: list[str] = []
-        self.worker = QThread(self)
-        self.loader = PortalLoader(
+        self.portal_run = run_on_portal(
+            self,
             lambda progress: PortalLists(
                 fetch_list(client, outgoing, date_from, date_to, progress, skipped=skipped),
                 skipped,
                 read_again(client, checks, progress),
-            )
+            ),
+            self.status.setText,
+            self._loaded,
+            self._failed,
         )
-        self.loader.moveToThread(self.worker)
-        self.worker.started.connect(self.loader.run)
-        self.loader.progress.connect(self.status.setText)
-        self.loader.loaded.connect(self._loaded)
-        self.loader.failed.connect(self._failed)
-        for signal in (self.loader.loaded, self.loader.failed):
-            signal.connect(self.worker.quit)
-        self.worker.start()
 
     def _failed(self, message: str) -> None:
         self.load_button.setEnabled(True)

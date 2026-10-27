@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date
 
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QTableWidgetItem,
@@ -31,12 +31,12 @@ from modern_gl.application.inventory import format_quantity, to_quantity
 from modern_gl.desktop.eqaime_import_form import BECOMES, COLUMNS, EXPENSE_MONTH, EqaimeImportForm
 from modern_gl.desktop.eqaime_portal_loader import (
     Fetched,
-    PortalLoader,
     changes_warning,
     fetch_invoices,
 )
 from modern_gl.desktop.import_window import say
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.portal_worker import run_on_portal
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import money
@@ -98,16 +98,7 @@ class EqaimeImportDialog(EqaimeImportForm):
         """Talk to the portal off the window's thread: the window stays alive."""
         self.load_button.setEnabled(False)
         self.status.setText(tr("Загрузка с портала…"))
-        self.worker = QThread(self)
-        self.loader = PortalLoader(job)
-        self.loader.moveToThread(self.worker)
-        self.worker.started.connect(self.loader.run)
-        self.loader.progress.connect(self.status.setText)
-        self.loader.loaded.connect(self._loaded)
-        self.loader.failed.connect(self._failed)
-        for signal in (self.loader.loaded, self.loader.failed):
-            signal.connect(self.worker.quit)
-        self.worker.start()
+        self.portal_run = run_on_portal(self, job, self.status.setText, self._loaded, self._failed)
 
     def _failed(self, message: str) -> None:
         self.load_button.setEnabled(True)
