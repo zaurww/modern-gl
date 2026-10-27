@@ -39,6 +39,7 @@ from modern_gl.domain.accounts import (
     SALES_REVENUE,
     SALES_VAT,
 )
+from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import round_ratio
 from modern_gl.i18n import tr, trd
@@ -226,7 +227,7 @@ class ReturnCommands(SaleCommands):
         """The purchase's (sale's) line a return line returns, if it names one."""
         return self.conn.execute(
             """
-            SELECT o.*, d.number FROM inventory_returns r
+            SELECT o.*, d.number, d.doc_date FROM inventory_returns r
             JOIN inventory_lines o ON o.company_id = r.company_id AND o.id = r.returned_line_id
             JOIN inventory_documents d ON d.id = o.document_id
             WHERE r.company_id = ? AND r.line_id = ?
@@ -238,10 +239,11 @@ class ReturnCommands(SaleCommands):
 
     def _apply_return(self, company_id: int, doc: Row, lines: Sequence[Row]) -> list[PostingInput]:
         invoice = doc["invoice"] or ""
+        self._require_own_invoice(company_id, invoice)
         postings: list[PostingInput] = []
         vat_items: list[tuple[int, tuple[int | None, ...], int]] = []
         for line in lines:
-            self._require_return_line(company_id, line)
+            self._require_return_line(company_id, doc, line)
             if doc["doc_type"] == PURCHASE_RETURN:
                 postings += self._purchase_return_line(company_id, doc, line, invoice)
             else:
@@ -259,7 +261,28 @@ class ReturnCommands(SaleCommands):
             postings += self._sale_return_vat(company_id, invoice, lines)
         return postings
 
-    def _require_return_line(self, company_id: int, line: Row) -> None:
+    def _require_own_invoice(self, company_id: int, invoice: str) -> None:
+        """A return has an e-qaimə of its own: its ƏDV belongs to the month of the return.
+        The purchase's (sale's) number would join the return to that e-qaimə — and to its
+        month (a correction, D140)."""
+        if not invoice:
+            return
+        row = self.conn.execute(
+            "SELECT number FROM inventory_documents WHERE company_id = ? AND invoice = ? "
+            "AND doc_type IN ('receipt', 'sale') ORDER BY number LIMIT 1",
+            (company_id, invoice),
+        ).fetchone()
+        if row is not None:
+            raise ValidationError(
+                tr(
+                    "e-qaimə {invoice} — номер документа №{n}; у возврата своя e-qaimə "
+                    "возврата, её ƏDV — в месяце возврата",
+                    invoice=invoice,
+                    n=row["number"],
+                )
+            )
+
+    def _require_return_line(self, company_id: int, doc: Row, line: Row) -> None:
         line_no = line["line_no"]
         if line["item_id"] is None or line["warehouse_id"] is None:
             raise ValidationError(tr("строка {line}: укажите товар и склад", line=line_no))
@@ -270,6 +293,15 @@ class ReturnCommands(SaleCommands):
         if line["offset_account_id"] is None:
             raise ValidationError(tr("строка {line}: не указан контрагент", line=line_no))
         link = self._return_link(company_id, line["id"])
+        if link is not None and doc["doc_date"] < link["doc_date"]:
+            raise ValidationError(
+                tr(
+                    "строка {line}: возврат не может быть раньше документа №{n} от {date}",
+                    line=line_no,
+                    n=link["number"],
+                    date=ru_date(link["doc_date"]),
+                )
+            )
         if link is not None and line["quantity"] > self.returnable(company_id, link["id"]):
             item = self._item(company_id, line["item_id"])
             raise ValidationError(

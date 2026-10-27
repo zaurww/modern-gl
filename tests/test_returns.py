@@ -21,6 +21,7 @@ from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
 from modern_gl.reporting.trade import PURCHASE, trade_documents
+from modern_gl.reporting.vat_register import vat_register
 from tests.test_sales import Shop, make_shop
 
 Q = QUANTITY_FACTOR
@@ -241,3 +242,77 @@ def test_returns_are_built_again_as_they_were(shop):
     shop.inventory.unpost_document(shop.company_id, back)
     shop.inventory.post_document(shop.company_id, back)
     assert shop.postings(back) == before
+
+
+def test_the_vat_of_a_return_is_in_the_month_of_the_return(shop, conn):
+    """Sold 25.01, e-qaimə MT0001: 3 printers for 60.00 + ƏDV 10.80. On 05.02 the buyer
+    sends back one — its return e-qaimə RT0001, 20.00 + 3.60; on 10.02 the company sends
+    one of the first purchase back to the supplier — RT0002, 12.00 + 2.16. January's
+    register keeps the sale as it was; February's has both returns, each on its side as
+    the portal has it (the buyer's return — received, the company's — sent)."""
+    sale = shop.sale(
+        "2026-01-25", [SaleLine(shop.item, shop.main, "3", "60", "10.80")], invoice="MT0001"
+    )
+    shop.inventory.post_return(
+        shop.company_id,
+        "2026-02-05",
+        SALE_RETURN,
+        [
+            ReturnLine(
+                shop.item, shop.main, "1", "20", "3.60", returned_line_id=first_line(shop, sale)
+            )
+        ],
+        shop.acc["62"],
+        [shop.customer, shop.contract],
+        vat_rate=1800,
+        invoice="RT0001",
+    )
+    shop.inventory.post_return(
+        shop.company_id,
+        "2026-02-10",
+        PURCHASE_RETURN,
+        [ReturnLine(shop.item, shop.main, "1", "12", "2.16", returned_line_id=first_line(shop, 1))],
+        shop.acc["60"],
+        shop.supplier,
+        vat_rate=1800,
+        invoice="RT0002",
+    )
+    january = vat_register(conn, shop.company_id, "2026-01-01", "2026-01-31")
+    assert [(r.invoice, r.amount, r.vat) for r in january.sales] == [("MT0001", 6_000, 1_080)]
+    assert january.purchases == []
+    february = vat_register(conn, shop.company_id, "2026-02-01", "2026-02-28")
+    assert [(r.invoice, r.doc_date, r.amount, r.vat) for r in february.purchases] == [
+        ("RT0001", "2026-02-05", 2_000, 360)
+    ]
+    assert [(r.invoice, r.doc_date, r.amount, r.vat) for r in february.sales] == [
+        ("RT0002", "2026-02-10", 1_200, 216)
+    ]
+
+
+def test_a_return_has_an_e_qaime_of_its_own_and_comes_after_its_document(shop):
+    """The sale's number on its return would put the return into the sale's month (a
+    correction, D140): refused. A return dated before its sale: refused."""
+    sale = shop.sale(
+        "2026-01-25", [SaleLine(shop.item, shop.main, "3", "60", "10.80")], invoice="MT0001"
+    )
+
+    def back(day: str, invoice: str) -> int:
+        return shop.inventory.post_return(
+            shop.company_id,
+            day,
+            SALE_RETURN,
+            [
+                ReturnLine(
+                    shop.item, shop.main, "1", "20", "3.60", returned_line_id=first_line(shop, sale)
+                )
+            ],
+            shop.acc["62"],
+            [shop.customer, shop.contract],
+            vat_rate=1800,
+            invoice=invoice,
+        )
+
+    with pytest.raises(ValidationError, match="своя e-qaimə возврата"):
+        back("2026-02-05", "MT0001")
+    with pytest.raises(ValidationError, match="не может быть раньше документа"):
+        back("2026-01-20", "RT0001")

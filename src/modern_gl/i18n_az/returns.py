@@ -36,4 +36,12 @@ AZ: dict[str, str] = {
     "По документу №{n} возвращать нечего": "№{n} sənədi üzrə qaytarılacaq bir şey yoxdur",
     "Возврат по e-qaimə {n}": "{n} e-qaiməsi üzrə qaytarma",
     "возврат услуг — вводится вручную": "xidmətlərin qaytarılması — əl ilə daxil edilir",
+    "e-qaimə {invoice} — номер документа №{n}; у возврата своя e-qaimə возврата, её "
+    "ƏDV — в месяце возврата": (
+        "e-qaimə {invoice} — №{n} sənədinin nömrəsidir; qaytarmanın öz qaytarma e-qaiməsi "
+        "var, onun ƏDV-si qaytarma ayındadır"
+    ),
+    "строка {line}: возврат не может быть раньше документа №{n} от {date}": (
+        "sətir {line}: qaytarma №{n} sənədindən ({date}) əvvəl ola bilməz"
+    ),
 }
