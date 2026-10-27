@@ -20,6 +20,7 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 # The mark of a company file in the SQLite header ('MGL1', set by migration 0046); 0 is an
 # empty or an older file of ours, anything else is another program's database.
 APPLICATION_ID = int.from_bytes(b"MGL1", "big")
+BUSY_TIMEOUT = 5.0  # seconds a connection waits for another program's lock on the file
 
 # A row is read both by name (row["code"]) and by position (row[0]) and has .keys()
 Connection = sqlite3.Connection
@@ -34,18 +35,37 @@ class NewerFileError(LedgerError):
     leaves it untouched (D148)."""
 
 
-def connect(path: str | Path) -> sqlite3.Connection:
-    """Open a ledger database and bring its schema up to date."""
+class BusyError(LedgerError):
+    """Another program holds the file's write lock longer than BUSY_TIMEOUT."""
+
+
+@contextmanager
+def _busy_is_an_error_for_the_user() -> Iterator[None]:
+    try:
+        yield
+    except sqlite3.OperationalError as e:
+        if "locked" not in str(e) and "busy" not in str(e):
+            raise
+        raise BusyError(
+            tr("Файл компании занят другой программой — закройте её и повторите")
+        ) from e
+
+
+def connect(path: str | Path, timeout: float = BUSY_TIMEOUT) -> sqlite3.Connection:
+    """Open a ledger database and bring its schema up to date. A file another program
+    keeps locked for longer than `timeout` is a BusyError, with a message for the user."""
     # isolation_level=None: no implicit transactions, we open them explicitly.
-    conn = sqlite3.connect(path, isolation_level=None)
+    conn = sqlite3.connect(path, isolation_level=None, timeout=timeout)
     conn.row_factory = sqlite3.Row
     try:
-        _check_application_id(conn)  # before anything touches another program's file
-        _check_not_newer(conn, path)  # before WAL or a migration writes to it
-        conn.execute("PRAGMA foreign_keys = ON")
-        conn.execute("PRAGMA journal_mode = WAL")
-        conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
-        migrate(conn)
+        with _busy_is_an_error_for_the_user():
+            _check_application_id(conn)  # before anything touches another program's file
+            _check_not_newer(conn, path)  # before a migration writes to it
+            conn.execute("PRAGMA foreign_keys = ON")
+            migrate(conn)
+            # after the migrations: one that fails leaves the file's header as it was
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = FULL")  # accounting data: durability over speed
     except BaseException:
         conn.close()
         raise
@@ -94,7 +114,7 @@ def close(conn: sqlite3.Connection) -> None:
 def connect_reader(path: str | Path) -> sqlite3.Connection:
     """A second connection to an open company's file, for reading in a worker thread
     (desktop.background): read-only, no migration; WAL lets it read beside the writer."""
-    conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True, timeout=BUSY_TIMEOUT)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -149,13 +169,15 @@ def transaction(conn: sqlite3.Connection) -> Iterator[None]:
         return
     if is_read_only(conn):
         raise ReadOnlyError(tr("Компания открыта только для просмотра — изменения не сохраняются"))
-    conn.execute("BEGIN IMMEDIATE")
+    with _busy_is_an_error_for_the_user():
+        conn.execute("BEGIN IMMEDIATE")
     try:
         yield
     except BaseException:
         conn.execute("ROLLBACK")
         raise
-    conn.execute("COMMIT")
+    with _busy_is_an_error_for_the_user():
+        conn.execute("COMMIT")
 
 
 @contextmanager

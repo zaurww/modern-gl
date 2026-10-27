@@ -12,9 +12,11 @@ from modern_gl.demo_data import create_demo_company
 from modern_gl.infrastructure.db import (
     APPLICATION_ID,
     MIGRATIONS_DIR,
+    BusyError,
     close,
     connect,
     open_snapshot,
+    transaction,
 )
 
 # A migration is never edited once written (CLAUDE.md); a new one is added here with its hash.
@@ -346,3 +348,35 @@ def test_demo_company_is_consistent(ledger):
     conn = ledger.conn
     assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+
+def test_a_locked_file_is_told_in_the_users_words(tmp_path):
+    """Another connection (another program) keeps the write lock: after the timeout the
+    write is refused with a message for the user, not with a traceback (D-new)."""
+    path = tmp_path / "shared.gl"
+    first = connect(path)
+    second = connect(path, timeout=0.2)
+    try:
+        first.execute("BEGIN IMMEDIATE")
+        with pytest.raises(BusyError, match="занят другой программой"), transaction(second):
+            pass
+        first.execute("ROLLBACK")
+        with transaction(second):  # free again
+            pass
+    finally:
+        close(first)
+        close(second)
+
+
+def test_a_failed_update_leaves_the_file_header_as_it_was(tmp_path):
+    """The move to WAL comes after the migrations: a file whose update failed is byte for
+    byte what the older program wrote («файл не изменён» is true)."""
+    path = tmp_path / "old.gl"
+    with sqlite3.connect(path) as ours:
+        ours.execute("CREATE TABLE companies (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+    ours.close()
+    before = hashlib.sha256(path.read_bytes()).hexdigest()
+    with pytest.raises(sqlite3.DatabaseError, match="already exists"):
+        connect(path)
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == before
+    assert not path.with_name("old.gl-wal").exists()
