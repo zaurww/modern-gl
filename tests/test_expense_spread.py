@@ -17,13 +17,17 @@ from modern_gl.desktop.inventory_document_page import (
     InventoryDocumentPage,
 )
 from modern_gl.desktop.session import Session
-from tests.test_purchases import values
-from tests.test_sales import Shop, make_shop
+from tests.helpers.sales import Shop, make_shop
 
 
 @pytest.fixture
 def shop(conn) -> Shop:
     return make_shop(conn, "classic")
+
+
+def values(shop: Shop, kind: str, *names: str) -> list[int]:
+    kind_id = shop.ledger.subconto_kind_id(shop.company_id, kind)
+    return [shop.ledger.add_subconto_value(shop.company_id, kind_id, name) for name in names]
 
 
 def test_an_air_conditioner_and_its_installation_go_to_one_fixed_asset(shop, conn, qtbot):
