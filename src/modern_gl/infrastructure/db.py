@@ -195,6 +195,32 @@ def open_snapshot(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def scratch_copy(conn: sqlite3.Connection) -> sqlite3.Connection:
+    """The open company copied into memory to try things on — the check of the books
+    (D-new) builds the modules' postings again there: writable even when the original is
+    a snapshot (D80); the original is only read and keeps no lock."""
+    copy = sqlite3.connect(":memory:", isolation_level=None, factory=_Connection)
+    _add_functions(copy)
+    try:
+        conn.backup(copy)
+        copy.row_factory = sqlite3.Row
+        copy.execute("PRAGMA foreign_keys = ON")
+    except BaseException:
+        copy.close()
+        raise
+    return copy
+
+
+def file_problems(conn: sqlite3.Connection) -> list[str]:
+    """What the engine finds wrong in the open file: damaged pages or indexes
+    (integrity_check) and references to rows that are gone (foreign_key_check); empty
+    when it is intact."""
+    found = [r[0] for r in conn.execute("PRAGMA integrity_check(20)")]
+    problems = [] if found == ["ok"] else found
+    problems += [f"{r[0]} #{r[1]} → {r[2]}" for r in conn.execute("PRAGMA foreign_key_check")]
+    return problems
+
+
 def _in_wal_mode(path: Path) -> bool:
     """The file's header says WAL (its write version, byte 18, is 2)."""
     try:

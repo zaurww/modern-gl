@@ -22,8 +22,30 @@ class PostingChecks(SubcontoCommands):
     """What a document must satisfy to be posted; each check raises ValidationError or
     PeriodClosedError with a message for the user."""
 
+    def posted_against_rules(self, company_id: int) -> list[tuple[Row, str]]:
+        """Each posted document today's posting rules would refuse, with why: a row a tool
+        wrote past the program, a value made a group since. The check of the books (D-new)
+        asks it; nothing is changed."""
+        problems: list[tuple[Row, str]] = []
+        for doc in self.conn.execute(
+            "SELECT * FROM documents WHERE company_id = ? AND status = 'posted' "
+            "ORDER BY doc_date, number",
+            (company_id,),
+        ).fetchall():
+            try:
+                self._validate_content(company_id, doc, posted=True)
+            except ValidationError as e:
+                problems.append((doc, str(e)))
+        return problems
+
     def _validate_for_posting(self, company_id: int, doc: Row) -> None:
         self._require_open_period(company_id, doc)
+        self._validate_content(company_id, doc)
+
+    def _validate_content(self, company_id: int, doc: Row, posted: bool = False) -> None:
+        """The rules of the document's postings. `posted` — one posted before, checked
+        again by the check of the books (D-new): an account closed since is no error, the
+        period and the moment of posting are not asked."""
         postings = self.conn.execute(
             "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (doc["id"],)
         ).fetchall()
@@ -48,7 +70,7 @@ class PostingChecks(SubcontoCommands):
         }
         for p in postings:
             self._validate_currency(p, accounts, values, currencies)
-            self._validate_line(p, accounts, values, optional, is_reversal)
+            self._validate_line(p, accounts, values, optional, is_reversal, posted)
 
     def _require_open_period(self, company_id: int, doc: Row, hint: str = "") -> None:
         """A document is changed only in the open period; `hint` — what to do instead."""
@@ -113,8 +135,10 @@ class PostingChecks(SubcontoCommands):
         values: dict[int, Row],
         optional: set[int],
         is_reversal: bool,
+        posted: bool = False,
     ) -> None:
-        """The sign of the amount, and each side: a leaf account, active, its subconto."""
+        """The sign of the amount, and each side: a leaf account, active (when it is being
+        posted), its subconto."""
         line = p["line_no"]
         if is_reversal and p["amount"] >= 0:
             raise ValidationError(
@@ -132,7 +156,7 @@ class PostingChecks(SubcontoCommands):
             )
             if acc["is_group"]:
                 raise ValidationError(tr("{label}: нельзя проводить на группу счетов", label=label))
-            if not acc["active"] and not is_reversal:
+            if not acc["active"] and not is_reversal and not posted:
                 raise ValidationError(tr("{label}: счёт не активен", label=label))
             self._validate_subconto(acc, p, prefix, label, values, optional)
             if not is_reversal:

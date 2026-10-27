@@ -69,7 +69,7 @@ OTHER_DIALOGS = {
     "ValueDialog",
 }
 # forms checked live by the general rules (test_the_form_is_as_designed below)
-FORMS = {"CrashDialog"}
+FORMS = {"CrashDialog", "VerificationDialog"}
 IMPORT_WINDOWS = {
     "EqaimeImportForm",
     "EqaimeImportDialog",
@@ -260,7 +260,31 @@ def crash_form() -> QWidget:
     return CrashDialog("Traceback (most recent call last):\n  ...\nValueError: x\n")
 
 
-FORM_STEPS = {"CrashDialog": crash_form}
+def verification_form() -> QWidget:
+    """«Проверка книги» with a check passed, one with findings and the rebuild."""
+    from modern_gl.application.verification import REBUILD, CheckResult, Finding
+    from modern_gl.desktop.verification_dialog import VerificationDialog
+    from modern_gl.infrastructure.db import connect
+
+    conn = connect(":memory:")
+    shop = make_shop(conn, "classic")
+    cid = shop.company_id
+    session = Session(conn, shop.ledger, cid, "Mağaza", Catalog(conn, cid))
+    dialog = VerificationDialog(session, lambda _doc_id: None)
+    dialog.show_results(
+        [
+            CheckResult("Файл компании цел", ()),
+            CheckResult(
+                "Проводки модулей совпадают с их документами",
+                (Finding("№7 от 07.03.2026: проводки отличаются", 1), Finding("файл")),
+                REBUILD,
+            ),
+        ]
+    )
+    return dialog
+
+
+FORM_STEPS = {"CrashDialog": crash_form, "VerificationDialog": verification_form}
 
 
 def form_problems(form: QWidget) -> list[str]:

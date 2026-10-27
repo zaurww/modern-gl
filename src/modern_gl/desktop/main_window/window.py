@@ -37,6 +37,7 @@ from modern_gl.desktop.reports_page import ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import PLACES_BY_KEY, bind
 from modern_gl.desktop.toast import Toast
+from modern_gl.desktop.verification_dialog import VerificationDialog
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import language, set_language, tr
 from modern_gl.infrastructure.db import Connection
@@ -182,6 +183,14 @@ class MainWindow(QMainWindow):
             return
         if PeriodDialog(self.open_session, self).exec():
             self._reopen()
+
+    def verify_books(self) -> None:
+        """«Проверка книги» (D-new): what does not agree, each finding opens its document;
+        after a rebuild the open pages show the new postings."""
+        dialog = VerificationDialog(self.open_session, self.open_document, self)
+        dialog.exec()
+        for doc_id in dialog.changed:
+            self.page_stack.postings_changed(doc_id)
 
     def _reopen(self) -> None:
         """The same company again (another language, look or books), on the same place."""
