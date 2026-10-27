@@ -73,7 +73,7 @@ def test_service_lines_become_goods(shop, conn, qtbot, monkeypatch):
     model = page.model
     kind = model.columns.index(KIND)
     assert not page.table.isColumnHidden(kind)
-    assert model.data(model.index(0, kind)) == "Услуга"
+    assert model.data(model.index(0, kind)) == "Счёт"
 
     asked = []
 
@@ -94,7 +94,7 @@ def test_service_lines_become_goods(shop, conn, qtbot, monkeypatch):
         items["Xprinter XP-Q80A"],
     ]
     assert [row.warehouse_id for row in model.rows] == [shop.main, shop.main]
-    assert model.data(model.index(0, kind)) == "Товар"
+    assert model.data(model.index(0, kind)) == "Склад"
     assert page.table.isColumnHidden(kind)  # no service left to change
 
     model.set_party(shop.acc["60"], [*shop.supplier, None])

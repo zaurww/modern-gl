@@ -30,6 +30,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     HEADERS,
     ITEM,
     KIND,
+    KIND_NAMES,
     MEMO,
     NUMBER_KEYS,
     PARTY_HEADERS,
@@ -292,7 +293,7 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineSpread):
     def _kind_text(self, row_index: int) -> str:
         if self.rows[row_index].is_empty():
             return ""
-        return tr("Услуга") if self._kind(row_index) == SERVICE else tr("Товар")
+        return tr(KIND_NAMES[self._kind(row_index)])
 
     def make_service(self, row_index: int) -> None:
         """Goods made a service: the line keeps what it is as its text and goes to an

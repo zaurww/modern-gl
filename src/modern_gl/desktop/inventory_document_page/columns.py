@@ -41,6 +41,8 @@ MEMO = "memo"
 # a receipt's line is goods (through a warehouse) or a service (to an account): the choice
 KIND = "kind"
 GOODS, SERVICE = 1, 0
+# named by where the line goes, not by what it is: a fixed asset may go to a warehouse (07)
+KIND_NAMES = {GOODS: "Склад", SERVICE: "Счёт"}
 SC_KEYS = {SC1, SC2, SC3}  # the subconto of the line's offset (supplier, customer) account
 ESC_KEYS = {ESC1, ESC2, ESC3}
 SALE_KEYS = {SALE1, SALE2, SALE3}
@@ -66,7 +68,7 @@ VAT_DOCUMENTS = INVENTORY_VAT_DOCUMENTS  # kept here for the pages
 
 HEADERS = {
     ITEM: "Товар",
-    KIND: "Вид",
+    KIND: "Куда",
     WAREHOUSE: "Склад",
     TO_WAREHOUSE: "Склад-получатель",
     QUANTITY: "Количество",

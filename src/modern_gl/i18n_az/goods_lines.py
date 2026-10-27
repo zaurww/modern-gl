@@ -1,4 +1,4 @@
-"""Service lines of a purchase made goods: «Вид» of the line."""
+"""Service lines of a purchase made goods: «Куда» of the line."""
 
 AZ: dict[str, str] = {
     "Строки — товары": "Sətirlər — mal",

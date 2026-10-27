@@ -35,9 +35,9 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
-    GOODS,
     ITEM,
     KIND,
+    KIND_NAMES,
     MEMO,
     PRICE,
     QUANTITY,
@@ -48,7 +48,6 @@ from modern_gl.desktop.inventory_document_page.columns import (
     SC1,
     SC2,
     SC3,
-    SERVICE,
     SEVERAL_MONTHS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
@@ -191,7 +190,7 @@ class InventoryLinesBase(QAbstractTableModel):
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return [(warehouse.id, warehouse.label) for warehouse in self.warehouses.values()]
         if key == KIND:
-            return [(GOODS, tr("Товар")), (SERVICE, tr("Услуга"))]
+            return [(kind, tr(name)) for kind, name in KIND_NAMES.items()]
         if key == ACCOUNT:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         if key == EXPENSE:  # goods come to a stock account through the warehouse only
