@@ -65,7 +65,7 @@ class MainWindow(ReportPlaces):
             bind(self, f"go_{place}", lambda p=place: self.show_place((p,)))
         hints = QGuiApplication.styleHints()
         if hints is not None:
-            hints.colorSchemeChanged.connect(lambda _scheme: self.follow_system_theme())
+            hints.colorSchemeChanged.connect(self.follow_system_theme)
 
     def command_palette(self) -> CommandPalette | None:
         """Ctrl+K: find and do anything (D86)."""
@@ -84,7 +84,7 @@ class MainWindow(ReportPlaces):
             act = menu.addAction(("✓  " if current else "    ") + company.name)
             act.triggered.connect(lambda _=False, p=company.path: self.open_company(p))
         menu.addSeparator()
-        menu.addAction(tr("Новая компания…")).triggered.connect(lambda: self.create_company())
+        menu.addAction(tr("Новая компания…")).triggered.connect(self.new_company)
         menu.addAction(tr("Добавить из файла…")).triggered.connect(self.add_company_file)
         menu.addAction(tr("Открыть для просмотра…")).triggered.connect(self.ask_view_company)
         if self.session is not None:
@@ -164,13 +164,6 @@ class MainWindow(ReportPlaces):
             books.setCheckable(True)
             books.setChecked(s.parallel_books)
             books.toggled.connect(self.set_parallel_books)
-
-    def _viewing(self) -> bool:
-        """Viewing only (D80): nothing new is started; the status bar says why."""
-        if self.session is None or not self.session.read_only:
-            return False
-        self.notify(tr("Компания открыта только для просмотра"))
-        return True
 
     def _make_place(self, key) -> PageWidget:
         s = self.open_session
@@ -316,7 +309,7 @@ class MainWindow(ReportPlaces):
         page.open_document.connect(self.open_document)
         page.copy_requested.connect(self.new_document)
         page.open_inventory_document.connect(self.open_inventory_document)
-        page.new_requested.connect(lambda: self.new_document())
+        page.new_requested.connect(self.new_document)
         page.template_saved.connect(self.open_template)
         page.close_requested.connect(lambda p=page: self.close_page(self._key_of(p)))
         page.title_changed.connect(lambda p=page: self._retitle(p))

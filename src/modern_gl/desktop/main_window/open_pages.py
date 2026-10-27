@@ -26,7 +26,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.workspace import Workspace
-from modern_gl.desktop.main_window.company_files import CompanyFiles
+from modern_gl.desktop.main_window.company_window import CompanyFiles
 from modern_gl.desktop.main_window.sidebar import (
     ALL_OPEN,
     KEY_ROLE,

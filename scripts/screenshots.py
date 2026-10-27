@@ -830,7 +830,7 @@ def shoot_stock_only(win, ledger, shot) -> None:
     """D90: the same company kept as a warehouse only — the books are not shown."""
     from modern_gl.domain.company import FULL, STOCK_ONLY
 
-    win._confirm_close_all = lambda: True  # the bank payment above is left unsaved
+    win.company.confirm_close = lambda: True  # the bank payment above is left unsaved
     ledger.set_company_mode(win.open_session.company_id, STOCK_ONLY)
     win.open_company(win.company_path)
     win.open_session.working_date = date(2026, 2, 28)
@@ -843,7 +843,7 @@ def shoot_stock_only(win, ledger, shot) -> None:
 
 def shoot_viewing(win, shot) -> None:
     """D80: the same company open for viewing only — nothing offers to change it."""
-    win._confirm_close_all = lambda: True  # the bank payment above is left unsaved
+    win.company.confirm_close = lambda: True  # the bank payment above is left unsaved
     win.view_company(win.company_path)
     s = win.open_session
     s.working_date = date(2026, 2, 28)

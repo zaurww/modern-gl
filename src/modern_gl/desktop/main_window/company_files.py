@@ -1,29 +1,25 @@
 """The open company and its file (one file each): created, opened, saved as, copied,
-restored from a backup, deleted; and what opens it again (language, look, books)."""
+restored from a backup, deleted; what is kept in it (VÖEN, books, the documents' language)."""
 
 from __future__ import annotations
 
 import getpass
-import subprocess
+import shutil
 import sys
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Protocol
 
-from PySide6.QtCore import (
-    QSettings,
-    QUrl,
-)
+from PySide6.QtCore import QObject, QProcess, QSettings, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
-    QApplication,
     QDialog,
     QFileDialog,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
-    QMainWindow,
     QMessageBox,
     QPushButton,
     QVBoxLayout,
@@ -34,18 +30,22 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.queries import company_name, company_tax_id, posting_count
 from modern_gl.application.workspace import SUFFIX, TRASH, Workspace
-from modern_gl.desktop import theme
 from modern_gl.desktop.background import LARGE
-from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.portal_company import ask_tax_id
 from modern_gl.desktop.preferences import Preferences
 from modern_gl.desktop.session import Session
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import LANGUAGES, language, set_document_language, set_language, tr
+from modern_gl.i18n import LANGUAGES, set_document_language, tr
 from modern_gl.infrastructure import backup
 from modern_gl.infrastructure.db import Connection, DatabaseError, Error, close
 from modern_gl.reporting.handover import handover_files, write_handover
+
+
+class Notify(Protocol):
+    """A message on the window, with «Undo» when `undo` is given."""
+
+    def __call__(self, message: str, undo: Callable[[], None] | None = None) -> None: ...
 
 
 def confirm_delete(parent: QWidget, name: str) -> bool:
@@ -83,9 +83,28 @@ def confirm_delete(parent: QWidget, name: str) -> bool:
     return dlg.exec() == QDialog.DialogCode.Accepted
 
 
-class CompanyFiles(QMainWindow):
-    def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
-        super().__init__()
+class CompanySession(QObject):
+    """The open company and its file: opened, created, viewed, saved as, copied, restored,
+    deleted; the window hears `opened` (show it), `closing` (drop its pages) and
+    `none_left` (the last one deleted). What it asks of the pages comes in: `confirm_close`
+    — may they close (unsaved ones ask), `notify` — a message on the window."""
+
+    opened = Signal(str)  # the company's name
+    closing = Signal()  # the file is closed right after: its pages go first
+    none_left = Signal()  # no company to open, none created
+
+    def __init__(
+        self,
+        workspace: Workspace,
+        settings: QSettings | None,
+        owner: QWidget,
+        confirm_close: Callable[[], bool],
+        notify: Notify,
+    ) -> None:
+        super().__init__(owner)
+        self.owner = owner  # the window: dialogs are shown over it
+        self.confirm_close = confirm_close
+        self.notify = notify
         self.workspace = workspace
         self.settings = settings  # None: nothing is remembered (tests)
         self.prefs = Preferences(settings) if settings is not None else None
@@ -117,17 +136,17 @@ class CompanyFiles(QMainWindow):
             if first
             else tr("Название новой компании:")
         )
-        name, ok = QInputDialog.getText(self, tr("Новая компания"), prompt)
+        name, ok = QInputDialog.getText(self.owner, tr("Новая компания"), prompt)
         if not ok or not name.strip():
             return False
         kinds = [tr("Полный учёт"), tr("Только склад (без бухгалтерии)")]
         kind, ok = QInputDialog.getItem(
-            self, tr("Новая компания"), tr("Что будете вести?"), kinds, 0, False
+            self.owner, tr("Новая компания"), tr("Что будете вести?"), kinds, 0, False
         )
         if not ok:
             return False
         mode = STOCK_ONLY if kind == kinds[1] else FULL
-        tax_id = ask_tax_id(self)  # checked against the portal (D113)
+        tax_id = ask_tax_id(self.owner)  # checked against the portal (D113)
         if tax_id is None:
             return False
         target = self._ask_file(tr("Где сохранить файл компании"), name.strip())
@@ -135,15 +154,15 @@ class CompanyFiles(QMainWindow):
             return False
         if self.company_path is not None and target.resolve() == self.company_path.resolve():
             QMessageBox.warning(
-                self, tr("Новая компания"), tr("Выберите другой файл: этот уже открыт")
+                self.owner, tr("Новая компания"), tr("Выберите другой файл: этот уже открыт")
             )
             return False
-        if not self._confirm_close_all():
+        if not self.confirm_close():
             return False
         try:
             path = self.workspace.create(name.strip(), path=target, mode=mode, tax_id=tax_id)
         except (LedgerError, OSError, Error) as e:
-            QMessageBox.warning(self, tr("Новая компания"), str(e))
+            QMessageBox.warning(self.owner, tr("Новая компания"), str(e))
             return False
         self._store_files()
         self.open_company(path)
@@ -154,7 +173,7 @@ class CompanyFiles(QMainWindow):
         another is given); None if cancelled."""
         suggested = self.workspace.new_path(name, folder)
         target, _ = QFileDialog.getSaveFileName(
-            self, title, str(suggested), tr("Файлы компаний (*.gl)")
+            self.owner, title, str(suggested), tr("Файлы компаний (*.gl)")
         )
         if not target:
             return None
@@ -162,7 +181,7 @@ class CompanyFiles(QMainWindow):
         return path if path.suffix.lower() == SUFFIX else path.with_name(path.name + SUFFIX)
 
     def open_company(self, path: Path) -> None:
-        if not self._confirm_close_all():
+        if not self.confirm_close():
             return
         try:
             conn, company_id = self.workspace.open(path)
@@ -170,7 +189,7 @@ class CompanyFiles(QMainWindow):
             self._offer_restore(Path(path), str(e))
             return
         except LedgerError as e:  # a newer program's file, a failed update: as it was
-            QMessageBox.warning(self, tr("Открыть компанию"), str(e))
+            QMessageBox.warning(self.owner, tr("Открыть компанию"), str(e))
             return
         self._use_company(conn, company_id, Path(path), read_only=False)
         if self.prefs:
@@ -178,7 +197,7 @@ class CompanyFiles(QMainWindow):
 
     def ask_view_company(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self,
+            self.owner,
             tr("Открыть для просмотра"),
             str(self.workspace.folder),
             tr("Файлы компаний (*.gl *.db);;Все файлы (*)"),
@@ -189,12 +208,12 @@ class CompanyFiles(QMainWindow):
     def view_company(self, path: Path) -> None:
         """A company file for viewing only (D80): a snapshot of it; the file is not changed,
         not listed and not backed up, so it may be a colleague's file in use."""
-        if not self._confirm_close_all():
+        if not self.confirm_close():
             return
         try:
             conn, company_id = self.workspace.view(path)
         except (LedgerError, OSError, Error) as e:
-            QMessageBox.warning(self, tr("Открыть для просмотра"), str(e))
+            QMessageBox.warning(self.owner, tr("Открыть для просмотра"), str(e))
             return
         self._use_company(conn, company_id, Path(path), read_only=True)
 
@@ -204,21 +223,19 @@ class CompanyFiles(QMainWindow):
             self.view_company(self.company_path)
             self.notify(tr("Файл перечитан"))
 
-    def _reopen(self) -> None:
-        """The same company again (another language, look or books), on the same place."""
+    def reopen(self) -> bool:
+        """The same company again (another language, look or books); False — none open."""
         if self.session is None or self.company_path is None:
-            return
-        place = self._current_place()
+            return False
         if self.session.read_only:
             self.view_company(self.company_path)
         else:
             self.open_company(self.company_path)
-        if place is not None:
-            self.show_place(place)
+        return True
 
     def _use_company(self, conn: Connection, company_id: int, path: Path, read_only: bool) -> None:
         old_date = self.session.working_date if self.session else None
-        self._close_company()
+        self.close()
         self.conn, self.company_path = conn, path
         self.ledger = Ledger(conn, actor=self.user_name())
         name = company_name(conn, company_id)
@@ -237,19 +254,19 @@ class CompanyFiles(QMainWindow):
         self.session.last_backup = lambda: self._last_backup(path)
         if old_date:
             self.session.working_date = old_date
-        self._show_company(name)
+        self.opened.emit(name)
 
     def _last_backup(self, path: Path) -> datetime | None:
         made = self.workspace.backups(path)
         return made[0].made_at if made else None
 
-    def _close_company(self) -> None:
+    def close(self) -> None:
         """Drop all pages of the current company and close its file."""
         if self.session is not None:
             self.session.background.wait()  # a worker's read of this file ends first
             # its result may still wait in the event loop: not shown on a closed company
             self.session.closed = True
-        self._drop_pages()
+        self.closing.emit()  # the pages go before the file
         if self.conn is not None:
             try:
                 viewed = self.session is not None and self.session.read_only
@@ -257,17 +274,17 @@ class CompanyFiles(QMainWindow):
                     self.workspace.auto_backup(self.conn, self.company_path)
             except (backup.BackupError, OSError, Error) as e:
                 QMessageBox.warning(
-                    self, tr("Резервная копия"), tr("Копия не сохранена: {error}", error=e)
+                    self.owner, tr("Резервная копия"), tr("Копия не сохранена: {error}", error=e)
                 )
             close(self.conn)
         self.conn = self.ledger = self.session = self.company_path = None
 
     def shutdown(self) -> None:
-        self._close_company()
+        self.close()
 
     def add_company_file(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
-            self,
+            self.owner,
             tr("Добавить компанию из файла"),
             "",
             tr("Файлы компаний (*.gl *.db);;Все файлы (*)"),
@@ -278,7 +295,7 @@ class CompanyFiles(QMainWindow):
             added = self.workspace.add_file(Path(path))
         except DatabaseError:
             QMessageBox.warning(
-                self,
+                self.owner,
                 tr("Добавить из файла"),
                 tr("Это не файл компании: {file}", file=Path(path).name),
             )
@@ -294,7 +311,10 @@ class CompanyFiles(QMainWindow):
         if self.session is None or self.company_path is None:
             return
         name, ok = QInputDialog.getText(
-            self, tr("Сохранить как"), tr("Название компании:"), text=self.session.company_name
+            self.owner,
+            tr("Сохранить как"),
+            tr("Название компании:"),
+            text=self.session.company_name,
         )
         if not ok or not name.strip():
             return
@@ -305,14 +325,14 @@ class CompanyFiles(QMainWindow):
             self.save_as_to(target, name.strip())
 
     def save_as_to(self, target: Path, name: str) -> bool:
-        if self.conn is None or self.company_path is None or not self._confirm_close_all():
+        if self.conn is None or self.company_path is None or not self.confirm_close():
             return False
         if target.suffix.lower() != SUFFIX:
             target = target.with_name(target.name + SUFFIX)
         try:
             self.workspace.save_as(self.conn, self.company_path, target, name)
         except (LedgerError, OSError, Error) as e:
-            QMessageBox.warning(self, tr("Сохранить как"), str(e))
+            QMessageBox.warning(self.owner, tr("Сохранить как"), str(e))
             return False
         self._store_files()
         self.open_company(target)
@@ -330,14 +350,14 @@ class CompanyFiles(QMainWindow):
             return
         suggested = Path.home() / f"{self.company_path.stem} {datetime.now():%Y-%m-%d}.gl"
         target, _ = QFileDialog.getSaveFileName(
-            self, tr("Сохранить копию компании"), str(suggested), tr("Файлы компаний (*.gl)")
+            self.owner, tr("Сохранить копию компании"), str(suggested), tr("Файлы компаний (*.gl)")
         )
         if not target:
             return
         try:
             backup.copy_to(self.conn, Path(target))
         except (backup.BackupError, OSError, Error) as e:
-            QMessageBox.warning(self, tr("Сохранить копию"), str(e))
+            QMessageBox.warning(self.owner, tr("Сохранить копию"), str(e))
             return
         self.notify(tr("Копия сохранена: {file}", file=target))
 
@@ -348,14 +368,14 @@ class CompanyFiles(QMainWindow):
         today = datetime.now().date()
         name = f"{self.company_path.stem} — {tr('передача дел')} {today}.zip"
         target, _ = QFileDialog.getSaveFileName(
-            self, tr("Передача дел"), str(Path.home() / name), tr("Архив zip (*.zip)")
+            self.owner, tr("Передача дел"), str(Path.home() / name), tr("Архив zip (*.zip)")
         )
         if not target:
             return
         try:
             write_handover(Path(target), handover_files(self.conn, self.session.company_id, today))
         except (OSError, Error) as e:
-            QMessageBox.warning(self, tr("Передача дел"), str(e))
+            QMessageBox.warning(self.owner, tr("Передача дел"), str(e))
             return
         self.notify(tr("Пакет передачи сохранён: {file}", file=target))
 
@@ -377,13 +397,13 @@ class CompanyFiles(QMainWindow):
             name=path.stem,
         )
         choice, ok = QInputDialog.getItem(
-            self, tr("Восстановить из копии"), prompt, [*labels, other], 0, False
+            self.owner, tr("Восстановить из копии"), prompt, [*labels, other], 0, False
         )
         if not ok:
             return
         if choice == other:
             chosen, _ = QFileDialog.getOpenFileName(
-                self, tr("Восстановить из копии"), "", tr("Файлы компаний (*.gl *.db)")
+                self.owner, tr("Восстановить из копии"), "", tr("Файлы компаний (*.gl *.db)")
             )
             if not chosen:
                 return
@@ -393,14 +413,14 @@ class CompanyFiles(QMainWindow):
         self.restore_from(source, path)
 
     def restore_from(self, source: Path, path: Path) -> bool:
-        if not self._confirm_close_all():
+        if not self.confirm_close():
             return False
         if self.company_path == path:
-            self._close_company()
+            self.close()
         try:
             self.workspace.restore(source, path)
         except (backup.BackupError, OSError, Error) as e:
-            QMessageBox.warning(self, tr("Восстановить из копии"), str(e))
+            QMessageBox.warning(self.owner, tr("Восстановить из копии"), str(e))
             return False
         self.open_company(path)
         self.notify(tr("Компания восстановлена из копии {file}", file=source.name))
@@ -409,27 +429,28 @@ class CompanyFiles(QMainWindow):
     def show_company_file(self) -> None:
         if self.company_path is None:
             return
-        if sys.platform == "win32":
-            subprocess.Popen(["explorer", "/select,", str(self.company_path)])
+        explorer = shutil.which("explorer") if sys.platform == "win32" else None
+        if explorer is not None:  # the file chosen in its folder; no shell, a full path
+            QProcess.startDetached(explorer, ["/select,", str(self.company_path)])
         else:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.company_path.parent)))
 
     def delete_company(self) -> None:
-        if self.session is None or not confirm_delete(self, self.session.company_name):
+        if self.session is None or not confirm_delete(self.owner, self.session.company_name):
             return
-        if not self._confirm_close_all():
+        if not self.confirm_close():
             return
         name, path = self.session.company_name, self.company_path
         if path is None:
             return
-        self._close_company()
+        self.close()
         self.workspace.delete(path)
         self._store_files()
         remaining = self.workspace.companies()
         if remaining:
             self.open_company(remaining[0].path)
         elif not self.create_company(first=True):
-            self._show_no_company()
+            self.none_left.emit()
         self.notify(
             tr("Компания «{name}» удалена (файл в папке «{trash}»)", name=name, trash=TRASH)
         )
@@ -438,33 +459,6 @@ class CompanyFiles(QMainWindow):
         """Who is working (D82): the name set in the program, else the Windows user."""
         name = self.prefs.user_name() if self.prefs else ""
         return name.strip() or getpass.getuser()
-
-    def ask_user_name(self) -> None:
-        name, ok = QInputDialog.getText(
-            self,
-            tr("Ваше имя"),
-            tr("Имя в журнале действий и в документах («Провёл …»):"),
-            text=self.user_name(),
-        )
-        if ok and name.strip() and name.strip() != self.user_name():
-            self.set_user_name(name.strip())
-
-    def set_user_name(self, name: str) -> None:
-        """The pages are built again: each module took the name when it opened."""
-        if not self._confirm_close_all():
-            return
-        if self.prefs:
-            self.prefs.set_user_name(name)
-        self._reopen()
-        self.notify(tr("Ваше имя: {name}", name=name))
-
-    def set_ui_language(self, code: str) -> None:
-        if code == language() or not self._confirm_close_all():
-            return
-        set_language(code)
-        if self.prefs:
-            self.prefs.set_language(code)
-        self._reopen()
 
     def set_document_language(self, code: str) -> None:
         """The language the program writes its texts into this company's documents in
@@ -477,12 +471,12 @@ class CompanyFiles(QMainWindow):
 
     def set_parallel_books(self, on: bool) -> None:
         """Books on or off (D63): the pages are built again with or without the field."""
-        if self.session is None or self.company_path is None or not self._confirm_close_all():
+        if self.session is None or self.company_path is None or not self.confirm_close():
             return
         try:
             self.session.ledger.set_parallel_books(self.session.company_id, on)
         except LedgerError as e:
-            QMessageBox.warning(self, tr("Параллельные книги (МСФО, налог)"), str(e))
+            QMessageBox.warning(self.owner, tr("Параллельные книги (МСФО, налог)"), str(e))
             return
         self.open_company(self.company_path)
 
@@ -491,80 +485,30 @@ class CompanyFiles(QMainWindow):
         if self.session is None:
             return
         current = company_tax_id(self.session.conn, self.session.company_id) or ""
-        typed = ask_tax_id(self, current)
+        typed = ask_tax_id(self.owner, current)
         if typed is None:
             return
         try:
             self.session.ledger.set_company_tax_id(self.session.company_id, typed or None)
         except LedgerError as e:
-            QMessageBox.warning(self, tr("VÖEN компании"), str(e))
+            QMessageBox.warning(self.owner, tr("VÖEN компании"), str(e))
 
     def set_stock_only(self, on: bool) -> None:
         """Only the warehouse, or the whole program (D90): the sidebar is built again."""
-        if self.session is None or self.company_path is None or not self._confirm_close_all():
+        if self.session is None or self.company_path is None or not self.confirm_close():
             return
         try:
             self.session.ledger.set_company_mode(
                 self.session.company_id, STOCK_ONLY if on else FULL
             )
         except LedgerError as e:
-            QMessageBox.warning(self, tr("Только склад (без бухгалтерии)"), str(e))
+            QMessageBox.warning(self.owner, tr("Только склад (без бухгалтерии)"), str(e))
             return
         self.open_company(self.company_path)
 
-    def set_ui_theme(self, name: str) -> None:
-        """Another look at once: the pages are built again in its colors."""
-        if name == theme.current_theme() or not self._confirm_close_all():
-            return
-        theme.use_theme(name)
-        if self.prefs:
-            self.prefs.set_theme(name)
-        self._repaint()
-
-    def set_table_look(self, change: Callable[[bool], None], on: bool) -> None:
-        """«Полосы в таблицах», «Сетка в отчётах» (D103, D127): the pages built again."""
-        change(on)
-        self._repaint(reopen=not self._dirty_pages())
-
-    def follow_system_theme(self) -> None:
-        """The system turned light or dark: «as the system» follows it. Pages with
-        unsaved changes are not built again — the new colors reach them on reopening."""
-        if theme.current_theme() != theme.SYSTEM_THEME:
-            return
-        shown = theme.shown_theme()
-        theme.use_theme(theme.SYSTEM_THEME)
-        if theme.shown_theme() != shown:
-            self._repaint(reopen=not self._dirty_pages())
-
-    def _repaint(self, reopen: bool = True) -> None:
-        app = QApplication.instance()
-        if isinstance(app, QApplication):
-            theme.apply(app)
-        if reopen:
-            self._reopen()
-
-    def _dirty_pages(self) -> list[PageWidget]:
-        raise NotImplementedError
-
-    def _current_place(self) -> tuple | None:
-        raise NotImplementedError
-
-    def show_place(self, key) -> None:
-        raise NotImplementedError
-
-    # ---- the window shows the company; made by the window ----------------------------
-
-    def _show_company(self, name: str) -> None:
-        raise NotImplementedError
-
-    def _drop_pages(self) -> None:
-        raise NotImplementedError
-
-    def _show_no_company(self) -> None:
-        raise NotImplementedError
-
-    def _confirm_close_all(self) -> bool:
-        raise NotImplementedError
-
-    def notify(self, message: str, undo: Callable[[], None] | None = None) -> None:
-        raise NotImplementedError
+    def viewing(self) -> bool:
+        """Viewing only (D80): nothing new is started; the status bar says why."""
+        if self.session is None or not self.session.read_only:
+            return False
+        self.notify(tr("Компания открыта только для просмотра"))
+        return True
