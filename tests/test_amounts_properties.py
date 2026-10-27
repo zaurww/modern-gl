@@ -75,9 +75,8 @@ def test_nothing_to_allocate_is_an_error(total: int, weights: list[int]) -> None
         allocate_minor(total, keyed(weights))
 
 
-@given(TOTAL, st.lists(WEIGHT, min_size=1, max_size=8))
+@given(TOTAL, st.lists(st.just(0), min_size=1, max_size=8))
 def test_a_zero_base_is_an_error(total: int, weights: list[int]) -> None:
-    assume(sum(weights) == 0)
     with pytest.raises(ValidationError):
         allocate_minor(total, keyed(weights))
 
