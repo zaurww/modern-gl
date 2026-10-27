@@ -118,9 +118,6 @@ modern-gl-cli = "modern_gl.api.cli:cli"
 # assert in widgets only narrows a type for pyright (a loaded document, a Qt layout);
 # input is checked by the application layer's errors, not by assert.
 "src/modern_gl/desktop/**" = ["N802", "N803", "N815", "S101"]
-# временно, правит ветка claude/audit-window — убрать при слиянии
-"src/modern_gl/desktop/main_window/window.py" = ["PLW0108"]
-"src/modern_gl/desktop/main_window/company_files.py" = ["S603", "S607"]
 # docstrings of the public core (claude/audit-types): required in domain, infrastructure,
 # api and application/ledger only
 "!src/modern_gl/{domain,infrastructure,api,application/ledger}/**" = [

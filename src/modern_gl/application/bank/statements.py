@@ -9,6 +9,7 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from itertools import accumulate
 
+from modern_gl.application import attention
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.bank.places import BankPlace, bank_places
 from modern_gl.application.bank.statement import statement
@@ -98,7 +99,7 @@ def _entered(
     ]
 
 
-@attention_source
+@attention_source(attention.BANK)
 def bank_attention(conn: Connection, company_id: int, day: str) -> list[Attention]:
     """«Bu gün» (D86): statements whose balance is not the bank's, and bank operations
     left as drafts — up to the day."""

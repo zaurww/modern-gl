@@ -26,16 +26,24 @@ class Attention:
 
 
 AttentionSource = Callable[[Connection, int, str], list[Attention]]
-_SOURCES: list[AttentionSource] = []
+_SOURCES: dict[AttentionSource, int] = {}
+
+# where each module's rows stand on «Bu gün»: money first, then goods, then papers —
+# an explicit place, not the order in which the modules happened to be imported
+BANK, STOCK, UNPAID_INVOICES, AWAITING_INVOICES = 10, 20, 30, 40
 
 
-def attention_source(source: AttentionSource) -> AttentionSource:
-    """A module's rows of «Требует внимания»: (conn, company_id, ISO day) → rows."""
-    if source not in _SOURCES:
-        _SOURCES.append(source)
-    return source
+def attention_source(place: int) -> Callable[[AttentionSource], AttentionSource]:
+    """A module's rows of «Требует внимания»: (conn, company_id, ISO day) → rows, shown
+    at `place` among the modules' rows (the constants above)."""
+
+    def register(source: AttentionSource) -> AttentionSource:
+        _SOURCES[source] = place
+        return source
+
+    return register
 
 
 def attention_sources() -> tuple[AttentionSource, ...]:
-    """Every module's source, in the order the modules were loaded."""
-    return tuple(_SOURCES)
+    """Every loaded module's source, by its place."""
+    return tuple(sorted(_SOURCES, key=lambda source: _SOURCES[source]))

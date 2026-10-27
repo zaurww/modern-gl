@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from modern_gl.application import attention
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.common import group_path
 from modern_gl.domain.dates import iso_date
@@ -322,7 +323,7 @@ def stock_card(
     return result
 
 
-@attention_source
+@attention_source(attention.STOCK)
 def negative_stock(conn: Connection, company_id: int, day: str) -> list[Attention]:
     """«Bu gün» (D86): goods that went below zero on a warehouse."""
     count = sum(1 for b in stock_balances(conn, company_id, day) if b.quantity < 0)

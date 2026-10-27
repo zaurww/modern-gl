@@ -5,20 +5,18 @@ accounts), the reports opened as pages of their own (a card, «Сравнени�
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QListWidgetItem, QMenu
+from PySide6.QtCore import QObject
 
 from modern_gl.desktop import icons
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
-from modern_gl.desktop.main_window.open_pages import OpenPages
-from modern_gl.desktop.main_window.sidebar import KEY_ROLE
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.preferences import STATEMENTS_VIEW, prefs
 from modern_gl.desktop.reports_hub import (
     BY_ID,
     HUB,
-    PIN_KEYS,
     Report,
     ReportsPage,
     ask_account,
@@ -48,13 +46,25 @@ from modern_gl.desktop.theme import P
 from modern_gl.i18n import tr
 from modern_gl.reporting.trade import PURCHASE, SALE
 
+if TYPE_CHECKING:
+    from modern_gl.desktop.main_window.navigator import Navigator
+
 ACCOUNT_REPORTS = ("subconto", "card", "analysis")  # they ask the account first
 
 
-class ReportPlaces(OpenPages):
-    def _report_place(self, key) -> PageWidget:
+class ReportPlaces(QObject):
+    """The reports of the `Navigator`: it opens the places that are reports through
+    `place`, the rest — the catalog's reports and the pinned ones — open here."""
+
+    def __init__(self, nav: Navigator) -> None:
+        super().__init__(nav)
+        self.nav = nav  # documents, places and the warehouse the reports lead to
+        self.company = nav.company
+        self.page_stack = nav.page_stack
+
+    def place(self, key) -> PageWidget:
         """ОСВ, the statements, the chart of accounts or «Все отчёты»."""
-        s = self.open_session
+        s = self.company.open_session
         if key == HUB:
             hub = ReportsPage(s)
             hub.open_report.connect(self.open_catalog_report)
@@ -67,7 +77,7 @@ class ReportPlaces(OpenPages):
             return osv
         if key == ("statements",):
             statements = StatementsPage(s)
-            statements.view_changed.connect(lambda p=statements: self._select_nav(key, p))
+            statements.view_changed.connect(lambda p=statements: self.page_stack.select_nav(key, p))
             self._wire_report(statements)
             return statements
         chart = ChartPage(s)
@@ -77,28 +87,22 @@ class ReportPlaces(OpenPages):
     # ---- «Все отчёты» and the pinned reports (D114) ------------------------------------
 
     def shown_reports(self) -> list[Report]:
-        s = self.open_session
+        s = self.company.open_session
         return shown(s.stock_only, s.read_only, s.parallel_books)
-
-    def _show_company(self, name: str) -> None:
-        super()._show_company(name)
-        self.show_pins()
 
     def show_pins(self) -> None:
         """The sidebar's pinned reports as they are chosen now; the page shown keeps its
         item chosen."""
         offered = {r.id: r for r in self.shown_reports()}
-        self.sidebar.set_pins(
+        self.page_stack.sidebar.set_pins(
             [
                 (pin_key(i), tr(offered[i].title), self._pin_icon(offered[i]))
                 for i in pinned()
                 if i in offered
             ]
         )
-        current = self.current_page()
-        if current is not None:
-            self._select_nav(self._key_of(current), current)
-        hub = self.pages.get(HUB)
+        self.page_stack.select_current()
+        hub = self.page_stack.pages.get(HUB)
         if isinstance(hub, ReportsPage):
             hub.show_pins()
 
@@ -119,14 +123,14 @@ class ReportPlaces(OpenPages):
 
     def _openers(self) -> dict[str, Callable[[], object]]:
         return {
-            "osv": lambda: self.show_place(("osv",)),
+            "osv": lambda: self.nav.show_place(("osv",)),
             "balance": lambda: self.open_statements("balance"),
             "profit": lambda: self.open_statements("profit"),
             "cash": lambda: self.open_statements("cash"),
             "books": self.open_books,
             "subconto_analysis": self.open_subconto_analysis,
-            "handover": self.hand_over,
-            "invoices": lambda: self.show_place(("invoices",)),
+            "handover": self.company.hand_over,
+            "invoices": lambda: self.nav.show_place(("invoices",)),
             "vat_credit": self.open_vat_credit,
             "vat_liability": lambda: self.open_single(VatLiabilityPage),
             "vat_receipts": lambda: self.open_single(VatReceiptsPage),
@@ -137,63 +141,41 @@ class ReportPlaces(OpenPages):
             "landed": self.open_landed_report,
             "stock_statement": lambda: self.open_stock_report(StockStatementPage),
             "gross_profit": lambda: self.open_stock_report(GrossProfitPage),
-            "stock": lambda: self.show_place(("inventory",)),
-            "bank": lambda: self.show_place(("bank",)),
+            "stock": lambda: self.nav.show_place(("inventory",)),
+            "bank": lambda: self.nav.show_place(("bank",)),
         }
 
     def _remember(self, report_id: str) -> None:
         remember(report_id)
-        hub = self.pages.get(HUB)
+        hub = self.page_stack.pages.get(HUB)
         if isinstance(hub, ReportsPage):
             hub.refresh()
 
     def _ask_account_report(self, report: Report) -> None:
-        s = self.open_session
-        account_id = ask_account(s.catalog, report.id, tr(report.title), self)
+        s = self.company.open_session
+        account_id = ask_account(s.catalog, report.id, tr(report.title), self.nav.owner)
         if account_id is not None:
             self._remember(report.id)
             self.open_report(report.id, account_id, month_of(s.working_date))
 
     def open_statements(self, view: str) -> None:
         """«Финансовая отчётность» on the view asked: one page for the three (D99)."""
-        page = self.pages.get(("statements",))
+        page = self.page_stack.pages.get(("statements",))
         if isinstance(page, StatementsPage):
             page.show_view(view)
         else:  # the page opens on it at once, without reading another view first
             prefs().set_view(STATEMENTS_VIEW, view)
-        self.show_place(("statements",))
+        self.nav.show_place(("statements",))
 
     def open_reconciliation(self, direction: str) -> None:
         """«Сверка с порталом» of purchases or sales, as from their pages."""
-        dialog = EqaimeReconciliationDialog(self.open_session, self, direction=direction)
-        dialog.exec()
-        self._refresh_trade()  # drafts may have been made from it
-        if dialog.chosen_document is not None:
-            self.open_document(dialog.chosen_document)
-
-    def _on_nav(self, current: QListWidgetItem | None, previous) -> None:
-        """A pinned report opens as from «Все отчёты» (a card asks the account first), and
-        the sidebar keeps the item of the page shown."""
-        key = current.data(KEY_ROLE) if current is not None else None
-        if key not in PIN_KEYS:
-            super()._on_nav(current, previous)
-            return
-        self.open_catalog_report(PIN_KEYS[key])
-        page = self.current_page()
-        if page is not None:
-            self._select_nav(self._key_of(page), page)
-
-    def _nav_menu(self, pos) -> None:
-        item = self.sidebar.nav.itemAt(pos)
-        key = item.data(KEY_ROLE) if item else None
-        if key not in PIN_KEYS:
-            super()._nav_menu(pos)
-            return
-        menu = QMenu(self)
-        menu.addAction(tr("Убрать из боковой панели")).triggered.connect(
-            lambda: self.unpin(PIN_KEYS[key])
+        dialog = EqaimeReconciliationDialog(
+            self.company.open_session, self.nav.owner, direction=direction
         )
-        menu.exec(self.sidebar.nav.viewport().mapToGlobal(pos))
+        dialog.exec()
+        self.nav.refresh_trade()  # drafts may have been made from it
+        if dialog.chosen_document is not None:
+            self.nav.open_document(dialog.chosen_document)
 
     def unpin(self, report_id: str) -> None:
         set_pinned(report_id, False)
@@ -204,95 +186,84 @@ class ReportPlaces(OpenPages):
     def open_books(self) -> None:
         """«Сравнение книг» (D98): an open page of its own, like an account's card."""
         key = BooksPage.key
-        if key not in self.pages:
-            page = BooksPage(self.open_session)
+        if key not in self.page_stack.pages:
+            page = BooksPage(self.company.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_vat_credit(self) -> None:
         """«ƏDV к зачёту»: one page, the period on it."""
         key = VatCreditPage.key
-        if key not in self.pages:
-            page = VatCreditPage(self.open_session)
+        if key not in self.page_stack.pages:
+            page = VatCreditPage(self.company.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_vat_register(self) -> None:
         """«Реестр e-qaimə»: one page, the period on it."""
         key = VatRegisterPage.key
-        if key not in self.pages:
-            page = VatRegisterPage(self.open_session)
+        if key not in self.page_stack.pages:
+            page = VatRegisterPage(self.company.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_single(self, page_class) -> None:
         """A report of one page, the period on it («ƏDV продаж к уплате»)."""
         key = page_class.key
-        if key not in self.pages:
-            page = page_class(self.open_session)
+        if key not in self.page_stack.pages:
+            page = page_class(self.company.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_subconto_analysis(self) -> None:
         """«Анализ субконто» (D125): one page, the directory is chosen on it."""
         key = SubcontoAnalysisPage.key
-        if key not in self.pages:
-            page = SubcontoAnalysisPage(self.open_session)
+        if key not in self.page_stack.pages:
+            page = SubcontoAnalysisPage(self.company.open_session)
             self._wire_report(page)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def _wire_report(self, page) -> None:
-        page.open_document.connect(self.open_document)
+        page.open_document.connect(self.nav.open_document)
         page.open_report.connect(self.open_report)
 
     def open_landed_report(self) -> None:
         """«Əlavə xərclər» by declaration, from the warehouse."""
         key = LandedCostReportPage.key
-        if key not in self.pages:
-            page = LandedCostReportPage(self.open_session)
-            page.open_inventory_document.connect(self.open_inventory_document)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+        if key not in self.page_stack.pages:
+            page = LandedCostReportPage(self.company.open_session)
+            page.open_inventory_document.connect(self.nav.open_inventory_document)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_stock_report(self, page_class) -> None:
         """«Ведомость по складу», «Валовая прибыль»: one page, the period on it."""
         key = page_class.key
-        if key not in self.pages:
-            page = page_class(self.open_session)
+        if key not in self.page_stack.pages:
+            page = page_class(self.company.open_session)
             page.open_stock_card.connect(self.open_stock_card)
-            self._add_page(key, page, open_item=True)
-        self._activate(key)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
 
     def open_stock_card(self, item_id: int, warehouse_id: int, params: ReportParams) -> None:
         """An item's card on a warehouse (0 — on all) for the period it was asked from."""
-        page = ItemCardPage(self.open_session, item_id, warehouse_id or None, params)
-        if page.key in self.pages:
-            self.close_page(page.key, ask=False)
-        page.open_inventory_document.connect(self.open_inventory_document)
-        self._add_page(page.key, page, open_item=True)
-        self._activate(page.key)
+        page = ItemCardPage(self.company.open_session, item_id, warehouse_id or None, params)
+        if page.key in self.page_stack.pages:
+            self.page_stack.close_page(page.key, ask=False)
+        page.open_inventory_document.connect(self.nav.open_inventory_document)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
 
     def open_report(self, kind: str, account_id: int, params: ReportParams) -> None:
-        page = REPORTS[kind](self.open_session, account_id, params)
+        page = REPORTS[kind](self.company.open_session, account_id, params)
         key = page.key  # a card of one counterparty is a page of its own
-        if key in self.pages:
-            self.close_page(key, ask=False)
+        if key in self.page_stack.pages:
+            self.page_stack.close_page(key, ask=False)
         self._wire_report(page)
-        self._add_page(key, page, open_item=True)
-        self._activate(key)
-
-    # ---- made by the window ----------------------------------------------------------
-
-    def open_document(self, doc_id: int) -> None:
-        raise NotImplementedError
-
-    def open_inventory_document(self, document_id: int) -> None:
-        raise NotImplementedError
-
-    def _refresh_trade(self) -> None:
-        raise NotImplementedError
+        self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)

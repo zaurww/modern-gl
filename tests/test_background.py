@@ -83,7 +83,7 @@ def test_a_read_queued_before_the_company_closes_is_not_shown(window, qtbot):
     osv.present = shown.append  # type: ignore[method-assign]
     session = window.session
     osv.refresh()
-    window._close_company()  # waits for the worker, drops the pages, closes the file
+    window.company.close()  # waits for the worker, drops the pages, closes the file
     qtbot.wait(100)  # the queued result is delivered now, if at all
     assert shown == []
     assert session.closed

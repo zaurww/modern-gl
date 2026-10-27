@@ -48,7 +48,7 @@ def _commands(win: MainWindow) -> list[Entry]:
         if not s.stock_only:
             items += [
                 (tr("Новый документ"), win.new_document, "Ctrl+N", "new"),
-                (tr("Быстрая строка"), win.quick_entry, "Ctrl+L", "journal"),
+                (tr("Быстрая строка"), win.nav.quick_entry, "Ctrl+L", "journal"),
             ]
         items += [
             (tr("Новая покупка"), lambda: win.new_inventory_document(PURCHASE), "", "purchases"),
@@ -77,7 +77,7 @@ def _places(win: MainWindow) -> list[Entry]:
             icon=report.icon,
             words=names(report),
         )
-        for report in win.shown_reports()
+        for report in win.reports.shown_reports()
     )
     # the places first, then the reports: one heading for each
     return sorted(entries, key=lambda e: e.group == tr("Отчёты"))
