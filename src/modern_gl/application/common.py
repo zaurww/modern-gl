@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from modern_gl.domain.dates import ru_date
@@ -144,35 +145,67 @@ def where_used(conn: Connection, company_id: int, table: str, row_id: int) -> st
     """Why the row cannot be deleted: the first place that refers to it (postings first),
     or None when nothing does. The places are read from the foreign keys, so a new
     table that refers to accounts or directory elements is checked without changes here."""
-    for referrer, columns in _references(conn, table):
-        own = db.column_names(conn, referrer)
-        where = " OR ".join(f'"{column}" = ?' for column in columns)
-        params: list[object] = [row_id] * len(columns)
-        if "company_id" in own:
+    for ref in _references(conn, table):
+        where = " OR ".join(f'"{column}" = ?' for column in ref.columns)
+        params: list[object] = [row_id] * len(ref.columns)
+        if ref.by_company:
             where = f"({where}) AND company_id = ?"
             params.append(company_id)
-        order = "ORDER BY id " if "id" in own else ""  # the earliest document first
+        order = "ORDER BY id " if ref.has_id else ""  # the earliest document first
         found = conn.execute(
-            f'SELECT * FROM "{referrer}" WHERE {where} {order}LIMIT 1', params
+            f'SELECT * FROM "{ref.table}" WHERE {where} {order}LIMIT 1', params
         ).fetchone()
         if found is not None:
-            return _usage_text(conn, referrer, found)
+            return _usage_text(conn, ref.table, found)
     return None
 
 
-def _references(conn: Connection, table: str) -> list[tuple[str, list[str]]]:
+@dataclass(frozen=True)
+class Reference:
+    """A table that refers to another, by these columns."""
+
+    table: str
+    columns: tuple[str, ...]
+    by_company: bool  # it has company_id: a row is looked for in the company only
+    has_id: bool  # it has an id to order by
+
+
+# the references of a schema (a table -> the tables that refer to it), read once per
+# process: the schema is the same in every connection of a version (migrations are
+# frozen, D148), and a connection cannot keep it
+_REFERENCES: dict[int, dict[str, tuple[Reference, ...]]] = {}
+
+
+def _references(conn: Connection, table: str) -> tuple[Reference, ...]:
     """The tables that refer to the table, each with its columns that do."""
-    found: dict[str, list[str]] = {}
-    for referrer, column in UNCHECKED_REFERENCES.get(table, []):
-        found.setdefault(referrer, []).append(column)
+    version = db.schema_version(conn)
+    schema = _REFERENCES.get(version)
+    if schema is None:
+        schema = _REFERENCES[version] = _read_references(conn)
+    return schema.get(table, ())
+
+
+def _read_references(conn: Connection) -> dict[str, tuple[Reference, ...]]:
+    found: dict[str, dict[str, list[str]]] = {}  # table -> referrer -> columns
+    for table, unchecked in UNCHECKED_REFERENCES.items():
+        for referrer, column in unchecked:
+            found.setdefault(table, {}).setdefault(referrer, []).append(column)
     for referrer in db.table_names(conn):
         for key in db.foreign_key_columns(conn, referrer):
             # a cascaded row is a part of the referred one (an element's tags), no use
-            if key.table == table and key.to == "id" and key.on_delete != "CASCADE":
-                found.setdefault(referrer, []).append(key.column)
+            if key.to == "id" and key.on_delete != "CASCADE":
+                found.setdefault(key.table, {}).setdefault(referrer, []).append(key.column)
     # the clearest reason first: a document by its number
     first = {"postings": 0, "inventory_lines": 1}
-    return sorted(found.items(), key=lambda ref: first.get(ref[0], 2))
+    columns = {table: db.column_names(conn, table) for table in db.table_names(conn)}
+    return {
+        table: tuple(
+            Reference(referrer, tuple(cols), "company_id" in own, "id" in own)
+            for referrer, cols in sorted(referrers.items(), key=lambda ref: first.get(ref[0], 2))
+            if (own := columns.get(referrer, set())) is not None
+        )
+        for table, referrers in found.items()
+    }
 
 
 def _usage_text(conn: Connection, referrer: str, row: Row) -> str:

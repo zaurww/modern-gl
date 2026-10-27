@@ -68,3 +68,25 @@ def test_fill_subconto_refuses_more_than_three_typed_values():
 
     with pytest.raises(ValidationError, match="больше 3 субконто"):
         fill_subconto(_account(1, 2, 3), {}, keep=(1, 2, 3, 4))
+
+
+# ---- the map of references is read once ----------------------------------------------
+
+
+def test_where_used_reads_the_schema_once_per_process(demo, monkeypatch):
+    from modern_gl.application import common
+    from modern_gl.infrastructure import db
+
+    calls = []
+    read = db.foreign_key_columns
+    monkeypatch.setattr(
+        common.db, "foreign_key_columns", lambda c, t: calls.append(t) or read(c, t)
+    )
+    common._REFERENCES.clear()
+    led, cid = demo.ledger, demo.company_id
+    assert common.where_used(led.conn, cid, "subconto_values", demo.supplier_a) is not None
+    scanned = len(calls)
+    assert scanned > 0
+    assert common.where_used(led.conn, cid, "subconto_values", demo.supplier_b) is not None
+    assert common.where_used(led.conn, cid, "accounts", demo.acc["301"]) is not None
+    assert len(calls) == scanned, "the foreign keys were read again"
