@@ -153,3 +153,51 @@ def test_a_payment_without_a_counterparty_is_one_line(demo):
         invoices=(("A-1", 5_000), ("A-2", 5_000)),
     )
     assert [(x.account_id, x.amount, x.invoice) for x in lines] == [(demo.acc["531"], 12_000, "")]
+
+
+# ---- a posting is one record -------------------------------------------------------------
+
+
+def test_a_column_of_a_posting_is_added_in_one_place(conn):
+    """`PostingRecord.COLUMNS` is the table's content, in its order, and the fields of the
+    record: the insert, the storno, the comparison and the snapshot all follow it."""
+    from dataclasses import fields
+
+    from modern_gl.application.ledger.posting_record import (
+        INSERT_POSTING,
+        KEY_COLUMNS,
+        PostingRecord,
+    )
+
+    table = [r["name"] for r in conn.execute("PRAGMA table_info(postings)")]
+    assert tuple(c for c in table if c not in KEY_COLUMNS) == PostingRecord.COLUMNS
+    assert tuple(f.name for f in fields(PostingRecord)) == PostingRecord.COLUMNS
+    assert all(column in INSERT_POSTING for column in PostingRecord.COLUMNS)
+
+
+def test_a_storno_negates_the_record_and_keeps_the_rest(demo):
+    from modern_gl.application.ledger.inputs import PostingInput
+    from modern_gl.application.ledger.posting_record import PostingRecord
+
+    led, cid = demo.ledger, demo.company_id
+    usd = led._currency(cid, "USD")["id"]
+    led.set_rate(cid, usd, "2026-03-01", 1_700_000)
+    bank = led.add_account(cid, "223", "Валютный счёт", parent="22", currency=True)
+    line = PostingInput(demo.acc["201"], bank, "170.00", (), (), "по счёту", usd, "100")
+    record = PostingRecord.from_input(line, 1)
+    assert record.params() == (
+        demo.acc["201"], bank, 17_000, None, None, None,
+        None, None, None, "по счёту", usd, 10_000, None, None, 0,
+    )  # fmt: skip
+    assert record.negated().params()[2] == -17_000
+    assert record.negated().params()[11] == -10_000
+    assert record.negated().memo == "по счёту"
+    doc = led.post_new(cid, "2026-03-01", [line])
+    storno = led.reverse(cid, doc, "2026-03-02")
+    stored = [
+        PostingRecord.from_row(r)
+        for r in led.conn.execute(
+            "SELECT * FROM postings WHERE document_id = ? ORDER BY line_no", (storno,)
+        )
+    ]
+    assert stored == [record.negated()]
