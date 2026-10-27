@@ -41,7 +41,7 @@ from modern_gl.domain.accounts import (
 )
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import round_ratio
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, transaction
 
 
@@ -315,14 +315,14 @@ class ReturnCommands(SaleCommands):
             postings.append(
                 PostingInput(
                     line["offset_account_id"], self._difference_account(company_id, FX_GAIN),
-                    money(amount - cost), party, (), tr("Разница цены возврата"), invoice=invoice,
+                    money(amount - cost), party, (), trd("Разница цены возврата"), invoice=invoice,
                 )
             )  # fmt: skip
         elif amount < cost:
             postings.append(
                 PostingInput(
                     self._difference_account(company_id, FX_LOSS), item["inventory_account_id"],
-                    money(cost - amount), (), stock, tr("Разница цены возврата"),
+                    money(cost - amount), (), stock, trd("Разница цены возврата"),
                 )
             )  # fmt: skip
         return postings
@@ -419,7 +419,7 @@ class ReturnCommands(SaleCommands):
         return [
             PostingInput(
                 vat_id, credit_id, money(amount), self._by_kind(company_id, vat_id, customer),
-                credit_sc, tr("НДС"), invoice=invoice,
+                credit_sc, trd("НДС"), invoice=invoice,
             )
             for (credit_id, credit_sc, customer), amount in totals.items()
         ]  # fmt: skip
