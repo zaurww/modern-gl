@@ -145,3 +145,16 @@ def test_adding_a_name_on_a_service_line_asks_for_an_item(shop, conn, qtbot, mon
     editor.setProperty("gl_add", True)
     delegate.setModelData(editor, model, index)
     assert asked == ["Zebra DS2208-SR"]
+
+
+def test_the_kind_cell_opens_with_both_choices(shop, conn, qtbot):
+    """The cell of «Вид» opens empty: its list is not narrowed to what the line is now,
+    «Товар» is there to pick without deleting «Услуга» first."""
+    page = receipt_with_services(shop, conn, qtbot)
+    model = page.model
+    index = model.index(0, model.columns.index(KIND))
+    editor = page.delegate.createEditor(page.table.viewport(), None, index)
+    page.delegate.setEditorData(editor, index)
+    assert editor.text() == ""
+    page.delegate.setModelData(editor, model, index)  # Enter on it: nothing changes
+    assert model.is_service(0)

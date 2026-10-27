@@ -149,6 +149,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         value = index.data(Qt.ItemDataRole.EditRole)
         if model.key(index) == ITEM and model.is_service(index.row()):
             value = model.rows[index.row()].memo  # what the service is, to read or correct
+        elif model.key(index) == KIND:
+            value = ""  # both choices in the list, not only the line's own
         elif model.key(index) in LIST_KEYS:
             value = "" if value is None else index.data(Qt.ItemDataRole.DisplayRole)
         editor.setText(value or "")
