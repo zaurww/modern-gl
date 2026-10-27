@@ -1,0 +1,161 @@
+{
+  "currency": {},
+  "rows": [
+    {
+      "account_id": 1,
+      "closing_ct": 0,
+      "closing_dt": 140000,
+      "closing_wrong": false,
+      "code": "201",
+      "depth": 0,
+      "is_group": false,
+      "name": "Материалы",
+      "opening_ct": 0,
+      "opening_dt": 120000,
+      "opening_wrong": false,
+      "subconto": [],
+      "turnover_ct": 30000,
+      "turnover_dt": 50000
+    },
+    {
+      "account_id": 2,
+      "closing_ct": 0,
+      "closing_dt": 900000,
+      "closing_wrong": false,
+      "code": "22",
+      "depth": 0,
+      "is_group": true,
+      "name": "Банковские счета",
+      "opening_ct": 0,
+      "opening_dt": 900000,
+      "opening_wrong": false,
+      "subconto": [],
+      "turnover_ct": 200000,
+      "turnover_dt": 200000
+    },
+    {
+      "account_id": 3,
+      "closing_ct": 0,
+      "closing_dt": 700000,
+      "closing_wrong": false,
+      "code": "221",
+      "depth": 1,
+      "is_group": false,
+      "name": "Банк 1",
+      "opening_ct": 0,
+      "opening_dt": 900000,
+      "opening_wrong": false,
+      "subconto": [],
+      "turnover_ct": 200000,
+      "turnover_dt": 0
+    },
+    {
+      "account_id": 4,
+      "closing_ct": 0,
+      "closing_dt": 200000,
+      "closing_wrong": false,
+      "code": "222",
+      "depth": 1,
+      "is_group": false,
+      "name": "Банк 2",
+      "opening_ct": 0,
+      "opening_dt": 0,
+      "opening_wrong": false,
+      "subconto": [],
+      "turnover_ct": 0,
+      "turnover_dt": 200000
+    },
+    {
+      "account_id": 5,
+      "closing_ct": 1000000,
+      "closing_dt": 0,
+      "closing_wrong": false,
+      "code": "301",
+      "depth": 0,
+      "is_group": false,
+      "name": "Капитал",
+      "opening_ct": 1000000,
+      "opening_dt": 0,
+      "opening_wrong": false,
+      "subconto": [],
+      "turnover_ct": 0,
+      "turnover_dt": 0
+    },
+    {
+      "account_id": 6,
+      "closing_ct": 70000,
+      "closing_dt": 0,
+      "closing_wrong": false,
+      "code": "531",
+      "depth": 0,
+      "is_group": false,
+      "name": "Поставщики",
+      "opening_ct": 20000,
+      "opening_dt": 0,
+      "opening_wrong": false,
+      "subconto": [],
+      "turnover_ct": 50000,
+      "turnover_dt": 0
+    },
+    {
+      "account_id": 7,
+      "closing_ct": 0,
+      "closing_dt": 30000,
+      "closing_wrong": false,
+      "code": "721",
+      "depth": 0,
+      "is_group": false,
+      "name": "Адм. расходы",
+      "opening_ct": 0,
+      "opening_dt": 0,
+      "opening_wrong": false,
+      "subconto": [],
+      "turnover_ct": 0,
+      "turnover_dt": 30000
+    }
+  ],
+  "subconto": {
+    "6": [
+      {
+        "closing_ct": 20000,
+        "closing_dt": 0,
+        "currency_closing": {},
+        "depth": 0,
+        "invoice": null,
+        "name": "Поставщик A",
+        "opening_ct": 20000,
+        "opening_dt": 0,
+        "path": [
+          1
+        ],
+        "turnover_ct": 0,
+        "turnover_dt": 0,
+        "value_id": 1
+      },
+      {
+        "closing_ct": 50000,
+        "closing_dt": 0,
+        "currency_closing": {},
+        "depth": 0,
+        "invoice": null,
+        "name": "Поставщик B",
+        "opening_ct": 0,
+        "opening_dt": 0,
+        "path": [
+          2
+        ],
+        "turnover_ct": 50000,
+        "turnover_dt": 0,
+        "value_id": 2
+      }
+    ]
+  },
+  "total": {
+    "closing_ct": 1070000,
+    "closing_dt": 1070000,
+    "opening_ct": 1020000,
+    "opening_dt": 1020000,
+    "turnover_ct": 280000,
+    "turnover_dt": 280000
+  }
+}

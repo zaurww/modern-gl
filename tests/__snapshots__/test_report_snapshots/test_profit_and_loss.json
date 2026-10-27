@@ -1,0 +1,58 @@
+{
+  "lines": [
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [],
+      "kind": "subtotal",
+      "title": "Валовая прибыль",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": "",
+      "amount": [
+        -30000
+      ],
+      "kind": "line",
+      "title": "Расходы без типа",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        -30000
+      ],
+      "kind": "subtotal",
+      "title": "Операционная прибыль",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        -30000
+      ],
+      "kind": "subtotal",
+      "title": "Прибыль до налогообложения",
+      "under_line": false,
+      "value_id": null
+    },
+    {
+      "account_id": null,
+      "account_type": null,
+      "amount": [
+        -30000
+      ],
+      "kind": "total",
+      "title": "Чистая прибыль (убыток)",
+      "under_line": false,
+      "value_id": null
+    }
+  ],
+  "unbalanced": []
+}
