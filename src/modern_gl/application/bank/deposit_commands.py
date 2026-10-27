@@ -34,7 +34,7 @@ from modern_gl.application.common import now
 from modern_gl.domain.accounts import OUTPUT_VAT
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import dry_run, transaction
 
 
 @dataclass
@@ -80,13 +80,8 @@ class VatDepositCommands(BankImportCommands):
     ) -> DepositImported:
         """What the import would do, nothing written: the import itself, rolled back — the
         preview and the import cannot differ."""
-        with transaction(self.conn):
-            self.conn.execute("SAVEPOINT deposit_preview")
-            try:
-                done = self._import_deposit(company_id, place, operations, balance, period)
-            finally:
-                self.conn.execute("ROLLBACK TO deposit_preview")
-                self.conn.execute("RELEASE deposit_preview")
+        with dry_run(self.conn):
+            done = self._import_deposit(company_id, place, operations, balance, period)
         done.rows = [replace(row, document_id=None) for row in done.rows]
         return done
 

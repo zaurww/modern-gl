@@ -40,7 +40,7 @@ from modern_gl.application.bank.operations import (
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED, BANK_FEE
 from modern_gl.i18n import tr, trd
-from modern_gl.infrastructure.db import transaction
+from modern_gl.infrastructure.db import dry_run, transaction
 
 
 @dataclass
@@ -75,13 +75,8 @@ class BankFileCommands(FileConversionCommands):
         self, company_id: int, files: Sequence[BankFile], places: Mapping[str, BankPlace]
     ) -> FileImported:
         """What the import would do, nothing written: the import itself, rolled back."""
-        with transaction(self.conn):
-            self.conn.execute("SAVEPOINT bank_file_preview")
-            try:
-                done = self._import_files(company_id, files, places, None, True)
-            finally:
-                self.conn.execute("ROLLBACK TO bank_file_preview")
-                self.conn.execute("RELEASE bank_file_preview")
+        with dry_run(self.conn):
+            done = self._import_files(company_id, files, places, None, True)
         done.rows = [replace(row, document_id=None) for row in done.rows]
         return done
 

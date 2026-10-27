@@ -10,6 +10,7 @@ import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
 
 from modern_gl.domain.errors import LedgerError, ReadOnlyError
@@ -133,12 +134,18 @@ def is_read_only(conn: sqlite3.Connection) -> bool:
     return bool(conn.execute("PRAGMA query_only").fetchone()[0])
 
 
+_SAVEPOINTS = count(1)  # names of nested blocks: unique, so an inner one never hides an outer
+
+
 @contextmanager
 def transaction(conn: sqlite3.Connection) -> Iterator[None]:
-    """Run the block atomically. Joins the outer transaction if one is already open.
+    """Run the block atomically. Inside an open transaction the block is a savepoint of
+    its own (D-new): its failure undoes the block only, the outer transaction goes on —
+    a loop that keeps the documents that posted and reports the ones that did not.
     A company open for viewing refuses at once, with a message for the user."""
     if conn.in_transaction:
-        yield
+        with _savepoint(conn, undo=False):
+            yield
         return
     if is_read_only(conn):
         raise ReadOnlyError(tr("Компания открыта только для просмотра — изменения не сохраняются"))
@@ -149,6 +156,29 @@ def transaction(conn: sqlite3.Connection) -> Iterator[None]:
         conn.execute("ROLLBACK")
         raise
     conn.execute("COMMIT")
+
+
+@contextmanager
+def dry_run(conn: sqlite3.Connection) -> Iterator[None]:
+    """Run the block and undo it whatever happens: a preview that is the real thing
+    rolled back, so the two cannot differ. Joins an open transaction like `transaction`."""
+    with transaction(conn), _savepoint(conn, undo=True):
+        yield
+
+
+@contextmanager
+def _savepoint(conn: sqlite3.Connection, undo: bool) -> Iterator[None]:
+    name = f"sp_{next(_SAVEPOINTS)}"
+    conn.execute(f"SAVEPOINT {name}")
+    try:
+        yield
+    except BaseException:
+        conn.execute(f"ROLLBACK TO {name}")
+        conn.execute(f"RELEASE {name}")
+        raise
+    if undo:
+        conn.execute(f"ROLLBACK TO {name}")
+    conn.execute(f"RELEASE {name}")
 
 
 def insert(conn: sqlite3.Connection, sql: str, params: Sequence[object] = ()) -> int:
