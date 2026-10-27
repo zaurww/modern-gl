@@ -37,15 +37,23 @@ class RebuildCommands(PostingCommands):
 
     def _gl_contents(self, company_id: int, start: str) -> dict[int, tuple]:
         """What the GL documents of the warehouse documents from `start` on say."""
+        # two plain joins, not one with OR: the OR kept SQLite from the documents' key and
+        # it compared every warehouse document with every GL one (10 s on the demo year)
         return document_contents(
             self.conn.execute(
+                "WITH gl AS ("
+                "  SELECT i.gl_document_id AS id FROM inventory_documents i "
+                "  WHERE i.company_id = ? AND i.doc_date >= ? AND i.gl_document_id IS NOT NULL "
+                "  UNION "
+                "  SELECT a.gl_document_id FROM inventory_documents i "
+                "  JOIN inventory_accruals a ON a.company_id = i.company_id "
+                "  AND a.document_id = i.id "
+                "  WHERE i.company_id = ? AND i.doc_date >= ?"
+                ") "
                 "SELECT d.id AS document_id, d.doc_date, d.memo AS doc_memo, "
-                f"{POSTING_CONTENT} FROM inventory_documents i "
-                "JOIN documents d ON d.company_id = i.company_id "
-                "AND (d.id = i.gl_document_id OR d.id IN "
-                "(SELECT a.gl_document_id FROM inventory_accruals a WHERE a.document_id = i.id)) "
-                "JOIN postings p ON p.document_id = d.id "
-                "WHERE i.company_id = ? AND i.doc_date >= ? ORDER BY d.id, p.line_no",
-                (company_id, start),
+                f"{POSTING_CONTENT} FROM gl "
+                "JOIN documents d ON d.company_id = ? AND d.id = gl.id "
+                "JOIN postings p ON p.document_id = d.id ORDER BY d.id, p.line_no",
+                (company_id, start, company_id, start, company_id),
             ),
         )
