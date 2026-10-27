@@ -29,7 +29,7 @@ from modern_gl.application.currencies import no_rate_text
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
-from modern_gl.application.ledger.module import ModuleDocumentCommands
+from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.accounts import BANK_FEE, FX_GAIN, FX_LOSS, FX_TRANSIT
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
@@ -90,7 +90,7 @@ class MissingAccountRole(ValidationError):
         self.role = role
 
 
-class ConversionCommands(ModuleDocumentCommands):
+class ConversionCommands(ModuleBase):
     def save_conversion(
         self,
         company_id: int,
@@ -107,7 +107,7 @@ class ConversionCommands(ModuleDocumentCommands):
         self._check_input(company_id, data)
         with transaction(self.conn):
             if conversion_id is None:
-                doc_id = self._insert_document(company_id, data.doc_date, data.memo, "common")
+                doc_id = self.documents.new(company_id, data.doc_date, data.memo)
                 saved: int = self.conn.execute(
                     "INSERT INTO currency_conversions (company_id, document_id) VALUES (?, ?) "
                     "RETURNING id",
@@ -117,7 +117,7 @@ class ConversionCommands(ModuleDocumentCommands):
             else:
                 saved = conversion_id
                 row = self._conversion_row(company_id, saved)
-                doc = self._document(company_id, row["document_id"])
+                doc = self.documents.get(company_id, row["document_id"])
                 if doc["status"] == "posted":
                     if not post:
                         raise ValidationError(
@@ -135,10 +135,7 @@ class ConversionCommands(ModuleDocumentCommands):
                 action = "post"
             else:
                 row = self._conversion_row(company_id, saved)
-                self.conn.execute(
-                    "UPDATE documents SET doc_date = ?, memo = ? WHERE id = ?",
-                    (iso_date(data.doc_date), data.memo, row["document_id"]),
-                )
+                self.documents.set_header(company_id, row["document_id"], data.doc_date, data.memo)
             self._audit(company_id, "conversion", saved, action, {})
         return saved
 
@@ -146,34 +143,29 @@ class ConversionCommands(ModuleDocumentCommands):
         """Back to a draft: its postings go (the audit trail keeps them)."""
         with transaction(self.conn):
             row = self._conversion_row(company_id, conversion_id)
-            doc = self._document(company_id, row["document_id"])
+            doc = self.documents.get(company_id, row["document_id"])
             if doc["status"] != "posted":
                 raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
             self._require_conversion_changeable(company_id, row)
-            snapshot = self._snapshot(doc)
-            self.conn.execute(
-                "UPDATE documents SET status = 'draft', posted_at = NULL WHERE id = ?", (doc["id"],)
-            )
-            self.conn.execute("DELETE FROM postings WHERE document_id = ?", (doc["id"],))
+            self.documents.unpost(company_id, doc)
             self._drop_credit_document(company_id, row)
-            self._audit(company_id, "document", doc["id"], "unpost", snapshot)
             self._audit(company_id, "conversion", conversion_id, "unpost", {})
 
     def delete_conversion(self, company_id: int, conversion_id: int) -> None:
         with transaction(self.conn):
             row = self._conversion_row(company_id, conversion_id)
-            doc = self._document(company_id, row["document_id"])
+            doc = self.documents.get(company_id, row["document_id"])
             if doc["status"] == "posted":
                 self._require_conversion_changeable(company_id, row)
             self._drop_credit_document(company_id, row)
             self.conn.execute("DELETE FROM currency_conversions WHERE id = ?", (conversion_id,))
-            self._remove_document(company_id, doc)
+            self.documents.remove(company_id, doc)
             self._audit(company_id, "conversion", conversion_id, "delete", {})
 
     def rebuild_postings(self, company_id: int, since: date | str) -> list[int]:
         """Build the GL documents of posted conversions from `since` on (not in the closed
         period) again from the conversions (D101); the GL documents that changed."""
-        return self._rebuild_each(
+        return self.documents.rebuild_each(
             company_id,
             since,
             "currency_conversions",
@@ -260,23 +252,18 @@ class ConversionCommands(ModuleDocumentCommands):
         row = self._conversion_row(company_id, conversion_id)
         if same_day(data):
             lines = debit_lines + credit_lines
-            self._write_module_document(
-                company_id, row["document_id"], data.doc_date, lines, data.memo
-            )
+            self.documents.write(company_id, row["document_id"], data.doc_date, lines, data.memo)
             self._drop_credit_document(company_id, row)
             return
-        self._write_module_document(
-            company_id, row["document_id"], data.doc_date, debit_lines, data.memo
-        )
+        self.documents.write(company_id, row["document_id"], data.doc_date, debit_lines, data.memo)
         target_date = data.target_date or data.doc_date
         if row["credit_document_id"] is not None:
-            self._write_module_document(
+            self.documents.write(
                 company_id, row["credit_document_id"], target_date, credit_lines, data.memo
             )
             return
-        credit_id = self._insert_document(company_id, target_date, data.memo, "common")
-        self._insert_postings(company_id, credit_id, credit_lines)
-        self._post(company_id, credit_id)
+        credit_id = self.documents.new(company_id, target_date, data.memo)
+        self.documents.write(company_id, credit_id, target_date, credit_lines, data.memo)
         self.conn.execute(
             "UPDATE currency_conversions SET credit_document_id = ? WHERE id = ?",
             (credit_id, conversion_id),
@@ -343,7 +330,7 @@ class ConversionCommands(ModuleDocumentCommands):
         return [
             doc_id
             for doc_id, day, lines in parts
-            if self._rebuild_module_document(company_id, doc_id, day, lines, conversion.memo)
+            if self.documents.rebuild(company_id, doc_id, day, lines, conversion.memo)
         ]
 
     def _transit_account(self, company_id: int) -> Row:
@@ -412,7 +399,7 @@ class ConversionCommands(ModuleDocumentCommands):
         )
 
     def _role_account(self, company_id: int, role: str, missing: str) -> Row:
-        account_id = self.account_role(company_id, role)
+        account_id = self.ledger.account_role(company_id, role)
         if account_id is None:
             raise MissingAccountRole(
                 role, missing + ". " + tr("Выберите его в «Счета конвертации» (меню «⋯»).")
@@ -436,9 +423,9 @@ class ConversionCommands(ModuleDocumentCommands):
     def _require_conversion_changeable(self, company_id: int, row: Row) -> None:
         for doc_id in (row["document_id"], row["credit_document_id"]):
             if doc_id is not None:
-                doc = self._document(company_id, doc_id)
+                doc = self.documents.get(company_id, doc_id)
                 if doc["status"] == "posted":
-                    self._require_changeable(company_id, doc)
+                    self.documents.require_changeable(company_id, doc)
 
     def _drop_credit_document(self, company_id: int, row: Row) -> None:
         if row["credit_document_id"] is None:
@@ -446,4 +433,5 @@ class ConversionCommands(ModuleDocumentCommands):
         self.conn.execute(
             "UPDATE currency_conversions SET credit_document_id = NULL WHERE id = ?", (row["id"],)
         )
-        self._remove_document(company_id, self._document(company_id, row["credit_document_id"]))
+        credit = self.documents.get(company_id, row["credit_document_id"])
+        self.documents.remove(company_id, credit)

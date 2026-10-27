@@ -7,7 +7,7 @@ from __future__ import annotations
 from modern_gl.application.bank.accounts import ACCOUNT_KINDS
 from modern_gl.application.common import insert
 from modern_gl.application.ledger.base import account_label
-from modern_gl.application.ledger.subconto import SubcontoCommands
+from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
@@ -16,7 +16,7 @@ from modern_gl.infrastructure.db import transaction
 KIND_CODES = {kind for kind, _ in ACCOUNT_KINDS}
 
 
-class BankStatementCommands(SubcontoCommands):
+class BankStatementCommands(ModuleBase):
     def add_bank_account(
         self,
         company_id: int,
@@ -33,10 +33,10 @@ class BankStatementCommands(SubcontoCommands):
         GL account (55 for a card), with its details; returns the element's id."""
         with transaction(self.conn):
             account_id = self._account(company_id, account)["id"]
-            directory = self.subconto_kind_id(company_id, "bank_account")
-            value_id = self.add_subconto_value(company_id, directory, name)
+            directory = self.ledger.subconto_kind_id(company_id, "bank_account")
+            value_id = self.ledger.add_subconto_value(company_id, directory, name)
             if currency_id is not None:
-                self.set_subconto_value_currency(company_id, value_id, currency_id)
+                self.ledger.set_subconto_value_currency(company_id, value_id, currency_id)
             self.set_bank_account(
                 company_id,
                 account_id,
@@ -74,7 +74,7 @@ class BankStatementCommands(SubcontoCommands):
             if name is not None and value_id is not None:
                 current = self._subconto_value(company_id, value_id)["name"]
                 if name.strip() != current:
-                    self.update_subconto_value(company_id, value_id, name)
+                    self.ledger.update_subconto_value(company_id, value_id, name)
             details = (kind, card_digits, holder_id, iban, int(closed))
             found = self._details_id(company_id, account_id, value_id)
             if found is None:

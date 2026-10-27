@@ -65,22 +65,23 @@ class Ledger(
     """The core's write use cases of one database (each group in its own module). The
     modules are objects of their own over the same connection — `ledger.bank`,
     `ledger.conversion`, `ledger.eqaime` (debt 2, D71): the core knows none of them, and
-    a module can be left out of a company without touching the core."""
+    a module can be left out of a company without touching the core. A module holds the
+    ledger and calls it (`ledger/module.py`, D-new); it is not the ledger."""
 
     @cached_property
     def bank(self) -> BankModule:
         from modern_gl.application.bank import BankModule
 
-        return BankModule(self.conn, self.actor)
+        return BankModule(self.conn, self.actor, ledger=self)
 
     @cached_property
     def conversion(self) -> ConversionModule:
         from modern_gl.application.conversion import ConversionModule
 
-        return ConversionModule(self.conn, self.actor)
+        return ConversionModule(self.conn, self.actor, ledger=self)
 
     @cached_property
     def eqaime(self) -> EqaimeModule:
         from modern_gl.application.eqaime import EqaimeModule
 
-        return EqaimeModule(self.conn, self.actor)
+        return EqaimeModule(self.conn, self.actor, ledger=self)
