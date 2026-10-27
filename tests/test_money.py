@@ -27,7 +27,8 @@ def test_to_minor(value, expected):
 
 @pytest.mark.parametrize("value", ["1.005", "abc", "", "NaN", "Infinity"])
 def test_to_minor_rejects(value):
-    with pytest.raises(ValueError, match=re.escape(value)):
+    # the message ends with the text that was not understood, after a colon
+    with pytest.raises(ValueError, match=rf": {re.escape(value)}$"):
         to_minor(value)
 
 
