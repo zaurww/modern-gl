@@ -1147,19 +1147,19 @@ def test_closing_a_page_opens_only_the_page_it_came_from(window):
     """Esc on a card opened from the reports: back to the report, nothing else is built on
     the way. Taking the closed item out of the sidebar moved its current item to the next
     one (the warehouse…), which was opened and read first — Esc took seconds."""
-    from modern_gl.desktop.main_window.window import MainWindow
+    from modern_gl.desktop.main_window.navigator import Navigator
 
     window.show_place(("osv",))
     doc = window.pages[("journal",)].model.docs[0]
     window.open_document(doc.id)
     before = set(window.pages)
     made = []
-    original = MainWindow._make_place
-    MainWindow._make_place = lambda self, key: made.append(key) or original(self, key)
+    original = Navigator._make_place
+    Navigator._make_place = lambda self, key: made.append(key) or original(self, key)
     try:
         window.close_current()
     finally:
-        MainWindow._make_place = original
+        Navigator._make_place = original
     assert made == []
     assert window.page_stack.key_of(window.stack.currentWidget()) == ("osv",)
     assert set(window.pages) <= before
