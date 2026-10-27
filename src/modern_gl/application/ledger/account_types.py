@@ -28,13 +28,14 @@ class AccountTypeCommands(LedgerBase):
             self._check_class(account_label(acc), account_class)
             old = acc["account_class"]
             ids = self._with_followers(company_id, acc["id"], "account_class IS ?", (old,))
+            # one statement: the file refuses a type of another class even for a moment (0057)
             self.conn.executemany(
-                "UPDATE accounts SET account_class = ? WHERE id = ?",
-                [(account_class, i) for i in ids],
-            )
-            self.conn.executemany(
-                "UPDATE accounts SET account_type = NULL WHERE id = ?",
-                [(i,) for i in ids if self._type_class(i) not in (None, account_class)],
+                "UPDATE accounts SET account_class = ?, "
+                "account_type = CASE WHEN ? = 1 THEN NULL ELSE account_type END WHERE id = ?",
+                [
+                    (account_class, int(self._type_class(i) not in (None, account_class)), i)
+                    for i in ids
+                ],
             )
             if contra is not None:
                 self.conn.execute(
