@@ -33,7 +33,8 @@ def values(shop: Shop, kind: str, *names: str) -> list[int]:
 def test_an_air_conditioner_and_its_installation_go_to_one_fixed_asset(shop, conn, qtbot):
     """An e-qaimə: «Komplekt montaj» 100.00, the air conditioner 2 340.68, «Kartric»
     30.00. 08 on the first line goes to the two others; the third changed to 26 changes
-    no other line; the asset «Kondisioner» on the second goes to the first only.
+    no other line; the asset «Kondisioner» chosen on the second stays its own (each line
+    has its own asset), the first is given it by hand.
     Posted: Dt 08 [Kondisioner] / Kt 60 100.00 + 2 340.68 = 2 440.68; Dt 26 / Kt 60 30.00;
     VAT 18%: 18.00 + 421.32 (2 340.68 × 0.18 = 421.3224) + 5.40 = 444.72."""
     (conditioner,) = values(shop, "fixed_asset", "Kondisioner")
@@ -66,7 +67,8 @@ def test_an_air_conditioner_and_its_installation_go_to_one_fixed_asset(shop, con
         shop.acc["26"],
     ]
     put(1, ESC1, conditioner)
-    assert [r.expense_subconto[0] for r in model.rows] == [conditioner, conditioner, None]
+    assert [r.expense_subconto[0] for r in model.rows] == [None, conditioner, None]
+    put(0, ESC1, conditioner)
     header = model.headerData(model.columns.index(ESC1), Qt.Orientation.Horizontal)
     assert header == "Субконто"  # 08 and 26 lines: two directories
     put(2, ESC1, office)

@@ -1,11 +1,13 @@
 """A directory element with its details saved at once — the element's window (D80: one
-scenario, one transaction): name, counterparty of a contract, currency, VÖEN, tags."""
+scenario, one transaction): name, counterparty of a contract, currency, VÖEN, tags; and
+elements named by the lines of a document, all at once (D172)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 from modern_gl.application.ledger.subconto import SubcontoCommands
+from modern_gl.i18n import fold
 from modern_gl.infrastructure.db import transaction
 
 Tax = tuple[str | None, bool, str | None]  # VÖEN or own tax number, non-resident, country
@@ -62,3 +64,24 @@ class SubcontoDetailCommands(SubcontoCommands):
                 self.set_subconto_value_tax(company_id, value_id, *details.tax)
             if details.tags is not None:
                 self.set_subconto_value_tags(company_id, value_id, details.tags)
+
+    def add_named_values(self, company_id: int, kind_id: int, names: list[str]) -> list[int]:
+        """An element for each name, in order, all or nothing: a name the directory has
+        (or that comes twice) is the same element, not a new one — the fixed assets of a
+        purchase named by its lines."""
+        known = {
+            fold(r["name"]): r["id"]
+            for r in self.conn.execute(
+                "SELECT id, name FROM subconto_values "
+                "WHERE company_id = ? AND kind_id = ? AND is_group = 0 ORDER BY id",
+                (company_id, kind_id),
+            )
+        }
+        result = []
+        with transaction(self.conn):
+            for name in names:
+                key = fold(name.strip())
+                if key not in known:
+                    known[key] = self.add_subconto_value(company_id, kind_id, name.strip())
+                result.append(known[key])
+        return result

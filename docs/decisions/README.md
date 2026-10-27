@@ -182,3 +182,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D170 | Типы: тесты под pyright, ядро — strict, докстринги ядра обязательны | принято | [D170-pyright-strict-core.md](D170-pyright-strict-core.md) |
 | D171 | Главное окно — композиция частей, а не цепочка наследования | принято | [D171-main-window-composition.md](D171-main-window-composition.md) |
 | D172 | Строка покупки — «Куда»: «Склад» или «Счёт»; выбранный счёт идёт в пустые строки | принято (уточняет D156) | [D172-purchase-line-where.md](D172-purchase-line-where.md) |
+| D-new | Много строк покупки разом: выделенные строки берут одно значение, ОС — по названиям строк | принято (уточняет D172) | [D-new-line-objects.md](D-new-line-objects.md) |

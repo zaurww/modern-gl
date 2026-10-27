@@ -24,6 +24,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
 from modern_gl.desktop.inventory_document_page.filling import RETURN_OF, FillingPart
 from modern_gl.desktop.inventory_document_page.goods_lines import GoodsLinesPart
 from modern_gl.desktop.inventory_document_page.header import HeaderPart
+from modern_gl.desktop.inventory_document_page.line_objects import LineObjectsPart
 from modern_gl.desktop.inventory_document_page.lines_model import (
     InventoryLinesModel,
     by_sale_kinds,
@@ -57,7 +58,14 @@ PARTY_MISSING = {
 
 
 class InventoryDocumentPage(
-    HeaderPart, PartyPart, ClipboardPart, NewValuesPart, GoodsLinesPart, SplitPart, FillingPart
+    HeaderPart,
+    PartyPart,
+    ClipboardPart,
+    NewValuesPart,
+    GoodsLinesPart,
+    LineObjectsPart,
+    SplitPart,
+    FillingPart,
 ):
     def __init__(
         self,
@@ -86,6 +94,7 @@ class InventoryDocumentPage(
         self._connect_delegate()
         self.model.changed.connect(self._changed)
         self._connect_goods()
+        self._connect_objects()
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._changed)
         self.vat_rate.activated.connect(self._vat_rate_changed)
@@ -242,6 +251,7 @@ class InventoryDocumentPage(
         self.hint.setVisible(not read_only and self.doc_type != "landed_cost")
         self.btn_shortage.hide()
         self.btn_return.setVisible(posted and not viewing and self.doc_type in RETURN_OF)
+        self._show_objects_button()
 
     def _show_totals(self) -> None:
         in_currency = self.model.rate is not None
@@ -258,6 +268,7 @@ class InventoryDocumentPage(
 
     def _changed(self, *_args) -> None:
         self._show_totals()
+        self._show_objects_button()
         if self._expense_columns() != self.expense_columns:  # a service line came or went
             self.table.configure_columns()
             self.expense_columns = self._expense_columns()

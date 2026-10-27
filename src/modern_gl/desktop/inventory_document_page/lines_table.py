@@ -110,6 +110,9 @@ class InventoryLinesDelegate(QStyledItemDelegate):
     # (kind_id, name, owner_id) -> the new element's id: a subconto list offers
     # "+ Добавить «…»" (see `attach_list`)
     add_value: Callable[[int, str, int | None], int] | None = None
+    # the other lines selected with the edited cell (`InventoryLinesTable`): they take
+    # the same value
+    selected_rows: Callable[[QModelIndex], list[int]] | None = None
 
     def createEditor(self, parent, option, index):
         model: InventoryLinesModel = index.model()
@@ -151,6 +154,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
             value = model.rows[index.row()].memo  # what the service is, to read or correct
         elif model.key(index) == KIND:
             value = ""  # both choices in the list, not only the line's own
+        elif value is None and model.is_per_line(index.row(), model.key(index)):
+            value = model.rows[index.row()].memo  # a new asset is named as its line
         elif model.key(index) in LIST_KEYS:
             value = "" if value is None else index.data(Qt.ItemDataRole.DisplayRole)
         editor.setText(value or "")
@@ -221,9 +226,15 @@ class InventoryLinesDelegate(QStyledItemDelegate):
                     raise ValueError(tr("сумма должна быть больше нуля"))
             else:
                 value = text
-            model.setData(index, value)
+            self._set(model, index, value)
         except (LedgerError, LookupError, ValueError, TypeError) as exc:
             self.error.emit(str(exc).strip("'\""))
+
+    def _set(self, model: InventoryLinesModel, index, value: object) -> None:
+        """The cell's value, and the same on the other lines selected with it."""
+        model.setData(index, value)
+        if self.selected_rows is not None:
+            model.set_on_rows(self.selected_rows(index), model.key(index), value, index.row())
 
     def eventFilter(self, editor, event):
         if event.type() == QEvent.Type.KeyPress and event.key() in (
@@ -257,7 +268,8 @@ class InventoryLinesTable(QTableView):
         self.setModel(model)
         self.setItemDelegate(delegate)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
-        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        # Shift+↓ or Shift/Ctrl with the mouse: a value picked goes to all lines selected
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.setEditTriggers(
             QAbstractItemView.EditTrigger.AnyKeyPressed
             | QAbstractItemView.EditTrigger.EditKeyPressed
@@ -269,6 +281,18 @@ class InventoryLinesTable(QTableView):
         self.setTabKeyNavigation(True)
         self.verticalHeader().setDefaultSectionSize(34)
         self.configure_columns()
+
+    def setItemDelegate(self, delegate) -> None:
+        super().setItemDelegate(delegate)
+        if isinstance(delegate, InventoryLinesDelegate):  # a new model comes with a new one
+            delegate.selected_rows = self._selected_rows
+
+    def _selected_rows(self, index: QModelIndex) -> list[int]:
+        """The lines selected in the edited cell's column (or whole), the cell's among them."""
+        rows = {
+            i.row() for i in self.selectionModel().selectedIndexes() if i.column() == index.column()
+        }
+        return sorted(rows) if index.row() in rows else []
 
     def edit_again(self, index: QModelIndex | QPersistentModelIndex, text: str) -> None:
         edit_again(self, index, text)
@@ -423,13 +447,20 @@ class NewNamesDialog(QDialog):
         parent=None,
         lines: list[tuple[int, str]] | None = None,
         chosen: set[int] | None = None,
+        wording: tuple[str, str, str] | None = None,
     ) -> None:
+        """`wording` — the title, text and button for lines other than goods (assets)."""
         super().__init__(parent)
-        self.setWindowTitle(tr("Строки — товары") if lines else tr("Новые элементы справочников"))
+        title, prompt, accept = wording or (
+            tr("Строки — товары"),
+            tr("Отмеченные строки станут товарами и придут на склад:"),
+            tr("Сделать товарами"),
+        )
+        self.setWindowTitle(title if lines else tr("Новые элементы справочников"))
         self.setMinimumWidth(440)
         form = QFormLayout(self)
         text = QLabel(
-            tr("Отмеченные строки станут товарами и придут на склад:")
+            prompt
             if lines
             else tr("Этих элементов нет в справочниках. Добавить?\n\n{names}", names=listing)
         )
@@ -457,7 +488,7 @@ class NewNamesDialog(QDialog):
             QDialogButtonBox.StandardButton.Yes | QDialogButtonBox.StandardButton.No
         )
         if lines:
-            buttons.button(QDialogButtonBox.StandardButton.Yes).setText(tr("Сделать товарами"))
+            buttons.button(QDialogButtonBox.StandardButton.Yes).setText(accept)
             buttons.button(QDialogButtonBox.StandardButton.No).setText(tr("Отмена"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)

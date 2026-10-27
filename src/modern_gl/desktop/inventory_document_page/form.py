@@ -255,6 +255,12 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_gl)
         actions.addWidget(self.btn_accrual)
+        self.btn_objects = button(tr("Объекты по названиям строк"), "flat")
+        self.btn_objects.setToolTip(
+            tr("Каждая отмеченная строка получит своё основное средство — по своему названию")
+        )
+        self.btn_objects.hide()
+        actions.addWidget(self.btn_objects)
         self.btn_return = button(tr("Оформить возврат"), "flat")
         self.btn_return.setToolTip(
             tr("Товар вернули: возврат по этому документу — его цены и ƏDV, без лишнего ввода")
