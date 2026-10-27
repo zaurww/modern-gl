@@ -1,3 +1,6 @@
+"""Accounting errors shown to the user: every rule violation is a LedgerError subclass."""
+
+
 class LedgerError(Exception):
     """Base class for accounting rule violations shown to the user."""
 

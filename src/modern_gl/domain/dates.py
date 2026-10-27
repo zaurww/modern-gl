@@ -1,3 +1,5 @@
+"""Dates and months as the program stores and shows them: ISO strings, month codes, titles."""
+
 from __future__ import annotations
 
 import calendar
