@@ -45,6 +45,7 @@ class ChartTable(ReportTable):
         for i in range(len(self.report.columns)):
             hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
             self.widths[i] = self.content_width(i)
+        self.remembered_widths()
         self.fit_columns()
 
     def fit_columns(self) -> None:

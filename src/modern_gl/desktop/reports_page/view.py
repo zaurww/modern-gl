@@ -198,6 +198,8 @@ class ReportPage(PageWidget):
         )
         if self.choosable_columns:
             self.model.shown = lambda col: self.columns_choice().shown(col)
+            self.model.arrange = lambda cols: self.columns_choice().arrange(cols)
+            self.table.remember_columns(self.columns_choice)
         self.table.doubleClicked.connect(lambda idx: self.drill(idx.data(Qt.ItemDataRole.UserRole)))
         self.table.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._context_menu)

@@ -1,12 +1,16 @@
 """The report table (DESIGN.md §4, D127): one for every report and every module table of
-figures — columns as wide as their text, the free room on the right."""
+figures — columns as wide as their text, the free room on the right. On a report page a
+column moved or widened with the mouse is remembered for its kind (`column_choice`)."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt
+from collections.abc import Callable
+
+from PySide6.QtCore import QEvent, QSignalBlocker, Qt
 from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import QAbstractItemView, QHeaderView, QTableView
 
+from modern_gl.desktop.reports_page.column_choice import ColumnChoice, column_id, width_id
 from modern_gl.desktop.reports_page.table import (
     GROUP_GAP,
     NAME_MAX,
@@ -45,6 +49,10 @@ class ReportTable(QTableView):
         self.verticalHeader().hide()
         self.verticalHeader().setDefaultSectionSize(ROW_HEIGHT)
         self.widths: dict[int, int] = {}
+        self.fixed: set[int] = set()  # columns the user gave a width: they keep it
+        # what is remembered — asked of the page each time: its key is set after the table
+        self.choice_of: Callable[[], ColumnChoice] | None = None
+        self._dragged: dict[str, int] = {}  # widths changed by the mouse, saved on release
         self._measured: dict[int, int] = {}  # content_width of a column, for these rows
         for signal in (
             model.modelReset,
@@ -56,6 +64,69 @@ class ReportTable(QTableView):
             signal.connect(lambda *_: self._measured.clear())
         # a narrow window: amounts give up some width
         self.viewport().installEventFilter(self)
+
+    @property
+    def choice(self) -> ColumnChoice | None:
+        return self.choice_of() if self.choice_of is not None else None
+
+    def remember_columns(self, choice_of: Callable[[], ColumnChoice]) -> None:
+        """Captions dragged move the columns, their edges the widths — remembered."""
+        self.choice_of = choice_of
+        header = self.horizontalHeader()
+        header.setSectionsMovable(True)
+        header.sectionMoved.connect(self._moved)
+        header.sectionResized.connect(self._resized)
+        if isinstance(header, GroupHeader):
+            header.released.connect(self._save_widths)
+
+    def _moved(self, logical: int, old: int, new: int) -> None:
+        """The model takes the new order (a pair follows the column dragged; the first
+        column stays first), and the header goes back to its own: the captions of the
+        groups are drawn by the model's order."""
+        header, columns = self.horizontalHeader(), self.report.columns
+        visual = [header.logicalIndex(v) for v in range(header.count())]
+        with QSignalBlocker(header):
+            for i in range(header.count()):
+                header.moveSection(header.visualIndex(i), i)
+        choice = self.choice
+        if choice is None or 0 in (old, new) or logical >= len(columns):
+            return
+        moved = column_id(columns[logical])
+        ids: list[str] = []
+        for i in visual:
+            cid = column_id(columns[i])
+            if i != 0 and (cid != moved or i == logical) and cid not in ids:
+                ids.append(cid)
+        choice.move(ids)
+        self.report.rearrange()
+        self.layout_columns()
+
+    def _resized(self, logical: int, old: int, new: int) -> None:
+        header = self.horizontalHeader()
+        if not (isinstance(header, GroupHeader) and header.held) or self.choice_of is None:
+            return  # the program fitting the columns
+        if logical < len(self.report.columns):
+            self._dragged[width_id(self.report.columns[logical])] = new
+            self.widths[logical] = new
+            self.fixed.add(logical)
+
+    def _save_widths(self) -> None:
+        choice = self.choice
+        if choice is not None:
+            for wid, px in self._dragged.items():
+                choice.set_width(wid, px)
+        self._dragged = {}
+
+    def remembered_widths(self) -> None:
+        """The widths the user gave stand instead of the measured ones."""
+        self.fixed = set()
+        choice = self.choice
+        remembered = choice.widths() if choice is not None else {}
+        for i, col in enumerate(self.report.columns):
+            px = remembered.get(width_id(col))
+            if px:
+                self.widths[i] = px
+                self.fixed.add(i)
 
     def layout_columns(self) -> None:
         """Every column as wide as its widest text, so the amounts stand right after the
@@ -74,6 +145,7 @@ class ReportTable(QTableView):
                 width += GROUP_GAP
             self.widths[i] = width if col.width or col.money or col.right else min(width, NAME_MAX)
         self._fit_groups()
+        self.remembered_widths()
         fit_rows(self, self.report)
         hh.updateGeometry()
         self.fit_columns()
@@ -125,7 +197,11 @@ class ReportTable(QTableView):
         if not widths:
             return
         columns = self.report.columns
-        names = [i for i, c in enumerate(columns) if not (c.width or c.money or c.right)]
+        names = [
+            i
+            for i, c in enumerate(columns)
+            if not (c.width or c.money or c.right) and i not in self.fixed
+        ]
         others = sum(w for i, w in widths.items() if i not in names)
         room = (self.viewport().width() - others) // max(1, len(names))
         fitted = {

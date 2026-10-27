@@ -29,6 +29,8 @@ PINNED_REPORTS = "reports/pinned"  # D114
 RECENT_REPORTS = "reports/recent"
 LAST_ACCOUNT = "reports/last_account"  # the account asked last for a card
 COLUMNS = "reports/columns/{kind}"  # «Колонки…» of a kind of report
+COLUMN_ORDER = "reports/column_order/{kind}"  # columns moved with the mouse
+COLUMN_WIDTHS = "reports/column_widths/{kind}"  # columns widened or narrowed with the mouse
 STATEMENTS_VIEW = "reports/statements_view"  # D99
 STATEMENTS_DETAIL = "reports/statements_detail"
 STATEMENTS_COLUMNS = "reports/statements_columns"
@@ -135,6 +137,26 @@ class Preferences:
 
     def set_columns(self, kind: str, text: str) -> None:
         self.set(COLUMNS.format(kind=kind), text)
+
+    def column_order(self, kind: str) -> list[str]:
+        """The columns of a kind of report in the order the user moved them to; [] — as made."""
+        return [line for line in self.text(COLUMN_ORDER.format(kind=kind)).splitlines() if line]
+
+    def set_column_order(self, kind: str, ids: list[str]) -> None:
+        self.set(COLUMN_ORDER.format(kind=kind), "\n".join(ids))
+
+    def column_widths(self, kind: str) -> dict[str, int]:
+        """The widths (px) the user gave columns with the mouse: «Дебет=120», one a line."""
+        found: dict[str, int] = {}
+        for line in self.text(COLUMN_WIDTHS.format(kind=kind)).splitlines():
+            cid, _, px = line.rpartition("=")
+            if cid and px.isdigit():
+                found[cid] = int(px)
+        return found
+
+    def set_column_widths(self, kind: str, widths: dict[str, int]) -> None:
+        lines = [f"{cid}={px}" for cid, px in widths.items()]
+        self.set(COLUMN_WIDTHS.format(kind=kind), "\n".join(lines))
 
     def view(self, key: str, default: str) -> str:
         """The view of a page chosen last (statements, stock reports, bank amounts…)."""

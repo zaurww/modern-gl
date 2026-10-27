@@ -15,8 +15,9 @@ from PySide6.QtCore import (
     QRectF,
     QSize,
     Qt,
+    Signal,
 )
-from PySide6.QtGui import QColor, QFontMetrics, QPainter
+from PySide6.QtGui import QColor, QFontMetrics, QMouseEvent, QPainter
 from PySide6.QtWidgets import (
     QHeaderView,
     QStyle,
@@ -118,13 +119,14 @@ class ReportModel(QAbstractTableModel):
         self.bands = True  # a list (the chart of accounts) goes without
         self.all_columns: list[Column] = []  # with the ones the user hid
         self.shown: Callable[[Column], bool] = lambda c: not c.optional
+        self.arrange: Callable[[list[Column]], list[Column]] = lambda cols: cols  # the order
 
     def set(
         self, columns, rows, emphasis=None, muted=None, total=None, section=None, tone=None
     ) -> None:
         self.beginResetModel()
         self.all_columns, self.rows = columns, rows
-        self.columns = columns[:1] + [c for c in columns[1:] if self.shown(c)]
+        self.columns = self._chosen()
         self.emphasis = emphasis or (lambda r: False)
         self.muted = muted or (lambda r: False)
         self.total = total or (lambda r: False)  # a rule above it
@@ -139,6 +141,17 @@ class ReportModel(QAbstractTableModel):
             else:
                 self.banded.append(run // BAND % 2 == 1)
                 run += 1
+        self.endResetModel()
+
+    def _chosen(self) -> list[Column]:
+        """The columns the user shows, in their order; the first one always."""
+        cols = self.all_columns
+        return self.arrange(cols[:1] + [c for c in cols[1:] if self.shown(c)])
+
+    def rearrange(self) -> None:
+        """The same rows with the columns in the order chosen now."""
+        self.beginResetModel()
+        self.columns = self._chosen()
         self.endResetModel()
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
@@ -222,12 +235,25 @@ def _grid_lines(painter: QPainter, rect: QRect, first: bool) -> None:
 
 class GroupHeader(QHeaderView):
     """Column captions; a group caption ("İlkin qalıq") stands over its Dt and Kt with
-    no rule of its own (D127); with the grid, the captions are cells of it too."""
+    no rule of its own (D127); with the grid, the captions are cells of it too. `held`
+    — the mouse is down on it: a width changing now is the user's (`ReportTable`)."""
+
+    released = Signal()
 
     def __init__(self, parent=None) -> None:
         super().__init__(Qt.Orientation.Horizontal, parent)
         self.setHighlightSections(False)
         self.setSectionsClickable(False)
+        self.held = False
+
+    def mousePressEvent(self, e: QMouseEvent) -> None:
+        self.held = True
+        super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e: QMouseEvent) -> None:
+        super().mouseReleaseEvent(e)
+        self.held = False
+        self.released.emit()
 
     def _columns(self) -> list[Column]:
         model = self.model()

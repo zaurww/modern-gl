@@ -186,3 +186,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D174 | Статья затрат разносится по строкам своего счёта, ОС — нет; Ctrl+V — во все выделенные | принято (уточняет D173) | [D174-cost-item-spread.md](D174-cost-item-spread.md) |
 | D175 | «Проверка книги»: программа сверяет свои данные, как Verify Data в QuickBooks | принято (опирается на D101, D149, D155) | [D175-books-verification.md](D175-books-verification.md) |
 | D176 | Каждый UPDATE и DELETE называет компанию: правило под тестом, как клиент в SAP | принято (уточняет D71, D72) | [D176-company-in-every-write.md](D176-company-in-every-write.md) |
+| D177 | Колонки отчёта: порядок и ширина мышью запоминаются | принято (дополняет D116) | [D177-column-memory.md](D177-column-memory.md) |
