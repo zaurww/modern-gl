@@ -17,6 +17,7 @@ from modern_gl.application.bank.file_import import FileOperation, account_choice
 from modern_gl.application.bank.files import BankFile, read_bank_file
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
 from modern_gl.application.bank.statement import place_balance
+from modern_gl.desktop.bank_page.file_rates import FileRates
 from modern_gl.desktop.bank_page.import_rows import ImportRows
 from modern_gl.desktop.import_window import ImportWindow, say
 from modern_gl.desktop.session import Session
@@ -57,6 +58,10 @@ class BankFileDialog(ImportWindow):
         self.add_notes()
         self.errors = self.warning  # the files not read
         say(self.errors, "\n".join(errors), "warning")
+        self.rates_note = QLabel()
+        self.rates_note.setWordWrap(True)
+        self.rates_note.hide()
+        self.root.addWidget(self.rates_note)
         self.rows = ImportRows()
         self.rows.itemChanged.connect(lambda *_: self._show_balances())
         self.rows.document_chosen.connect(self._open_document)
@@ -64,6 +69,14 @@ class BankFileDialog(ImportWindow):
         self.balances = QLabel()
         self.balances.setWordWrap(True)
         self.root.addWidget(self.balances)
+        self.rates = FileRates(
+            session,
+            self.files,
+            self.rates_note,
+            self.quiet(tr("Загрузить курсы ЦБА"), lambda: None),
+            self.preview,
+            self,
+        )
         self.drafts_button = self.quiet(
             tr("Создать черновики"), lambda: self.write(post=False), right=True
         )
@@ -109,6 +122,7 @@ class BankFileDialog(ImportWindow):
 
     def preview(self) -> None:
         """What the import would do, nothing written: the lines to check first."""
+        self.rates.show()
         places = self.places()
         waiting = [f.file_name for f in self.files if f.iban not in places]
         try:
@@ -148,6 +162,7 @@ class BankFileDialog(ImportWindow):
         self.status.setText(text)
         for box in self.accounts.values():
             box.setEnabled(False)
+        self.rates.button.setVisible(False)
         self.post_button.setVisible(False)
         self.drafts_button.setVisible(False)
         self.close_button.setText(tr("Готово"))

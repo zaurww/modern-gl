@@ -2,14 +2,16 @@
 leaves one account and comes to the other — a line in each account's file, the same
 reference in both; the bank's fee of it is a line of the same operation. Both files
 loaded — one conversion, posted; one of them — a draft with that side, finished when the
-other file comes.
+other file comes. The order of the files does not matter: a side loaded before its
+account's IBAN was known is a draft (a transfer, a fee) — the next load replaces such
+drafts by the conversion; a side posted by hand keeps the conversion out, and says so.
 
 The bank module makes a conversion of the conversion module here: the one place the bank
 writes another module's document."""
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from modern_gl.application.bank.file_import import CONVERSION, FileOperation
 from modern_gl.application.bank.import_commands import BankImportCommands
@@ -27,6 +29,31 @@ from modern_gl.infrastructure.db import transaction
 
 
 class FileConversionCommands(BankImportCommands):
+    def _redo_conversion_drafts(
+        self, company_id: int, ops: Sequence[FileOperation]
+    ) -> dict[str, int]:
+        """The drafts of bank operations with a conversion's references (its sides, its
+        fees) deleted: the conversion takes their place. -> the references of a side
+        posted as a bank operation (the conversion is not made): its number."""
+        sides = {op.reference for op in ops if op.kind == CONVERSION}
+        fees = {f.reference for op in ops if op.kind == CONVERSION for f in op.fees}
+        if not sides:
+            return {}
+        marks = ", ".join("?" * len(sides | fees))
+        rows = self.conn.execute(
+            "SELECT o.id, o.reference, d.status, d.number FROM bank_operations o "
+            "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
+            f"WHERE o.company_id = ? AND o.reference IN ({marks})",
+            (company_id, *sorted(sides | fees)),
+        ).fetchall()
+        posted = {}
+        for r in rows:
+            if r["status"] == "draft":
+                self.delete_bank_operation(company_id, r["id"])
+            elif r["reference"] in sides:
+                posted[r["reference"]] = r["number"]
+        return posted
+
     def _file_conversion(
         self,
         company_id: int,
@@ -34,10 +61,12 @@ class FileConversionCommands(BankImportCommands):
         ops: Sequence[FileOperation],
         known: bool,
         post: bool,
+        taken: Collection[str] = (),
     ) -> list[ImportRow]:
         """The conversion of the line `op` (and of the other account's line among `ops`):
-        a new one, or the one of an earlier file finished with this side. -> the rows of
-        both lines and their fees."""
+        a new one, or the one of an earlier file finished with this side; a fee `taken`
+        (posted as a bank operation) stays out. -> the rows of both lines and their
+        fees."""
         other = next(
             (
                 x
@@ -73,6 +102,7 @@ class FileConversionCommands(BankImportCommands):
             fees += [
                 ConversionFee(x.place.account_id, -f.amount, x.place.subconto, x.place.currency_id)
                 for f in x.fees
+                if f.reference not in taken
             ]
         data = ConversionInput(
             doc_date=days[OUT] or days[IN] or op.day,  # the debit's day is the conversion's
@@ -84,6 +114,23 @@ class FileConversionCommands(BankImportCommands):
         )
         state, why, document = self._save_file_conversion(company_id, data, existing, post)
         return [row for x in mine for row in _rows(x, state, why, document)]
+
+    def _held_conversion(
+        self, op: FileOperation, ops: Sequence[FileOperation], number: int
+    ) -> list[ImportRow]:
+        """A conversion one side of which is posted as bank operation `number` (a transfer
+        posted by hand): nothing written, both lines say what to do."""
+        why = tr(
+            "конвертация: сторона уже проведена операцией №{n} — отмените её проведение "
+            "и загрузите файлы ещё раз",
+            n=number,
+        )
+        mine = [x for x in ops if x.kind == CONVERSION and x.reference == op.reference]
+        rows = []
+        for x in mine:
+            rows.append(ImportRow(x, KNOWN, (), why))
+            rows += [ImportRow(FileOperation(f, x.place, FEE), KNOWN, (), why) for f in x.fees]
+        return rows
 
     def _save_file_conversion(
         self, company_id: int, data: ConversionInput, existing: int | None, post: bool

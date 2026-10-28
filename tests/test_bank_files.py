@@ -52,6 +52,7 @@ from modern_gl.application.bank.files.kapital import other_side
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.conversion.calc import load_conversion
+from modern_gl.application.currencies import days_without_rate
 from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.domain.accounts import BANK_FEE
 from modern_gl.domain.currency import parse_rate
@@ -533,6 +534,48 @@ def test_a_conversion_waits_for_the_other_file(ledger, firm, files):
     assert ledger.conn.execute("SELECT COUNT(*) FROM currency_conversions").fetchone()[0] == 1
 
 
+def test_a_side_loaded_as_a_transfer_becomes_the_conversion(ledger, firm, files):
+    """The AZN file loaded while the EUR account's IBAN was not known: its conversion line
+    is a transfer draft. Both files loaded again: the draft gives way to the conversion —
+    1 000.00 EUR → 1 925.00 ₼, fee 6.00 EUR, posted; one conversion, no transfer left."""
+    cid = firm["cid"]
+    azn, eur = files
+    alone = {AZN_IBAN: firm["places"][AZN_IBAN]}
+    first = ledger.bank.import_bank_files(cid, [azn], alone)
+    [row] = [r for r in first.rows if r.op.reference == "2001"]
+    assert (row.op.kind, row.state) == (TRANSFER, DRAFT)
+
+    again = ledger.bank.import_bank_files(cid, [azn, eur], firm["places"])
+    states = {(r.op.reference, r.op.direction): r.state for r in again.rows}
+    assert states[("2001", "in")] == states[("2001", "out")] == POSTED
+    assert "2001" not in by_reference(ledger, cid)
+    [conversion_id] = [r[0] for r in ledger.conn.execute("SELECT id FROM currency_conversions")]
+    done = load_conversion(ledger.conn, cid, conversion_id)
+    assert done.status == "posted"
+    assert done.source is not None and done.target is not None
+    assert (done.source.amount, done.target.amount) == (100000, 192500)
+    assert [f.amount for f in done.fees] == [600]
+
+
+def test_a_side_posted_by_hand_keeps_the_conversion_out(ledger, firm, files):
+    """The transfer draft posted by hand (onto 57): the next load makes no conversion over
+    it — nothing doubled — and both lines say what to do."""
+    cid = firm["cid"]
+    azn, eur = files
+    ledger.bank.import_bank_files(cid, [azn], {AZN_IBAN: firm["places"][AZN_IBAN]})
+    transfer_id = by_reference(ledger, cid)["2001"]
+    op = load_bank_operation(ledger.conn, cid, transfer_id)
+    line = replace(op.lines[0], account_id=ledger.account_id(cid, "57"))
+    ledger.bank.save_bank_operation(cid, replace(op, lines=(line,)), transfer_id, post=True)
+
+    again = ledger.bank.import_bank_files(cid, [azn, eur], firm["places"])
+    held = [r for r in again.rows if r.op.reference == "2001"]
+    assert [r.state for r in held] == [KNOWN, KNOWN]
+    assert all("№" + str(op.number) in r.reason for r in held)
+    assert ledger.conn.execute("SELECT COUNT(*) FROM currency_conversions").fetchone()[0] == 0
+    assert load_bank_operation(ledger.conn, cid, transfer_id).status == "posted"
+
+
 SEPTEMBER_DSMF = (
     "2026-09-04",
     "1105 / 604",
@@ -680,6 +723,43 @@ def test_the_window_shows_the_lines_to_check_first_and_posts(qtbot, firm, sessio
     item = dialog.rows.topLevelItem(dialog.rows.rows().index(row))
     dialog.rows.itemDoubleClicked.emit(item, 0)
     assert dialog.chosen_document == row.document_id is not None
+
+
+def test_the_days_without_a_rate_are_found(ledger, firm):
+    """EUR has rates of 01.08, 04.08 and 05.08: of the lines' days only 06.08 lacks one;
+    the manat needs none, a currency the company has not is left out."""
+    needs = [("EUR", "2026-08-04"), ("EUR", "2026-08-06"), ("AZN", "2026-08-06")]
+    needs += [("XYZ", "2026-08-06")]
+    assert days_without_rate(ledger.conn, firm["cid"], needs) == {"EUR": ["2026-08-06"]}
+
+
+def test_the_window_loads_the_missing_rates(qtbot, firm, session, tmp_path):
+    """No EUR rate on 04.08: the conversion waits, said above the lines; «Загрузить курсы
+    ЦБА» loads it (2.0000) and the lines are shown again — the conversion is posted."""
+    from modern_gl.desktop.bank_page.file_dialog import BankFileDialog
+
+    s, _messages = session
+    s.ledger.delete_rate(s.company_id, "EUR", "2026-08-04")
+    s.ledger.delete_rate(s.company_id, "EUR", "2026-08-01")
+    s.fetch_rates = lambda day: {"EUR": (2_000_000, 1)}
+    azn = kapital_file(tmp_path / "azn.xlsx", AZN_IBAN, "AZN", "5000", AZN_LINES)
+    eur = kapital_file(tmp_path / "eur.xlsx", EUR_IBAN, "EUR", "2000", EUR_LINES)
+    dialog = BankFileDialog(s, [azn, eur])
+    qtbot.addWidget(dialog)
+    conversion = next(r for r in dialog.rows.rows() if r.op.reference == "2001")
+    assert conversion.state == DRAFT
+    assert "EUR" in dialog.rates_note.text() and not dialog.rates.button.isHidden()
+    dialog.rates.button.click()
+    qtbot.waitUntil(lambda: dialog.rates.run is None, timeout=5000)
+    assert dialog.rates_note.isHidden() and dialog.rates.button.isHidden()
+    conversion = next(r for r in dialog.rows.rows() if r.op.reference == "2001")
+    assert conversion.state == POSTED
+    assert (
+        s.ledger.conn.execute(
+            "SELECT rate FROM currency_rates WHERE rate_date = '2026-08-04'"
+        ).fetchone()["rate"]
+        == 2_000_000
+    )
 
 
 def test_a_file_of_an_account_not_known_waits_for_the_choice(qtbot, ledger, session, tmp_path):

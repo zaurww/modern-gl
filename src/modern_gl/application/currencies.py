@@ -99,6 +99,37 @@ def missing_rates_text(
     return tr("На {date} курс не загружен: {what}", date=ru_date(day), what=what)
 
 
+def days_without_rate(
+    conn: Connection, company_id: int, needs: Iterable[tuple[str, str]]
+) -> dict[str, list[str]]:
+    """Of the (currency code, ISO day) pairs some lines need — a bank statement in a
+    currency — the days a currency of the company has no rate set for: code -> the days,
+    earliest first. A currency the company has not (the manat too) is left out."""
+    wanted: dict[str, set[str]] = {}
+    for code, day in needs:  # the manat is no currency of the company: left out below
+        wanted.setdefault(code, set()).add(day)
+    if not wanted:
+        return {}
+    marks = ", ".join("?" * len(wanted))
+    have: dict[str, set[str]] = {
+        r["code"]: set()
+        for r in conn.execute(
+            f"SELECT code FROM currencies WHERE company_id = ? AND code IN ({marks})",
+            (company_id, *sorted(wanted)),
+        )
+    }
+    first = min(min(days) for days in wanted.values())
+    for r in conn.execute(
+        "SELECT c.code, r.rate_date FROM currency_rates r "
+        "JOIN currencies c ON c.company_id = r.company_id AND c.id = r.currency_id "
+        f"WHERE r.company_id = ? AND r.rate_date >= ? AND c.code IN ({marks})",
+        (company_id, first, *sorted(wanted)),
+    ):
+        have[r["code"]].add(r["rate_date"])
+    missing = {code: sorted(wanted[code] - days) for code, days in have.items()}
+    return {code: days for code, days in sorted(missing.items()) if days}
+
+
 def latest_rates(conn: Connection, company_id: int) -> dict[int, Rate]:
     """The most recent rate of every currency that has one."""
     return {
