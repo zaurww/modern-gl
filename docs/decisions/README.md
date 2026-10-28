@@ -188,4 +188,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D176 | Каждый UPDATE и DELETE называет компанию: правило под тестом, как клиент в SAP | принято (уточняет D71, D72) | [D176-company-in-every-write.md](D176-company-in-every-write.md) |
 | D177 | Колонки отчёта: порядок и ширина мышью запоминаются | принято (дополняет D116) | [D177-column-memory.md](D177-column-memory.md) |
 | D178 | «Журнал действий»: кто открывал компанию и что делал | принято (шаг 1 из `BACKLOG.md`; дополняет D82, D96) | [D178-action-log.md](D178-action-log.md) |
-| D-new | Стек не меняется: Python, SQLite-файл, PySide6; ядро не знает о Qt | принято (опирается на D9, D18, D77, D111, D122) | [D-new-stack.md](D-new-stack.md) |
+| D179 | Стек не меняется: Python, SQLite-файл, PySide6; ядро не знает о Qt | принято (опирается на D9, D18, D77, D111, D122) | [D179-stack-fixed.md](D179-stack-fixed.md) |
