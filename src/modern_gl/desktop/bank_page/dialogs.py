@@ -200,14 +200,22 @@ class BankAccountDialog(QDialog):
 
 
 class PeriodDialog(QDialog):
-    """A statement for several days: a weekend, a card's month."""
+    """A statement for several days: a weekend, a card's month; or the days to load the
+    Central Bank's rates of (`title`, `action`, `end`)."""
 
-    def __init__(self, start: date, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        start: date,
+        parent: QWidget | None = None,
+        title: str = "",
+        action: str = "",
+        end: date | None = None,
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Выписка за период"))
+        self.setWindowTitle(title or tr("Выписка за период"))
         root = QVBoxLayout(self)
         row = QHBoxLayout()
-        self.date_from, self.date_to = date_edit(start), date_edit(start)
+        self.date_from, self.date_to = date_edit(start), date_edit(end or start)
         for text, edit in ((tr("Период с"), self.date_from), (tr("по"), self.date_to)):
             label = caption(text)
             edit.setFixedWidth(130)
@@ -216,7 +224,7 @@ class PeriodDialog(QDialog):
         root.addLayout(row)
         buttons = QHBoxLayout()
         buttons.addStretch(1)
-        cancel, ok = button(tr("Отмена")), button(tr("Создать"), "primary")
+        cancel, ok = button(tr("Отмена")), button(action or tr("Создать"), "primary")
         ok.setDefault(True)
         cancel.clicked.connect(self.reject)
         ok.clicked.connect(self.accept)

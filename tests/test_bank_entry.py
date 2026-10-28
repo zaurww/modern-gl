@@ -222,6 +222,26 @@ def test_marked_lines_change_their_account(qtbot, bank, monkeypatch):
     assert [(x.account_id, x.amount) for x in op.lines] == [(acc(session, free), 10_000)]
 
 
+def test_the_bank_loads_cbar_rates_too(qtbot, bank, monkeypatch):
+    """«⋯ → Курсы ЦБА…» of the bank: the days chosen (02–03.03.2026) get the rates."""
+    from PySide6.QtWidgets import QDialog
+
+    from modern_gl.desktop.bank_page.dialogs import PeriodDialog
+    from modern_gl.i18n import tr
+
+    session = bank
+    messages: list[str] = []
+    session.notify = messages.append
+    page = statement_page(qtbot, session)
+    assert tr("Курсы ЦБА…") in [item[0] for item in page.more_items() if item]
+    session.fetch_rates = lambda day: {"USD": (1_700_000, 1), "EUR": (1_900_000, 1)}
+    monkeypatch.setattr(PeriodDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    monkeypatch.setattr(PeriodDialog, "period", lambda self: ("2026-03-02", "2026-03-03"))
+    page.load_cbar_rates()
+    loaded = tr("Загружены курсы ЦБА за {n} дн.", n=2)
+    qtbot.waitUntil(lambda: loaded in messages, timeout=5000)
+
+
 def test_marked_lines_are_deleted_with_del(qtbot, bank, monkeypatch):
     """Two payments of 100.00 marked: Del deletes both, the statement is back to the
     opening 10 000.00. In «Все операции» lines are marked too (ƏDV DH over many days)."""

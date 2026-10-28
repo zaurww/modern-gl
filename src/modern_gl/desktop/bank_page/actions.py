@@ -27,6 +27,7 @@ from modern_gl.desktop.bank_page.file_dialog import BankFileDialog
 from modern_gl.desktop.bank_page.offset_dialog import AdvanceOffsetDialog
 from modern_gl.desktop.bank_page.portal import DepositDialog
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
+from modern_gl.desktop.cbar_rates import MAX_DAYS, days_to_load, load_rates
 from modern_gl.desktop.preferences import BANK_AMOUNTS, prefs
 from modern_gl.desktop.reports_page import ReportPage
 from modern_gl.desktop.widgets import MenuItem
@@ -109,6 +110,7 @@ class BankActions(ReportPage):
             (tr("Зачесть авансы…"), self.offset_advances),
             None,
             (tr("Конвертация валюты…"), self.new_conversion.emit),
+            (tr("Курсы ЦБА…"), self.load_cbar_rates),
             (tr("Настройки банка…"), self.settings),
         ]
 
@@ -125,6 +127,38 @@ class BankActions(ReportPage):
         dialog = PeriodDialog(date.fromisoformat(self._next_day()), self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self._add_statement(*dialog.period())
+
+    def load_cbar_rates(self) -> None:
+        """The Central Bank's rates from the bank too: most often a statement in a
+        currency needs them (the year so far by default; the days loaded are skipped)."""
+        today = self.s.working_date
+        dialog = PeriodDialog(
+            today.replace(month=1, day=1), self, tr("Курсы ЦБА"), tr("Загрузить"), today
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        first, last = (date.fromisoformat(d) for d in dialog.period())
+        if first > last:
+            first, last = last, first
+        if (last - first).days >= MAX_DAYS:
+            self.s.notify(tr("Слишком длинный период: не больше {n} дней", n=MAX_DAYS))
+            return
+        days = days_to_load(self.s, first, last)
+        if not days:
+            self.s.notify(tr("Курсы ЦБА за этот период уже загружены"))
+            return
+        load_rates(
+            self.s,
+            self,
+            days,
+            lambda _text: None,  # the toast at the end says it
+            lambda n: self.s.notify(tr("Загружены курсы ЦБА за {n} дн.", n=n)),
+            self._rates_failed,
+        )
+        self.s.notify(tr("Курсы ЦБА загружаются: дней {n}", n=len(days)))
+
+    def _rates_failed(self, message: str) -> None:
+        QMessageBox.warning(self, tr("Курсы ЦБА"), message)
 
     def _add_statement(self, date_from: str, date_to: str) -> None:
         place = self.place
