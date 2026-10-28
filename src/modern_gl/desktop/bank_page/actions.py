@@ -19,6 +19,7 @@ from modern_gl.application.bank import (
     transfer_targets,
 )
 from modern_gl.application.queries import document_owner
+from modern_gl.desktop.bank_page.change_account import ChangeAccountDialog
 from modern_gl.desktop.bank_page.deposit_reconcile import DepositReconcileDialog
 from modern_gl.desktop.bank_page.dialogs import BankAccountDialog, PeriodDialog
 from modern_gl.desktop.bank_page.entry import ONE, TWO
@@ -83,6 +84,7 @@ class BankActions(ReportPage):
             items.append((tr("Выписка за период…"), self.new_period))
         if self.lines_shown():
             items.append((tr("Перенести отмеченные на другой счёт…"), self.move_selected))
+            items.append((tr("Сменить счёт у отмеченных…"), self.change_account_selected))
             items.append((tr("Удалить отмеченные…  Del"), self.delete_selected))
         if self.level == STATEMENT:
             one = self.amount_mode() == ONE
@@ -270,6 +272,23 @@ class BankActions(ReportPage):
             self.s.notify(str(e))
             return
         self.s.notify(tr("Перенесено на {name}: {n}", name=target.name, n=len(operations)))
+        self.refresh()
+
+    def change_account_selected(self) -> None:
+        """The marked lines' account (a fee on 80) changed to another one (26)."""
+        operations, _others = self.marked()
+        if not operations:
+            self.s.notify(tr("Отметьте строки банковских операций (Ctrl или Shift + щелчок)"))
+            return
+        dialog = ChangeAccountDialog(self.s, operations, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or (chosen := dialog.chosen()) is None:
+            return
+        try:
+            n = self.s.ledger.bank.change_line_account(self.s.company_id, operations, *chosen)
+        except LedgerError as e:
+            self.s.notify(str(e))
+            return
+        self.s.notify(tr("Счёт сменён у операций: {n}", n=n))
         self.refresh()
 
     def delete_selected(self) -> None:

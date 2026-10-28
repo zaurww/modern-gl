@@ -69,7 +69,7 @@ OTHER_DIALOGS = {
     "ValueDialog",
 }
 # forms checked live by the general rules (test_the_form_is_as_designed below)
-FORMS = {"CrashDialog", "VerificationDialog"}
+FORMS = {"ChangeAccountDialog", "CrashDialog", "VerificationDialog"}
 IMPORT_WINDOWS = {
     "EqaimeImportForm",
     "EqaimeImportDialog",
@@ -284,7 +284,23 @@ def verification_form() -> QWidget:
     return dialog
 
 
-FORM_STEPS = {"CrashDialog": crash_form, "VerificationDialog": verification_form}
+def change_account_form() -> QWidget:
+    """«Сменить счёт у отмеченных» of the bank, nothing marked yet."""
+    from modern_gl.desktop.bank_page.change_account import ChangeAccountDialog
+    from modern_gl.infrastructure.db import connect
+
+    conn = connect(":memory:")
+    shop = make_shop(conn, "classic")
+    cid = shop.company_id
+    session = Session(conn, shop.ledger, cid, "Mağaza", Catalog(conn, cid))
+    return ChangeAccountDialog(session, [])
+
+
+FORM_STEPS = {
+    "ChangeAccountDialog": change_account_form,
+    "CrashDialog": crash_form,
+    "VerificationDialog": verification_form,
+}
 
 
 def form_problems(form: QWidget) -> list[str]:

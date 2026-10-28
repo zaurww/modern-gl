@@ -16,6 +16,7 @@ from datetime import date
 
 from modern_gl.application.bank.advances import AdvanceOffset, counterparty_balance
 from modern_gl.application.bank.operations import (
+    FEE,
     IN,
     KIND_NAMES,
     OUT,
@@ -26,7 +27,7 @@ from modern_gl.application.bank.operations import (
     allocate,
     load_bank_operations,
 )
-from modern_gl.application.common import fill_subconto, pad_subconto
+from modern_gl.application.common import account_kinds, fill_subconto, pad_subconto
 from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.invoices import open_invoices
 from modern_gl.application.ledger.documents import explain_owner
@@ -203,6 +204,59 @@ class BankCommands(ModuleBase):
                     **{f.name: getattr(moved, f.name) for f in fields(BankOperationInput)}
                 )
                 self.save_bank_operation(company_id, data, operation_id, post=op.status == "posted")
+
+    def change_line_account(
+        self, company_id: int, operation_ids: list[int], old_id: int, new_id: int
+    ) -> int:
+        """The lines on one account go to another (a fee loaded before the bank's settings
+        said 26): each operation keeps its number and status, a posted one is posted
+        again — all of them or none. A subconto of the same kind stays; a fee without one
+        gets the item «Комиссия банка». How many operations changed."""
+        old, new = self._account(company_id, old_id), self._account(company_id, new_id)
+        changed = 0
+        with transaction(self.conn):
+            operations = load_bank_operations(self.conn, company_id, operation_ids)
+            for operation_id in operation_ids:
+                op = operations.get(operation_id)
+                if op is None:
+                    raise NotFoundError(tr("документ {id} не найден", id=operation_id))
+                if not any(line.account_id == old_id for line in op.lines):
+                    continue
+                lines = tuple(
+                    replace(
+                        line,
+                        account_id=new_id,
+                        subconto=self._moved_subconto(company_id, op, line.subconto, old, new),
+                    )
+                    if line.account_id == old_id
+                    else line
+                    for line in op.lines
+                )
+                data = BankOperationInput(
+                    **{f.name: getattr(op, f.name) for f in fields(BankOperationInput)}
+                )
+                data = replace(data, lines=lines)
+                self.save_bank_operation(company_id, data, operation_id, post=op.status == "posted")
+                changed += 1
+        return changed
+
+    def _moved_subconto(
+        self,
+        company_id: int,
+        op: BankOperation,
+        subconto: Sequence[int | None],
+        old: Row,
+        new: Row,
+    ) -> tuple[int | None, ...]:
+        by_kind = {
+            kind: value
+            for kind, value in zip(account_kinds(old), pad_subconto(subconto), strict=True)
+            if kind is not None and value is not None
+        }
+        moved = fill_subconto(new, by_kind)
+        if op.kind == FEE and not any(moved):
+            return self.named_subconto(company_id, new["id"], trd("Комиссия банка"))
+        return moved
 
     def plan_advance_offsets(
         self, company_id: int, day: str, counterparty_id: int
