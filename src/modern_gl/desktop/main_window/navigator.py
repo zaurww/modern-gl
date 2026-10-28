@@ -299,7 +299,7 @@ class Navigator(QObject):
         self.new_bank_operation(data)
 
     def _next_bank_draft(self, page: BankOperationPage, operation_id: int) -> None:
-        """A draft posted: the next one to check opens in its place."""
+        """A draft (or an unchecked one) posted: the next one to check opens in its place."""
         self.page_stack.close_page(self.page_stack.key_of(page), ask=False)
         self.open_bank_operation(operation_id)
 

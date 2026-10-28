@@ -24,7 +24,7 @@ from modern_gl.application.bank import (
     SUPPLIER,
     BankOperationInput,
     load_bank_operation,
-    next_draft,
+    next_to_check,
 )
 from modern_gl.application.currencies import missing_rates_text
 from modern_gl.application.posting_preview import PostingPreview
@@ -322,7 +322,8 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         if self.read_only:
             return False
         new = self.doc is None
-        checked = self.doc is not None and self.doc.status == "draft"
+        # a draft, or one the import posted unseen: the statement is checked line by line
+        checking = self.doc is not None and (self.doc.status == "draft" or not self.doc.checked)
         self.error.hide()
         try:
             data = self.collect()
@@ -351,8 +352,8 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.saved.emit(self.doc.document_id)
         if new and post:  # a statement is typed one operation after another
             self.next_requested.emit(self.next_of(data))
-        elif checked and post:  # its drafts are checked one after another
-            after = next_draft(self.s.conn, self.s.company_id, self.doc.id)
+        elif checking and post:  # the next one to check opens
+            after = next_to_check(self.s.conn, self.s.company_id, self.doc.id)
             if after is None:
                 self.close_requested.emit()  # none left: back to the statement
             else:
@@ -365,9 +366,13 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         if self.doc is None:
             data = self._vat_line(data)
             deposit = self._deposit_part(data)
-            return self.s.ledger.bank.save_bank_payment(self.s.company_id, data, deposit, post=post)
+            return self.s.ledger.bank.save_bank_payment(
+                self.s.company_id, data, deposit, post=post, checked=post
+            )
         return [
-            self.s.ledger.bank.save_bank_operation(self.s.company_id, data, self.doc.id, post=post)
+            self.s.ledger.bank.save_bank_operation(
+                self.s.company_id, data, self.doc.id, post=post, checked=post
+            )
         ]
 
     def postings_preview(self) -> PostingPreview:

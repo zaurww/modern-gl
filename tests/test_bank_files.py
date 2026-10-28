@@ -615,6 +615,29 @@ def test_a_fee_loaded_again_joins_its_draft_conversion(ledger, firm, files):
     assert done.status == "posted" and [f.amount for f in done.fees] == [600]
 
 
+def test_what_the_import_posts_waits_to_be_checked(ledger, firm, files):
+    """Posted by the import — not checked: the next to check after Alfa's payment is the
+    fee; marked checked, it is skipped; unposted, it waits again."""
+    from modern_gl.application.bank import next_to_check
+
+    cid = firm["cid"]
+    ledger.bank.import_bank_files(cid, files[:1], firm["places"])
+    ids = by_reference(ledger, cid)
+    payment, fee = ids["1001"], ids["1002"]
+    assert not load_bank_operation(ledger.conn, cid, fee).checked
+    assert next_to_check(ledger.conn, cid, payment) == fee
+    assert ledger.bank.mark_checked(cid, [fee, ids["1003"]], True) == 1  # 1003 is a draft
+    assert load_bank_operation(ledger.conn, cid, fee).checked
+    assert next_to_check(ledger.conn, cid, payment) != fee
+    ledger.bank.unpost_bank_operation(cid, fee)
+    assert not load_bank_operation(ledger.conn, cid, fee).checked
+    op = load_bank_operation(ledger.conn, cid, fee)
+    ledger.bank.save_bank_operation(cid, op, fee, post=True, checked=True)  # the form
+    assert load_bank_operation(ledger.conn, cid, fee).checked
+    ledger.bank.save_bank_operation(cid, op, fee, post=True)  # a rebuild keeps it
+    assert load_bank_operation(ledger.conn, cid, fee).checked
+
+
 SEPTEMBER_DSMF = (
     "2026-09-04",
     "1105 / 604",

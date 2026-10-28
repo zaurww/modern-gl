@@ -36,7 +36,7 @@ from modern_gl.desktop.date_field import (
     edited_date,
     to_qdate,
 )
-from modern_gl.desktop.icons import status_mark
+from modern_gl.desktop.icons import icon, status_mark
 from modern_gl.desktop.theme import P, check_icon, dot_icon, fonts
 from modern_gl.domain.accounts import ACCOUNT_TYPES, TYPE_NAMES
 from modern_gl.domain.dates import ru_date
@@ -463,6 +463,14 @@ def status_icon(posted: bool) -> QIcon:
     if key not in _CLASS_ICONS:
         _CLASS_ICONS[key] = status_mark(posted, P.accent, P.amber)
     return _CLASS_ICONS[key]
+
+
+def bank_status_icon(posted: bool, checked: bool) -> QIcon:
+    """A bank operation's status: a draft — the amber dot; posted by the import and not
+    checked by a person — a grey lightning; checked — the accent check."""
+    if posted and not checked:
+        return icon("auto", P.tertiary, 16, selected=P.secondary)
+    return status_icon(posted)
 
 
 def class_icon(account_class: str | None) -> QIcon:

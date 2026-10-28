@@ -153,7 +153,7 @@ class EntrySaving(EntryChoices):
             start, end = self.period
             if not start <= data.doc_date <= end:
                 raise ValueError(tr("Дата — в пределах выписки"))
-            self.s.ledger.bank.save_bank_operation(self.s.company_id, data, post=True)
+            self.s.ledger.bank.save_bank_operation(self.s.company_id, data, post=True, checked=True)
         except (ValueError, LedgerError) as e:
             self.show_error(str(e))
             return False

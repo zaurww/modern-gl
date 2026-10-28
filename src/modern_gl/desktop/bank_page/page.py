@@ -124,6 +124,7 @@ class BankPage(BankActions):
         for empty in self.empty_states.values():
             self.stack.addWidget(empty)
         bind(self.table, "delete", self.delete_selected)  # the marked lines
+        bind(self.table, "check_row", self.check_selected)
         # an account or a statement opens with one click: the lists are the way in
         self.table.clicked.connect(self._clicked)
         bind(self, "up", self.up)
@@ -369,7 +370,9 @@ class BankPage(BankActions):
         assert account is not None
         self.model.bands = True
         if self.view == LINES:
-            self.model.set(line_columns(True), lines.lines, muted=lambda r: r.status != "draft")
+            self.model.set(
+                line_columns(True), lines.lines, muted=lambda r: r.status != "draft" and r.checked
+            )
         else:
             first, last = self.period_dates()
             shown = [s for s in self.statements if s.date_from <= last and s.date_to >= first]
@@ -391,10 +394,14 @@ class BankPage(BankActions):
         self.model.set(
             line_columns(s.date_from != s.date_to),
             lines.lines,
-            muted=lambda r: r.status != "draft",
+            muted=done,
         )
         self.header.title.setText(period_text(s))
-        self.header.subtitle.setText(f"{account.title}  ·  {where(account)}")
+        waiting = sum(1 for line in lines.lines if line.status == "draft" or not line.checked)
+        about = f"{account.title}  ·  {where(account)}"
+        if waiting:  # a statement checked line by line: what is left
+            about += "  ·  " + tr("не проверено: {n}", n=waiting)
+        self.header.subtitle.setText(about)
         self.reconcile.show_statement(s)
         self.entry.show_for(account.place, s.date_from, s.date_to, self.amount_mode())
 
@@ -453,3 +460,8 @@ class BankPage(BankActions):
             self.open_statement(row.date_from, row.date_to)
         elif isinstance(row, StatementLine):
             self.open_document.emit(row.document_id)
+
+
+def done(line) -> bool:
+    """Quieter: posted and checked by a person (D86); what waits reads as usual."""
+    return line.status != "draft" and line.checked

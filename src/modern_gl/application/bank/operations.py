@@ -95,6 +95,7 @@ class BankOperation(BankOperationInput):
     document_id: int = 0
     number: int = 0
     status: str = "draft"
+    checked: bool = False  # posted and seen by a person, not only by the import
 
 
 def load_bank_operation(conn: Connection, company_id: int, operation_id: int) -> BankOperation:
@@ -104,10 +105,10 @@ def load_bank_operation(conn: Connection, company_id: int, operation_id: int) ->
     return found[operation_id]
 
 
-def next_draft(conn: Connection, company_id: int, operation_id: int) -> int | None:
-    """The draft to check after this operation: the next one of the same bank account by
-    day and number, else the first one before it (drafts of a statement are checked one
-    after another)."""
+def next_to_check(conn: Connection, company_id: int, operation_id: int) -> int | None:
+    """The operation to check after this one — a draft, or one the import posted and no
+    person checked: the next one of the same bank account by day and number, else the
+    first one before it (a statement is checked one line after another)."""
     row = conn.execute(
         "SELECT o2.id FROM bank_operations o "
         "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
@@ -116,7 +117,7 @@ def next_draft(conn: Connection, company_id: int, operation_id: int) -> int | No
         "AND COALESCE(o2.sc2, 0) = COALESCE(o.sc2, 0) "
         "AND COALESCE(o2.sc3, 0) = COALESCE(o.sc3, 0) "
         "JOIN documents d2 ON d2.company_id = o2.company_id AND d2.id = o2.document_id "
-        "AND d2.status = 'draft' "
+        "AND (d2.status = 'draft' OR o2.is_checked = 0) "
         "WHERE o.company_id = ? AND o.id = ? "
         "ORDER BY CASE WHEN d2.doc_date > d.doc_date "
         "OR (d2.doc_date = d.doc_date AND d2.number > d.number) THEN 0 ELSE 1 END, "
@@ -170,6 +171,7 @@ def _load_part(conn: Connection, company_id: int, ids: Sequence[int]) -> dict[in
             document_id=r["document_id"],
             number=r["number"],
             status=r["status"],
+            checked=bool(r["is_checked"]),
         )
         for r in conn.execute(
             "SELECT o.*, d.number, d.doc_date, d.memo, d.status FROM bank_operations o "

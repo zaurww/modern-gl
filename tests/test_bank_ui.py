@@ -16,7 +16,7 @@ from modern_gl.application.bank import (
     BankLine,
     BankOperationInput,
     load_bank_operation,
-    next_draft,
+    next_to_check,
 )
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger, PostingInput
@@ -472,8 +472,8 @@ def test_a_draft_posted_hands_over_to_the_next_one(qtbot, session):
     first = saved_draft(qtbot, session, "100", "2026-02-03")
     second = saved_draft(qtbot, session, "200", "2026-02-03")
     third = saved_draft(qtbot, session, "300", "2026-02-04")
-    assert next_draft(session.conn, cid, second) == third
-    assert next_draft(session.conn, cid, third) == first  # nothing later: from the start
+    assert next_to_check(session.conn, cid, second) == third
+    assert next_to_check(session.conn, cid, third) == first  # nothing later: from the start
     page = new_page(qtbot, session)
     page.load(second)
     with qtbot.waitSignal(page.draft_requested) as handed:
@@ -486,7 +486,7 @@ def test_a_draft_posted_hands_over_to_the_next_one(qtbot, session):
     with qtbot.assertNotEmitted(page.draft_requested):
         page.load(first)
         page.btn_post.click()  # posted already: an edit of it hands over nothing
-    assert next_draft(session.conn, cid, first) is None
+    assert next_to_check(session.conn, cid, first) is None
 
 
 def test_lines_with_keys_insert_copy_and_remove(qtbot, session):

@@ -242,6 +242,33 @@ def test_the_bank_loads_cbar_rates_too(qtbot, bank, monkeypatch):
     qtbot.waitUntil(lambda: loaded in messages, timeout=5000)
 
 
+def test_space_marks_the_lines_checked(qtbot, bank):
+    """A line posted by the import is not checked: «не проверено: 1» under the title;
+    Space marks it, Space again takes the mark off."""
+    from modern_gl.application.bank import load_bank_operation
+    from modern_gl.i18n import tr
+
+    session = bank
+    page = statement_page(qtbot, session)
+    enter(qtbot)
+    pick(qtbot, page.entry.account, "70")
+    enter_until(qtbot, page.entry.money_out)
+    type_text(page.entry.money_out, "100")
+    enter(qtbot)
+    [op] = operations(session)
+    assert op.checked  # typed by a person
+    session.ledger.bank.mark_checked(session.company_id, [op.id], False)  # as the import
+    page.refresh()
+    assert tr("не проверено: {n}", n=1) in page.header.subtitle.text()
+    page.table.selectRow(0)
+    page.check_selected()
+    assert load_bank_operation(session.conn, session.company_id, op.id).checked
+    assert tr("не проверено") not in page.header.subtitle.text()
+    page.table.selectRow(0)
+    page.check_selected()
+    assert not load_bank_operation(session.conn, session.company_id, op.id).checked
+
+
 def test_marked_lines_are_deleted_with_del(qtbot, bank, monkeypatch):
     """Two payments of 100.00 marked: Del deletes both, the statement is back to the
     opening 10 000.00. In «Все операции» lines are marked too (ƏDV DH over many days)."""

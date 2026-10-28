@@ -325,6 +325,23 @@ class BankActions(ReportPage):
         self.s.notify(tr("Счёт сменён у операций: {n}", n=n))
         self.refresh()
 
+    def check_selected(self) -> None:
+        """Space: the marked lines checked by a person — or, all of them checked already,
+        not checked again (a slip of the key is undone with the same key)."""
+        if self.s.read_only or not self.lines_shown():
+            return
+        operations, _others = self.marked()
+        if not operations:
+            return
+        rows = {i.row() for i in self.table.selectionModel().selectedRows()}
+        checked = all(
+            self.model.rows[r].checked for r in rows if self.model.rows[r].status != "draft"
+        )
+        n = self.s.ledger.bank.mark_checked(self.s.company_id, operations, not checked)
+        if n:
+            self.s.notify(tr("Не проверено: {n}", n=n) if checked else tr("Проверено: {n}", n=n))
+        self.refresh()
+
     def delete_selected(self) -> None:
         """The marked lines deleted at once — loaded twice or by mistake: all of them or
         none (one in the closed period keeps them all). Other documents among them stay."""
