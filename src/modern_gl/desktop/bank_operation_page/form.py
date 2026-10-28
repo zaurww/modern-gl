@@ -51,6 +51,7 @@ class BankOperationForm(PageWidget):
     open_gl_document = Signal(int)
     copy_requested = Signal(object)  # BankOperationInput
     next_requested = Signal(object)  # BankOperationInput: the next one of the statement
+    draft_requested = Signal(int)  # the next draft of the bank account to check
 
     def __init__(self, session: Session) -> None:
         super().__init__()
@@ -251,8 +252,6 @@ class BankOperationForm(PageWidget):
             tr("+ Строка"), "flat", tr("Ещё одна e-qaimə, договор или счёт") + " (Ins)"
         )
         lines_head.addWidget(self.btn_add_line)
-        self.btn_add_fee = button(tr("+ Комиссия банка"), "flat", "F6")
-        lines_head.addWidget(self.btn_add_fee)
         self.btn_unfold = button(tr("Развернуть"), "flat", tr("Счёт, субконто и сумма строки"))
         lines_head.addWidget(self.btn_unfold)
         root.addLayout(lines_head)

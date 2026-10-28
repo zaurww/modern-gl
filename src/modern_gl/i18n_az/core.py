@@ -1272,7 +1272,6 @@ AZ: dict[str, str] = {
     "Расшифровка платежа": "Ödənişin təfərrüatı",
     "+ Строка": "+ Sətir",
     "Ещё одна e-qaimə, договор или счёт": "Daha bir e-qaimə, müqavilə və ya hesab",
-    "+ Комиссия банка": "+ Bank komissiyası",
     "Банковских счетов нет": "Bank hesabları yoxdur",
     "Назначение": "Təyinat",
     "Налоги": "Vergilər",

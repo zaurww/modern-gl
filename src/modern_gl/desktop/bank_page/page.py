@@ -368,7 +368,7 @@ class BankPage(BankActions):
         assert account is not None
         self.model.bands = True
         if self.view == LINES:
-            self.model.set(line_columns(True), lines.lines, muted=lambda r: r.status == "draft")
+            self.model.set(line_columns(True), lines.lines, muted=lambda r: r.status != "draft")
         else:
             first, last = self.period_dates()
             shown = [s for s in self.statements if s.date_from <= last and s.date_to >= first]
@@ -390,7 +390,7 @@ class BankPage(BankActions):
         self.model.set(
             line_columns(s.date_from != s.date_to),
             lines.lines,
-            muted=lambda r: r.status == "draft",
+            muted=lambda r: r.status != "draft",
         )
         self.header.title.setText(period_text(s))
         self.header.subtitle.setText(f"{account.title}  ·  {where(account)}")

@@ -53,6 +53,7 @@ from modern_gl.application.bank.operations import (
     last_lines,
     latest_direction,
     load_bank_operation,
+    next_draft,
     split_by_deposit,
     vat_deposit_part,
 )
@@ -128,6 +129,7 @@ __all__ = [
     "last_lines",
     "latest_direction",
     "load_bank_operation",
+    "next_draft",
     "payment_lines",
     "place_balance",
     "split_by_deposit",

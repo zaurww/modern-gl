@@ -104,6 +104,28 @@ def load_bank_operation(conn: Connection, company_id: int, operation_id: int) ->
     return found[operation_id]
 
 
+def next_draft(conn: Connection, company_id: int, operation_id: int) -> int | None:
+    """The draft to check after this operation: the next one of the same bank account by
+    day and number, else the first one before it (drafts of a statement are checked one
+    after another)."""
+    row = conn.execute(
+        "SELECT o2.id FROM bank_operations o "
+        "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
+        "JOIN bank_operations o2 ON o2.company_id = o.company_id AND o2.id <> o.id "
+        "AND o2.account_id = o.account_id AND COALESCE(o2.sc1, 0) = COALESCE(o.sc1, 0) "
+        "AND COALESCE(o2.sc2, 0) = COALESCE(o.sc2, 0) "
+        "AND COALESCE(o2.sc3, 0) = COALESCE(o.sc3, 0) "
+        "JOIN documents d2 ON d2.company_id = o2.company_id AND d2.id = o2.document_id "
+        "AND d2.status = 'draft' "
+        "WHERE o.company_id = ? AND o.id = ? "
+        "ORDER BY CASE WHEN d2.doc_date > d.doc_date "
+        "OR (d2.doc_date = d.doc_date AND d2.number > d.number) THEN 0 ELSE 1 END, "
+        "d2.doc_date, d2.number LIMIT 1",
+        (company_id, operation_id),
+    ).fetchone()
+    return None if row is None else row["id"]
+
+
 def load_bank_operations(
     conn: Connection, company_id: int, operation_ids: Sequence[int]
 ) -> dict[int, BankOperation]:

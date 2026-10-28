@@ -287,6 +287,7 @@ class Navigator(QObject):
         page.open_gl_document.connect(self.show_document)
         page.copy_requested.connect(self.new_bank_operation)
         page.next_requested.connect(lambda data, p=page: self._next_bank_operation(p, data))
+        page.draft_requested.connect(lambda op_id, p=page: self._next_bank_draft(p, op_id))
         page.close_requested.connect(
             lambda p=page: self.page_stack.close_page(self.page_stack.key_of(p), ask=False)
         )
@@ -296,6 +297,11 @@ class Navigator(QObject):
         """A new operation posted: it is in the statement; the next one opens in its place."""
         self.page_stack.close_page(self.page_stack.key_of(page), ask=False)
         self.new_bank_operation(data)
+
+    def _next_bank_draft(self, page: BankOperationPage, operation_id: int) -> None:
+        """A draft posted: the next one to check opens in its place."""
+        self.page_stack.close_page(self.page_stack.key_of(page), ask=False)
+        self.open_bank_operation(operation_id)
 
     def open_inventory_document(self, document_id: int) -> None:
         key = ("inventory_doc", document_id)

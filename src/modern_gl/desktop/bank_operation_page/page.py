@@ -24,6 +24,7 @@ from modern_gl.application.bank import (
     SUPPLIER,
     BankOperationInput,
     load_bank_operation,
+    next_draft,
 )
 from modern_gl.application.currencies import missing_rates_text
 from modern_gl.application.queries import load_document
@@ -85,7 +86,6 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.deposit.unknown.connect(self._not_listed)
         self.deposit.activated.connect(self._changed)
         self.btn_add_line.clicked.connect(lambda: self.add_line(focus=True))
-        self.btn_add_fee.clicked.connect(self.add_fee)
         self.btn_unfold.clicked.connect(self.unfold)
 
         self.btn_save.clicked.connect(lambda: self.save(post=False))
@@ -216,7 +216,6 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         for row in self.line_rows:
             row.set_read_only(ro)
         self.btn_add_line.setVisible(not ro)
-        self.btn_add_fee.setVisible(not ro)
         self.keys_hint.setVisible(not ro)
         self._layout_lines()
         self.btn_delete.setVisible(self.doc is not None and not ro)
@@ -226,9 +225,12 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.btn_post.setVisible(not ro)
 
     def menu_items(self) -> list[MenuItem]:
-        if self.doc is None or self.s.read_only:
-            return []
-        return [(tr("Копировать"), self._copy)]
+        items: list[MenuItem] = []
+        if not self.read_only:  # a fee taken with the payment: rare, so here and F6
+            items.append((tr("Добавить комиссию банка") + "  (F6)", self.add_fee))
+        if self.doc is not None and not self.s.read_only:
+            items.append((tr("Копировать"), self._copy))
+        return items
 
     def _copy(self) -> None:
         try:
@@ -316,6 +318,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         if self.read_only:
             return False
         new = self.doc is None
+        checked = self.doc is not None and self.doc.status == "draft"
         self.error.hide()
         try:
             data = self.collect()
@@ -355,6 +358,12 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.saved.emit(self.doc.document_id)
         if new and post:  # a statement is typed one operation after another
             self.next_requested.emit(self.next_of(data))
+        elif checked and post:  # its drafts are checked one after another
+            after = next_draft(self.s.conn, self.s.company_id, self.doc.id)
+            if after is None:
+                self.close_requested.emit()  # none left: back to the statement
+            else:
+                self.draft_requested.emit(after)
         return True
 
     @staticmethod

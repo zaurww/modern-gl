@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import QApplication, QDialog
 
 from modern_gl.application.bank import (
@@ -16,6 +16,7 @@ from modern_gl.application.bank import (
     BankLine,
     BankOperationInput,
     load_bank_operation,
+    next_draft,
 )
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.ledger import Ledger, PostingInput
@@ -459,6 +460,46 @@ def test_an_operation_written_opens_unfolded(qtbot, session):
     qtbot.waitExposed(again)
     assert not again.folded and again.line_rows[0].isVisible()
     assert not again.btn_unfold.isVisible() and not again.summary.isVisible()
+
+
+def saved_draft(qtbot, session, amount: str, day: str = "") -> int:
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    if day:
+        page.date.setDate(QDate.fromString(day, "yyyy-MM-dd"))
+    page.counterparty_edit.setFocus()
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)
+    page.amount.setFocus()
+    typed(amount)
+    page.btn_save.click()
+    assert page.doc is not None and page.doc.status == "draft"
+    return page.doc.id
+
+
+def test_a_draft_posted_hands_over_to_the_next_one(qtbot, session):
+    """Drafts of a bank account are checked one after another: after the first one posted,
+    the later one; after it, the one before (opened out of order); then none — the page
+    goes back."""
+    cid = session.company_id
+    first = saved_draft(qtbot, session, "100", "2026-02-03")
+    second = saved_draft(qtbot, session, "200", "2026-02-03")
+    third = saved_draft(qtbot, session, "300", "2026-02-04")
+    assert next_draft(session.conn, cid, second) == third
+    assert next_draft(session.conn, cid, third) == first  # nothing later: from the start
+    page = new_page(qtbot, session)
+    page.load(second)
+    with qtbot.waitSignal(page.draft_requested) as handed:
+        page.btn_post.click()
+    assert handed.args == [third]
+    for op_id in (third, first):
+        page = new_page(qtbot, session)
+        page.load(op_id)
+        page.btn_post.click()
+    with qtbot.assertNotEmitted(page.draft_requested):
+        page.load(first)
+        page.btn_post.click()  # posted already: an edit of it hands over nothing
+    assert next_draft(session.conn, cid, first) is None
 
 
 def test_lines_with_keys_insert_copy_and_remove(qtbot, session):
