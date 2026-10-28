@@ -97,6 +97,7 @@ KEYS: dict[str, Key] = {
         # ---- the table only (not while a cell is edited: there the keys type) -----------
         _k("delete", "Del", Scope.GRID, N_("удалить строку")),
         _k("open_row", ENTER, Scope.GRID, N_("открыть")),
+        _k("check_row", "Space", Scope.GRID, N_("проверено")),
         _k("copy_document", "F9", Scope.GRID, N_("копия документа")),
         _k("add_charge", "Ins", Scope.GRID, N_("новый расход")),
         _k("copy_rows", "Ctrl+C", Scope.GRID, N_("копировать")),

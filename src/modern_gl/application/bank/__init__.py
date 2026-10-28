@@ -25,6 +25,7 @@ from modern_gl.application.bank.advances import (
     counterparty_balance,
     payment_lines,
 )
+from modern_gl.application.bank.check_commands import BankCheckCommands
 from modern_gl.application.bank.deposit_commands import VatDepositCommands
 from modern_gl.application.bank.file_commands import BankFileCommands
 from modern_gl.application.bank.operations import (
@@ -54,7 +55,7 @@ from modern_gl.application.bank.operations import (
     latest_direction,
     load_bank_operation,
     load_bank_operations,
-    next_draft,
+    next_to_check,
     split_by_deposit,
     vat_deposit_part,
 )
@@ -78,7 +79,7 @@ from modern_gl.application.bank.statements import (
 )
 
 
-class BankModule(VatDepositCommands, BankFileCommands):
+class BankModule(VatDepositCommands, BankFileCommands, BankCheckCommands):
     """The bank's write scenarios (D47, D78, D112, D146): one object per ledger,
     `ledger.bank`."""
 
@@ -131,7 +132,7 @@ __all__ = [
     "latest_direction",
     "load_bank_operation",
     "load_bank_operations",
-    "next_draft",
+    "next_to_check",
     "payment_lines",
     "place_balance",
     "split_by_deposit",

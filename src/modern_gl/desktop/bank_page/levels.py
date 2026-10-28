@@ -17,7 +17,7 @@ from modern_gl.application.bank import (
     StatementLine,
 )
 from modern_gl.desktop.reports_page import Column
-from modern_gl.desktop.widgets import ru_date, status_icon
+from modern_gl.desktop.widgets import bank_status_icon, ru_date
 from modern_gl.domain.dates import date_range
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import N_, tr
@@ -181,8 +181,9 @@ def line_columns(period: bool) -> list[Column]:
             tr("Операция"),
             line_kind,
             width=190,
-            # a draft — an amber dot and word, still to check; posted — a check (D73)
-            icon=lambda r: status_icon(r.status != "draft"),
+            # a draft — an amber dot and word; posted by the import — a grey lightning, to
+            # check; checked by a person — the check (D73)
+            icon=lambda r: bank_status_icon(r.status != "draft", r.checked),
             tone=lambda r: "amber" if r.status == "draft" else None,
         ),
         Column(tr("Контрагент"), lambda r: r.counterparty or r.corr, width=200),

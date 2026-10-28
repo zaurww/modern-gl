@@ -26,6 +26,8 @@ class StatementLine:
     corr: str  # codes of the other side's accounts
     kind: str = ""  # a bank operation's kind, "conversion", or "" (journal, warehouse…)
     direction: str = ""  # of a bank operation
+    # a person saw it: False — a bank operation the import posted and no one checked yet
+    checked: bool = True
 
 
 @dataclass
@@ -87,6 +89,7 @@ def statement(
                 r["corr"] or "",
                 kind,
                 r["direction"] or "",
+                bool(r["checked"]),
             )
         )
     for d in _drafts(conn, place, params):
@@ -137,7 +140,7 @@ def _statement_rows(conn: Connection, place: BankPlace, params: dict) -> list[Ro
                     SELECT DISTINCT COALESCE(a.code, a.name) AS code FROM moves m
                     JOIN accounts a ON a.id = m.corr_id
                     WHERE m.document_id = docs.id)) AS corr,
-               o.kind, o.direction,
+               o.kind, o.direction, COALESCE(o.is_checked, 1) AS checked,
                EXISTS (SELECT 1 FROM document_owners x
                        WHERE x.company_id = :c AND x.document_id = docs.id
                          AND x.module = 'conversion') AS conversion

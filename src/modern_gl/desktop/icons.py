@@ -44,6 +44,7 @@ GLYPHS: dict[str, str] = {
     "account": "hash",
     "counterparty": "building-2",
     "command": "zap",
+    "auto": "zap",  # posted by the program itself (an import), not checked by a person
     "palette": "command",
     "attention": "circle-alert",
     "money": "wallet",

@@ -61,13 +61,16 @@ class BankCommands(ModuleBase):
         deposit: BankOperationInput | None,
         *,
         post: bool,
+        checked: bool | None = None,
     ) -> list[int]:
         """A new payment and its ƏDV part on the ƏDV deposit account (D69): two
         operations, each on its own account, saved both or neither."""
         with transaction(self.conn):
-            saved = [self.save_bank_operation(company_id, data, post=post)]
+            saved = [self.save_bank_operation(company_id, data, post=post, checked=checked)]
             if deposit is not None:
-                saved.append(self.save_bank_operation(company_id, deposit, post=post))
+                saved.append(
+                    self.save_bank_operation(company_id, deposit, post=post, checked=checked)
+                )
         return saved
 
     def save_bank_operation(
@@ -77,11 +80,13 @@ class BankCommands(ModuleBase):
         operation_id: int | None = None,
         *,
         post: bool,
+        checked: bool | None = None,
     ) -> int:
         """Create or change a bank operation; `post` builds and posts its GL document.
 
         A posted operation is changed in place (D32): its document keeps the number.
         A draft keeps only what was entered — its GL document has no postings yet.
+        `checked` — a person saved it (the form, the statement's line); None keeps it.
         """
         self._check_bank_input(company_id, data)
         with transaction(self.conn):
@@ -110,6 +115,8 @@ class BankCommands(ModuleBase):
                 doc_id = row["document_id"]
                 action = "update"
             self._store_bank(company_id, saved, data)
+            if checked is not None:
+                self._set_checked(company_id, saved, checked and post)
             if post:
                 postings = self._bank_postings(company_id, data)
                 self.documents.write(company_id, doc_id, data.doc_date, postings, data.memo)
@@ -124,6 +131,7 @@ class BankCommands(ModuleBase):
         with transaction(self.conn):
             row = self._bank_row(company_id, operation_id)
             self.documents.unpost(company_id, self.documents.get(company_id, row["document_id"]))
+            self._set_checked(company_id, operation_id, False)
             self._audit(company_id, "bank_operation", operation_id, "unpost", {})
 
     def delete_bank_operation(self, company_id: int, operation_id: int) -> None:
@@ -418,6 +426,12 @@ class BankCommands(ModuleBase):
         }
         if wanted - known:
             raise NotFoundError(tr("счёт не найден"))
+
+    def _set_checked(self, company_id: int, operation_id: int, checked: bool) -> None:
+        self.conn.execute(
+            "UPDATE bank_operations SET is_checked = ? WHERE company_id = ? AND id = ?",
+            (int(checked), company_id, operation_id),
+        )
 
     def _store_bank(self, company_id: int, operation_id: int, data: BankOperationInput) -> None:
         self.conn.execute(
