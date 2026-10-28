@@ -92,8 +92,7 @@ def statement(
                 bool(r["checked"]),
             )
         )
-    for d in _drafts(conn, place, params):
-        result.lines.append(d)
+    result.lines += _drafts(conn, place, params) + _conversion_drafts(conn, place, params)
     result.lines.sort(key=lambda line: (line.doc_date, line.number))
     return result
 
@@ -185,6 +184,59 @@ def _drafts(conn: Connection, place: BankPlace, params: dict) -> list[StatementL
             r["counterparty"] or "",
             r["corr"] or "",
             r["kind"],
+            r["direction"],
+        )
+        for r in rows
+    ]
+
+
+def _conversion_drafts(conn: Connection, place: BankPlace, params: dict) -> list[StatementLine]:
+    """Draft conversions (D37) with a side on the bank account: the debit side on the
+    conversion's day, the credit side on its own day when the bank credits later; a fee
+    taken from the account goes with the side. Listed as drafts: no balance yet."""
+    other = "(SELECT COALESCE(a.code, a.name) FROM accounts a WHERE a.id = {o}_account_id)"
+    bank = (
+        "(SELECT v.name FROM subconto_values v JOIN subconto_kinds k ON k.id = v.kind_id "
+        "AND k.code = 'bank_account' WHERE v.id IN ({o}_sc1, {o}_sc2, {o}_sc3))"
+    )
+    fees = (
+        "(SELECT COALESCE(SUM(f.amount), 0) FROM conversion_fees f "
+        "WHERE f.conversion_id = c.id AND f.account_id = :a "
+        "AND (:v IS NULL OR :v IN (f.sc1, f.sc2, f.sc3)))"
+    )
+    sides = []
+    for own, o, direction, day in (
+        ("from", "to", OUT, "d.doc_date"),
+        ("to", "from", IN, "COALESCE(c.to_date, d.doc_date)"),
+    ):
+        sides.append(
+            f"""
+            SELECT d.id, d.number, {day} AS doc_date, d.memo, '{direction}' AS direction,
+                   COALESCE(c.{own}_amount, 0) AS amount, {fees} AS fees,
+                   {bank.format(o=o)} AS counterparty, {other.format(o=o)} AS corr
+            FROM currency_conversions c
+            JOIN documents d ON d.id = c.document_id AND d.status = 'draft'
+            WHERE c.company_id = :c AND c.{own}_account_id = :a
+              AND (:v IS NULL OR :v IN (c.{own}_sc1, c.{own}_sc2, c.{own}_sc3))
+            """
+        )
+    rows = conn.execute(
+        f"SELECT * FROM ({' UNION ALL '.join(sides)}) WHERE doc_date BETWEEN :from AND :to",
+        params,
+    ).fetchall()
+    return [
+        StatementLine(
+            r["id"],
+            r["number"],
+            r["doc_date"],
+            r["memo"],
+            "draft",
+            r["amount"] if r["direction"] == IN else 0,
+            (r["amount"] if r["direction"] == OUT else 0) + r["fees"],
+            None,
+            r["counterparty"] or "",
+            r["corr"] or "",
+            "conversion",
             r["direction"],
         )
         for r in rows
