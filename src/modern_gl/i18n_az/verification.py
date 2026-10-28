@@ -10,6 +10,7 @@ AZ: dict[str, str] = {
     "Проводки модулей совпадают с их документами": (
         "Modulların yazılışları onların sənədləri ilə üst-üstə düşür"
     ),
+    "Банк сходится с выписками банка": "Bank bankın çıxarışları ilə uyğun gəlir",
     "Склад сходится со счетами запасов": "Anbar ehtiyat hesabları ilə uyğun gəlir",
     # what they find
     "№{n} от {date}: {problem}": "№{n} ({date}): {problem}",
@@ -26,10 +27,13 @@ AZ: dict[str, str] = {
     "счёт {account}: на складе {stock}, по книге {books}, разница {diff}": (
         "hesab {account}: anbarda {stock}, kitabda {books}, fərq {diff}"
     ),
+    "{place}, выписка {period}: по банку {bank}, в программе {books}, разница {diff}": (
+        "{place}, çıxarış {period}: bankda {bank}, proqramda {books}, fərq {diff}"
+    ),
     # the window
     "Проверка книги…": "Kitabın yoxlanışı…",
     "Проверка книги": "Kitabın yoxlanışı",
-    "Программа сверяет свои данные: файл, правила проведения, сторно, проводки модулей и склад. В файле ничего не меняется.": "Proqram öz məlumatlarını tutuşdurur: fayl, keçirmə qaydaları, storno, modulların yazılışları və anbar. Faylda heç nə dəyişmir.",
+    "Программа сверяет свои данные: файл, правила проведения, сторно, проводки модулей, банк и склад. В файле ничего не меняется.": "Proqram öz məlumatlarını üzləşdirir: fayl, keçirmə qaydaları, storno, modulların yazılışları, bank və anbar. Faylda heç nə dəyişmir.",
     "Проверяю…": "Yoxlanılır…",
     "Всё сходится": "Hər şey uyğundur",
     "Найдено расхождений: {n}": "Tapılan fərqlər: {n}",

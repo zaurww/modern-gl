@@ -3,6 +3,11 @@
 Hand-calculated:
 Bank (tests/test_bank.py): a fee of 2.00 USD on 07.03 at 1.70 is 3.40; a rate of 1.75
   entered for 07.03 later makes the operation say 3.50 — the books still say 3.40.
+Bank statement: Kapital AZN on 51, 10 000.00 in on 01.03, 1 200.00 out on 02.03; the
+  bank says 8 800.00 at the end of 02.03 — reconciled. Then 50.00 out on 02.03 typed in
+  the journal: the books 8 750.00, the bank 8 800.00, the difference 50.00.
+ƏDV deposit (tests/test_deposit_reconciliation.py): 01–03.10 marked reconciled, out
+  952.44; a fee of 5.00 on 02.10 since: out 957.44, at the end −268.44 → −273.44.
 Warehouse (tests/helpers/sales.py): 10 bought for 120.00, 3 sold at 12.00 each: 84.00 on
   the warehouse and on 41. A journal posting Dt 41 / Ct 60 5.00 past the warehouse: the
   books 89.00, the warehouse 84.00, the difference −5.00.
@@ -12,14 +17,21 @@ from __future__ import annotations
 
 import pytest
 
-from modern_gl.application.bank import load_bank_operation
+from modern_gl.application.bank import bank_places, load_bank_operation
+from modern_gl.application.bank.deposit_reconciliation import reconcile_deposit
+from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import load_document
 from modern_gl.application.verification import REBUILD, rebuild_modules, verify
 from modern_gl.domain.currency import parse_rate
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import connect, open_snapshot
 from tests.helpers.bank import usd_fee
+from tests.helpers.deposit import fee
 from tests.helpers.sales import make_shop, two_lines
+from tests.helpers.vat_deposit import operations
+
+BANK = "Банк сходится с выписками банка"
 
 
 def found(conn, company_id) -> dict[str, list[str]]:
@@ -38,6 +50,7 @@ def test_a_sound_company_passes_every_check(demo):
         "Проведённые документы соответствуют правилам проведения",
         "Сторно повторяют свои документы",
         "Проводки модулей совпадают с их документами",
+        BANK,
         "Склад сходится со счетами запасов",
     ]
     assert all(r.ok for r in results)
@@ -100,6 +113,67 @@ def test_bank_postings_behind_a_fixed_rate_are_found_and_rebuilt(ledger, bank_fi
     assert rebuild_modules(ledger, cid) == [doc_id]
     assert [p.amount for p in load_document(ledger.conn, cid, doc_id).postings] == [350]
     assert problems(ledger.conn, cid) == []
+
+
+@pytest.fixture
+def kapital(ledger):
+    cid = ledger.create_company("ООО Выписки")
+    apply_chart_template(ledger, cid, "1c77", "ru")
+    azn = ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "bank_account"), "Kapital")
+    owner = ledger.add_subconto_value(
+        cid, ledger.subconto_kind_id(cid, "counterparty"), "Учредитель"
+    )
+    a51, a80 = ledger.account_id(cid, "51"), ledger.account_id(cid, "80")
+    ledger.post_new(cid, "2026-03-01", [PostingInput(a51, a80, "10000", [azn], [owner])])
+    ledger.post_new(cid, "2026-03-02", [PostingInput(a80, a51, "1200", [owner], [azn])])
+    ledger.bank.set_bank_closing(cid, a51, azn, "2026-03-02", "2026-03-02", 880_000)
+    return cid, a51, a80, azn, owner
+
+
+def test_a_reconciled_statement_agrees_with_the_bank(ledger, kapital):
+    assert problems(ledger.conn, kapital[0]) == []
+
+
+def test_a_journal_posting_to_51_after_the_statement_was_reconciled(ledger, kapital):
+    cid, a51, a80, azn, owner = kapital
+    ledger.post_new(cid, "2026-03-02", [PostingInput(a80, a51, "50", [owner], [azn])])
+    assert found(ledger.conn, cid)[BANK] == [
+        "Kapital (51), выписка 02.03.2026: по банку 8 800.00, в программе 8 750.00, разница 50.00"
+    ]
+
+
+def test_a_reconciled_vat_deposit_period_changed_since(ledger, deposit_firm):
+    """The days' statements differ from the portal too (no opening balance in the books,
+    a draft) — here only the reconciled period is looked at."""
+
+    def changes() -> list[str]:
+        return [text for text in found(ledger.conn, cid)[BANK] if "сверен" in text]
+
+    cid, place = deposit_firm["cid"], deposit_firm["place"]
+    ledger.bank.import_vat_deposit(cid, place, operations(), 100000)
+    seen = reconcile_deposit(
+        ledger.conn, cid, place, operations(), 100000, "2026-10-01", "2026-10-03"
+    )
+    ledger.bank.mark_deposit_reconciled(cid, place, seen)
+    assert changes() == []
+
+    fee(ledger, deposit_firm, "2026-10-02")
+    [place] = [p for p in bank_places(ledger.conn, cid) if p.key == place.key]
+    assert changes() == [
+        f"{place.name} ({place.account_code}): "
+        + tr(
+            "{period} сверен, но {side} изменилось: приход {was_in} → {now_in}, расход "
+            "{was_out} → {now_out}, на конец {was_end} → {now_end}",
+            period="01.10.2026–03.10.2026",
+            side=tr("в программе"),
+            was_in="684.00",
+            now_in="684.00",
+            was_out="952.44",
+            now_out="957.44",
+            was_end="-268.44",
+            now_end="-273.44",
+        )
+    ]
 
 
 @pytest.fixture

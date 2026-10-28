@@ -3,7 +3,8 @@ QuickBooks calls Verify Data and SAP a ledger consistency check. The database al
 refuses a wrong row (triggers, CHECK, keys — D149, D155); this finds what no single row
 shows: a file damaged on the disk, a posted document today's rules would refuse, a storno
 that does not mirror its document, a module's postings that are not what its documents
-make, a warehouse that does not agree with its accounts.
+make, a bank account that does not agree with the bank's statements, a warehouse that
+does not agree with its accounts.
 
 Everything runs on a copy of the company in memory (`scratch_copy`): the file is only
 read, so a company open for viewing (D80) is checked as well. What can be put right is
@@ -50,10 +51,11 @@ Check = Callable[[Ledger, int], CheckResult]
 def checks() -> tuple[Check, ...]:
     """The checks in the order they are shown: the core's, then the modules'. The list is
     explicit, like `rebuild.module_rebuilders`: a new module adds its check here."""
+    from modern_gl.application.bank.verification import statements_against_bank
     from modern_gl.application.inventory.verification import stock_against_accounts
     from modern_gl.application.verification.books import module_postings, posting_rules, storno
 
-    return (posting_rules, storno, module_postings, stock_against_accounts)
+    return (posting_rules, storno, module_postings, statements_against_bank, stock_against_accounts)
 
 
 def verify(conn: Connection, company_id: int) -> list[CheckResult]:
