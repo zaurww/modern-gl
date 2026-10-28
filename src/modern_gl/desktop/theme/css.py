@@ -38,9 +38,10 @@ QPushButton#capsule:hover {{ background: {P.surface}; }}
 QFrame#periodField[focused="true"] QPushButton#capsule:hover {{ background: {P.field}; }}
 /* the period with the mouse (D105): quiet cells, the chosen ones blue; one calendar of days */
 QFrame#periodLine {{ background: {P.hairline}; }}
-QFrame#periodWindow, QFrame#calendarWindow {{
+QFrame#periodWindow, QFrame#calendarWindow, QFrame#postingsWindow {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 12px;
 }}
+QLabel#postingsTitle {{ color: {P.text}; font-weight: 600; }}
 QLabel#periodYear {{ color: {P.text}; font-weight: 600; }}
 QPushButton#periodPreset, QPushButton#periodCell {{
     background: transparent; border: none; border-radius: 7px; color: {P.text};

@@ -32,9 +32,11 @@ from modern_gl.application.journal import (
     page_authors,
     several_authors,
 )
+from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.application.queries import DocumentSummary, document_year, document_years
 from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.page import PageWidget
+from modern_gl.desktop.posting_peek import bind_peek
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
 from modern_gl.desktop.reason_dialog import confirm_delete
 from modern_gl.desktop.session import Session
@@ -266,6 +268,7 @@ class JournalPage(PageWidget):
         self.table = ListTable(self.model, 36, fill=MEMO, wrap=False)
         self.table.setColumnHidden(BOOK, not session.parallel_books)  # one book (D63)
         self.table.doubleClicked.connect(self._open_current)
+        bind_peek(self.table, session, self._current_postings)
         # scrolled to the top: the older documents (the newer ones — the model's fetchMore)
         bar = self.table.verticalScrollBar()
         bar.valueChanged.connect(lambda v: v == bar.minimum() and self.model.fetch_page(True))
@@ -377,6 +380,10 @@ class JournalPage(PageWidget):
     def _current_id(self) -> int | None:
         idx = self.table.currentIndex()
         return idx.data(Qt.ItemDataRole.UserRole) if idx.isValid() else None
+
+    def _current_postings(self) -> list[PreviewPosting] | None:
+        doc_id = self._current_id()
+        return None if doc_id is None else gl_postings(self.s.conn, self.s.company_id, doc_id)
 
     def _open_current(self) -> None:
         if (doc_id := self._current_id()) is not None:

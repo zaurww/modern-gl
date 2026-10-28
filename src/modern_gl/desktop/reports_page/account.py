@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 
+from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.desktop.preferences import SUBCONTO_LEVELS, prefs
 from modern_gl.desktop.reports_page.view import (
     Column,
@@ -27,6 +28,7 @@ from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
+from modern_gl.reporting.report_common import CardLine
 from modern_gl.reporting.reports import SubcontoRow, Turnovers
 
 # ОСВ по субконто: how deep (an index of «Детализация»; -1: the deepest the account has)
@@ -182,6 +184,12 @@ class CardPage(AccountReportPage):
     def drill(self, row) -> None:
         if row is not None and row.document_id:
             self.open_document.emit(row.document_id)
+
+    def row_postings(self) -> list[PreviewPosting] | None:
+        row = self.current_row()
+        if not isinstance(row, CardLine):
+            return None
+        return gl_postings(self.s.conn, self.s.company_id, row.document_id)
 
 
 class SubcontoPage(AccountReportPage):

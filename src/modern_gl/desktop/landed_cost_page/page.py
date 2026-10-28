@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.currencies import rate_on
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.landed_cost_page.columns import (
     ACCOUNT,
     AMOUNT,
@@ -42,6 +43,7 @@ from modern_gl.desktop.landed_cost_page.pickers import (
     source_label,
 )
 from modern_gl.desktop.new_cell_value import add_typed_value
+from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
@@ -92,6 +94,7 @@ class LandedCostPage(LandedCostForm):
         for table in (self.charges_table, self.targets_table):
             bind(table, "add_charge", self.add_charge)
             bind(table, "delete", self._remove_row)
+        self.postings.bind_key(self)
 
     # ---- page protocol -----------------------------------------------------------------
 
@@ -184,6 +187,7 @@ class LandedCostPage(LandedCostForm):
     def _changed(self, *_args) -> None:
         self._show_currency_columns()
         self._recalculate()
+        self.postings.changed()
         if not self.charges.read_only and not self.dirty:
             self.dirty = True
             self.title_changed.emit()
@@ -296,6 +300,7 @@ class LandedCostPage(LandedCostForm):
             self.status.set(tr("Черновик"), "amber")
         self._apply_mode(read_only)
         self.dirty = False
+        self.postings.changed()
         self.title_changed.emit()
 
     @staticmethod
@@ -327,17 +332,8 @@ class LandedCostPage(LandedCostForm):
         self._finish_editing()
         self.error.hide()
         try:
-            targets, charges = self.targets.to_inputs(), self.charges.to_inputs()
-            if not targets:
-                raise ValidationError(tr("Добавьте поступления партии"))
-            if self.doc is not None and self.doc.status == "posted":
-                post = True
-                with self.inventory.reposting(self.s.company_id, self.doc.id):
-                    document_id = self._save_draft(targets, charges)
-            else:
-                document_id = self._save_draft(targets, charges)
-                if post:
-                    self.inventory.post_document(self.s.company_id, document_id)
+            post = post or (self.doc is not None and self.doc.status == "posted")
+            document_id = self._write(post)
         except (LedgerError, ValueError, TypeError) as exc:
             self.show_error(str(exc))
             return False
@@ -352,6 +348,27 @@ class LandedCostPage(LandedCostForm):
         )
         self.saved.emit(document_id)
         return True
+
+    def _write(self, post: bool) -> int:
+        """Save the costs as typed and post them if asked; a posted document is edited in
+        place — posted again, later documents recalculated."""
+        targets, charges = self.targets.to_inputs(), self.charges.to_inputs()
+        if not targets:
+            raise ValidationError(tr("Добавьте поступления партии"))
+        if self.doc is not None and self.doc.status == "posted":
+            with self.inventory.reposting(self.s.company_id, self.doc.id):
+                return self._save_draft(targets, charges)
+        document_id = self._save_draft(targets, charges)
+        if post:
+            self.inventory.post_document(self.s.company_id, document_id)
+        return document_id
+
+    def postings_preview(self) -> PostingPreview:
+        """Posted and not edited — its postings; else what «Провести» would post."""
+        saved = [self.doc.id] if self.doc is not None else []
+        stored = self.doc is not None and self.doc.status == "posted" and not self.dirty
+        write = None if stored else lambda: [self._write(post=True)]
+        return document_postings(self.s, "inventory", saved, write)
 
     def _save_draft(self, targets, charges) -> int:
         method = str(self.method.currentData())

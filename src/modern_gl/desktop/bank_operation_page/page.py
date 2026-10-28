@@ -27,6 +27,7 @@ from modern_gl.application.bank import (
     next_draft,
 )
 from modern_gl.application.currencies import missing_rates_text
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.bank_operation_page.bank import BankAccountPart
 from modern_gl.desktop.bank_operation_page.common import (
@@ -36,6 +37,7 @@ from modern_gl.desktop.bank_operation_page.common import (
 from modern_gl.desktop.bank_operation_page.counterparty import CounterpartyPart
 from modern_gl.desktop.bank_operation_page.folded import FoldedPart
 from modern_gl.desktop.bank_operation_page.lines import LinesPart
+from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
@@ -99,6 +101,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         bind(self, "fee", self._fee_key)
         bind(self, "duplicate_row", self._duplicate_line)
         bind(self, "remove_line", self._remove_current_line)
+        self.postings.bind_key(self)
         self.direction.buttonClicked.connect(self._direction_changed)
         self.account.activated.connect(self._bank_account_changed)
         self.bank.activated.connect(self._bank_chosen)
@@ -302,6 +305,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.amount_currency.setText(self.currency_code())
         self._layout_lines()
         self._update_rate_note()
+        self.postings.changed()
 
     def _update_rate_note(self) -> None:
         currency_id = self.currency.currentData()
@@ -322,18 +326,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.error.hide()
         try:
             data = self.collect()
-            if self.doc is None:  # a new one: with its ƏDV part on the deposit, if typed
-                data = self._vat_line(data)
-                deposit = self._deposit_part(data)
-                saved = self.s.ledger.bank.save_bank_payment(
-                    self.s.company_id, data, deposit, post=post
-                )
-            else:
-                saved = [
-                    self.s.ledger.bank.save_bank_operation(
-                        self.s.company_id, data, self.doc.id, post=post
-                    )
-                ]
+            saved = self._write(data, post)
         except (LedgerError, ValueError) as e:
             self.show_error(str(e))
             return False
@@ -365,6 +358,24 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
             else:
                 self.draft_requested.emit(after)
         return True
+
+    def _write(self, data: BankOperationInput, post: bool) -> list[int]:
+        """Save the operation as typed: the operations written (a new payment with its
+        ƏDV part on the deposit, if typed — two)."""
+        if self.doc is None:
+            data = self._vat_line(data)
+            deposit = self._deposit_part(data)
+            return self.s.ledger.bank.save_bank_payment(self.s.company_id, data, deposit, post=post)
+        return [
+            self.s.ledger.bank.save_bank_operation(self.s.company_id, data, self.doc.id, post=post)
+        ]
+
+    def postings_preview(self) -> PostingPreview:
+        """Posted and not edited — its postings; else what «Провести» would post."""
+        saved = [self.doc.id] if self.doc is not None else []
+        stored = self.posted and not self.dirty
+        write = None if stored else lambda: self._write(self.collect(), post=True)
+        return document_postings(self.s, "bank", saved, write)
 
     @staticmethod
     def next_of(data: BankOperationInput) -> BankOperationInput:

@@ -31,6 +31,7 @@ from modern_gl.application.bank import (
     bank_statements,
     statement,
 )
+from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.desktop.bank_page.actions import (
     ACCOUNTS,
     DAYS,
@@ -438,6 +439,12 @@ class BankPage(BankActions):
         elif self.level == JOURNAL and self.view == DAYS and self.period:
             at = next((i for i, s in enumerate(rows) if (s.date_from, s.date_to) == self.period), 0)
         self.table.setCurrentIndex(self.model.index(at, 0) if at >= 0 else QModelIndex())
+
+    def row_postings(self) -> list[PreviewPosting] | None:
+        row = self.current_row()
+        if not isinstance(row, StatementLine):
+            return None
+        return gl_postings(self.s.conn, self.s.company_id, row.document_id)
 
     def drill(self, row: object) -> None:
         if isinstance(row, BankAccount):

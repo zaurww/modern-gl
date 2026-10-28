@@ -35,8 +35,10 @@ from tests.helpers.bank_ui import (
     choose,
     key,
     new_page,
+    pay_alfa,
     setup_company,
     shown_page,
+    type_text,
     typed,
     value,
 )
@@ -48,21 +50,6 @@ pytestmark = pytest.mark.questions("Yes")  # deleting, posting: yes
 @pytest.fixture
 def session(bank_session):
     return bank_session
-
-
-def type_text(edit, text: str) -> None:
-    edit.setText(text)
-    edit.textEdited.emit(text)
-
-
-def pay_alfa(page: BankOperationPage) -> None:
-    """1 180.00 to ALFA found by its VÖEN, e-qaimə MT001."""
-    choose(page.sc[0], "Kapital AZN")
-    type_text(page.counterparty_edit, "1234567890")
-    page.counterparty_edit.editingFinished.emit()
-    line = page.line_rows[0]
-    type_text(line.amount, "1180")
-    type_text(line.invoice, "MT001")
 
 
 def test_payment_to_a_supplier_found_by_voen(qtbot, session):

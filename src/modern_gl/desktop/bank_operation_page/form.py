@@ -27,6 +27,7 @@ from modern_gl.application.bank import (
 )
 from modern_gl.application.catalog import AccountInfo
 from modern_gl.application.invoices import OpenInvoice
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.bank_operation_page.common import (
     FIELD_WIDTH,
     NONE,
@@ -37,6 +38,7 @@ from modern_gl.desktop.bank_operation_page.line_row import LineRow
 from modern_gl.desktop.directories_page import added_value, new_value
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox, SuggestBox
+from modern_gl.desktop.posting_preview import PostingsPanel
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
@@ -84,6 +86,8 @@ class BankOperationForm(PageWidget):
         self.error.setWordWrap(True)
         self.error.hide()
         root.addWidget(self.error)
+        self.postings = PostingsPanel(session, self.postings_preview)
+        root.addWidget(self.postings)
         root.addStretch(1)
         self._build_footer(root)
 
@@ -321,6 +325,10 @@ class BankOperationForm(PageWidget):
         root.addLayout(actions)
 
     # ---- what the parts ask of the fields --------------------------------------------
+
+    def postings_preview(self) -> PostingPreview:
+        """What the operation posts (the page answers)."""
+        raise NotImplementedError
 
     @property
     def posted(self) -> bool:

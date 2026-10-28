@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.desktop.reports_page.account import invoice_text
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
@@ -12,6 +13,7 @@ from modern_gl.desktop.widgets import balance_text, ru_date
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
+from modern_gl.reporting.report_common import SubcontoCardLine
 
 
 @dataclass
@@ -117,3 +119,9 @@ class SubcontoCardPage(ReportPage):
     def drill(self, row) -> None:
         if row is not None and row.document_id:
             self.open_document.emit(row.document_id)
+
+    def row_postings(self) -> list[PreviewPosting] | None:
+        row = self.current_row()
+        if not isinstance(row, SubcontoCardLine):
+            return None
+        return gl_postings(self.s.conn, self.s.company_id, row.document_id)

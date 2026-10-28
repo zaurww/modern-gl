@@ -17,6 +17,7 @@ from modern_gl.application.inventory import (
     Inventory,
     InventoryDocumentData,
 )
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.grid_editing import finish_editing
 from modern_gl.desktop.landed_cost_page.columns import (
     HINT,
@@ -27,6 +28,7 @@ from modern_gl.desktop.landed_cost_page.models import ChargesModel, TargetsModel
 from modern_gl.desktop.landed_cost_page.table import CellDelegate, LinesTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.posting_preview import PostingsPanel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import SEPARATOR, legend
 from modern_gl.desktop.theme import fonts
@@ -70,7 +72,13 @@ class LandedCostForm(PageWidget):
         root.addWidget(self.error)
 
         self._build_summary(root)
+        self.postings = PostingsPanel(session, self.postings_preview)
+        root.addWidget(self.postings)
         self._build_actions(root)
+
+    def postings_preview(self) -> PostingPreview:
+        """What the costs post (the page answers)."""
+        raise NotImplementedError
 
     def _build_head(self, root: QVBoxLayout) -> None:
         top = QHBoxLayout()

@@ -13,11 +13,13 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.conversion import Conversion
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop import icons
 from modern_gl.desktop.conversion_page.common import BASE
 from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.side_panel import SidePanel, Stat
 from modern_gl.desktop.page import PageWidget
+from modern_gl.desktop.posting_preview import PostingsPanel
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
@@ -61,8 +63,14 @@ class ConversionForm(PageWidget):
         self.error.setWordWrap(True)
         self.error.hide()
         root.addWidget(self.error)
+        self.postings = PostingsPanel(session, self.postings_preview)
+        root.addWidget(self.postings)
         root.addStretch(1)
         self._build_actions(root)
+
+    def postings_preview(self) -> PostingPreview:
+        """What the conversion posts (the page answers)."""
+        raise NotImplementedError
 
     # ---- the fields ------------------------------------------------------------------
 

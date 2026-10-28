@@ -33,6 +33,7 @@ from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.journal_page import JournalPage
 from modern_gl.desktop.main_window import MainWindow
 from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
+from modern_gl.desktop.posting_peek import peek
 from modern_gl.desktop.reports_page import (
     OsvPage,
     StatementsPage,
@@ -79,7 +80,8 @@ def main() -> None:
             (
                 w
                 for w in QApplication.topLevelWidgets()
-                if w.objectName() in ("completer", "palette", "periodWindow", "calendarWindow")
+                if w.objectName()
+                in ("completer", "palette", "periodWindow", "calendarWindow", "postingsWindow")
                 and w.isVisible()
             ),
             None,
@@ -109,6 +111,10 @@ def main() -> None:
     assert popup is not None
     popup.hide()
     journal.quick.edit.clear()
+    journal.table.setFocus()
+    peeked = peek(journal.table, journal._current_postings() or [])  # F7 on a row
+    shot("1e_journal_postings")
+    peeked.close()
     palette = win.command_palette()  # Ctrl+K: find and do anything (D86)
     assert palette is not None
     palette.search.setText("60")
@@ -739,6 +745,9 @@ def main() -> None:
     conversion.fee_rows[1].amount.setText("0.50")
     conversion._changed()
     shot("10f_conversion")
+    conversion.postings.flip()  # F7: what it would post, before «Провести»
+    shot("10f2_conversion_postings")
+    conversion.postings.flip()
     conversion.save(post=True)
     shot("10g_conversion_posted")
     win.close_current()
@@ -833,6 +842,9 @@ def main() -> None:
     payment.line_rows[1].amount.setText("1.20")
     payment._changed()
     shot("12b2_bank_payment_lines")
+    payment.postings.flip()  # F7: the postings it would make
+    shot("12b3_bank_payment_postings")
+    payment.postings.flip()
     win.notify(i18n.tr("Документ №{n} проведён", n=14), lambda: None)
     shot("15_toast")  # what was done, at the bottom, with «Undo» (D86)
     shoot_vat_deposit(session, win, ledger, shot)

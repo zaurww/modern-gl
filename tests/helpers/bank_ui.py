@@ -83,6 +83,21 @@ def new_page(qtbot, session: Session, prefill=None) -> BankOperationPage:
     return page
 
 
+def type_text(edit, text: str) -> None:
+    edit.setText(text)
+    edit.textEdited.emit(text)
+
+
+def pay_alfa(page: BankOperationPage) -> None:
+    """1 180.00 to ALFA found by its VÖEN, e-qaimə MT001."""
+    choose(page.sc[0], "Kapital AZN")
+    type_text(page.counterparty_edit, "1234567890")
+    page.counterparty_edit.editingFinished.emit()
+    line = page.line_rows[0]
+    type_text(line.amount, "1180")
+    type_text(line.invoice, "MT001")
+
+
 def key(qtbot, k, modifier=Qt.KeyboardModifier.NoModifier) -> None:
     """A key where the user's goes: the open list, or the field with the cursor."""
     popup = QApplication.activePopupWidget()

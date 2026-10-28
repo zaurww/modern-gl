@@ -10,6 +10,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMessageBox
 
 from modern_gl.application.inventory import Inventory
+from modern_gl.application.posting_preview import PreviewPosting, owned_postings
 from modern_gl.application.trade_batch import BulkPosting, open_lines, post_drafts
 from modern_gl.desktop.batch_post_dialog import BatchPostDialog
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
@@ -287,6 +288,12 @@ class TradePage(ReportPage):
         self.imported.emit()
         if dialog.chosen_document is not None:
             self.open_document.emit(dialog.chosen_document)
+
+    def row_postings(self) -> list[PreviewPosting] | None:
+        row = self.current_row()
+        if not isinstance(row, TradeDocument):
+            return None
+        return owned_postings(self.s.conn, self.s.company_id, "inventory", [row.id])
 
     def drill(self, row: TradeDocument | None) -> None:
         if row is not None:

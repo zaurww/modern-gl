@@ -25,6 +25,7 @@ from modern_gl.application.inventory import (
     InventoryDocumentData,
     default_vat_rate,
 )
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.inventory_document_page.columns import (
     DOCUMENT_TYPES,
@@ -41,6 +42,7 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
 )
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox
+from modern_gl.desktop.posting_preview import PostingsPanel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import legend
 from modern_gl.desktop.theme import fonts
@@ -112,6 +114,8 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         root.addWidget(self.error)
 
         self._build_summary(root)
+        self.postings = PostingsPanel(session, self.postings_preview)
+        root.addWidget(self.postings)
         self._build_actions(root)
 
     # ---- the fields ------------------------------------------------------------------
@@ -330,6 +334,9 @@ class InventoryDocumentForm(GridEditing, PageWidget):
     # ---- made by the groups of the page; each group may call the others --------------
 
     def _changed(self, *_args) -> None:  # the page
+        raise NotImplementedError
+
+    def postings_preview(self) -> PostingPreview:  # the page
         raise NotImplementedError
 
     def _split_months(self, index: QPersistentModelIndex) -> None:  # the splits

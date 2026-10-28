@@ -15,6 +15,7 @@ from modern_gl.application.inventory import (
     StockShortageError,
     vat_of,
 )
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.inventory_document_page.clipboard import ClipboardPart
 from modern_gl.desktop.inventory_document_page.columns import (
     DOCUMENT_TYPES,
@@ -36,6 +37,7 @@ from modern_gl.desktop.inventory_document_page.lines_table import (
 from modern_gl.desktop.inventory_document_page.new_values import NewValuesPart
 from modern_gl.desktop.inventory_document_page.party import PartyPart
 from modern_gl.desktop.inventory_document_page.splits import SplitPart
+from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
@@ -45,7 +47,7 @@ from modern_gl.desktop.widgets import (
     to_qdate,
 )
 from modern_gl.domain.dates import month_title
-from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.domain.invoice import EQAIME
 from modern_gl.i18n import N_, tr
 
@@ -112,6 +114,7 @@ class InventoryDocumentPage(
         bind(self.table, "delete", self._remove_row)
         bind(self.table, "paste_rows", self.paste)  # inside a cell editor: its own paste
         bind(self.table, "copy_rows", self.copy)
+        self.postings.bind_key(self)
 
     @property
     def document_id(self) -> int | None:
@@ -265,6 +268,7 @@ class InventoryDocumentPage(
         self.vat_total.setVisible(shown)
         self.vat_total.setText(money(vat, blank_zero=False))
         self.total.setText(money(self.model.total() + vat, blank_zero=False))
+        self.postings.changed()
 
     def _changed(self, *_args) -> None:
         self._show_totals()
@@ -287,17 +291,11 @@ class InventoryDocumentPage(
         if post and self._party_missing():
             return False
         try:
-            if self.doc is not None and self.doc.status == "posted":
-                # edited in place: posted again at once, later documents recalculated
-                post = True
-                inputs = self.model.to_inputs(complete=True)
-                with self.inventory.reposting(self.s.company_id, self.doc.id):
-                    document_id = self._save_draft(inputs)
-            else:
-                inputs = self.model.to_inputs(complete=post)
-                document_id = self._save_draft(inputs)
-                if post:
-                    self._post_saved(document_id)
+            posted = self.doc is not None and self.doc.status == "posted"
+            post = post or posted  # edited in place: posted again at once
+            document_id = self._write(post)
+            if post and not posted:
+                self._post_saved(document_id)
         except (LedgerError, ValueError, TypeError) as exc:
             self.show_error(str(exc))
             # goods short: brought in as a purchase that waits for its e-qaimə (D154)
@@ -317,14 +315,45 @@ class InventoryDocumentPage(
         self.saved.emit(document_id)
         return True
 
-    def _party_missing(self) -> bool:
-        """Posting without the header's supplier (customer): say so at its field."""
+    def _write(self, post: bool) -> int:
+        """Save the document as typed; a posted one is edited in place — posted again,
+        later documents recalculated. A draft is posted after (`post_document`)."""
+        if self.doc is not None and self.doc.status == "posted":
+            inputs = self.model.to_inputs(complete=True)
+            with self.inventory.reposting(self.s.company_id, self.doc.id):
+                return self._save_draft(inputs)
+        return self._save_draft(self.model.to_inputs(complete=post))
+
+    def postings_preview(self) -> PostingPreview:
+        """Posted and not edited — its postings; else what «Провести» would post."""
+        saved = [self.doc.id] if self.doc is not None else []
+        stored = self.doc is not None and self.doc.status == "posted" and not self.dirty
+        if stored or self.doc_type == "landed_cost":  # costs are posted on their own page
+            return document_postings(self.s, "inventory", saved, None)
+        return document_postings(self.s, "inventory", saved, self._write_posted)
+
+    def _write_posted(self) -> list[int]:
+        if (missing := self._missing_party()) is not None:
+            raise ValidationError(missing)
+        document_id = self._write(post=True)
+        if self.doc is None or self.doc.status != "posted":
+            self.inventory.post_document(self.s.company_id, document_id)
+        return [document_id]
+
+    def _missing_party(self) -> str | None:
+        """Why it cannot post without the header's supplier (customer)."""
         party, _contract = self._positions()
         if not self.model.party_in_header() or party is None:
-            return False
+            return None
         if self.model.party_subconto[party] is not None:
+            return None
+        return tr(PARTY_MISSING[self.doc_type])
+
+    def _party_missing(self) -> bool:
+        """Posting without the header's supplier (customer): say so at its field."""
+        if (missing := self._missing_party()) is None:
             return False
-        self.show_error(tr(PARTY_MISSING[self.doc_type]))
+        self.show_error(missing)
         self.party.setFocus()
         return True
 

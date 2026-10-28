@@ -84,6 +84,7 @@ KEYS: dict[str, Key] = {
         _k("duplicate_row", "F9", Scope.PAGE, N_("копия строки")),
         _k("split_row", "F8", Scope.PAGE, N_("разделить строку")),
         _k("fee", "F6", Scope.PAGE, N_("комиссия")),
+        _k("postings", "F7", Scope.PAGE, N_("проводки")),
         _k("remove_line", "Ctrl+Del", Scope.PAGE, N_("убрать строку")),
         _k("edit", "F2", Scope.PAGE, N_("изменить")),
         _k("open", ENTER, Scope.PAGE, N_("открыть")),

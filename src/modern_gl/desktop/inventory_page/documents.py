@@ -5,8 +5,10 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox, QTableView
 
+from modern_gl.application.posting_preview import PreviewPosting, owned_postings
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.posting_peek import bind_peek
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate
 from modern_gl.desktop.widgets import ru_date
@@ -23,7 +25,14 @@ class DocumentsPart(InventoryForm):
         self.documents.doubleClicked.connect(
             lambda index: self._open_document(index.data(Qt.ItemDataRole.UserRole))
         )
+        bind_peek(self.documents, self.s, self._document_postings)
         return self.documents
+
+    def _document_postings(self) -> list[PreviewPosting] | None:
+        row = self._selected_document()
+        if row is None:
+            return None
+        return owned_postings(self.s.conn, self.s.company_id, "inventory", [row.id])
 
     def _show_documents(self) -> None:
         """The warehouse documents; the drafts are counted on the switch, not to be lost."""

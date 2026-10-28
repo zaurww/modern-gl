@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.posting_preview import PreviewPosting
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.period_field import PeriodField
 from modern_gl.desktop.reports_page.column_choice import ColumnChoice
@@ -150,6 +151,10 @@ class ReportPage(PageWidget):
 
         bind(self, "refresh", self.refresh)
         bind(self, "copy_report", lambda: copy_to_clipboard(self))
+        # here, not on top: the peek's table is this package's (an import cycle)
+        from modern_gl.desktop.posting_peek import bind_peek
+
+        bind_peek(self.table, session, self.row_postings)
         self._bind_open()
 
     def _build_period_bar(self, root: QVBoxLayout) -> None:
@@ -234,6 +239,14 @@ class ReportPage(PageWidget):
 
     def menu_actions(self, row: Any) -> list[MenuAction | None]:
         return []
+
+    def current_row(self) -> Any:
+        idx = self.table.currentIndex()
+        return idx.data(Qt.ItemDataRole.UserRole) if idx.isValid() else None
+
+    def row_postings(self) -> list[PreviewPosting] | None:
+        """F7: the postings of the row under the cursor; a page of documents answers."""
+        return None
 
     def title(self) -> str:
         raise NotImplementedError

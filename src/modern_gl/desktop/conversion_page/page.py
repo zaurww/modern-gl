@@ -24,6 +24,7 @@ from modern_gl.application.conversion import (
     official_rate,
 )
 from modern_gl.application.currencies import missing_rates_text
+from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.conversion_page.accounts_dialog import ConversionAccountsDialog
 from modern_gl.desktop.conversion_page.common import (
@@ -33,6 +34,7 @@ from modern_gl.desktop.conversion_page.common import (
 )
 from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.form import ConversionForm
+from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
@@ -76,6 +78,7 @@ class ConversionPage(ConversionForm):
         bind(self, "post", lambda: self.save(post=True))
         bind(self, "insert", lambda: self.add_fee(focus=True))
         bind(self, "remove_line", self._remove_current_fee)
+        self.postings.bind_key(self)
         self.btn_add_fee.setToolTip(tr("Комиссия, которую удержал банк") + " (Ins)")
         for panel in (self.source, self.target):
             panel.changed.connect(self._changed)
@@ -295,6 +298,7 @@ class ConversionPage(ConversionForm):
         )
 
     def _update_summary(self) -> None:
+        self.postings.changed()
         try:
             data = self.collect()
         except ValueError:
@@ -343,15 +347,24 @@ class ConversionPage(ConversionForm):
 
     # ---- actions ---------------------------------------------------------------------
 
+    def _write(self, post: bool) -> int:
+        doc_id = self.doc.id if self.doc else None
+        return self.s.ledger.conversion.save_conversion(
+            self.s.company_id, self.collect(), doc_id, post=post
+        )
+
+    def postings_preview(self) -> PostingPreview:
+        """Posted and not edited — its postings; else what «Провести» would post."""
+        saved = [self.doc.id] if self.doc is not None else []
+        write = None if self.posted and not self.dirty else lambda: [self._write(post=True)]
+        return document_postings(self.s, "conversion", saved, write)
+
     def save(self, post: bool) -> bool:
         if self.read_only:
             return False
         self.error.hide()
         try:
-            data = self.collect()
-            conversion_id = self.s.ledger.conversion.save_conversion(
-                self.s.company_id, data, self.doc.id if self.doc else None, post=post
-            )
+            conversion_id = self._write(post)
         except MissingAccountRoleError as e:
             # a chart without the accounts: choose them now and post again
             chosen = self.edit_accounts(missing=e.role)
