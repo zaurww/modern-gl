@@ -582,6 +582,28 @@ def test_a_fee_goes_to_the_account_of_the_settings_not_as_last_time(ledger, firm
     assert lines(ledger, cid, by_reference(ledger, cid)["1106"])[1] == [("26", 200, "")]
 
 
+def test_the_lines_marked_go_to_another_account(ledger, firm, files):
+    """The fee 1.00 loaded onto 91.2 goes to 26 with the item «Комиссия банка»: still
+    posted, its posting is Dt 26 Kt 51 1.00; Alfa's payment, marked too, has no 91.2."""
+    cid, acc = firm["cid"], firm["acc"]
+    ledger.bank.import_bank_files(cid, files[:1], firm["places"])
+    ids = by_reference(ledger, cid)
+    moved = ledger.bank.change_line_account(cid, [ids["1001"], ids["1002"]], acc["91.2"], acc["26"])
+    assert moved == 1
+    fee, fee_lines = lines(ledger, cid, ids["1002"])
+    assert (fee.status, fee_lines) == ("posted", [("26", 100, "")])
+    item = ledger.conn.execute(
+        "SELECT name FROM subconto_values WHERE id = ?", (fee.lines[0].subconto[0],)
+    ).fetchone()
+    assert item["name"] == "Комиссия банка"
+    postings = ledger.conn.execute(
+        "SELECT debit_account_id, credit_account_id, amount FROM postings WHERE document_id = ?",
+        (fee.document_id,),
+    ).fetchall()
+    assert [tuple(r) for r in postings] == [(acc["26"], acc["51"], 100)]
+    assert lines(ledger, cid, ids["1001"])[1] == [("60.1", 100000, "MT260800000001")]
+
+
 def test_a_file_of_another_firm_is_not_loaded(ledger, firm, tmp_path):
     path = kapital_file(
         tmp_path / "x.xlsx", AZN_IBAN, "AZN", "5000", AZN_LINES[:1], tin="1999999999"

@@ -181,6 +181,47 @@ def test_lines_move_to_another_account(qtbot, bank, monkeypatch):
     assert page.current is not None and page.current.closing == 1_000_000
 
 
+def test_marked_lines_change_their_account(qtbot, bank, monkeypatch):
+    """A payment of 100.00 typed onto 70, marked, «Сменить счёт у отмеченных»: onto
+    71 it does not go (an employee wanted, nothing changes); onto an account without
+    subconto it does — posted, with the same number."""
+    from PySide6.QtWidgets import QDialog
+
+    from modern_gl.desktop.bank_page.change_account import ChangeAccountDialog
+
+    session = bank
+    page = statement_page(qtbot, session)
+    enter(qtbot)
+    pick(qtbot, page.entry.account, "70")
+    enter_until(qtbot, page.entry.money_out)
+    type_text(page.entry.money_out, "100")
+    enter(qtbot)
+    [before] = operations(session)
+    page.table.selectRow(0)
+    free = next(  # an account without subconto: the line goes there as it is
+        a.code for a in session.catalog.leaf_accounts if a.code != "70" and not any(a.sc_kinds)
+    )
+    seen = []
+
+    def chosen(dialog):
+        seen.append(dialog.old.currentData())
+        dialog.new.setCurrentIndex(dialog.new.findData(acc(session, target)))
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(ChangeAccountDialog, "exec", chosen)
+    told = []
+    monkeypatch.setattr(session, "notify", told.append)
+    target = "71"  # wants an employee the line lacks: nothing changes
+    page.change_account_selected()
+    assert "71" in told[0] and operations(session) == [before]
+    target = free
+    page.change_account_selected()
+    [op] = operations(session)
+    assert seen == [acc(session, "70")] * 2
+    assert (op.number, op.status) == (before.number, "posted")
+    assert [(x.account_id, x.amount) for x in op.lines] == [(acc(session, free), 10_000)]
+
+
 def test_marked_lines_are_deleted_with_del(qtbot, bank, monkeypatch):
     """Two payments of 100.00 marked: Del deletes both, the statement is back to the
     opening 10 000.00. In «Все операции» lines are marked too (ƏDV DH over many days)."""
