@@ -166,6 +166,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
     def load(self, operation_id: int) -> None:
         self.doc = load_bank_operation(self.s.conn, self.s.company_id, operation_id)
         d = self.doc
+        self._unfolded = True  # opened again to check its lines: shown, not «Развернуть»
         self._loading = True
         self._fill(d)
         self._loading = False

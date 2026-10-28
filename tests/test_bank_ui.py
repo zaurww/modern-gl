@@ -441,6 +441,26 @@ def test_the_lines_unfold_with_a_fee_or_by_hand(qtbot, session):
     assert not other.folded and other.line_rows[0].account.hasFocus()
 
 
+def test_an_operation_written_opens_unfolded(qtbot, session):
+    """A draft (or a posted one) opened again shows its line at once: it is opened to
+    check the account, without «Развернуть» each time."""
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    page.counterparty_edit.setFocus()
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)
+    page.amount.setFocus()
+    typed("100")
+    page.btn_save.click()
+    assert page.doc is not None and page.doc.status == "draft"
+    again = new_page(qtbot, session)
+    again.load(page.doc.id)
+    again.show()
+    qtbot.waitExposed(again)
+    assert not again.folded and again.line_rows[0].isVisible()
+    assert not again.btn_unfold.isVisible() and not again.summary.isVisible()
+
+
 def test_lines_with_keys_insert_copy_and_remove(qtbot, session):
     page = shown_page(qtbot, session)
     line = page.line_rows[0]
