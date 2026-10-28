@@ -79,7 +79,7 @@ FROZEN = {
     "0056_item_minimum.sql": "5434a29414182511",
     "0057_value_checks.sql": "b9905e018735542d",
     "0058_audit_by_time.sql": "50d0c877d782adc0",
-    "0059_bank_checked.sql": "6c9f1d468a64ebb8",
+    "0059_bank_checked.sql": "2173242eb9d7ecf4",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

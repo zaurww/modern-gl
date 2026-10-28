@@ -1,4 +1,4 @@
--- A bank operation checked by a person (D-new-bank-checked): the import posts the lines it
+-- A bank operation checked by a person (D180): the import posts the lines it
 -- is sure of, and a user who checks every line must see which ones they have seen. Set when
 -- the user posts the operation in its form or marks it in the statement; the import and a
 -- rebuild never set it. Typed by hand and posted already — checked: a person made it.

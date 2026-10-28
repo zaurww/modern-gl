@@ -189,3 +189,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D177 | Колонки отчёта: порядок и ширина мышью запоминаются | принято (дополняет D116) | [D177-column-memory.md](D177-column-memory.md) |
 | D178 | «Журнал действий»: кто открывал компанию и что делал | принято (шаг 1 из `BACKLOG.md`; дополняет D82, D96) | [D178-action-log.md](D178-action-log.md) |
 | D179 | Стек не меняется: Python, SQLite-файл, PySide6; ядро не знает о Qt | принято (опирается на D9, D18, D77, D111, D122) | [D179-stack-fixed.md](D179-stack-fixed.md) |
+| D180 | «Проверено» у банковской операции | принято | [D180-bank-checked.md](D180-bank-checked.md) |
