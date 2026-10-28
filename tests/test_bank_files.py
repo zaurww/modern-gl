@@ -576,6 +576,45 @@ def test_a_side_posted_by_hand_keeps_the_conversion_out(ledger, firm, files):
     assert load_bank_operation(ledger.conn, cid, transfer_id).status == "posted"
 
 
+def test_a_draft_conversion_is_posted_once_the_rate_is_there(ledger, firm, files):
+    """Loaded before the EUR rate of 04.08 was there: a draft. The rate set, the files
+    loaded again: the same conversion is posted, 1 000.00 EUR → 1 925.00 ₼ with its fee
+    6.00 EUR — not a second one."""
+    cid = firm["cid"]
+    ledger.delete_rate(cid, "EUR", "2026-08-04")
+    ledger.delete_rate(cid, "EUR", "2026-08-01")
+    ledger.bank.import_bank_files(cid, files, firm["places"])
+    [conversion_id] = [r[0] for r in ledger.conn.execute("SELECT id FROM currency_conversions")]
+    assert load_conversion(ledger.conn, cid, conversion_id).status == "draft"
+
+    ledger.set_rate(cid, "EUR", "2026-08-04", parse_rate("2"))
+    again = ledger.bank.import_bank_files(cid, files, firm["places"])
+    assert {r.state for r in again.rows if r.op.reference in ("2001", "2002")} == {POSTED}
+    assert [r[0] for r in ledger.conn.execute("SELECT id FROM currency_conversions")] == [
+        conversion_id
+    ]
+    done = load_conversion(ledger.conn, cid, conversion_id)
+    assert done.status == "posted" and [f.amount for f in done.fees] == [600]
+
+
+def test_a_fee_loaded_again_joins_its_draft_conversion(ledger, firm, files):
+    """The conversion's fee posted apart (then deleted) and the conversion a draft: loaded
+    again, the fee 6.00 EUR goes into the conversion, not into a bank operation."""
+    cid = firm["cid"]
+    ledger.delete_rate(cid, "EUR", "2026-08-04")
+    ledger.delete_rate(cid, "EUR", "2026-08-01")
+    ledger.bank.import_bank_files(cid, files, firm["places"])
+    [conversion_id] = [r[0] for r in ledger.conn.execute("SELECT id FROM currency_conversions")]
+    draft = load_conversion(ledger.conn, cid, conversion_id)
+    ledger.conversion.save_conversion(cid, replace(draft, fees=()), conversion_id, post=False)
+
+    ledger.set_rate(cid, "EUR", "2026-08-04", parse_rate("2"))
+    ledger.bank.import_bank_files(cid, files, firm["places"])
+    assert "2002" not in by_reference(ledger, cid)
+    done = load_conversion(ledger.conn, cid, conversion_id)
+    assert done.status == "posted" and [f.amount for f in done.fees] == [600]
+
+
 SEPTEMBER_DSMF = (
     "2026-09-04",
     "1105 / 604",

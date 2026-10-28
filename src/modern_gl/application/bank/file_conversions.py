@@ -17,6 +17,7 @@ from modern_gl.application.bank.file_import import CONVERSION, FileOperation
 from modern_gl.application.bank.import_commands import BankImportCommands
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
 from modern_gl.application.bank.operations import FEE, IN, OUT
+from modern_gl.application.common import pad_subconto
 from modern_gl.application.conversion.calc import (
     ConversionFee,
     ConversionInput,
@@ -84,15 +85,21 @@ class FileConversionCommands(BankImportCommands):
         if existing is not None:
             before = load_conversion(self.conn, company_id, existing)
             has = {OUT: before.source is not None, IN: before.target is not None}
+            if before.status == "draft":  # made again of the files' sides and fees: the
+                loaded = {x.direction for x in mine}  # rates may be there now
+                has = {side: has[side] and side not in loaded for side in has}
             mine = [x for x in mine if not has[x.direction]]
             if not mine:
                 return [ImportRow(op, KNOWN)]
-            sides = {OUT: before.source, IN: before.target}
-            days = {
-                OUT: before.doc_date if before.source else None,
-                IN: (before.target_date or before.doc_date) if before.target else None,
+            sides = {
+                OUT: before.source if has[OUT] else None,
+                IN: before.target if has[IN] else None,
             }
-            fees = list(before.fees)
+            days = {
+                OUT: before.doc_date if sides[OUT] else None,
+                IN: (before.target_date or before.doc_date) if sides[IN] else None,
+            }
+            fees = [f for f in before.fees if _of_side(f, sides)]
             memo = before.memo
         for x in mine:
             days[x.direction] = x.day
@@ -167,6 +174,16 @@ class FileConversionCommands(BankImportCommands):
             "SELECT document_id FROM currency_conversions WHERE company_id = ? AND id = ?",
             (company_id, conversion_id),
         ).fetchone()["document_id"]
+
+
+def _of_side(fee: ConversionFee, sides: dict[str, ConversionSide | None]) -> bool:
+    """The fee was taken on a side kept (not loaded again): the side's account."""
+    return any(
+        side is not None
+        and (side.account_id, pad_subconto(side.subconto))
+        == (fee.account_id, pad_subconto(fee.subconto))
+        for side in sides.values()
+    )
 
 
 def _rows(op: FileOperation, state: str, why: str, document: int) -> list[ImportRow]:
