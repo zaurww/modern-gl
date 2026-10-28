@@ -203,12 +203,15 @@ class BankFileCommands(FileConversionCommands):
         unknown = [BankLine(None, op.amount)]
         if op.kind in (SUPPLIER, CUSTOMER):
             return self._payment_lines(company_id, op, counterparty, new_party)
-        if op.kind == FEE:  # as the last fee, else the settings' account, item «Комиссия банка»
+        if op.kind == FEE:  # the settings' account (else as the last fee), «Комиссия банка»
             before = previous_lines(self.conn, company_id, op.place, op, None)
-            fee = before[0].account_id if before else self.ledger.account_role(company_id, BANK_FEE)
+            fee = self.ledger.account_role(company_id, BANK_FEE)
+            if fee is None and before:
+                fee = before[0].account_id
             if fee is None:
                 return unknown, tr("не задан счёт комиссий банка")
-            subconto = before[0].subconto if before else ()
+            same = before and before[0].account_id == fee
+            subconto = before[0].subconto if same else ()
             if not any(subconto):
                 subconto = self.named_subconto(company_id, fee, trd("Комиссия банка"))
             return [BankLine(fee, op.amount, subconto)], ""

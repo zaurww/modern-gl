@@ -53,6 +53,7 @@ from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.conversion.calc import load_conversion
 from modern_gl.application.ledger.inputs import PostingInput
+from modern_gl.domain.accounts import BANK_FEE
 from modern_gl.domain.currency import parse_rate
 from modern_gl.i18n import tr
 from tests.helpers.excel import active_sheet
@@ -558,6 +559,27 @@ def test_a_tax_is_posted_as_the_last_one_with_its_code(ledger, firm, files, tmp_
     ledger.bank.save_bank_operation(cid, replace(op, lines=(fixed,)), tax_id, post=True)
     done = ledger.bank.import_bank_files(cid, [september], firm["places"])
     assert [(r.state, r.lines[0][0]) for r in done.rows] == [(POSTED, "69")]
+
+
+SEPTEMBER_FEE = (
+    "2026-09-04",
+    "1106 / 605",
+    f"AZ96AIIB00000670130001944290 / {BANK}",
+    "-2",
+    "-2",
+    "605 saylı əməliyyat üzrə xidmət haqqı",
+)
+
+
+def test_a_fee_goes_to_the_account_of_the_settings_not_as_last_time(ledger, firm, files, tmp_path):
+    """August's fee went to 91.2; the settings then say 26 — September's goes to 26."""
+    cid = firm["cid"]
+    ledger.bank.import_bank_files(cid, files[:1], firm["places"])
+    ledger.set_account_role(cid, BANK_FEE, firm["acc"]["26"])
+    path = kapital_file(tmp_path / "sep.xlsx", AZN_IBAN, "AZN", "5292", [SEPTEMBER_FEE])
+    done = ledger.bank.import_bank_files(cid, [read_bank_file(path)], firm["places"])
+    assert [(r.state, r.lines[0][0]) for r in done.rows] == [(POSTED, "26")]
+    assert lines(ledger, cid, by_reference(ledger, cid)["1106"])[1] == [("26", 200, "")]
 
 
 def test_a_file_of_another_firm_is_not_loaded(ledger, firm, tmp_path):
