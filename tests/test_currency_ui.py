@@ -8,7 +8,7 @@ from fractions import Fraction
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLineEdit
+from PySide6.QtWidgets import QLineEdit, QMessageBox
 
 from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
@@ -20,6 +20,7 @@ from modern_gl.desktop.postings import AMOUNT, CT, CURRENCY, CURRENCY_AMOUNT, ME
 from modern_gl.desktop.reports_page import CardPage, OsvPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import CURRENCY_OPTIONAL, parse_rate
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import connect
 from tests.helpers.qt import focused, running_app
 
@@ -139,8 +140,10 @@ def test_posting_without_currency_on_a_currency_account_is_explained(session, qt
 def test_currencies_page_loads_cbar_rates_and_revalues(session, qtbot):
     page = CurrenciesPage(session)
     qtbot.addWidget(page)
-    page.fetch = lambda day: {"USD": (parse_rate("1.72"), 1), "JPY": (1_130_000, 100)}
-    assert page.load_rates(date(2026, 3, 30), date(2026, 3, 31)) == 2
+    session.fetch_rates = lambda day: {"USD": (parse_rate("1.72"), 1), "JPY": (1_130_000, 100)}
+    assert page.load_rates(date(2026, 3, 30), date(2026, 3, 31)) is not None
+    qtbot.waitUntil(lambda: page.loading is None, timeout=5000)
+    assert session.messages[-1] == tr("Загружены курсы ЦБА за {n} дн.", n=2)
     usd = session.ledger.currency_id(session.company_id, "USD")
     assert session.catalog.currencies[usd].code == "USD"
     chosen = page.currency()
@@ -164,7 +167,7 @@ def test_currencies_page_loads_cbar_rates_and_revalues(session, qtbot):
     assert "не нужна" in session.messages[-1]
 
 
-def test_no_connection_is_reported_once(session, qtbot):
+def test_no_connection_is_reported_once(session, qtbot, monkeypatch):
     from modern_gl.infrastructure.cbar import RatesUnavailableError
 
     page = CurrenciesPage(session)
@@ -175,9 +178,26 @@ def test_no_connection_is_reported_once(session, qtbot):
         calls.append(day)
         raise RatesUnavailableError("Не удалось связаться с сайтом ЦБА (cbar.az): offline")
 
-    page.fetch = offline
-    assert page.load_rates(date(2026, 3, 1), date(2026, 3, 10)) == 0
-    assert len(calls) == 1
+    session.fetch_rates = offline
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: warned.append(a[2]))
+    page.load_rates(date(2026, 3, 1), date(2026, 3, 10))
+    qtbot.waitUntil(lambda: page.loading is None, timeout=5000)
+    assert len(calls) == 1 and "cbar.az" in warned[0]
+
+
+def test_a_year_of_rates_is_loaded(session, qtbot):
+    """A whole year (365 days) is allowed now: it goes in the background."""
+    page = CurrenciesPage(session)
+    qtbot.addWidget(page)
+    session.fetch_rates = lambda day: {"USD": (parse_rate("1.70"), 1)}
+    assert page.load_rates(date(2026, 1, 1), date(2026, 12, 31)) is not None
+    qtbot.waitUntil(lambda: page.loading is None, timeout=20000)
+    usd = session.ledger.currency_id(session.company_id, "USD")
+    count = session.conn.execute(
+        "SELECT COUNT(*) FROM currency_rates WHERE currency_id = ?", (usd,)
+    ).fetchone()[0]
+    assert count == 365
 
 
 def test_osv_and_card_show_amounts_in_currency(session, qtbot):

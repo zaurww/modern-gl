@@ -6,21 +6,16 @@ window shows the lines again."""
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import date
 
 from PySide6.QtWidgets import QLabel, QPushButton, QWidget
 
 from modern_gl.application.bank.files import BankFile
 from modern_gl.application.currencies import days_without_rate
+from modern_gl.desktop.cbar_rates import load_rates
 from modern_gl.desktop.import_window import say
-from modern_gl.desktop.portal_worker import PortalRun, run_on_portal
+from modern_gl.desktop.portal_worker import PortalRun
 from modern_gl.desktop.session import Session
-from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure.cbar import RatesUnavailableError
-from modern_gl.infrastructure.etaxes import PortalError
-
-Rates = dict[str, tuple[int, int]]
 
 
 class FileRates:
@@ -61,38 +56,19 @@ class FileRates:
         days = sorted({day for days in self.missing.values() for day in days})
         if not days or self.run is not None:
             return
-        fetch = self.s.fetch_rates
         self.button.setEnabled(False)
-
-        def job(progress: Callable[[str], None]) -> dict[str, Rates]:
-            got: dict[str, Rates] = {}
-            for n, day in enumerate(days, 1):
-                progress(tr("Курсы ЦБА: {n} из {total}", n=n, total=len(days)))
-                try:
-                    got[day] = fetch(date.fromisoformat(day))
-                except RatesUnavailableError as e:  # a day without rates is skipped;
-                    if "cbar.az" in str(e):  # no connection: said, not tried every day
-                        raise PortalError(str(e)) from e
-            return got
-
-        self.run = run_on_portal(
+        self.run = load_rates(
+            self.s,
             self.parent,
-            job,
+            days,
             lambda text: say(self.note, text, "warning"),
-            self._fetched,
+            self._loaded,
             self._failed,
         )
 
-    def _fetched(self, got: object) -> None:
+    def _loaded(self, _days: int) -> None:
         self.run = None
         self.button.setEnabled(True)
-        assert isinstance(got, dict)
-        try:
-            for day, rates in sorted(got.items()):
-                self.s.ledger.import_rates(self.s.company_id, date.fromisoformat(day), rates)
-        except LedgerError as e:
-            say(self.note, str(e), "warning")
-            return
         self.loaded()
 
     def _failed(self, message: str) -> None:

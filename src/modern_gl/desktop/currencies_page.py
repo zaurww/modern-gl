@@ -7,10 +7,10 @@ typed by hand. Revaluation brings balances of currency accounts to the rate of a
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QAction, QColor, QGuiApplication
+from PySide6.QtGui import QAction, QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -33,8 +33,10 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.currencies import CurrencyInfo, Rate, latest_rates, list_rates
 from modern_gl.application.default_accounts import EXCHANGE_GAIN, EXCHANGE_LOSS, default_account
+from modern_gl.desktop.cbar_rates import MAX_DAYS, days_to_load, load_rates
 from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.page import PageWidget
+from modern_gl.desktop.portal_worker import PortalRun
 from modern_gl.desktop.reports_page import Column, ReportModel, month_of
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
@@ -52,10 +54,8 @@ from modern_gl.desktop.widgets import (
 from modern_gl.domain.currency import KNOWN, currency_name, format_rate, parse_rate
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.infrastructure import cbar
 
 CURRENCY_ROLE = Qt.ItemDataRole.UserRole
-MAX_DAYS = 92  # one request per day: a quarter at most
 
 
 def _dialog(parent: QWidget, title: str) -> tuple[QDialog, QVBoxLayout, QFormLayout]:
@@ -92,13 +92,13 @@ class CurrenciesPage(PageWidget):
         super().__init__()
         self.setObjectName("page")
         self.s = session
-        self.fetch = cbar.fetch  # replaced in tests: no network there
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 30, 40, 24)
         root.setSpacing(18)
 
         self.header = PageHeader(tr("Валюты"), "")
-        rates = self.header.primary(
+        self.loading: PortalRun | None = None  # CBAR rates being loaded
+        self.rates_button = rates = self.header.primary(
             tr("Курсы ЦБА…"),
             self.load_cbar,
             tr("Загрузить официальные курсы Центрального банка (cbar.az)"),
@@ -386,35 +386,40 @@ class CurrenciesPage(PageWidget):
             return
         self.load_rates(edited_date(start), edited_date(end))
 
-    def load_rates(self, first: date, last: date) -> int:
-        """Load CBAR rates for every day of the period; returns the days loaded."""
+    def load_rates(self, first: date, last: date) -> PortalRun | None:
+        """The CBAR rates of the period's days the company lacks, in the background: the
+        button says how far it is, a toast — how many days were loaded."""
         if first > last:
             first, last = last, first
         if (last - first).days >= MAX_DAYS:
             self.s.notify(tr("Слишком длинный период: не больше {n} дней", n=MAX_DAYS))
-            return 0
-        loaded, problems = 0, []
-        QGuiApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            day = first
-            while day <= last:
-                try:
-                    if self.s.ledger.import_rates(self.s.company_id, day, self.fetch(day)):
-                        loaded += 1
-                except LedgerError as e:
-                    problems.append(str(e))
-                    if isinstance(e, cbar.RatesUnavailableError) and "cbar.az" in str(e):
-                        break  # no connection: do not try every other day
-                day += timedelta(days=1)
-        finally:
-            QGuiApplication.restoreOverrideCursor()
+            return None
+        if self.loading is not None:
+            return None
+        days = days_to_load(self.s, first, last)
+        if not days:
+            self.s.notify(tr("Курсы ЦБА за этот период уже загружены"))
+            return None
+        self.rates_button.setEnabled(False)
+        self.loading = load_rates(
+            self.s, self, days, self.rates_button.setText, self._rates_loaded, self._rates_failed
+        )
+        return self.loading
+
+    def _rates_done(self) -> None:
+        self.loading = None
+        self.rates_button.setEnabled(True)
+        self.rates_button.setText(tr("Курсы ЦБА…"))
         self.s.catalog.reload()
         self.refresh()
-        if problems and not loaded:
-            QMessageBox.warning(self, tr("Курсы ЦБА"), problems[0])
-        else:
-            self.s.notify(tr("Загружены курсы ЦБА за {n} дн.", n=loaded))
-        return loaded
+
+    def _rates_loaded(self, days: int) -> None:
+        self._rates_done()
+        self.s.notify(tr("Загружены курсы ЦБА за {n} дн.", n=days))
+
+    def _rates_failed(self, message: str) -> None:
+        self._rates_done()
+        QMessageBox.warning(self, tr("Курсы ЦБА"), message)
 
     # ---- revaluation -----------------------------------------------------------------
 
