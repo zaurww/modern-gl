@@ -324,3 +324,39 @@ def test_the_bank_statement_marks_both_days_of_a_conversion(ledger, conn, firm):
     assert [(line.doc_date, line.money_in, line.kind) for line in azn.lines] == [
         ("2026-03-03", 169_500, "conversion")
     ]
+
+
+def test_the_bank_statement_lists_a_draft_conversion_as_a_draft(ledger, conn, firm):
+    """A sale of 1 000 USD loaded from a file and left a draft: the USD account lists
+    1 002.00 out (1 000.00 + the 2.00 fee) and the manat one 1 695.00 in on the credit
+    day — drafts, no balance; the day counts it as a draft."""
+    from modern_gl.application.bank import bank_statements
+
+    cid = firm["cid"]
+    conversion = ledger.conversion.save_conversion(
+        cid, sale(firm, target_date="2026-03-03"), post=False
+    )
+    document = load_conversion(conn, cid, conversion).document_id
+    places = {p.value_id: p for p in bank_places(conn, cid)}
+    usd = statement(conn, cid, places[firm["usd_bank"]], "2026-03-01", "2026-03-31")
+    azn = statement(conn, cid, places[firm["azn_bank"]], "2026-03-01", "2026-03-31")
+    assert [
+        (line.document_id, line.doc_date, line.money_in, line.money_out, line.balance)
+        for line in usd.lines
+    ] == [(document, "2026-03-02", 0, 100_200, None)]
+    line = usd.lines[0]
+    assert (line.status, line.kind, line.direction) == ("draft", "conversion", "out")
+    assert (line.counterparty, line.corr, line.memo) == ("Kapital Bank AZN", "51", "Продажа USD")
+    assert (usd.total_out, usd.closing) == (0, 0)
+    assert [
+        (line.doc_date, line.money_in, line.money_out, line.direction) for line in azn.lines
+    ] == [("2026-03-03", 169_500, 0, "in")]
+    assert azn.lines[0].counterparty == "Kapital Bank USD"
+    days = bank_statements(conn, cid, places[firm["usd_bank"]])
+    assert [(s.date_from, s.lines, s.drafts, s.closing) for s in days] == [("2026-03-02", 0, 1, 0)]
+    # posted, it is an ordinary line again
+    ledger.conversion.save_conversion(
+        cid, sale(firm, target_date="2026-03-03"), conversion, post=True
+    )
+    usd = statement(conn, cid, places[firm["usd_bank"]], "2026-03-01", "2026-03-31")
+    assert [(line.status, line.money_out) for line in usd.lines] == [("posted", 100_200)]
