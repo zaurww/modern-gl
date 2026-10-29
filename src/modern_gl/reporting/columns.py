@@ -17,6 +17,7 @@ from datetime import date
 from modern_gl.domain.period_input import Period, month_bounds, quarter_bounds, quarter_of, shift
 
 ONE, MONTHS, QUARTERS, PREVIOUS, YEAR_AGO = "one", "months", "quarters", "previous", "year_ago"
+SUBCONTO = "subconto"  # the profit and loss: a column per element of a directory (D-new)
 COMPARISONS = (PREVIOUS, YEAR_AGO)
 MAX_COLUMNS = 13  # months of more than a year are shown by quarters
 
@@ -128,6 +129,16 @@ def percent(amounts: Amounts) -> int | None:
         return None
     change = difference(amounts) * 10_000
     return (abs(change) + base // 2) // base * (1 if change >= 0 else -1)
+
+
+def share(amount: int, base: int) -> int | None:
+    """A figure as a share of its base (a line of the profit and loss against the revenue
+    of the same column) in hundredths of a percent, rounded half away from zero; None
+    without a base. An expense is negative, so its share is negative too."""
+    base = abs(base)
+    if not base:
+        return None
+    return (abs(amount) * 10_000 + base // 2) // base * (1 if amount >= 0 else -1)
 
 
 def _month_end(day: date) -> bool:

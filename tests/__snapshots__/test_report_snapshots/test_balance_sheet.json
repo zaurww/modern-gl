@@ -4,6 +4,7 @@
       "account_id": null,
       "account_type": null,
       "amount": [],
+      "depth": 0,
       "kind": "heading",
       "title": "Активы",
       "under_line": false,
@@ -13,6 +14,7 @@
       "account_id": null,
       "account_type": null,
       "amount": [],
+      "depth": 0,
       "kind": "heading",
       "title": "Оборотные активы",
       "under_line": false,
@@ -24,6 +26,7 @@
       "amount": [
         1040000
       ],
+      "depth": 0,
       "kind": "line",
       "title": "Счета без типа",
       "under_line": false,
@@ -35,6 +38,7 @@
       "amount": [
         1040000
       ],
+      "depth": 0,
       "kind": "subtotal",
       "title": "Оборотные активы",
       "under_line": false,
@@ -46,6 +50,7 @@
       "amount": [
         1040000
       ],
+      "depth": 0,
       "kind": "total",
       "title": "Итого активы",
       "under_line": false,
@@ -55,6 +60,7 @@
       "account_id": null,
       "account_type": null,
       "amount": [],
+      "depth": 0,
       "kind": "heading",
       "title": "Обязательства и капитал",
       "under_line": false,
@@ -64,6 +70,7 @@
       "account_id": null,
       "account_type": null,
       "amount": [],
+      "depth": 0,
       "kind": "heading",
       "title": "Краткосрочные обязательства",
       "under_line": false,
@@ -75,6 +82,7 @@
       "amount": [
         70000
       ],
+      "depth": 0,
       "kind": "line",
       "title": "Счета без типа",
       "under_line": false,
@@ -86,6 +94,7 @@
       "amount": [
         70000
       ],
+      "depth": 0,
       "kind": "subtotal",
       "title": "Краткосрочные обязательства",
       "under_line": false,
@@ -95,6 +104,7 @@
       "account_id": null,
       "account_type": null,
       "amount": [],
+      "depth": 0,
       "kind": "heading",
       "title": "Капитал",
       "under_line": false,
@@ -106,6 +116,7 @@
       "amount": [
         1000000
       ],
+      "depth": 0,
       "kind": "line",
       "title": "Счета без типа",
       "under_line": false,
@@ -117,6 +128,7 @@
       "amount": [
         -30000
       ],
+      "depth": 0,
       "kind": "line",
       "title": "Прибыль (убыток) текущего периода",
       "under_line": false,
@@ -128,6 +140,7 @@
       "amount": [
         970000
       ],
+      "depth": 0,
       "kind": "subtotal",
       "title": "Капитал",
       "under_line": false,
@@ -139,12 +152,14 @@
       "amount": [
         1040000
       ],
+      "depth": 0,
       "kind": "total",
       "title": "Итого обязательства и капитал",
       "under_line": false,
       "value_id": null
     }
   ],
+  "split": [],
   "unbalanced": [
     0
   ]

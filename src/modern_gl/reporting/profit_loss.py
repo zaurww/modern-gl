@@ -70,6 +70,8 @@ INVESTING = ("finance_income", FX_MONEY)
 FINANCING = ("finance_expense", FX_LOANS)
 # (line, account, the account's first subconto) -> a figure per column
 Turnovers = dict[tuple[str, int, int | None], Amounts]
+# (line, account, first subconto, the element of the split directory) -> net
+Legs = dict[tuple[str, int, int | None, int | None], int]
 
 
 def profit_and_loss(
@@ -80,19 +82,43 @@ def profit_and_loss(
     layers: tuple[str, ...] = COMMON,
     detail: str = TYPES,
     periods: list[Period] | None = None,
+    split: int | None = None,
 ) -> Statement:
     """Income and expense of the period, without the closing of them into the result
     (postings against a «Financial result» or «Retained earnings» account) and without
     the moves between income and expense accounts (26, 44 closed into 46): an expense
     shows where it was spent. `detail`: TYPES, or ACCOUNTS / ITEMS under each line.
-    `periods`: a column per period (D107), else the one from `date_from` to `date_to`."""
+    `periods`: a column per period (D107), else the one from `date_from` to `date_to`.
+    `split`: a directory (subconto kind) — a column per element of it met in the period
+    (by its place on each account), «not given» last, then the whole (D-new)."""
     t: Turnovers = defaultdict(Amounts)
-    columns = periods or [(date_from, date_to)]
-    for i, (first, last) in enumerate(columns):
-        for k, net in _turnovers(conn, company_id, first, last, layers).items():
-            t[k] += Amounts.at(i, len(columns), net)
-    names = Names.read(conn, company_id) if detail != TYPES else None
-    return Statement(_Lines(t, names, detail == ITEMS).build())
+    names = Names.read(conn, company_id) if detail != TYPES or split else None
+    columns: list[tuple[int | None, str]] = []
+    if split is not None and names is not None:
+        legs = _turnovers(conn, company_id, date_from, date_to, layers, split)
+        columns = _split_columns(legs, names)
+        at = {value: i for i, (value, _) in enumerate(columns)}
+        n = len(columns) + 1
+        for (key, account_id, sc, value), net in legs.items():
+            t[(key, account_id, sc)] += Amounts.at(at[value], n, net) + Amounts.at(n - 1, n, net)
+    else:
+        stretches = periods or [(date_from, date_to)]
+        for i, (first, last) in enumerate(stretches):
+            legs = _turnovers(conn, company_id, first, last, layers)
+            for (key, account_id, sc, _), net in legs.items():
+                t[(key, account_id, sc)] += Amounts.at(i, len(stretches), net)
+    lines = _Lines(t, names if detail != TYPES else None, detail == ITEMS).build()
+    return Statement(lines, split=columns)
+
+
+def _split_columns(legs: Legs, names: Names) -> list[tuple[int | None, str]]:
+    """The elements met, by name; the postings without one last."""
+    values = {value for (_, _, _, value) in legs}
+    named = sorted((names.values.get(v, ""), v) for v in values if v is not None)
+    columns: list[tuple[int | None, str]] = [(v, name) for name, v in named]
+    if None in values:
+        columns.append((None, ""))
+    return columns
 
 
 class _Lines:
@@ -176,23 +202,24 @@ def _detail(
     for (k, account_id, value_id), amount in t.items():
         if k == key:
             by_account[account_id][value_id] += amount
-    shown = [
-        a for a in sorted(by_account, key=names.order.__getitem__) if total(by_account[a].values())
-    ]
+    whole = {a: total(v.values()) for a, v in by_account.items()}
+    shown = [a for a in whole if whole[a]]
     one = len(shown) == 1 and not always
     if len(shown) == 1:
         line.account_id = shown[0]
+    rows = [Line("", kind="account", account_id=shown[0])] if one else names.account_lines(whole)
     lines: list[Line] = []
-    for account_id in shown:
-        values = by_account[account_id]
+    for row in rows:
         if not one:
-            whole = total(values.values())
-            lines.append(Line(names.accounts[account_id], whole, "account", account_id=account_id))
-        if not items or set(values) == {None}:
+            lines.append(row)
+        if row.kind != "account" or not items or row.account_id is None:
+            continue
+        values = by_account[row.account_id]
+        if set(values) == {None}:
             continue
         titles = {v: names.values.get(v, "") if v is not None else "" for v in values}
         lines.extend(
-            Line(titles[v], values[v], "item", None, account_id, v, one)
+            Line(titles[v], values[v], "item", None, row.account_id, v, one, row.depth)
             for v in sorted(values, key=lambda v: (v is None, titles[v]))
             if values[v]
         )
@@ -200,13 +227,18 @@ def _detail(
 
 
 def _turnovers(
-    conn: Connection, company_id: int, date_from, date_to, layers
-) -> dict[tuple[str, int, int | None], int]:
-    """Income (Ct − Dt) and expense (−(Dt − Ct)) of the period by line, account and the
-    account's first subconto, signed so they add; each leg judged by `_pl_key`. A posting
-    in a currency with no amount in it is an exchange difference (the revaluation)."""
+    conn: Connection, company_id: int, date_from, date_to, layers, split: int | None = None
+) -> Legs:
+    """Income (Ct − Dt) and expense (−(Dt − Ct)) of the period by line, account, the
+    account's first subconto and the element of the `split` directory on the account
+    (None without one), signed so they add; each leg judged by `_pl_key`. A posting in a
+    currency with no amount in it is an exchange difference (the revaluation)."""
     params = book_params(conn, company_id, date_from, date_to, layers)
     accounts = _accounts(conn, company_id)
+    places = {
+        i: next((n for n in (1, 2, 3) if a[f"sc{n}_kind_id"] == split), None)
+        for i, a in accounts.items()
+    }
     output_vat = {
         r["account_id"]
         for r in conn.execute(
@@ -214,7 +246,7 @@ def _turnovers(
             (company_id,),
         )
     }
-    result: dict[tuple[str, int, int | None], int] = defaultdict(int)
+    result: Legs = defaultdict(int)
     for r in conn.execute(
         f"""
         WITH {docs_cte(start=FROM)},
@@ -226,22 +258,24 @@ def _turnovers(
         ),
         legs AS (
             SELECT debit_account_id AS account_id, credit_account_id AS other,
-                   dt_sc1 AS sc, fx, -amount AS net
+                   dt_sc1 AS sc1, dt_sc2 AS sc2, dt_sc3 AS sc3, fx, -amount AS net
             FROM moves
             UNION ALL
-            SELECT credit_account_id, debit_account_id, ct_sc1, fx, amount
+            SELECT credit_account_id, debit_account_id, ct_sc1, ct_sc2, ct_sc3, fx, amount
             FROM moves
         )
-        SELECT account_id, other, sc, fx, SUM(net) AS net
+        SELECT account_id, other, sc1, sc2, sc3, fx, SUM(net) AS net
         FROM legs
-        GROUP BY account_id, other, sc, fx, CASE WHEN net > 0 THEN 1 ELSE 0 END
+        GROUP BY account_id, other, sc1, sc2, sc3, fx, CASE WHEN net > 0 THEN 1 ELSE 0 END
         """,
         params,
     ):
         a, other = accounts[r["account_id"]], accounts[r["other"]]
         key = _pl_key(a, other, r["net"], output_vat, bool(r["fx"]))
         if key is not None:
-            result[(key, r["account_id"], r["sc"])] += r["net"]
+            place = places[r["account_id"]]
+            value = r[f"sc{place}"] if place else None
+            result[(key, r["account_id"], r["sc1"], value)] += r["net"]
     return result
 
 

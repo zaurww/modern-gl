@@ -34,7 +34,7 @@ TYPES, ACCOUNTS, ITEMS = "types", "accounts", "items"  # how much a line shows u
 class Line:
     title: str  # Russian, for tr(): a type's name, or a caption of the statement
     amount: Amounts = field(default_factory=Amounts)  # a figure per column
-    kind: str = "line"  # line | account | item | subtotal | total | heading
+    kind: str = "line"  # line | group | account | item | subtotal | total | heading
     account_type: str | None = None  # the type of a «line» (UNTYPED: none)
     # the detail under a line of the profit and loss (D102): an «account», an «item» of
     # it (its first subconto, None: not given); their titles are names, not for tr()
@@ -42,6 +42,9 @@ class Line:
     value_id: int | None = None
     # an item right under its line: the line's only account is not shown (D108)
     under_line: bool = False
+    # a «group» of the chart, an account or an item under it: how many groups stand
+    # above it within its line (the page indents by it)
+    depth: int = 0
 
 
 @dataclass
@@ -49,6 +52,9 @@ class Statement:
     lines: list[Line] = field(default_factory=list)
     # balance sheet: assets − (liabilities + equity); profit and loss: 0
     unbalanced: Amounts = field(default_factory=Amounts)
+    # the columns of a profit and loss split by a directory (D-new): (element, name),
+    # None — the postings without one; the last column of the figures is the whole
+    split: list[tuple[int | None, str]] = field(default_factory=list)
 
 
 def balance_sheet(
@@ -97,6 +103,7 @@ class Names:
     accounts: dict[int, str]  # «26  Ümumtəsərrüfat xərcləri»
     order: dict[int, int]  # the place in the chart
     values: dict[int, str]  # subconto values
+    parents: dict[int, int | None] = field(default_factory=dict)  # account -> its group
 
     @classmethod
     def read(cls, conn: Connection, company_id: int) -> Names:
@@ -111,15 +118,53 @@ class Names:
             {i: f"{a['code'] or ''}  {a['name']}".strip() for i, a in accounts.items()},
             {i: n for n, i in enumerate(accounts)},
             values,
+            {i: a["parent_id"] for i, a in accounts.items()},
         )
 
     def account_lines(self, amounts: dict[int, Amounts], sign: int = 1) -> list[Line]:
-        """A line per account with an amount, in the order of the chart."""
-        return [
-            Line(self.accounts[i], amounts[i] * sign, "account", account_id=i)
-            for i in sorted(amounts, key=self.order.__getitem__)
-            if amounts[i]
-        ]
+        """A line per account with an amount, in the order of the chart, under the groups
+        of the chart it belongs to: a «group» line adds up its accounts here, `depth`
+        counts the groups above. The only node of a level stands in place of its group
+        (one group under a line is not repeated; D-new)."""
+        shown = {i for i, a in amounts.items() if a}
+        involved: set[int] = set()
+        for i in shown:
+            node: int | None = i
+            while node is not None and node not in involved:
+                involved.add(node)
+                node = self.parents.get(node)
+        children: dict[int | None, list[int]] = defaultdict(list)
+        for i in sorted(involved, key=self.order.__getitem__):
+            children[self.parents.get(i)].append(i)
+        lines: list[Line] = []
+
+        def whole(i: int) -> Amounts:
+            return amounts.get(i, Amounts()) + total(whole(c) for c in children[i])
+
+        def emit(parent: int | None, depth: int) -> None:
+            nodes = children[parent]
+            if len(nodes) == 1 and nodes[0] not in shown:  # a lone group: its children
+                emit(nodes[0], depth)
+                return
+            for i in nodes:
+                if i in shown:
+                    lines.append(
+                        Line(
+                            self.accounts[i],
+                            amounts[i] * sign,
+                            "account",
+                            account_id=i,
+                            depth=depth,
+                        )
+                    )
+                else:
+                    lines.append(
+                        Line(self.accounts[i], whole(i) * sign, "group", account_id=i, depth=depth)
+                    )
+                    emit(i, depth + 1)
+
+        emit(None, 0)
+        return lines
 
 
 def _open_accounts(
