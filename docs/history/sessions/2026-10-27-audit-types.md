@@ -1,4 +1,4 @@
-# 2026-10-27, ветка claude/audit-types (D-new — типы и докстринги ядра)
+# 2026-10-27, ветка claude/audit-types (D188 — типы и докстринги ядра)
 
 - **Тесты и скрипты под pyright**: было 285 ошибок, стало 0. Помощники с типами —
   `tests/helpers/qt.py`, `tests/helpers/excel.py`; одно `pyright: ignore` (тест, что float

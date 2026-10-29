@@ -52,7 +52,7 @@ class Statement:
     lines: list[Line] = field(default_factory=list)
     # balance sheet: assets − (liabilities + equity); profit and loss: 0
     unbalanced: Amounts = field(default_factory=Amounts)
-    # the columns of a profit and loss split by a directory (D-new): (element, name),
+    # the columns of a profit and loss split by a directory (D188): (element, name),
     # None — the postings without one; the last column of the figures is the whole
     split: list[tuple[int | None, str]] = field(default_factory=list)
 
@@ -125,7 +125,7 @@ class Names:
         """A line per account with an amount, in the order of the chart, under the groups
         of the chart it belongs to: a «group» line adds up its accounts here, `depth`
         counts the groups above. The only node of a level stands in place of its group
-        (one group under a line is not repeated; D-new)."""
+        (one group under a line is not repeated; D188)."""
         shown = {i for i, a in amounts.items() if a}
         involved: set[int] = set()
         for i in shown:

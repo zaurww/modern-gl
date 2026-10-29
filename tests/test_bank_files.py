@@ -49,7 +49,8 @@ from modern_gl.application.bank.file_import import (
 )
 from modern_gl.application.bank.files import BankFileError, read_bank_file
 from modern_gl.application.bank.files.kapital import other_side
-from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED
+from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED
+from modern_gl.application.bank.operations import OUT, BankLine, BankOperationInput
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.conversion.calc import load_conversion
 from modern_gl.application.currencies import days_without_rate
@@ -557,23 +558,172 @@ def test_a_side_loaded_as_a_transfer_becomes_the_conversion(ledger, firm, files)
     assert [f.amount for f in done.fees] == [600]
 
 
-def test_a_side_posted_by_hand_keeps_the_conversion_out(ledger, firm, files):
-    """The transfer draft posted by hand (onto 57): the next load makes no conversion over
-    it — nothing doubled — and both lines say what to do."""
+def post_side_by_hand(ledger, firm, azn):
+    """The AZN file loaded alone, its conversion line a transfer draft — posted by hand
+    onto 57 (Dt 51 / Kt 57 1 925.00). -> the transfer's operation."""
     cid = firm["cid"]
-    azn, eur = files
     ledger.bank.import_bank_files(cid, [azn], {AZN_IBAN: firm["places"][AZN_IBAN]})
     transfer_id = by_reference(ledger, cid)["2001"]
     op = load_bank_operation(ledger.conn, cid, transfer_id)
     line = replace(op.lines[0], account_id=ledger.account_id(cid, "57"))
     ledger.bank.save_bank_operation(cid, replace(op, lines=(line,)), transfer_id, post=True)
+    return load_bank_operation(ledger.conn, cid, transfer_id)
+
+
+def test_a_side_posted_by_hand_gives_way_to_the_conversion(ledger, firm, files):
+    """The transfer posted by hand is the same line of the bank (its reference): both
+    files loaded, the conversion takes its place — 1 000.00 EUR → 1 925.00 ₼, fee 6.00
+    EUR, posted; the transfer is gone (the audit trail keeps it), 57 is at zero, and the
+    rows say which operation the conversion replaced."""
+    cid = firm["cid"]
+    azn, eur = files
+    op = post_side_by_hand(ledger, firm, azn)
 
     again = ledger.bank.import_bank_files(cid, [azn, eur], firm["places"])
+    rows = [r for r in again.rows if r.op.reference in ("2001", "2002")]
+    assert [r.state for r in rows] == [POSTED] * 3
+    assert {r.reason for r in rows} == {
+        tr("вместо проведённых вручную операций №{numbers}", numbers=str(op.number))
+    }
+    assert "2001" not in by_reference(ledger, cid)
+    [conversion_id] = [r[0] for r in ledger.conn.execute("SELECT id FROM currency_conversions")]
+    done = load_conversion(ledger.conn, cid, conversion_id)
+    assert done.status == "posted"
+    assert done.source is not None and done.target is not None
+    assert (done.source.amount, done.target.amount) == (100000, 192500)
+    assert [f.amount for f in done.fees] == [600]
+    transit = ledger.account_id(cid, "57")
+    balance = ledger.conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN debit_account_id = ? THEN amount ELSE -amount END), 0) "
+        "FROM postings WHERE debit_account_id = ? OR credit_account_id = ?",
+        (transit, transit, transit),
+    ).fetchone()[0]
+    assert balance == 0
+    deleted = ledger.conn.execute(
+        "SELECT COUNT(*) FROM audit_events WHERE entity = 'bank_operation' "
+        "AND entity_id = ? AND action = 'delete'",
+        (op.id,),
+    ).fetchone()[0]
+    assert deleted == 1
+
+
+def test_a_side_posted_in_a_closed_period_keeps_the_conversion_out(ledger, firm, files):
+    """The transfer posted by hand lies in a closed period: nothing is replaced, no
+    conversion is made over it — nothing doubled — and both lines say what to do."""
+    cid = firm["cid"]
+    azn, eur = files
+    op = post_side_by_hand(ledger, firm, azn)
+    ledger.set_closed_through(cid, "2026-08-31")
+    try:
+        again = ledger.bank.import_bank_files(cid, [azn, eur], firm["places"])
+    finally:
+        ledger.set_closed_through(cid, None)
     held = [r for r in again.rows if r.op.reference == "2001"]
     assert [r.state for r in held] == [KNOWN, KNOWN]
-    assert all("№" + str(op.number) in r.reason for r in held)
+    assert all("№" + str(op.number) in r.reason and "закрытом" in r.reason for r in held)
     assert ledger.conn.execute("SELECT COUNT(*) FROM currency_conversions").fetchone()[0] == 0
-    assert load_bank_operation(ledger.conn, cid, transfer_id).status == "posted"
+    assert load_bank_operation(ledger.conn, cid, op.id).status == "posted"
+
+
+def test_the_statement_says_why_a_line_waits(ledger, firm, files):
+    """The import's reason outlives its window: the draft of 03.08 (Beta, a new
+    counterparty) carries «новый контрагент — проверьте» in the statement; a person who
+    saves the line has seen it — the note goes. The statements' journal names the drafts
+    next to the difference: 03.08 by the bank 3 599.00, entered 3 999.00 — −400.00 and
+    two drafts (Beta −300.00, Alfa −100.00)."""
+    from modern_gl.application.bank.statement import statement
+    from modern_gl.application.bank.statements import bank_statements
+    from modern_gl.desktop.bank_page.levels import status_text
+    from modern_gl.domain.money import format_minor
+
+    cid = firm["cid"]
+    place = firm["places"][AZN_IBAN]
+    ledger.bank.import_bank_files(cid, files, firm["places"])
+    day = statement(ledger.conn, cid, place, "2026-08-03", "2026-08-03")
+    notes = {line.number: (line.status, line.note) for line in day.lines}
+    ids = by_reference(ledger, cid)
+    beta = load_bank_operation(ledger.conn, cid, ids["1003"])
+    alfa = load_bank_operation(ledger.conn, cid, ids["1001"])
+    assert notes[beta.number] == ("draft", tr("новый контрагент — проверьте"))
+    assert notes[alfa.number] == ("posted", "")
+
+    [third] = [s for s in bank_statements(ledger.conn, cid, place) if s.date_from == "2026-08-03"]
+    assert (third.difference, third.drafts) == (-40000, 2)
+    assert status_text(third) == tr(
+        "расхождение {amount} · черновиков {n}", amount=format_minor(-40000), n=2
+    )
+
+    ledger.bank.save_bank_operation(cid, beta, beta.id, post=True, checked=True)
+    day = statement(ledger.conn, cid, place, "2026-08-03", "2026-08-03")
+    [seen] = [line for line in day.lines if line.number == beta.number]
+    assert (seen.status, seen.note) == ("posted", "")
+
+
+def typed_payment(ledger, firm, amount: int, invoice: str = "MT260800000001") -> int:
+    """A payment to Alfa typed by hand on 03.08 — no statement reference — and posted,
+    checked by the person who typed it. -> the operation."""
+    cid = firm["cid"]
+    place = firm["places"][AZN_IBAN]
+    data = BankOperationInput(
+        doc_date="2026-08-03",
+        direction=OUT,
+        account_id=place.account_id,
+        subconto=place.subconto,
+        kind=SUPPLIER,
+        counterparty_id=firm["alfa"],
+        lines=(BankLine(firm["acc"]["60.1"], amount, (), invoice),),
+        memo="Оплата Альфа",
+    )
+    return ledger.bank.save_bank_operation(cid, data, post=True, checked=True)
+
+
+def test_a_line_typed_by_hand_gets_the_reference(ledger, firm, files):
+    """Alfa's 1 000.00 of 03.08 typed before the file came: the file's line «1001» —
+    same account, day, direction and amount — is that operation. It gets the reference,
+    stays posted and checked; no second operation, no new counterparty; the preview
+    only says so. The statement of 03.08 stays: 5 000.00 − 1 000.00 − 1.00 = 3 999.00."""
+    cid = firm["cid"]
+    azn, _ = files
+    typed = typed_payment(ledger, firm, 100000)
+
+    preview = ledger.bank.preview_bank_files(cid, [azn], firm["places"])
+    [row] = [r for r in preview.rows if r.op.reference == "1001"]
+    assert (row.state, preview.linked) == (LINKED, 1)
+    assert load_bank_operation(ledger.conn, cid, typed).reference == ""
+
+    done = ledger.bank.import_bank_files(cid, [azn], firm["places"])
+    [row] = [r for r in done.rows if r.op.reference == "1001"]
+    assert row.state == LINKED and row.document_id is not None
+    assert (done.posted, done.drafts, done.linked) == (2, 4, 1)
+    linked = load_bank_operation(ledger.conn, cid, typed)
+    assert (linked.reference, linked.status, linked.checked) == ("1001", "posted", True)
+    assert [
+        r["id"]
+        for r in ledger.conn.execute("SELECT id FROM bank_operations WHERE reference = '1001'")
+    ] == [typed]
+    from modern_gl.application.bank.statement import statement
+
+    day = statement(ledger.conn, cid, firm["places"][AZN_IBAN], "2026-08-03", "2026-08-03")
+    assert (day.opening, day.closing) == (500000, 399900)
+
+
+def test_several_lines_typed_by_hand_hold_the_files_line(ledger, firm, files):
+    """Two payments of 1 000.00 typed on 03.08 and one such line in the file: which one
+    it is nobody knows — the file's line waits as a draft that says so, both typed ones
+    keep no reference, nothing is doubled by the import itself."""
+    cid = firm["cid"]
+    azn, _ = files
+    first, second = typed_payment(ledger, firm, 100000), typed_payment(ledger, firm, 100000)
+    done = ledger.bank.import_bank_files(cid, [azn], firm["places"])
+    [row] = [r for r in done.rows if r.op.reference == "1001"]
+    why = tr("за этот день введено вручную строк на эту сумму: {n} — проверьте дубли", n=2)
+    assert (row.state, row.reason, done.linked) == (DRAFT, why, 0)
+    held = ledger.conn.execute(
+        "SELECT note FROM bank_operations WHERE document_id = ?", (row.document_id,)
+    ).fetchone()["note"]
+    assert held == why
+    for typed in (first, second):
+        assert load_bank_operation(ledger.conn, cid, typed).reference == ""
 
 
 def test_a_draft_conversion_is_posted_once_the_rate_is_there(ledger, firm, files):
@@ -787,6 +937,26 @@ def test_the_window_shows_the_lines_to_check_first_and_posts(qtbot, firm, sessio
     assert dialog.chosen_document == row.document_id is not None
 
 
+def test_the_statement_names_its_drafts(qtbot, ledger, firm, session, files):
+    """Under the statement of 03.08: «Расхождение −400,00: черновиков 2 — …», not a guess
+    about a fee; the journal's row says the same."""
+    from modern_gl.desktop.bank_page import BankPage
+    from modern_gl.domain.money import format_minor
+
+    s, _ = session
+    ledger.bank.import_bank_files(firm["cid"], files, firm["places"])
+    page = BankPage(s)
+    qtbot.addWidget(page)
+    page.drill(page.model.rows[1])  # Kapital AZN
+    [third] = [r for r in page.model.rows if r.date_from == "2026-08-03"]
+    page.drill(third)
+    assert page.reconcile.verdict.text() == tr(
+        "Расхождение {amount}: черновиков {n} — они не двигают остаток; проведите их или удалите",
+        amount=format_minor(-40000),
+        n=2,
+    )
+
+
 def test_the_days_without_a_rate_are_found(ledger, firm):
     """EUR has rates of 01.08, 04.08 and 05.08: of the lines' days only 06.08 lacks one;
     the manat needs none, a currency the company has not is left out."""
@@ -921,6 +1091,10 @@ def test_a_line_nobody_knows_is_posted_to_the_unidentified(ledger, firm, tmp_pat
         (row.document_id,),
     ).fetchall()
     assert [tuple(r) for r in postings] == [(firm["acc"]["51"], suspense, 25000)]
+    note = ledger.conn.execute(
+        "SELECT note FROM bank_operations WHERE document_id = ?", (row.document_id,)
+    ).fetchone()["note"]
+    assert note == row.reason  # the statement says why it is there
     [waiting] = [a for a in bank_attention(ledger.conn, cid, "2026-08-06") if a.amount]
     assert (waiting.text, waiting.count, waiting.amount) == (
         tr("Невыясненные поступления и списания"),

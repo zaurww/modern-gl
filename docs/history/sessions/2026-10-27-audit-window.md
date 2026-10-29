@@ -1,4 +1,4 @@
-# 2026-10-27 — claude/audit-window (D-new-main-window-composition)
+# 2026-10-27 — claude/audit-window (D188-main-window-composition)
 
 Главное окно из цепочки наследования `CompanyFiles ← OpenPages ← ReportPlaces ← MainWindow`
 (12 крючков `raise NotImplementedError`) — в композицию, тремя переносами без изменения логики:

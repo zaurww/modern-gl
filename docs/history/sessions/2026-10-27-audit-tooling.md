@@ -1,4 +1,4 @@
-# 2026-10-27, ветка claude/audit-tooling (D-new — инструменты)
+# 2026-10-27, ветка claude/audit-tooling (D188 — инструменты)
 
 Внедрение аудита инструментов; общие документы не правились — решение и «Долг» при слиянии.
 
@@ -28,7 +28,7 @@ Dev-зависимости (п. 4.7): `pytest-cov` — покрытие числ
 `pyinstaller` — зрелый способ собрать PySide6 для Windows без установки Python.
 Не удалось: сборку на Windows проверить только в CI (локально Linux).
 
-**D-new:** | D-new | **Инструменты: coverage, hypothesis, syrupy, pre-commit, pyinstaller,
+**D188:** | D188 | **Инструменты: coverage, hypothesis, syrupy, pre-commit, pyinstaller,
 CI-матрица** (ветка `claude/audit-tooling`). CI — ubuntu и windows, Python 3.12
 (`.python-version`), кэш uv, `hledger` на ubuntu, dependabot еженедельно. Покрытие `src`
 измеряется на ubuntu, порог `fail_under` в `pyproject` = факт − 3 (87 при 90), поднимать вместе

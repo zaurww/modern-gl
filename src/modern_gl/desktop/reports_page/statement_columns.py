@@ -1,6 +1,6 @@
 """The columns of the «Финансовая отчётность» page (D107): «Колонки ▾» by the period —
 one period, by months, by quarters, against the period before or a year before; in the
-profit and loss also by the elements of a directory (a shop, a project; D-new) and a
+profit and loss also by the elements of a directory (a shop, a project; D188) and a
 share of the revenue after each figure; the titles of the columns and the figures under
 them."""
 

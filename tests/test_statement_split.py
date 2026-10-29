@@ -1,5 +1,5 @@
 """The profit and loss by the elements of a directory in columns, its lines under the
-groups of the chart, and a line's share of the revenue (D-new): a restaurant with two
+groups of the chart, and a line's share of the revenue (D188): a restaurant with two
 shops and a head office, the chart in the manner of the Uniform System of Accounts for
 Restaurants — groups give the sections, «Lokasiya» on every income and expense account.
 

@@ -1,4 +1,4 @@
-# 2026-10-29, ветка claude/statement-columns (D-new «колонки по субконто»)
+# 2026-10-29, ветка claude/statement-columns (D188 «колонки по субконто»)
 
 Пользователь: клиент-ресторан, 11 точек, учёт по Uniform System of Accounts for
 Restaurants (шпаргалка и шаблоны на диске). Оценка: ядро справляется — точка это

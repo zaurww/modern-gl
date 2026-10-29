@@ -1,4 +1,4 @@
-# 2026-10-27 — claude/audit-application (D-new ×2)
+# 2026-10-27 — claude/audit-application (D188 ×2)
 
 Аудит слоя `application`: побочные эффекты, дубли, ошибки, наследование ядра модулями.
 
@@ -6,7 +6,7 @@
   «Субконто по виду» — одна `common.fill_subconto` вместо семи копий. Карта ссылок
   `where_used` читается раз на версию схемы. «Не найден» — `NotFoundError`, строка обмена —
   `FormatError`, четыре `assert` — явные проверки. `answers.py` → `reporting/` (api без assistant).
-- **D-new «Модули — композиция, не наследование ядра» (уточняет D123):** запись модуля
+- **D188 «Модули — композиция, не наследование ядра» (уточняет D123):** запись модуля
   (`BankModule`, `ConversionModule`, `EqaimeModule`, `Inventory`) строится на
   `ledger/module.ModuleBase`: соединение, автор, общие поиски `LedgerBase`, `self.ledger` —
   ядро, которое модуль вызывает, и `self.documents` — `ModuleDocuments(ledger)`: GL-документы
@@ -16,7 +16,7 @@
   ядра с другим смыслом; к внутренностям `Ledger` модуль ходит только через `ModuleDocuments`
   (страж `test_a_module_calls_the_core_and_is_not_the_core`). Ручки `ledger.bank` и т. п.
   передают модулю свой `Ledger`. Новый модуль («Касса») — так же.
-- **D-new «PostingRecord»:** проводка как значение — `ledger/posting_record.PostingRecord`
+- **D188 «PostingRecord»:** проводка как значение — `ledger/posting_record.PostingRecord`
   (frozen dataclass): `COLUMNS` в порядке таблицы `postings`, `from_input`, `from_row`,
   `params`, `negated`, `as_dict`; вставка, красное сторно, сравнение содержимого при
   перепроведении, снимок для журнала действий и `POSTING_CONTENT` перестроения — через неё.

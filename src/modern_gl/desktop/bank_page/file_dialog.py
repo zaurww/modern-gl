@@ -246,8 +246,10 @@ def summary(done: FileImported) -> str:
         posted=done.posted,
         drafts=done.drafts,
     )
+    if done.linked:
+        text += tr(", введённых вручную связано {n}", n=done.linked)
     if done.counterparties:
         text += tr(", новых контрагентов {n}", n=done.counterparties)
-    if not (done.posted or done.drafts):
+    if not (done.posted or done.drafts or done.linked):
         text += tr(" — новых строк нет")
     return text

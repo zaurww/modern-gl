@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 
 from modern_gl.application.bank.account_commands import BankStatementCommands
-from modern_gl.application.bank.commands import BankCommands
+from modern_gl.application.bank.advance_commands import BankAdvanceCommands
 from modern_gl.application.bank.imported import DRAFT, POSTED, ImportedOperation
 from modern_gl.application.bank.operations import (
     CUSTOMER,
@@ -30,7 +30,7 @@ def party_key(op: ImportedOperation) -> str:
     return op.tin or fold(" ".join(op.name.split()))
 
 
-class BankImportCommands(BankCommands, BankStatementCommands):
+class BankImportCommands(BankAdvanceCommands, BankStatementCommands):
     def _import_parties(
         self, company_id: int, operations: Iterable[ImportedOperation]
     ) -> tuple[dict[str, int], set[int]]:
@@ -116,10 +116,14 @@ class BankImportCommands(BankCommands, BankStatementCommands):
             except LedgerError as e:
                 why = str(e)
         saved = self.save_bank_operation(company_id, data, post=False)
-        return (
-            DRAFT,
-            why or tr("загружено черновиком"),
-            self._bank_row(company_id, saved)["document_id"],
+        why = why or tr("загружено черновиком")
+        self._set_note(company_id, saved, why)  # the statement says why it waits
+        return DRAFT, why, self._bank_row(company_id, saved)["document_id"]
+
+    def _note_by_document(self, company_id: int, document_id: int, note: str) -> None:
+        self.conn.execute(
+            "UPDATE bank_operations SET note = ? WHERE company_id = ? AND document_id = ?",
+            (note, company_id, document_id),
         )
 
     def _line_codes(

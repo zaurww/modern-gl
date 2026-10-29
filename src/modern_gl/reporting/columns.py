@@ -17,7 +17,7 @@ from datetime import date
 from modern_gl.domain.period_input import Period, month_bounds, quarter_bounds, quarter_of, shift
 
 ONE, MONTHS, QUARTERS, PREVIOUS, YEAR_AGO = "one", "months", "quarters", "previous", "year_ago"
-SUBCONTO = "subconto"  # the profit and loss: a column per element of a directory (D-new)
+SUBCONTO = "subconto"  # the profit and loss: a column per element of a directory (D188)
 COMPARISONS = (PREVIOUS, YEAR_AGO)
 MAX_COLUMNS = 13  # months of more than a year are shown by quarters
 

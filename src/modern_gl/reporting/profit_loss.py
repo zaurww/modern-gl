@@ -90,7 +90,7 @@ def profit_and_loss(
     shows where it was spent. `detail`: TYPES, or ACCOUNTS / ITEMS under each line.
     `periods`: a column per period (D107), else the one from `date_from` to `date_to`.
     `split`: a directory (subconto kind) — a column per element of it met in the period
-    (by its place on each account), «not given» last, then the whole (D-new)."""
+    (by its place on each account), «not given» last, then the whole (D188)."""
     t: Turnovers = defaultdict(Amounts)
     names = Names.read(conn, company_id) if detail != TYPES or split else None
     columns: list[tuple[int | None, str]] = []

@@ -76,7 +76,7 @@ class StatementsPage(ReportPage):
         self.view_buttons.get(view, self.balance_button).setChecked(True)
         self.detail_buttons.get(detail, self.detail_buttons[ACCOUNTS]).setChecked(True)
         # months side by side, a comparison (D107); the profit and loss by the elements of
-        # a directory and with a share of the revenue (D-new)
+        # a directory and with a share of the revenue (D188)
         self.columns = ColumnsChoice(self.refresh, self._directories, lambda: self.view == PROFIT)
         self.split: list[tuple[int | None, str]] = []
         self.header.add_action(views)

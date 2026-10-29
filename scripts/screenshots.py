@@ -189,7 +189,7 @@ def main() -> None:
     statements.period.set_period(date(2026, 1, 1), date(2026, 2, 28))
     statements.columns.choose("months")
     shot("20e_profit_by_months")
-    statements.columns.choose("subconto", "Статьи затрат")  # D-new: the elements in columns
+    statements.columns.choose("subconto", "Статьи затрат")  # D188: the elements in columns
     statements.columns.toggle_percent()
     shot("20h_profit_by_subconto")
     statements.columns.toggle_percent()
