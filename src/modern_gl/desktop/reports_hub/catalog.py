@@ -85,6 +85,13 @@ REPORTS = (
         "directories",
     ),
     Report(
+        "reconciliation_act",
+        GROUPS[1],
+        N_("Акт сверки"),
+        N_("Расчёты с контрагентом за период, акт для подписи в Excel — одному или всем"),
+        "counterparty",
+    ),
+    Report(
         "books",
         GROUPS[1],
         N_("Сравнение книг"),

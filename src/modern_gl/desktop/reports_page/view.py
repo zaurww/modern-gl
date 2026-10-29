@@ -110,6 +110,7 @@ class ReportPage(PageWidget):
 
     open_document = Signal(int)
     open_report = Signal(str, int, object)  # kind, account id, ReportParams
+    title_changed = Signal()  # the sidebar's item follows (a page whose choice names it)
 
     key: tuple[Any, ...] = ("report",)  # what opens the page again; [0] is its kind
     has_period = True

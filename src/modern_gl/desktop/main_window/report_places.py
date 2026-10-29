@@ -32,6 +32,7 @@ from modern_gl.desktop.reports_page import (
     BooksPage,
     ChartPage,
     OsvPage,
+    ReconciliationActPage,
     ReportParams,
     StatementsPage,
     SubcontoAnalysisPage,
@@ -130,6 +131,7 @@ class ReportPlaces(QObject):
             "cash": lambda: self.open_statements("cash"),
             "books": self.open_books,
             "subconto_analysis": self.open_subconto_analysis,
+            "reconciliation_act": lambda: self.open_single(ReconciliationActPage),
             "handover": self.company.hand_over,
             "action_log": lambda: self.open_single(ActionLogPage),
             "invoices": lambda: self.nav.show_place(("invoices",)),
@@ -233,6 +235,7 @@ class ReportPlaces(QObject):
     def _wire_report(self, page) -> None:
         page.open_document.connect(self.nav.open_document)
         page.open_report.connect(self.open_report)
+        page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
 
     def open_landed_report(self) -> None:
         """«Əlavə xərclər» by declaration, from the warehouse."""

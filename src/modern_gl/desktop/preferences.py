@@ -37,6 +37,7 @@ STATEMENTS_COLUMNS = "reports/statements_columns"
 STATEMENTS_PERCENT = "reports/statements_percent"  # a share of the revenue (D188)
 SUBCONTO_LEVELS = "reports/subconto_levels"
 SUBCONTO_ANALYSIS_KIND = "reports/subconto_analysis_kind"  # the directory asked last
+RECONCILIATION_PARTNER = "reports/reconciliation_partner"  # the counterparty of the act
 STOCK_STATEMENT_VIEW = "reports/stock_statement_view"
 GROSS_PROFIT_VIEW = "reports/gross_profit_view"
 # ---- modules -------------------------------------------------------------------------

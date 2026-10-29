@@ -198,3 +198,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D186 | Строка банка не исчезает молча | принято (уточняет D37, D78, D146, D180) | [D186-bank-visible-gaps.md](D186-bank-visible-gaps.md) |
 | D187 | Ручная строка банка узнаётся при загрузке файла | принято (уточняет D146, D186) | [D187-bank-hand-typed-links.md](D187-bank-hand-typed-links.md) |
 | D188 | Колонки ОПиУ по субконто, строки под группами плана, процент от выручки | принято | [D188-statement-columns-by-subconto.md](D188-statement-columns-by-subconto.md) |
+| D-new | Акт сверки с контрагентом (üzləşmə aktı) | принято | [D-new-reconciliation-act.md](D-new-reconciliation-act.md) |

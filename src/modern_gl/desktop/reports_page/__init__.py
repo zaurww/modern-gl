@@ -1,5 +1,5 @@
 """Report pages: ОСВ, карточка счёта, ОСВ по субконто, анализ счёта, анализ и
-карточка субконто, план счетов.
+карточка субконто, акт сверки, план счетов.
 
 Every report = parameters bar + one calm table + footer. Drill-down by double click.
 """
@@ -11,6 +11,7 @@ from modern_gl.desktop.reports_page.action_log import ActionLogPage
 from modern_gl.desktop.reports_page.books import BooksPage
 from modern_gl.desktop.reports_page.chart import ChartPage
 from modern_gl.desktop.reports_page.osv import OsvPage
+from modern_gl.desktop.reports_page.reconciliation import ReconciliationActPage
 from modern_gl.desktop.reports_page.report_table import NAME_MIN, ReportTable
 from modern_gl.desktop.reports_page.statements import StatementsPage
 from modern_gl.desktop.reports_page.subconto_analysis import SubcontoAnalysisPage
@@ -46,6 +47,7 @@ __all__ = [
     "Column",
     "MenuAction",
     "OsvPage",
+    "ReconciliationActPage",
     "ReportModel",
     "ReportPage",
     "ReportParams",

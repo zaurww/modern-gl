@@ -36,6 +36,7 @@ from modern_gl.desktop.opening_balances_page import OpeningBalancesPage
 from modern_gl.desktop.posting_peek import peek
 from modern_gl.desktop.reports_page import (
     OsvPage,
+    ReconciliationActPage,
     StatementsPage,
     SubcontoAnalysisPage,
     SubcontoPage,
@@ -221,6 +222,11 @@ def main() -> None:
     analysis = cast(SubcontoAnalysisPage, win.stack.currentWidget())
     analysis.drill(analysis.model.rows[3])  # «Карточка субконто» (D123) of Beta Servis
     shot("6d_subconto_card")
+    win.open_catalog_report("reconciliation_act")  # «Акт сверки» of the same counterparty
+    act = cast(ReconciliationActPage, win.stack.currentWidget())
+    act.partner.setCurrentIndex(act.partner.findData(analysis.model.rows[3].value_id))
+    act.partner.activated.emit(act.partner.currentIndex())
+    shot("6e_reconciliation_act")
     win.open_report("card", session.catalog.by_code["51"].id, osv.params)
     shot("7_card")
     win.show_place(("chart",))
