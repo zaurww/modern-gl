@@ -869,6 +869,26 @@ def test_the_window_shows_the_lines_to_check_first_and_posts(qtbot, firm, sessio
     assert dialog.chosen_document == row.document_id is not None
 
 
+def test_the_statement_names_its_drafts(qtbot, ledger, firm, session, files):
+    """Under the statement of 03.08: «Расхождение −400,00: черновиков 2 — …», not a guess
+    about a fee; the journal's row says the same."""
+    from modern_gl.desktop.bank_page import BankPage
+    from modern_gl.domain.money import format_minor
+
+    s, _ = session
+    ledger.bank.import_bank_files(firm["cid"], files, firm["places"])
+    page = BankPage(s)
+    qtbot.addWidget(page)
+    page.drill(page.model.rows[1])  # Kapital AZN
+    [third] = [r for r in page.model.rows if r.date_from == "2026-08-03"]
+    page.drill(third)
+    assert page.reconcile.verdict.text() == tr(
+        "Расхождение {amount}: черновиков {n} — они не двигают остаток; проведите их или удалите",
+        amount=format_minor(-40000),
+        n=2,
+    )
+
+
 def test_the_days_without_a_rate_are_found(ledger, firm):
     """EUR has rates of 01.08, 04.08 and 05.08: of the lines' days only 06.08 lacks one;
     the manat needs none, a currency the company has not is left out."""

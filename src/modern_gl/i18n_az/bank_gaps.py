@@ -13,4 +13,7 @@ AZ = {
         "onu storno ilə düzəldin və faylları yenidən yükləyin"
     ),
     "расхождение {amount} · черновиков {n}": "fərq {amount} · qaralama {n}",
+    "Расхождение {amount}: черновиков {n} — они не двигают остаток; проведите их или удалите": (
+        "Fərq {amount}: qaralama {n} — onlar qalığı dəyişmir; keçirin və ya silin"
+    ),
 }

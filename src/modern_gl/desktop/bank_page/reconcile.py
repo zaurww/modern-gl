@@ -83,6 +83,16 @@ class ReconcileBar(QWidget):
         if s.status == OK:
             self.verdict.setObjectName("reconciled")
             self.verdict.setText(tr("✓ Сверена: программа и банк сходятся."))
+        elif s.status == DIFF and s.drafts:  # the drafts do not move the balance
+            self.verdict.setObjectName("error")
+            self.verdict.setText(
+                tr(
+                    "Расхождение {amount}: черновиков {n} — они не двигают остаток; "
+                    "проведите их или удалите",
+                    amount=format_minor(s.difference or 0),
+                    n=s.drafts,
+                )
+            )
         elif s.status == DIFF:
             difference = s.difference or 0
             self.verdict.setObjectName("error")
