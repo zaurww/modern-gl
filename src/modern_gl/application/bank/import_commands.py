@@ -56,7 +56,7 @@ class BankImportCommands(BankCommands, BankStatementCommands):
         return found, added
 
     def unidentified_account(self, company_id: int) -> int:
-        """The account of what nobody knows yet (D-new-unidentified): the settings' one; a
+        """The account of what nobody knows yet (D184): the settings' one; a
         company without it gets «76.9 Невыясненные поступления и списания» — under 76 when
         that is a group, without a code when 76.9 is taken — and keeps it in the settings."""
         found = self.ledger.account_role(company_id, UNIDENTIFIED)

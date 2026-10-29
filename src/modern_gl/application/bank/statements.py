@@ -119,7 +119,7 @@ def bank_attention(conn: Connection, company_id: int, day: str) -> list[Attentio
 
 def _unidentified(conn: Connection, company_id: int, day: str) -> tuple[int, int]:
     """The posted bank operations up to the day still on the unidentified account
-    (D-new-unidentified), and their sum: what waits to be moved to its account."""
+    (D184), and their sum: what waits to be moved to its account."""
     row = conn.execute(
         "SELECT COUNT(DISTINCT o.id) AS n, COALESCE(SUM(l.amount), 0) AS amount "
         "FROM account_roles r "

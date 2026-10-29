@@ -33,7 +33,7 @@ INCOMING_SURPLUS = "incoming_surplus"
 INCOMING_CONTRIBUTION = "incoming_contribution"
 INCOMING_PRODUCTION = "incoming_production"
 INCOMING_GIFT = "incoming_gift"
-# What nobody knows yet (D-new-unidentified): a line of a bank's statement whose account
+# What nobody knows yet (D184): a line of a bank's statement whose account
 # the program cannot tell is posted here, so the bank's balance meets the books; it is moved
 # to its account later. A company without one gets it on first need (76.9).
 UNIDENTIFIED = "unidentified"

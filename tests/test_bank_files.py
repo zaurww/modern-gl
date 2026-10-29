@@ -887,7 +887,7 @@ def test_the_bank_page_loads_files_from_its_menu(qtbot, firm, session, monkeypat
     assert "1001" in by_reference(s.ledger, s.company_id)
 
 
-# ---- what nobody knows: the unidentified account (D-new-unidentified) -------------------
+# ---- what nobody knows: the unidentified account (D184) -------------------
 
 UNKNOWN_LINE = (
     "2026-08-06",
