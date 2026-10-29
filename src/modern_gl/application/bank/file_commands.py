@@ -94,7 +94,7 @@ class BankFileCommands(FileConversionCommands):
                 self._remember_iban(company_id, places[file.iban], file.iban)
         ops = file_operations(files, places, own_tin)
         redo = [op for op in ops if take is None or op.reference in take]
-        held = self._redo_conversion_drafts(company_id, redo)
+        held, replaced = self._redo_conversion_lines(company_id, redo)
         known = known_references(self.conn, company_id)
         new = [
             op for op in ops if op.reference not in known and (take is None or op.reference in take)
@@ -116,7 +116,13 @@ class BankFileCommands(FileConversionCommands):
                 found = self._held_conversion(op, ops, held[op.reference])
             elif op.kind == CONVERSION:
                 found = self._file_conversion(
-                    company_id, op, ops, op.reference in known, post, known
+                    company_id,
+                    op,
+                    ops,
+                    op.reference in known,
+                    post,
+                    known,
+                    replaced.get(op.reference, ()),
                 )
             else:
                 party = parties.get(party_key(op))
@@ -186,6 +192,7 @@ class BankFileCommands(FileConversionCommands):
             state, reason, document = self._post_or_draft(company_id, unknown, post)
             if state == POSTED:
                 reason = tr("на невыясненных: {why}", why=why)
+                self._note_by_document(company_id, document, reason)
             return ImportRow(op, state, self._line_codes(company_id, unknown), reason, document)
         state, reason, document = self._post_or_draft(company_id, data, post, why)
         return ImportRow(op, state, self._line_codes(company_id, data), reason, document)

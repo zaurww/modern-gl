@@ -3,8 +3,10 @@ leaves one account and comes to the other — a line in each account's file, the
 reference in both; the bank's fee of it is a line of the same operation. Both files
 loaded — one conversion, posted; one of them — a draft with that side, finished when the
 other file comes. The order of the files does not matter: a side loaded before its
-account's IBAN was known is a draft (a transfer, a fee) — the next load replaces such
-drafts by the conversion; a side posted by hand keeps the conversion out, and says so.
+account's IBAN was known is a bank operation (a transfer, a fee) — the next load replaces
+it by the conversion, a draft or posted by hand alike (the same line of the bank, known by
+its reference; the audit trail keeps what was), and the row says what it replaced. Only a
+side posted in a closed period keeps the conversion out, and says so.
 
 The bank module makes a conversion of the conversion module here: the one place the bank
 writes another module's document."""
@@ -30,30 +32,45 @@ from modern_gl.infrastructure.db import transaction
 
 
 class FileConversionCommands(BankImportCommands):
-    def _redo_conversion_drafts(
+    def _redo_conversion_lines(
         self, company_id: int, ops: Sequence[FileOperation]
-    ) -> dict[str, int]:
-        """The drafts of bank operations with a conversion's references (its sides, its
-        fees) deleted: the conversion takes their place. -> the references of a side
-        posted as a bank operation (the conversion is not made): its number."""
+    ) -> tuple[dict[str, int], dict[str, list[int]]]:
+        """The bank operations with a conversion's references (its sides, its fees)
+        deleted: the conversion takes their place — a draft, or one posted by hand in the
+        open period. -> (the references of a side that stays — posted in a closed period
+        — to its number; a side's reference -> the numbers of the posted operations the
+        conversion replaces, the fees' included)."""
         sides = {op.reference for op in ops if op.kind == CONVERSION}
-        fees = {f.reference for op in ops if op.kind == CONVERSION for f in op.fees}
+        fees = {f.reference: op.reference for op in ops if op.kind == CONVERSION for f in op.fees}
         if not sides:
-            return {}
-        marks = ", ".join("?" * len(sides | fees))
+            return {}, {}
+        marks = ", ".join("?" * len(sides | set(fees)))
         rows = self.conn.execute(
             "SELECT o.id, o.reference, d.status, d.number FROM bank_operations o "
             "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
-            f"WHERE o.company_id = ? AND o.reference IN ({marks})",
-            (company_id, *sorted(sides | fees)),
+            f"WHERE o.company_id = ? AND o.reference IN ({marks}) ORDER BY d.number",
+            (company_id, *sorted(sides | set(fees))),
         ).fetchall()
-        posted = {}
+        held: dict[str, int] = {}
+        replaced: dict[str, list[int]] = {}
         for r in rows:
-            if r["status"] == "draft":
-                self.delete_bank_operation(company_id, r["id"])
-            elif r["reference"] in sides:
-                posted[r["reference"]] = r["number"]
-        return posted
+            side = r["reference"] if r["reference"] in sides else fees[r["reference"]]
+            if r["status"] == "posted":
+                try:
+                    doc = self.documents.get(company_id, self._document_id(r["id"]))
+                    self.documents.require_changeable(company_id, doc)
+                except LedgerError:
+                    if r["reference"] in sides:
+                        held[r["reference"]] = r["number"]
+                    continue
+                replaced.setdefault(side, []).append(r["number"])
+            self.delete_bank_operation(company_id, r["id"])
+        return held, replaced
+
+    def _document_id(self, operation_id: int) -> int:
+        return self.conn.execute(
+            "SELECT document_id FROM bank_operations WHERE id = ?", (operation_id,)
+        ).fetchone()["document_id"]
 
     def _file_conversion(
         self,
@@ -63,11 +80,13 @@ class FileConversionCommands(BankImportCommands):
         known: bool,
         post: bool,
         taken: Collection[str] = (),
+        replaced: Sequence[int] = (),
     ) -> list[ImportRow]:
         """The conversion of the line `op` (and of the other account's line among `ops`):
         a new one, or the one of an earlier file finished with this side; a fee `taken`
-        (posted as a bank operation) stays out. -> the rows of both lines and their
-        fees."""
+        (posted as a bank operation) stays out; `replaced` — the numbers of the operations
+        posted by hand it takes the place of, said on the rows. -> the rows of both lines
+        and their fees."""
         other = next(
             (
                 x
@@ -120,16 +139,21 @@ class FileConversionCommands(BankImportCommands):
             memo=memo,
         )
         state, why, document = self._save_file_conversion(company_id, data, existing, post)
+        if replaced and not why:
+            why = tr(
+                "вместо проведённых вручную операций №{numbers}",
+                numbers=", ".join(str(n) for n in replaced),
+            )
         return [row for x in mine for row in _rows(x, state, why, document)]
 
     def _held_conversion(
         self, op: FileOperation, ops: Sequence[FileOperation], number: int
     ) -> list[ImportRow]:
-        """A conversion one side of which is posted as bank operation `number` (a transfer
-        posted by hand): nothing written, both lines say what to do."""
+        """A conversion one side of which is bank operation `number`, posted in a closed
+        period: nothing written, both lines say what to do."""
         why = tr(
-            "конвертация: сторона уже проведена операцией №{n} — отмените её проведение "
-            "и загрузите файлы ещё раз",
+            "конвертация: сторона проведена операцией №{n} в закрытом периоде — "
+            "исправьте её сторно и загрузите файлы ещё раз",
             n=number,
         )
         mine = [x for x in ops if x.kind == CONVERSION and x.reference == op.reference]

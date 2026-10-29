@@ -9,6 +9,7 @@ from modern_gl.application.bank.balance import account_balance
 from modern_gl.application.bank.operations import IN, OUT
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.domain.dates import iso_date
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 
 
@@ -28,6 +29,9 @@ class StatementLine:
     direction: str = ""  # of a bank operation
     # a person saw it: False — a bank operation the import posted and no one checked yet
     checked: bool = True
+    # the import's note: why a draft, why on the unidentified account (the line never
+    # vanishes without a word — the statement says what waits and why)
+    note: str = ""
 
 
 @dataclass
@@ -90,6 +94,7 @@ def statement(
                 kind,
                 r["direction"] or "",
                 bool(r["checked"]),
+                r["note"] or "",
             )
         )
     result.lines += _drafts(conn, place, params) + _conversion_drafts(conn, place, params)
@@ -139,7 +144,7 @@ def _statement_rows(conn: Connection, place: BankPlace, params: dict) -> list[Ro
                     SELECT DISTINCT COALESCE(a.code, a.name) AS code FROM moves m
                     JOIN accounts a ON a.id = m.corr_id
                     WHERE m.document_id = docs.id)) AS corr,
-               o.kind, o.direction, COALESCE(o.is_checked, 1) AS checked,
+               o.kind, o.direction, COALESCE(o.is_checked, 1) AS checked, o.note,
                EXISTS (SELECT 1 FROM document_owners x
                        WHERE x.company_id = :c AND x.document_id = docs.id
                          AND x.module = 'conversion') AS conversion
@@ -154,7 +159,7 @@ def _statement_rows(conn: Connection, place: BankPlace, params: dict) -> list[Ro
 def _drafts(conn: Connection, place: BankPlace, params: dict) -> list[StatementLine]:
     rows = conn.execute(
         """
-        SELECT d.id, d.number, d.doc_date, d.memo, o.kind, o.direction,
+        SELECT d.id, d.number, d.doc_date, d.memo, o.kind, o.direction, o.note,
                COALESCE(SUM(x.amount), 0) AS total, v.name AS counterparty,
                (SELECT string_agg(code, ', ') FROM (
                     SELECT DISTINCT COALESCE(a.code, a.name) AS code
@@ -185,6 +190,7 @@ def _drafts(conn: Connection, place: BankPlace, params: dict) -> list[StatementL
             r["corr"] or "",
             r["kind"],
             r["direction"],
+            note=r["note"],
         )
         for r in rows
     ]
@@ -213,6 +219,7 @@ def _conversion_drafts(conn: Connection, place: BankPlace, params: dict) -> list
             f"""
             SELECT d.id, d.number, {day} AS doc_date, d.memo, '{direction}' AS direction,
                    COALESCE(c.{own}_amount, 0) AS amount, {fees} AS fees,
+                   c.{o}_account_id IS NULL AS one_sided,
                    {bank.format(o=o)} AS counterparty, {other.format(o=o)} AS corr
             FROM currency_conversions c
             JOIN documents d ON d.id = c.document_id AND d.status = 'draft'
@@ -238,6 +245,7 @@ def _conversion_drafts(conn: Connection, place: BankPlace, params: dict) -> list
             r["corr"] or "",
             "conversion",
             r["direction"],
+            note=tr("вторая сторона — в выписке другого счёта") if r["one_sided"] else "",
         )
         for r in rows
     ]

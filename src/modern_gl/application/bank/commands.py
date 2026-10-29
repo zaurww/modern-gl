@@ -117,6 +117,8 @@ class BankCommands(ModuleBase):
             self._store_bank(company_id, saved, data)
             if checked is not None:
                 self._set_checked(company_id, saved, checked and post)
+            if checked:  # a person saved it: the import's note is read
+                self._set_note(company_id, saved, "")
             if post:
                 postings = self._bank_postings(company_id, data)
                 self.documents.write(company_id, doc_id, data.doc_date, postings, data.memo)
@@ -431,6 +433,14 @@ class BankCommands(ModuleBase):
         self.conn.execute(
             "UPDATE bank_operations SET is_checked = ? WHERE company_id = ? AND id = ?",
             (int(checked), company_id, operation_id),
+        )
+
+    def _set_note(self, company_id: int, operation_id: int, note: str) -> None:
+        """The import's note on the operation (why a draft, why unidentified, what it
+        replaced), shown in the statement next to the line."""
+        self.conn.execute(
+            "UPDATE bank_operations SET note = ? WHERE company_id = ? AND id = ?",
+            (note, company_id, operation_id),
         )
 
     def _store_bank(self, company_id: int, operation_id: int, data: BankOperationInput) -> None:

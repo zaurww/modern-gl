@@ -136,6 +136,12 @@ def account_columns() -> list[Column]:
 def status_text(s: BankStatement) -> str:
     if s.status == OK:
         return tr("сверена")
+    if s.status == DIFF and s.drafts:  # the drafts do not move the balance: say so
+        return tr(
+            "расхождение {amount} · черновиков {n}",
+            amount=format_minor(s.difference or 0),
+            n=s.drafts,
+        )
     if s.status == DIFF:
         return tr("расхождение {amount}", amount=format_minor(s.difference or 0))
     return tr("остаток банка не введён")
@@ -187,7 +193,12 @@ def line_columns(period: bool) -> list[Column]:
             tone=lambda r: "amber" if r.status == "draft" else None,
         ),
         Column(tr("Контрагент"), lambda r: r.counterparty or r.corr, width=200),
-        Column(tr("Назначение"), lambda r: r.memo),
+        # the import's note first — why the line waits — then the bank's purpose
+        Column(
+            tr("Назначение"),
+            lambda r: f"{r.note} — {r.memo}" if r.note and r.memo else r.note or r.memo,
+            tone=lambda r: "amber" if r.note else None,
+        ),
         Column(tr("Приход"), lambda r: r.money_in, money=True, width=120),
         Column(tr("Расход"), lambda r: r.money_out, money=True, width=120),
         Column(tr("Остаток"), lambda r: r.balance, money=True, width=130),
