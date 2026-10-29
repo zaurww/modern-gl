@@ -162,3 +162,59 @@ def test_share_of_the_revenue():
     assert share(79_000, 120_000) == 6_583
     assert share(10_000, 0) is None
     assert share(0, 120_000) == 0
+
+
+# ---- the page ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def window(statements_window):
+    return statements_window
+
+
+def test_the_page_splits_the_profit_and_loss_and_shows_the_share(window, qtbot):
+    """«Колонки: По субконто: …» — a column per cost item of the demo and «Итого», the
+    whole being the sum of the elements; «Процент от выручки» puts a «%» after each
+    figure, the revenue being 100 % of itself; the balance sheet knows no split."""
+    from datetime import date
+
+    from modern_gl.desktop.reports_page import StatementsPage
+
+    window.show_place(("statements",))
+    page = window.stack.currentWidget()
+    assert isinstance(page, StatementsPage)
+    page.profit_button.click()
+    page.period.set_period(date(2026, 1, 1), date(2026, 3, 31))
+    directories = dict(page._directories())
+    assert "Статьи затрат" in directories.values()  # the cost items of 26 and 44
+    kind_id, name = next((k, n) for k, n in directories.items() if n == "Статьи затрат")
+    page.columns.choose("subconto", name)
+    assert page.columns.kind_id() == kind_id
+    qtbot.waitUntil(lambda: bool(page.model.columnCount() > 2 and page.split))
+    titles = [page.model.title(i) for i in range(page.model.columnCount())]
+    assert titles[0] == "Статья" and titles[-1] == "Итого"
+    assert titles[1:] == ["Аренда офиса", "Материальные расходы", "Не указано", "Итого"]
+    operating = next(r for r in page.model.rows if r.title == "Операционные расходы")
+    assert tuple(operating.amount) == (-25_000, -30_000, 0, -55_000)
+    net = page.model.rows[-1]
+    assert net.title == "Чистая прибыль (убыток)"
+    assert net.amount[-1] == sum(net.amount[:-1])
+    assert page.columns.button.text().startswith(f"Колонки: По субконто: {name}")
+
+    page.columns.toggle_percent()
+    qtbot.waitUntil(lambda: page.model.title(2) == "%")
+    revenue = next(r for r in page.model.rows if r.account_type == "sales" and r.kind == "line")
+    whole, first = page.model.columns[-1], page.model.columns[2]
+    assert whole.title == "%" and whole.value is not None and first.value is not None
+    assert whole.value(revenue) == 10_000  # the share in «Итого»: revenue 100 %
+    assert whole.value(operating) == -5_500  # expenses −55 %
+    assert first.value(revenue) is None  # no revenue in «Аренда офиса»
+
+    page.balance_button.click()  # one column: the split is of the profit and loss only
+    qtbot.waitUntil(lambda: page.model.columnCount() == 2)
+    assert page.columns.mode == "subconto"
+    page.columns.toggle_percent()
+    page.columns.choose("one")
+    again = StatementsPage(window.session)
+    assert (again.columns.mode, again.columns.percent) == ("one", False)
+    again.deleteLater()

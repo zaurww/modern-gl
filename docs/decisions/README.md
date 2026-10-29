@@ -195,3 +195,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D183 | Счёт с проводками становится группой: «Разделить счёт» | принято (опирается на D5, D21, D22, D62) | [D183-split-account.md](D183-split-account.md) |
 | D184 | Невыясненные поступления и списания (76.9) | принято (опирается на D47, D78, D146, D180) | [D184-unidentified.md](D184-unidentified.md) |
 | D185 | Один счёт расчётов: авансы на 60/62; ƏDV покупок раскладывает деньги без номера сам | принято (меняет D78 для новых компаний; уточняет D138, D144, D145) | [D185-one-settlement-account.md](D185-one-settlement-account.md) |
+| D-new | Колонки ОПиУ по субконто, строки под группами плана, процент от выручки | принято | [D-new-statement-columns-by-subconto.md](D-new-statement-columns-by-subconto.md) |
