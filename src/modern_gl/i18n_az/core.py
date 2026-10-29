@@ -245,7 +245,6 @@ AZ: dict[str, str] = {
     "Налог на прибыль": "Mənfəət vergisi",
     "счёт {code} скрыт": "{code} hesabı gizlədilib",
     "название счёта не может быть пустым": "hesabın adı boş ola bilməz",
-    "счёт {code}: по счёту есть проводки, он не может стать группой": "hesab {code}: hesab üzrə yazılışlar var, qrup ola bilməz",
     "счёт {code}: у группы есть субсчета": "hesab {code}: qrupun subhesabları var",
     "счёт {code}: по счёту есть проводки, субконто можно только добавить на свободное место": "hesab {code}: hesab üzrə yazılışlar var, subkontonu yalnız boş yerə əlavə etmək olar",
     "счёт {code} уже есть": "{code} hesabı artıq var",

@@ -22,6 +22,7 @@ from modern_gl.desktop.reports_page.view import (
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
+from modern_gl.desktop.split_account_dialog import SplitAccountDialog
 from modern_gl.desktop.widgets import (
     class_icon,
     hide_when_viewing,
@@ -171,6 +172,21 @@ class ChartPage(ReportPage):
             saved = self.s.catalog.accounts[dialog.saved_id]
             self._after_change(saved.id, tr("Счёт {code} сохранён", code=saved.short))
 
+    def add_subaccount(self, acc: AccountInfo) -> None:
+        """A subaccount of a group; an account that is not one becomes a group first, its
+        history going on as the first subaccount — then the next one is added."""
+        if not acc.is_group:
+            dialog = SplitAccountDialog(self.s, acc, self)
+            if not dialog.exec() or dialog.group_id is None:
+                return
+            self.s.catalog.reload()
+            self._after_change(
+                dialog.group_id, tr("Счёт {code} стал группой", code=acc.short)
+            )
+            self.edit_account(None, dialog.group_id)
+            return
+        self.edit_account(None, acc.id)
+
     def toggle_hidden(self, acc) -> None:
         self.s.ledger.set_account_active(self.s.company_id, acc.id, not acc.active)
         message = N_("Счёт {code} снова виден") if not acc.active else N_("Счёт {code} скрыт")
@@ -206,7 +222,7 @@ class ChartPage(ReportPage):
             return []
         edit: list[MenuAction | None] = [
             (tr("Изменить…"), lambda: self.edit_account(row)),
-            (tr("Добавить субсчёт…"), lambda: self.edit_account(None, row.id)),
+            (tr("Добавить субсчёт…"), lambda: self.add_subaccount(row)),
             (tr("Показать") if not row.active else tr("Скрыть"), lambda: self.toggle_hidden(row)),
             (tr("Удалить"), lambda: self.delete_account(row)),
             None,

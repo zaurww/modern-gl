@@ -224,6 +224,76 @@ class ChartCommands(AccountTypeCommands):
                 },
             )
 
+    def split_account(
+        self, company_id: int, account: int | str, sub_code: str | None, sub_name: str
+    ) -> int:
+        """«Разделить счёт»: an account with postings becomes a group (D-new-split-account).
+        A new group takes the account's code, name, place and properties; the account
+        itself — the same id, so its postings, operations, settings and balances — goes on
+        as its first subaccount under the code and name given. Nothing posted is touched:
+        postings reference the id. Returns the group's id. Audited."""
+        sub_code = clean_code(sub_code)
+        sub_name = sub_name.strip()
+        with transaction(self.conn):
+            acc = self._account(company_id, account)
+            label = account_label(acc)
+            if acc["is_group"]:
+                raise ValidationError(tr("счёт {code} уже группа", code=label))
+            if not sub_name:
+                raise ValidationError(tr("название субсчёта не может быть пустым"))
+            if acc["code"] and (not sub_code or sub_code == acc["code"]):
+                raise ValidationError(
+                    tr("у субсчёта нужен свой код, не {code}", code=acc["code"])
+                )
+            try:
+                self.conn.execute(
+                    "UPDATE accounts SET code = ?, name = ? WHERE company_id = ? AND id = ?",
+                    (sub_code, sub_name, company_id, acc["id"]),
+                )
+            except IntegrityError as e:
+                raise ValidationError(tr("счёт {code} уже есть", code=sub_code)) from e
+            group = self._insert_account(
+                label,
+                (
+                    company_id,
+                    acc["code"],
+                    acc["name"],
+                    acc["parent_id"],
+                    1,
+                    None,
+                    None,
+                    None,
+                    acc["account_class"],
+                    acc["account_type"],
+                    acc["contra"],
+                    acc["two_sided"],
+                    acc["currency"],
+                ),
+            )
+            self.conn.execute(
+                "UPDATE accounts SET parent_id = ? WHERE company_id = ? AND id = ?",
+                (group, company_id, acc["id"]),
+            )
+            if not acc["active"]:
+                self.conn.execute(
+                    "UPDATE accounts SET active = 0 WHERE company_id = ? AND id = ?",
+                    (company_id, group),
+                )
+            self._audit(
+                company_id,
+                "account",
+                group,
+                "split",
+                {
+                    "code": acc["code"],
+                    "name": acc["name"],
+                    "subaccount": acc["id"],
+                    "subaccount_code": sub_code,
+                    "subaccount_name": sub_name,
+                },
+            )
+        return group
+
     def _check_group_change(
         self, company_id: int, acc: Row, label: str, group: bool, used: bool
     ) -> None:
@@ -232,7 +302,9 @@ class ChartCommands(AccountTypeCommands):
         if group and used:
             raise ValidationError(
                 tr(
-                    "счёт {code}: по счёту есть проводки, он не может стать группой",
+                    "счёт {code}: по счёту есть проводки, он не может стать группой "
+                    "так. Выберите в плане счетов «Добавить субсчёт…»: проводки останутся "
+                    "на первом субсчёте",
                     code=label,
                 )
             )
