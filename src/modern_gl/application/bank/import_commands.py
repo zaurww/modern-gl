@@ -9,7 +9,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 
 from modern_gl.application.bank.account_commands import BankStatementCommands
-from modern_gl.application.bank.commands import BankCommands
+from modern_gl.application.bank.advance_commands import BankAdvanceCommands
 from modern_gl.application.bank.imported import DRAFT, POSTED, ImportedOperation
 from modern_gl.application.bank.operations import (
     CUSTOMER,
@@ -30,7 +30,7 @@ def party_key(op: ImportedOperation) -> str:
     return op.tin or fold(" ".join(op.name.split()))
 
 
-class BankImportCommands(BankCommands, BankStatementCommands):
+class BankImportCommands(BankAdvanceCommands, BankStatementCommands):
     def _import_parties(
         self, company_id: int, operations: Iterable[ImportedOperation]
     ) -> tuple[dict[str, int], set[int]]:
