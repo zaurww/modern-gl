@@ -132,7 +132,7 @@ def test_both_templates_leave_70s_employee_optional(ledger, conn, name, lang):
 
 @pytest.mark.parametrize("name", ["classic", "1c77"])
 def test_the_templates_keep_advances_on_the_settlement_account(ledger, name):
-    """One settlement account (D-new): no advance accounts — an overpayment stays on 60 /
+    """One settlement account (D185): no advance accounts — an overpayment stays on 60 /
     62 with the counterparty; the user may still add one and give it the role."""
     from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
 

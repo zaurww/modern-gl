@@ -26,7 +26,7 @@ def test_template_classes(ledger, conn):
     assert c["02"] == ("asset", 1)  # accumulated depreciation: contra-asset
     assert c["60.1"] == ("liability", 0)
     assert c["62.1"] == ("asset", 0)
-    assert "60.2" not in c  # one settlement account, no advance accounts (D-new)
+    assert "60.2" not in c  # one settlement account, no advance accounts (D185)
     assert c["80"] == ("equity", 0)
     assert c["90.1"] == ("revenue", 0)
     assert c["90.2"] == ("expense", 0)

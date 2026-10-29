@@ -4,7 +4,7 @@ For the period: paid from a bank account or the cash desk (naming an e-qaimə or
 from the ƏDV deposit, the e-qaimə received, the ƏDV credited (D138). At the period's end:
 an advance no e-qaimə closes, e-qaimə not paid, and the ƏDV of e-qaimə paid but not
 credited — mostly ƏDV not paid to the supplier's deposit (D138); money without a number
-pays the e-qaimə oldest first in the credit too (`application/vat/purchases`, D-new)."""
+pays the e-qaimə oldest first in the credit too (`application/vat/purchases`, D185)."""
 
 from __future__ import annotations
 

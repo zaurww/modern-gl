@@ -59,7 +59,7 @@ def test_template_types(ledger, conn):
     assert k2["80"] == ("share_capital", "equity")  # 1C 7.7: 80 is share capital
     assert k2["46"] == ("inventory", "asset")
     assert k2["90.2"] == ("cost_of_sales", "expense")
-    assert "60.2" not in k2  # one settlement account (D-new)
+    assert "60.2" not in k2  # one settlement account (D185)
 
 
 def test_type_gives_class_and_subaccounts_inherit(ledger, conn):

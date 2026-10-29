@@ -1,4 +1,4 @@
-"""Advance accounts as the templates had them before one settlement account (D-new): an
+"""Advance accounts as the templates had them before one settlement account (D185): an
 old company keeps them, so the tests of what they do add them — 60.2 / 62.2 under 60 / 62
 of the 1C chart, 61 / 64 of the classic one."""
 
