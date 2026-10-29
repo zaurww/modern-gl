@@ -85,7 +85,7 @@ Ruff ловит и `S`, `N`, `PT`, `T20`, `ERA`, `PLW`, > 8 аргументов
 Документы, которые читаются в начале каждой сессии (`CLAUDE.md`, `docs/CONCEPT.md`,
 `STATUS.md`, `ARCHITECTURE.md`, `ENGINEERING.md`, этот файл), каждый раз стоят времени и
 внимания. Пределы в символах — `tests/test_docs_size.py`; новое решение — файл
-`docs/decisions/D188-<slug>.md` (статус, контекст, решение, последствия; индекс —
+`docs/decisions/D-new-<slug>.md` (статус, контекст, решение, последствия; индекс —
 `scripts/decisions_index.py`), контекст и решение вместе — не длиннее 1 200 символов
 (подробности — в документ модуля; `tests/test_decisions.py`).
 

@@ -2,7 +2,7 @@
 
     uv run python scripts/decisions_index.py
 
-A decision is a file `docs/decisions/D<nnn>-<slug>.md` (or `D188<n>-<slug>.md` in a branch,
+A decision is a file `docs/decisions/D<nnn>-<slug>.md` (or `D-new<n>-<slug>.md` in a branch,
 D131) that starts with `# D<n> — <title>` and a `Статус:` line. The index is generated, never
 edited by hand; `tests/test_decisions.py` fails when it is out of date.
 """
@@ -14,8 +14,8 @@ from pathlib import Path
 
 DECISIONS = Path(__file__).parent.parent / "docs" / "decisions"
 INDEX = DECISIONS / "README.md"
-FILE = re.compile(r"^(D\d{3}|D188\d*)-[a-z0-9-]+\.md$")
-TITLE = re.compile(r"^# (D\d+|D188\d*) — (.+)$")
+FILE = re.compile(r"^(D\d{3}|D-new\d*)-[a-z0-9-]+\.md$")
+TITLE = re.compile(r"^# (D\d+|D-new\d*) — (.+)$")
 STATUS = re.compile(r"^Статус: (.+)$", re.MULTILINE)
 
 HEADER = """# Решения
@@ -23,7 +23,7 @@ HEADER = """# Решения
 Одно решение — один файл: статус, дата, контекст, решение (слова пользователя), последствия
 (где живёт в коде). Только добавление: номера не переиспользуются, отменённое получает статус
 «заменено D<n>». Найти `D72` — `ls docs/decisions | grep D072`, по слову — `grep -rl слово
-docs/decisions`. Новое решение в ветке — `D188-<slug>.md`, при слиянии — следующий номер
+docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, при слиянии — следующий номер
 `master` (`CLAUDE.md`, «Параллельные сессии»). Ещё не решённое — `OPEN.md`.
 
 Таблица ниже генерируется: `uv run python scripts/decisions_index.py`, руками не править.
@@ -34,7 +34,7 @@ docs/decisions`. Новое решение в ветке — `D188-<slug>.md`, �
 
 
 def decision_files(folder: Path = DECISIONS) -> list[Path]:
-    """Decision files by number; branch files (`D188…`) last."""
+    """Decision files by number; branch files (`D-new…`) last."""
 
     def key(path: Path) -> tuple[int, str]:
         number = path.name.split("-")[0][1:]

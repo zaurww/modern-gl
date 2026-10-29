@@ -1,4 +1,4 @@
-"""A line of a file the books hold already, typed by hand (D188): a bank operation
+"""A line of a file the books hold already, typed by hand (D187): a bank operation
 without a statement reference on the same bank account, day, direction and amount gets
 the file's reference instead of a second operation — hand-typed and loaded lines mix
 without doubling. Several hand-typed lines of that amount on the day and not as many
