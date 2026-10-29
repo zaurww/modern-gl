@@ -12,6 +12,8 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from modern_gl import __version__
+
 LOG_NAME = "modern-gl.log"
 CRASH_NAME = "crash.txt"
 MAX_BYTES = 1_000_000
@@ -41,6 +43,7 @@ def start(folder: Path, level: int = logging.INFO) -> Path:
         root.removeHandler(old)  # started twice (tests): one file, one handler
         old.close()
     root.addHandler(handler)
+    logging.getLogger("modern_gl").info("Modern GL %s", __version__)
     if _crash_file is None:
         try:
             _crash_file = (log_dir / CRASH_NAME).open("a", encoding="utf-8")

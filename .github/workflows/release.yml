@@ -1,8 +1,12 @@
 name: Release
 
+# A tag `v<version>` (scripts/release.py) builds the Windows installer and the zip and
+# publishes them as a GitHub Release. Run by hand (workflow_dispatch) it only builds and
+# keeps the files as the run's artifact: a check of the build before a tag.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
 
 jobs:
   windows:
@@ -18,14 +22,43 @@ jobs:
         run: uv python install
       - name: Install
         run: uv sync --locked
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          $v = (uv version --short).Trim()
+          if ("${{ github.ref_type }}" -eq "tag" -and "${{ github.ref_name }}" -ne "v$v") {
+            Write-Error "Тег ${{ github.ref_name }} не совпадает с версией $v в pyproject.toml"
+            exit 1
+          }
+          "version=$v" >> $env:GITHUB_OUTPUT
       - name: Build
         run: uv run pyinstaller --clean --noconfirm packaging/modern-gl.spec
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" packaging\modern-gl.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Zip
         shell: pwsh
-        run: Compress-Archive -Path dist/modern-gl -DestinationPath "modern-gl-${{ github.ref_name }}-windows.zip"
+        run: Compress-Archive -Path dist/modern-gl -DestinationPath "dist/modern-gl-${{ steps.version.outputs.version }}-windows.zip"
+      - name: Keep the files
+        uses: actions/upload-artifact@v4
+        with:
+          name: modern-gl-${{ steps.version.outputs.version }}
+          path: |
+            dist/modern-gl-*-setup.exe
+            dist/modern-gl-*-windows.zip
       - name: GitHub Release
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
-          files: modern-gl-${{ github.ref_name }}-windows.zip
+          files: |
+            dist/modern-gl-*-setup.exe
+            dist/modern-gl-*-windows.zip
           generate_release_notes: false
-          body: "Сборка для Windows: распаковать и запустить modern-gl.exe. Изменения — CHANGELOG.md."
+          body: |
+            Windows: `modern-gl-${{ steps.version.outputs.version }}-setup.exe` — установить или обновить (поверх прежней версии; файлы компаний не трогаются).
+            Без установки: распаковать zip и запустить `modern-gl.exe`. Что изменилось — `CHANGELOG.md`.

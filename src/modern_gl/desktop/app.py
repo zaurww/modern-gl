@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from modern_gl import demo_year, i18n
@@ -66,6 +67,7 @@ def main() -> int:
     remembered = prefs()
     theme.use_theme(remembered.text(THEME, theme.DEFAULT_THEME))
     theme.apply(app)
+    app.setWindowIcon(QIcon(str(Path(__file__).parent / "resources" / "app.png")))
     qt_texts.install(app)
     select_whole_on_entry(app)
     lang = remembered.text(LANGUAGE, i18n.DEFAULT)

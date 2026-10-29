@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl import __version__
 from modern_gl.desktop import icons
 from modern_gl.desktop.reports_hub.catalog import HUB, PIN_KEYS
 from modern_gl.desktop.shortcuts import key_line
@@ -209,7 +210,8 @@ class Sidebar(QWidget):
         self.viewing.setVisible(read_only)
         journal = not (read_only or stock_only)  # Ctrl+N is a new journal document
         keys = ["palette", "new_document" if journal else None, "close_page"]
-        self.hint.setText("\n".join(key_line(k) for k in keys if k))
+        lines = [key_line(k) for k in keys if k] + [f"Modern GL {__version__}"]
+        self.hint.setText("\n".join(lines))
 
     def add_section(self, title: str) -> QListWidgetItem:
         """A heading as in Things: in words, not capitals, of the items' size but bold, with
