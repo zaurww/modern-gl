@@ -1,4 +1,4 @@
-"""The release (D-new-release-updates): one version in `pyproject.toml`, shown by the
+"""The release (D189-release-updates): one version in `pyproject.toml`, shown by the
 program and described in `CHANGELOG.md`; the build files name the same program."""
 
 from __future__ import annotations
