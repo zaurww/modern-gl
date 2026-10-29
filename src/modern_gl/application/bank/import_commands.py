@@ -6,15 +6,22 @@ end of a day written on the day's statement."""
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import replace
 
 from modern_gl.application.bank.account_commands import BankStatementCommands
 from modern_gl.application.bank.commands import BankCommands
 from modern_gl.application.bank.imported import DRAFT, POSTED, ImportedOperation
-from modern_gl.application.bank.operations import CUSTOMER, SUPPLIER, BankOperationInput
+from modern_gl.application.bank.operations import (
+    CUSTOMER,
+    OTHER,
+    SUPPLIER,
+    BankOperationInput,
+)
 from modern_gl.application.bank.places import BankPlace
 from modern_gl.application.counterparties import known_counterparty, short_name
+from modern_gl.domain.accounts import UNIDENTIFIED
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import fold, tr, trd
 from modern_gl.infrastructure.db import transaction
 
 
@@ -47,6 +54,43 @@ class BankImportCommands(BankCommands, BankStatementCommands):
                 added.add(existing)
             found[key] = existing
         return found, added
+
+    def unidentified_account(self, company_id: int) -> int:
+        """The account of what nobody knows yet (D-new-unidentified): the settings' one; a
+        company without it gets «76.9 Невыясненные поступления и списания» — under 76 when
+        that is a group, without a code when 76.9 is taken — and keeps it in the settings."""
+        found = self.ledger.account_role(company_id, UNIDENTIFIED)
+        if found is not None:
+            return found
+        taken = self.conn.execute(
+            "SELECT code, is_group FROM accounts WHERE company_id = ? AND code IN ('76', '76.9')",
+            (company_id,),
+        ).fetchall()
+        codes = {r["code"]: r["is_group"] for r in taken}
+        made = self.ledger.add_account(
+            company_id,
+            None if "76.9" in codes else "76.9",
+            trd("Невыясненные поступления и списания"),
+            parent="76" if codes.get("76") else None,
+            account_type="other_liability",
+            two_sided=True,
+        )
+        self.ledger.set_account_role(company_id, UNIDENTIFIED, made)
+        return made
+
+    def _to_unidentified(
+        self, company_id: int, data: BankOperationInput
+    ) -> BankOperationInput | None:
+        """The lines whose account is not known go to the unidentified account; None —
+        every line has its account."""
+        if all(x.account_id is not None for x in data.lines):
+            return None
+        account = self.unidentified_account(company_id)
+        lines = tuple(
+            replace(x, account_id=account, subconto=()) if x.account_id is None else x
+            for x in data.lines
+        )
+        return replace(data, kind=OTHER, lines=lines)
 
     def _post_or_draft(
         self, company_id: int, data: BankOperationInput, post: bool, why: str = ""

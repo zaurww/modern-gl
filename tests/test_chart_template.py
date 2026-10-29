@@ -20,7 +20,7 @@ def test_template_structure(company, conn):
         (company,),
     ).fetchall()
     by_code = {r["code"]: r for r in rows}
-    assert len(rows) == 96  # 91.3, 91.4 — interest (D128)
+    assert len(rows) == 97  # 91.3, 91.4 — interest (D128); 76.9 — unidentified
     assert by_code["60"]["is_group"] == 1
     assert by_code["60.1"]["parent"] == "60"
     assert by_code["26"]["is_group"] == 0

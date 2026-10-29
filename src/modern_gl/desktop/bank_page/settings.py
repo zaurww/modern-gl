@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED, BANK_FEE
+from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED, BANK_FEE, UNIDENTIFIED
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import N_, tr
 
@@ -27,6 +27,7 @@ class BankSettingsDialog(QDialog):
         (BANK_FEE, N_("Счёт комиссии банка"), "— не указан —"),
         (ADVANCE_PAID, N_("Авансы выданные"), N_("— на счёте поставщика —")),
         (ADVANCE_RECEIVED, N_("Авансы полученные"), N_("— на счёте покупателя —")),
+        (UNIDENTIFIED, N_("Невыясненные поступления и списания"), N_("— создать при загрузке —")),
     )
 
     def __init__(self, session: Session, parent=None) -> None:
@@ -55,7 +56,8 @@ class BankSettingsDialog(QDialog):
             tr(
                 "Комиссия — для «+ Комиссия банка» (F6) и конвертации. Оплата больше долга "
                 "контрагента — аванс: на счёт авансов, а без него — на счёт расчётов без "
-                "e-qaimə. В строке счёт можно сменить."
+                "e-qaimə. Строка выписки, о которой неизвестно, что это, проводится на "
+                "невыясненные — потом её переносят на свой счёт. В строке счёт можно сменить."
             )
         )
         hint.setObjectName("tertiary")

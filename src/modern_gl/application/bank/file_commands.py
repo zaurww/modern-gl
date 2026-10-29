@@ -179,6 +179,14 @@ class BankFileCommands(FileConversionCommands):
         post: bool,
     ) -> ImportRow:
         data, why = self._file_operation(company_id, op, counterparty, new_party)
+        # an own account not known is a setting to make, not money nobody knows
+        sure_kind = op.kind != TRANSFER
+        unknown = self._to_unidentified(company_id, data) if post and sure_kind else None
+        if unknown is not None:  # posted all the same: the bank's balance meets the books
+            state, reason, document = self._post_or_draft(company_id, unknown, post)
+            if state == POSTED:
+                reason = tr("на невыясненных: {why}", why=why)
+            return ImportRow(op, state, self._line_codes(company_id, unknown), reason, document)
         state, reason, document = self._post_or_draft(company_id, data, post, why)
         return ImportRow(op, state, self._line_codes(company_id, data), reason, document)
 

@@ -885,3 +885,86 @@ def test_the_bank_page_loads_files_from_its_menu(qtbot, firm, session, monkeypat
     azn = kapital_file(tmp_path / "azn.xlsx", AZN_IBAN, "AZN", "5000", AZN_LINES)
     page.load_bank_files([str(azn)])
     assert "1001" in by_reference(s.ledger, s.company_id)
+
+
+# ---- what nobody knows: the unidentified account (D-new-unidentified) -------------------
+
+UNKNOWN_LINE = (
+    "2026-08-06",
+    "1201 / 701",
+    f"AZ96AIIB00000670130001944290 / {BANK}",
+    "250",
+    "250",
+    "Geri qaytarma",
+)
+
+
+def unknown_file(tmp_path):
+    path = kapital_file(tmp_path / "unknown.xlsx", AZN_IBAN, "AZN", "5000", [UNKNOWN_LINE])
+    return read_bank_file(path)
+
+
+def test_a_line_nobody_knows_is_posted_to_the_unidentified(ledger, firm, tmp_path):
+    """+250.00 from the bank itself, not a fee: what it is nobody knows. Not a draft any
+    more: Dt 51 / Kt 76.9 «Невыясненные поступления и списания» 250.00 — the bank's balance
+    meets the books; the row says why, and «Bu gün» shows it until it is moved."""
+    from modern_gl.application.bank.statements import bank_attention
+
+    cid = firm["cid"]
+    done = ledger.bank.import_bank_files(cid, [unknown_file(tmp_path)], firm["places"])
+    [row] = done.rows
+    assert (row.state, row.lines) == (POSTED, (("76.9", "", 25000),))
+    assert row.reason == tr("на невыясненных: {why}", why=tr("что это — выберите счёт"))
+    suspense = ledger.account_id(cid, "76.9")
+    postings = ledger.conn.execute(
+        "SELECT debit_account_id, credit_account_id, amount FROM postings WHERE document_id = ?",
+        (row.document_id,),
+    ).fetchall()
+    assert [tuple(r) for r in postings] == [(firm["acc"]["51"], suspense, 25000)]
+    [waiting] = [a for a in bank_attention(ledger.conn, cid, "2026-08-06") if a.amount]
+    assert (waiting.text, waiting.count, waiting.amount) == (
+        tr("Невыясненные поступления и списания"),
+        1,
+        25000,
+    )
+    op = ledger.conn.execute(
+        "SELECT id FROM bank_operations WHERE document_id = ?", (row.document_id,)
+    ).fetchone()["id"]
+    found = ledger.add_account(cid, "98.1", "Возврат от банка", account_class="revenue")
+    ledger.bank.change_line_account(cid, [op], suspense, found)  # it is found out
+    assert not [a for a in bank_attention(ledger.conn, cid, "2026-08-06") if a.amount]
+
+
+def test_an_older_company_gets_the_account_on_first_need(ledger, firm, tmp_path):
+    """A company made before the templates had 76.9: the import adds it under 76 and
+    keeps it in the settings; «Создать черновики» leaves the line a draft as before."""
+    from modern_gl.domain.accounts import UNIDENTIFIED
+
+    cid = firm["cid"]
+    ledger.set_account_role(cid, UNIDENTIFIED, None)
+    ledger.delete_account(cid, "76.9")
+    drafts = ledger.bank.import_bank_files(
+        cid, [unknown_file(tmp_path)], firm["places"], post=False
+    )
+    assert drafts.rows[0].state == DRAFT
+    assert (
+        ledger.conn.execute(
+            "SELECT 1 FROM accounts WHERE company_id = ? AND code = '76.9'", (cid,)
+        ).fetchone()
+        is None
+    )
+    ledger.bank.delete_bank_operations(
+        cid,
+        [
+            r["id"]
+            for r in ledger.conn.execute(
+                "SELECT id FROM bank_operations WHERE company_id = ?", (cid,)
+            )
+        ],
+    )
+    done = ledger.bank.import_bank_files(cid, [unknown_file(tmp_path)], firm["places"])
+    assert done.rows[0].state == POSTED
+    made = ledger.account_id(cid, "76.9")
+    assert ledger.account_role(cid, UNIDENTIFIED) == made
+    row = ledger.conn.execute("SELECT parent_id, two_sided FROM accounts WHERE id = ?", (made,))
+    assert tuple(row.fetchone()) == (ledger.account_id(cid, "76"), 1)

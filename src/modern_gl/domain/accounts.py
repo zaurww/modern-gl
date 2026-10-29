@@ -33,6 +33,10 @@ INCOMING_SURPLUS = "incoming_surplus"
 INCOMING_CONTRIBUTION = "incoming_contribution"
 INCOMING_PRODUCTION = "incoming_production"
 INCOMING_GIFT = "incoming_gift"
+# What nobody knows yet (D-new-unidentified): a line of a bank's statement whose account
+# the program cannot tell is posted here, so the bank's balance meets the books; it is moved
+# to its account later. A company without one gets it on first need (76.9).
+UNIDENTIFIED = "unidentified"
 ACCOUNT_ROLES = (
     INPUT_VAT,
     OPENING_BALANCE,
@@ -51,6 +55,7 @@ ACCOUNT_ROLES = (
     INCOMING_CONTRIBUTION,
     INCOMING_PRODUCTION,
     INCOMING_GIFT,
+    UNIDENTIFIED,
 )
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {

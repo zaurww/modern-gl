@@ -48,6 +48,8 @@ def state(row: ImportRow, written: bool) -> str:
         return tr("уже есть")
     if row.state == LINKED:
         return tr("введена вручную — связана") if written else tr("введена вручную — будет связана")
+    if row.state == POSTED and row.reason:  # on the unidentified account: to move later
+        return row.reason
     if row.state == POSTED:
         return tr("проведена") if written else tr("новая — будет проведена")
     return tr("черновик: {why}", why=row.reason)
@@ -98,10 +100,11 @@ class ImportRows(QTreeWidget):
         if not written and row.state in CHOICES:
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
             item.setCheckState(0, Qt.CheckState.Checked)
-        if row.state == KNOWN or (written and row.state == POSTED):
+        waits = row.state == DRAFT or bool(row.reason)  # a draft, or on the unidentified
+        if row.state == KNOWN or (written and row.state == POSTED and not waits):
             for column in range(len(COLUMNS)):  # nothing to do here: quieter (D86)
                 item.setForeground(column, QColor(P.muted if written else P.tertiary))
-        if row.state == DRAFT:
+        if waits and row.state != KNOWN:
             item.setForeground(STATE, QColor(P.amber))
         if row.document_id is not None:
             hint = tr("Двойной щелчок — открыть документ")

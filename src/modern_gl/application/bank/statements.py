@@ -109,7 +109,25 @@ def bank_attention(conn: Connection, company_id: int, day: str) -> list[Attentio
             if st.date_from <= day:
                 differ += st.status == DIFF
                 drafts += st.drafts
+    count, amount = _unidentified(conn, company_id, day)
     return [
         Attention(tr("Выписки не сходятся с банком"), differ, ("bank",)),
         Attention(tr("Черновики в банке"), drafts, ("bank",)),
+        Attention(tr("Невыясненные поступления и списания"), count, ("bank",), amount),
     ]
+
+
+def _unidentified(conn: Connection, company_id: int, day: str) -> tuple[int, int]:
+    """The posted bank operations up to the day still on the unidentified account
+    (D-new-unidentified), and their sum: what waits to be moved to its account."""
+    row = conn.execute(
+        "SELECT COUNT(DISTINCT o.id) AS n, COALESCE(SUM(l.amount), 0) AS amount "
+        "FROM account_roles r "
+        "JOIN bank_operation_lines l ON l.company_id = r.company_id "
+        "AND l.account_id = r.account_id "
+        "JOIN bank_operations o ON o.company_id = l.company_id AND o.id = l.operation_id "
+        "JOIN documents d ON d.id = o.document_id AND d.status = 'posted' "
+        "WHERE r.company_id = ? AND r.role = 'unidentified' AND d.doc_date <= ?",
+        (company_id, day),
+    ).fetchone()
+    return row["n"], row["amount"]

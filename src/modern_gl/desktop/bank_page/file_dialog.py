@@ -222,7 +222,7 @@ class BankFileDialog(ImportWindow):
 
 def drafts_first(rows: list[ImportRow]) -> list[ImportRow]:
     """The lines to check above, the rest in the order of the files."""
-    return sorted(rows, key=lambda row: row.state != DRAFT)
+    return sorted(rows, key=lambda row: row.state != DRAFT and not row.reason)
 
 
 def preview_summary(seen: FileImported) -> str:

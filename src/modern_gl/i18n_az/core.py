@@ -36,9 +36,6 @@ AZ: dict[str, str] = {
     "неоплаченных e-qaimə нет": "ödənilməmiş e-qaimə yoxdur",
     "Зачесть авансы…": "Avansları əvəzləşdir…",
     "Авансы зачтены": "Avanslar əvəzləşdirildi",
-    "Комиссия — для «+ Комиссия банка» (F6) и конвертации. Оплата больше долга контрагента — аванс: на счёт авансов, а без него — на счёт расчётов без e-qaimə. В строке счёт можно сменить.": (
-        "Komissiya — «+ Bank komissiyası» (F6) və konvertasiya üçün. Kontragentin borcundan artıq ödəniş avansdır: avans hesabına, o yoxdursa — hesablaşma hesabına e-qaiməsiz. Sətirdə hesabı dəyişmək olar."
-    ),
     "Зачёт аванса: {name}": "Avansın əvəzləşdirilməsi: {name}",
     "нечего зачитывать": "əvəzləşdiriləcək heç nə yoxdur",
     "— на счёте поставщика —": "— malsatanın hesabında —",

@@ -161,9 +161,11 @@ def test_migration_types_old_companies_like_the_template(ledger, conn, template)
     # 0048: deferred taxes (D128)
     sql = (MIGRATIONS_DIR / "0048_ifrs_types.sql").read_text(encoding="utf-8")
     conn.executescript(sql[sql.index("UPDATE accounts") :])
-    # 76H came with D65 (0031), the ƏDV deposit 54 with the templates later, 09 and 77 of
+    # 76H came with D65 (0031), the ƏDV deposit 54 and 76.9 with the templates later, 09 and 77 of
     # the classic chart and 91.3, 91.4 of 1C 7.7 with D128: files typed by 0012 had none
-    later = {"76H", "54", "91.3", "91.4"} | ({"09", "77"} if template == "classic" else set())
+    later = {"76H", "54", "91.3", "91.4", "76.9"} | (
+        {"09", "77"} if template == "classic" else set()
+    )
     assert {code: k for code, k in kinds(conn, cid).items() if code not in later} == {
         code: k for code, k in expected.items() if code not in later
     }
