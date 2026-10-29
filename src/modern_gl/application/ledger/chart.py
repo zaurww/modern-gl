@@ -242,9 +242,7 @@ class ChartCommands(AccountTypeCommands):
             if not sub_name:
                 raise ValidationError(tr("название субсчёта не может быть пустым"))
             if acc["code"] and (not sub_code or sub_code == acc["code"]):
-                raise ValidationError(
-                    tr("у субсчёта нужен свой код, не {code}", code=acc["code"])
-                )
+                raise ValidationError(tr("у субсчёта нужен свой код, не {code}", code=acc["code"]))
             try:
                 self.conn.execute(
                     "UPDATE accounts SET code = ?, name = ? WHERE company_id = ? AND id = ?",

@@ -59,8 +59,8 @@ class SplitAccountDialog(QDialog):
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
-        self.name.setFocus()
-        self.name.selectAll()
+        ok.setDefault(True)
+        ok.setFocus()  # the code and name offered are usually right: Enter takes them
 
     def _free_code(self) -> str:
         """75 → 75.1 (75.2… if taken); an account without a code — none."""

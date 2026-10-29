@@ -191,3 +191,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D179 | Стек не меняется: Python, SQLite-файл, PySide6; ядро не знает о Qt | принято (опирается на D9, D18, D77, D111, D122) | [D179-stack-fixed.md](D179-stack-fixed.md) |
 | D180 | «Проверено» у банковской операции | принято | [D180-bank-checked.md](D180-bank-checked.md) |
 | D181 | Проводки документа модуля видны до проведения и из списков (F7) | принято (опирается на D72, D75, D90, D117) | [D181-posting-preview.md](D181-posting-preview.md) |
+| D-new | Счёт с проводками становится группой: «Разделить счёт» | принято (опирается на D5, D21, D22, D62) | [D-new-split-account.md](D-new-split-account.md) |

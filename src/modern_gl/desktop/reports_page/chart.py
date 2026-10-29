@@ -180,9 +180,7 @@ class ChartPage(ReportPage):
             if not dialog.exec() or dialog.group_id is None:
                 return
             self.s.catalog.reload()
-            self._after_change(
-                dialog.group_id, tr("Счёт {code} стал группой", code=acc.short)
-            )
+            self._after_change(dialog.group_id, tr("Счёт {code} стал группой", code=acc.short))
             self.edit_account(None, dialog.group_id)
             return
         self.edit_account(None, acc.id)

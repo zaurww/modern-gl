@@ -69,7 +69,7 @@ OTHER_DIALOGS = {
     "ValueDialog",
 }
 # forms checked live by the general rules (test_the_form_is_as_designed below)
-FORMS = {"ChangeAccountDialog", "CrashDialog", "VerificationDialog"}
+FORMS = {"ChangeAccountDialog", "CrashDialog", "SplitAccountDialog", "VerificationDialog"}
 IMPORT_WINDOWS = {
     "EqaimeImportForm",
     "EqaimeImportDialog",
@@ -296,9 +296,23 @@ def change_account_form() -> QWidget:
     return ChangeAccountDialog(session, [])
 
 
+def split_account_form() -> QWidget:
+    """«Сделать счёт группой» — «Добавить субсчёт…» on an account with postings."""
+    from modern_gl.desktop.split_account_dialog import SplitAccountDialog
+    from modern_gl.infrastructure.db import connect
+
+    conn = connect(":memory:")
+    shop = make_shop(conn, "classic")
+    cid = shop.company_id
+    catalog = Catalog(conn, cid)
+    session = Session(conn, shop.ledger, cid, "Mağaza", catalog)
+    return SplitAccountDialog(session, catalog.by_code["76"])
+
+
 FORM_STEPS = {
     "ChangeAccountDialog": change_account_form,
     "CrashDialog": crash_form,
+    "SplitAccountDialog": split_account_form,
     "VerificationDialog": verification_form,
 }
 

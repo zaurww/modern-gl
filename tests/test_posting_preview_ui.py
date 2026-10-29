@@ -93,6 +93,33 @@ def test_f7_on_a_journal_row_shows_its_postings(qtbot, session):
     peek.close()
 
 
+def test_a_right_click_on_a_row_offers_its_postings(qtbot, session, monkeypatch):
+    """Who does not know F7 finds it in the menu of a row: «Проводки  F7» shows them."""
+    from PySide6.QtWidgets import QMenu
+
+    page = new_page(qtbot, session)
+    pay_alfa(page)
+    assert page.save(post=True)
+    journal = JournalPage(session)
+    qtbot.addWidget(journal)
+    journal.show()
+    qtbot.waitExposed(journal)
+    offered: list[str] = []
+
+    class Menu(QMenu):
+        def exec(self, *_):  # type: ignore[override]
+            offered.extend(a.text() for a in self.actions())
+            self.actions()[0].trigger()
+
+    monkeypatch.setattr("modern_gl.desktop.posting_peek.QMenu", Menu)
+    table = journal.table
+    table.customContextMenuRequested.emit(table.visualRect(table.currentIndex()).center())
+    assert offered == ["Проводки  F7"]
+    [peek] = table.findChildren(PostingsPeek)
+    assert shown(peek) == [("60.1", "ALFA MMC, Договор 1", "51", "Kapital AZN", 118000)]
+    peek.close()
+
+
 def test_nothing_of_the_books_in_only_the_warehouse(qtbot, session):
     session.ledger.set_company_mode(session.company_id, STOCK_ONLY)
     page = new_page(qtbot, session)

@@ -244,6 +244,10 @@ class ReportPage(PageWidget):
         idx = self.table.currentIndex()
         return idx.data(Qt.ItemDataRole.UserRole) if idx.isValid() else None
 
+    def _shows_postings(self) -> bool:
+        """The page's rows have postings to show (it answers row_postings)."""
+        return not self.s.stock_only and type(self).row_postings is not ReportPage.row_postings
+
     def row_postings(self) -> list[PreviewPosting] | None:
         """F7: the postings of the row under the cursor; a page of documents answers."""
         return None
@@ -323,6 +327,14 @@ class ReportPage(PageWidget):
         if not idx.isValid():
             return
         actions = self.menu_actions(idx.data(Qt.ItemDataRole.UserRole))
+        if self._shows_postings():  # the postings first: the menu teaches F7 (D181)
+            from modern_gl.desktop.posting_peek import peek, peek_caption
+
+            self.table.setCurrentIndex(idx)
+            postings = self.row_postings()
+            if postings is not None:
+                item = (peek_caption(), lambda: peek(self.table, postings))
+                actions = [item, *([None, *actions] if actions else [])]
         if not actions:
             return
         menu = QMenu(self)

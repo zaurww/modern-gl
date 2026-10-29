@@ -381,7 +381,7 @@ class BankPage(BankActions):
         self.header.title.setText(account.title)
         self.header.subtitle.setText(f"{where(account)}  ·  {tr(kind)}")
         hint = (
-            tr("Двойной щелчок — документ.")
+            tr("Двойной щелчок — документ, F7 или правый щелчок — его проводки.")
             if self.view == LINES
             else tr("Щёлкните выписку — её строки; внизу выписки впишите остаток из банка.")
         )

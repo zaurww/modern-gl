@@ -15,7 +15,9 @@ AZ: dict[str, str] = {
     "Щёлкните выписку — её строки; внизу выписки впишите остаток из банка.": (
         "Çıxarışa klikləyin — onun sətirləri; çıxarışın altında bankdakı qalığı yazın."
     ),
-    "Двойной щелчок — документ.": "İki dəfə klik — sənəd.",
+    "Двойной щелчок — документ, F7 или правый щелчок — его проводки.": (
+        "İki dəfə klik — sənəd, F7 və ya sağ klik — onun yazılışları."
+    ),
     "На начало {opening}   ·   приход {money_in}   ·   расход {money_out}   ·   на конец {closing}": (
         "Əvvələ {opening}   ·   mədaxil {money_in}   ·   məxaric {money_out}   ·   sona {closing}"
     ),

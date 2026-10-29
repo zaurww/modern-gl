@@ -63,7 +63,7 @@ class BankFileDialog(ImportWindow):
         self.rates_note.setWordWrap(True)
         self.rates_note.hide()
         self.root.addWidget(self.rates_note)
-        self.fee_account = FeeAccountChoice(session, lambda: self.preview())
+        self.fee_account = FeeAccountChoice(session, self.preview)
         self.root.addWidget(self.fee_account)
         self.rows = ImportRows()
         self.rows.itemChanged.connect(lambda *_: self._show_balances())

@@ -9,7 +9,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QKeyEvent, QKeySequence
-from PySide6.QtWidgets import QAbstractItemView, QFrame, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QAbstractItemView, QFrame, QLabel, QMenu, QVBoxLayout
 
 from modern_gl.application.posting_preview import PreviewPosting
 from modern_gl.desktop.posting_preview import postings_columns
@@ -75,13 +75,34 @@ def peek(view: QAbstractItemView, postings: list[PreviewPosting]) -> PostingsPee
     return window
 
 
+def show_postings(view: QAbstractItemView, session: Session, read: Read) -> None:
+    """The postings of the current row of `view` under it (F7, or «Проводки» of the menu)."""
+    if session.stock_only or not view.currentIndex().isValid():
+        return
+    if (postings := read()) is not None:
+        peek(view, postings)
+
+
 def bind_peek(view: QAbstractItemView, session: Session, read: Read) -> None:
-    """F7 on the list shows the postings of its current row."""
+    """F7 on the list shows the postings of its current row; a list without a menu of its
+    own gets one with «Проводки  F7» on a right click — the way to learn the key."""
+    bind(view, "postings", lambda: show_postings(view, session, read))
+    if session.stock_only or view.contextMenuPolicy() != Qt.ContextMenuPolicy.DefaultContextMenu:
+        return
+    view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
 
-    def show() -> None:
-        if session.stock_only or not view.currentIndex().isValid():
+    def menu(pos: QPoint) -> None:
+        index = view.indexAt(pos)
+        if not index.isValid():
             return
-        if (postings := read()) is not None:
-            peek(view, postings)
+        view.setCurrentIndex(index)
+        shown = QMenu(view)
+        shown.addAction(peek_caption(), lambda: show_postings(view, session, read))
+        shown.exec(view.viewport().mapToGlobal(pos))
 
-    bind(view, "postings", show)
+    view.customContextMenuRequested.connect(menu)
+
+
+def peek_caption() -> str:
+    """«Проводки  F7»: the menu item that teaches the key."""
+    return tr("Проводки") + "  F7"
