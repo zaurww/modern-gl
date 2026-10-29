@@ -47,9 +47,12 @@ def main(argv: list[str]) -> None:
     check_changelog(version)
     if run("git", "tag", "--list", f"v{version}").strip():
         sys.exit(f"Тег v{version} уже есть")
-    run("uv", "version", version)
-    if run("git", "status", "--porcelain").strip():  # the version was not this one yet
-        run("git", "add", "pyproject.toml", "uv.lock")
+    # --no-sync: the lock gets the version, the environment is not rebuilt (a running
+    # modern-gl-mcp holds its exe)
+    run("uv", "version", version, "--no-sync")
+    run("git", "add", "pyproject.toml", "uv.lock")
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT, check=False)  # noqa: S603, S607
+    if staged.returncode:  # the version was not this one yet
         run("git", "commit", "-m", f"Версия {version}")
     run("git", "tag", "-a", f"v{version}", "-m", f"Modern GL {version}")
     if "--push" in argv:
