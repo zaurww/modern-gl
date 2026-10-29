@@ -11,7 +11,6 @@ from dataclasses import dataclass, field, replace
 
 from modern_gl.application.bank.advances import payment_lines
 from modern_gl.application.bank.deposit_import import previous_lines
-from modern_gl.application.bank.file_conversions import FileConversionCommands
 from modern_gl.application.bank.file_import import (
     CONVERSION,
     FileOperation,
@@ -21,9 +20,10 @@ from modern_gl.application.bank.file_import import (
     payment_check,
     tax_lines_before,
 )
+from modern_gl.application.bank.file_links import FileLinkCommands
 from modern_gl.application.bank.files import BankFile, BankFileError
 from modern_gl.application.bank.import_commands import party_key
-from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
+from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED, ImportRow
 from modern_gl.application.bank.operations import (
     CUSTOMER,
     FEE,
@@ -50,12 +50,13 @@ class FileImported:
     posted: int = 0
     drafts: int = 0
     known: int = 0  # loaded before
+    linked: int = 0  # typed by hand, got the reference
     counterparties: int = 0  # added to the directory
     closings: int = 0  # days whose balance by the bank was written
     rows: list[ImportRow] = field(default_factory=list)  # in the order of the files
 
 
-class BankFileCommands(FileConversionCommands):
+class BankFileCommands(FileLinkCommands):
     def import_bank_files(
         self,
         company_id: int,
@@ -99,7 +100,8 @@ class BankFileCommands(FileConversionCommands):
         new = [
             op for op in ops if op.reference not in known and (take is None or op.reference in take)
         ]
-        parties, added = self._import_parties(company_id, new)
+        links = self._hand_links(company_id, new)
+        parties, added = self._import_parties(company_id, links.to_import(new))
         done = FileImported(counterparties=len(added))
         written: set[str] = set()  # this import's: a transfer is in both files
         handled: set[int] = set()  # the other side of a conversion, done with its first
@@ -126,12 +128,16 @@ class BankFileCommands(FileConversionCommands):
                 )
             else:
                 party = parties.get(party_key(op))
-                found = [self._file_new(company_id, op, party, party in added, post)]
+                linked, hold = self._link_hand_typed(company_id, op, links)
+                found = [
+                    linked or self._file_new(company_id, op, party, party in added, post, hold)
+                ]
             handled.update(id(row.op) for row in found)
             written.add(op.reference)
             rows += found
         done.rows = rows
         done.known = sum(1 for row in rows if row.state == KNOWN)
+        done.linked = sum(1 for row in rows if row.state == LINKED)
         done.posted = sum(1 for row in rows if row.state == POSTED)
         done.drafts = sum(1 for row in rows if row.state == DRAFT)
         for file in files:
@@ -183,10 +189,13 @@ class BankFileCommands(FileConversionCommands):
         counterparty: int | None,
         new_party: bool,
         post: bool,
+        hold: str = "",
     ) -> ImportRow:
+        """`hold` — why the line waits as a draft whatever it is (a double?)."""
         data, why = self._file_operation(company_id, op, counterparty, new_party)
+        why = hold or why
         # an own account not known is a setting to make, not money nobody knows
-        sure_kind = op.kind != TRANSFER
+        sure_kind = op.kind != TRANSFER and not hold
         unknown = self._to_unidentified(company_id, data) if post and sure_kind else None
         if unknown is not None:  # posted all the same: the bank's balance meets the books
             state, reason, document = self._post_or_draft(company_id, unknown, post)

@@ -49,7 +49,8 @@ from modern_gl.application.bank.file_import import (
 )
 from modern_gl.application.bank.files import BankFileError, read_bank_file
 from modern_gl.application.bank.files.kapital import other_side
-from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED
+from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED
+from modern_gl.application.bank.operations import OUT, BankLine, BankOperationInput
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.conversion.calc import load_conversion
 from modern_gl.application.currencies import days_without_rate
@@ -656,6 +657,73 @@ def test_the_statement_says_why_a_line_waits(ledger, firm, files):
     day = statement(ledger.conn, cid, place, "2026-08-03", "2026-08-03")
     [seen] = [line for line in day.lines if line.number == beta.number]
     assert (seen.status, seen.note) == ("posted", "")
+
+
+def typed_payment(ledger, firm, amount: int, invoice: str = "MT260800000001") -> int:
+    """A payment to Alfa typed by hand on 03.08 — no statement reference — and posted,
+    checked by the person who typed it. -> the operation."""
+    cid = firm["cid"]
+    place = firm["places"][AZN_IBAN]
+    data = BankOperationInput(
+        doc_date="2026-08-03",
+        direction=OUT,
+        account_id=place.account_id,
+        subconto=place.subconto,
+        kind=SUPPLIER,
+        counterparty_id=firm["alfa"],
+        lines=(BankLine(firm["acc"]["60.1"], amount, (), invoice),),
+        memo="Оплата Альфа",
+    )
+    return ledger.bank.save_bank_operation(cid, data, post=True, checked=True)
+
+
+def test_a_line_typed_by_hand_gets_the_reference(ledger, firm, files):
+    """Alfa's 1 000.00 of 03.08 typed before the file came: the file's line «1001» —
+    same account, day, direction and amount — is that operation. It gets the reference,
+    stays posted and checked; no second operation, no new counterparty; the preview
+    only says so. The statement of 03.08 stays: 5 000.00 − 1 000.00 − 1.00 = 3 999.00."""
+    cid = firm["cid"]
+    azn, _ = files
+    typed = typed_payment(ledger, firm, 100000)
+
+    preview = ledger.bank.preview_bank_files(cid, [azn], firm["places"])
+    [row] = [r for r in preview.rows if r.op.reference == "1001"]
+    assert (row.state, preview.linked) == (LINKED, 1)
+    assert load_bank_operation(ledger.conn, cid, typed).reference == ""
+
+    done = ledger.bank.import_bank_files(cid, [azn], firm["places"])
+    [row] = [r for r in done.rows if r.op.reference == "1001"]
+    assert row.state == LINKED and row.document_id is not None
+    assert (done.posted, done.drafts, done.linked) == (2, 4, 1)
+    linked = load_bank_operation(ledger.conn, cid, typed)
+    assert (linked.reference, linked.status, linked.checked) == ("1001", "posted", True)
+    assert [
+        r["id"]
+        for r in ledger.conn.execute("SELECT id FROM bank_operations WHERE reference = '1001'")
+    ] == [typed]
+    from modern_gl.application.bank.statement import statement
+
+    day = statement(ledger.conn, cid, firm["places"][AZN_IBAN], "2026-08-03", "2026-08-03")
+    assert (day.opening, day.closing) == (500000, 399900)
+
+
+def test_several_lines_typed_by_hand_hold_the_files_line(ledger, firm, files):
+    """Two payments of 1 000.00 typed on 03.08 and one such line in the file: which one
+    it is nobody knows — the file's line waits as a draft that says so, both typed ones
+    keep no reference, nothing is doubled by the import itself."""
+    cid = firm["cid"]
+    azn, _ = files
+    first, second = typed_payment(ledger, firm, 100000), typed_payment(ledger, firm, 100000)
+    done = ledger.bank.import_bank_files(cid, [azn], firm["places"])
+    [row] = [r for r in done.rows if r.op.reference == "1001"]
+    why = tr("за этот день введено вручную строк на эту сумму: {n} — проверьте дубли", n=2)
+    assert (row.state, row.reason, done.linked) == (DRAFT, why, 0)
+    held = ledger.conn.execute(
+        "SELECT note FROM bank_operations WHERE document_id = ?", (row.document_id,)
+    ).fetchone()["note"]
+    assert held == why
+    for typed in (first, second):
+        assert load_bank_operation(ledger.conn, cid, typed).reference == ""
 
 
 def test_a_draft_conversion_is_posted_once_the_rate_is_there(ledger, firm, files):
