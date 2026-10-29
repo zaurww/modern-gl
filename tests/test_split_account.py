@@ -1,4 +1,4 @@
-"""«Разделить счёт» (D-new-split-account): an account with postings becomes a group, its
+"""«Разделить счёт» (D182): an account with postings becomes a group, its
 history going on as the first subaccount. Hand-calculated, March 2026:
 
 01.03  Dt 51 / Kt 75 [Учредитель]  1 000.00

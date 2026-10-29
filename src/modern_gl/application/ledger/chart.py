@@ -227,7 +227,7 @@ class ChartCommands(AccountTypeCommands):
     def split_account(
         self, company_id: int, account: int | str, sub_code: str | None, sub_name: str
     ) -> int:
-        """«Разделить счёт»: an account with postings becomes a group (D-new-split-account).
+        """«Разделить счёт»: an account with postings becomes a group (D182).
         A new group takes the account's code, name, place and properties; the account
         itself — the same id, so its postings, operations, settings and balances — goes on
         as its first subaccount under the code and name given. Nothing posted is touched:
