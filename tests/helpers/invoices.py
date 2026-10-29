@@ -8,6 +8,7 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import Ledger
 from modern_gl.infrastructure.db import connect
+from tests.helpers.advances import add_advance_accounts
 
 
 @pytest.fixture(name="invoice_firm")
@@ -16,6 +17,7 @@ def firm():
     ledger = Ledger(conn, actor="test")
     cid = ledger.create_company("Firma")
     apply_chart_template(ledger, cid, "classic", "ru")
+    add_advance_accounts(ledger, cid)
     kind = {c: ledger.subconto_kind_id(cid, c) for c in ("counterparty", "contract")}
     v = {
         "Альфа": ledger.add_subconto_value(cid, kind["counterparty"], "Альфа"),

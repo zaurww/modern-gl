@@ -37,12 +37,13 @@ def test_suppliers_money_against_their_eqaime(invoice_firm):
     """Альфа. MT01 of 05.03, 1 000 + 180: on 10.03 1 000 from the bank and 180 from the
     deposit, both naming it — credited 180, nothing to look at.
     MT02 of 15.03, 500 + 90: paid ahead on 01.03, 590 from the bank to 61 without a number.
-    The advance pays MT02 (590 of 590) — its ƏDV of what is paid is 90, credited 0 (the
-    credit goes by number): 90 «без номера»; nothing open.
+    The advance pays MT02 (590 of 590): the module lays the money without a number out over
+    the e-qaimə too — 500 of its value; the ƏDV not from the deposit, so its 90 is credited
+    0 — «не на депозит»; nothing open.
     Бета: MT03 of 20.03, 200 + 36, not paid — 236 unpaid, no warning.
     March credits 180, as «ƏDV к зачёту». On 05.04 the bank sets the advance against MT02
-    (Dt 60 / Kt 61 590, naming it): its value is paid by number now (590 ≥ 500), the ƏDV
-    still not from the deposit — credited 0, the warning becomes «не на депозит»."""
+    (Dt 60 / Kt 61 590, naming it): it moves no money, so nothing changes — still credited
+    0, «не на депозит»."""
     conn, ledger, cid, acc, v = invoice_firm
     mt01 = buy(ledger, cid, acc, v, "Альфа", "2026-03-05", "1000", "180", "MT01")
     pay(ledger, cid, acc, v, "2026-03-10", "1000", "MT01")
@@ -63,9 +64,7 @@ def test_suppliers_money_against_their_eqaime(invoice_firm):
     ]
     assert alfa.lines[0].document_id == mt01
     assert (alfa.advance, alfa.unpaid, alfa.excess) == (0, 0, 9_000)
-    assert (
-        warning(alfa) == "ƏDV 90.00 не зачтён: оплачено без номера e-qaimə — укажите номер в банке"
-    )
+    assert warning(alfa) == "ƏDV 90.00 не зачтён: оплачено, но ƏDV не перечислен на депозит"
     assert [(ln.invoice, ln.amount, ln.vat) for ln in beta.lines] == [("MT03", 20_000, 3_600)]
     assert (beta.advance, beta.unpaid, beta.excess, warning(beta)) == (0, 23_600, 0, None)
     assert (march.total.tax, march.total.unpaid, march.warnings) == (18_000, 23_600, 1)

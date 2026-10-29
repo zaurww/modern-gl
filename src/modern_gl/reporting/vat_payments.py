@@ -3,9 +3,8 @@ they issued — the purchases' side of the check by counterparty (`reporting/vat
 For the period: paid from a bank account or the cash desk (naming an e-qaimə or not) and
 from the ƏDV deposit, the e-qaimə received, the ƏDV credited (D138). At the period's end:
 an advance no e-qaimə closes, e-qaimə not paid, and the ƏDV of e-qaimə paid but not
-credited — the credit goes by the e-qaimə's number (D120), so money without it credits
-nothing until the bank sets the advance against the e-qaimə, nor does ƏDV not paid to the
-supplier's deposit (an advance set against it pays the value, not the ƏDV — D138)."""
+credited — mostly ƏDV not paid to the supplier's deposit (D138); money without a number
+pays the e-qaimə oldest first in the credit too (`application/vat/purchases`, D-new)."""
 
 from __future__ import annotations
 

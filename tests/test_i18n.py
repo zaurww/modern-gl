@@ -93,7 +93,7 @@ def test_translated_message_in_azerbaijani():
 def test_azerbaijani_chart_template(ledger, conn):
     set_language("az")
     cid = ledger.create_company("Test MMC")
-    assert apply_chart_template(ledger, cid) == 43  # 09, 77 — deferred tax (D128); 76.9
+    assert apply_chart_template(ledger, cid) == 41  # 09, 77 (D128); 76.9; no 61, 64
     names = dict(conn.execute("SELECT code, name FROM accounts WHERE company_id = ?", (cid,)))
     assert names["50"] == "Kassa"
     assert names["46"] == "Məhsulun (işlərin, xidmətlərin) satışı"

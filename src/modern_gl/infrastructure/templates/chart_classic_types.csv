@@ -22,9 +22,7 @@ code;type
 54;vat_deposit
 57;transit
 60;payable
-61;advance_paid
 62;receivable
-64;advance_received
 68;tax_payable
 68.1;tax_payable
 68.2;tax_payable

@@ -4,6 +4,7 @@ from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.reports import trial_balance
+from tests.helpers.advances import add_advance_accounts
 
 
 @pytest.fixture
@@ -20,7 +21,7 @@ def test_template_structure(company, conn):
         (company,),
     ).fetchall()
     by_code = {r["code"]: r for r in rows}
-    assert len(rows) == 97  # 91.3, 91.4 — interest (D128); 76.9 — unidentified
+    assert len(rows) == 95  # 91.3, 91.4 — interest (D128); 76.9 — unidentified; no 60.2, 62.2
     assert by_code["60"]["is_group"] == 1
     assert by_code["60.1"]["parent"] == "60"
     assert by_code["26"]["is_group"] == 0
@@ -129,17 +130,16 @@ def test_both_templates_leave_70s_employee_optional(ledger, conn, name, lang):
     assert row["sc_optional"] == 1
 
 
-@pytest.mark.parametrize(
-    ("name", "paid", "received"), [("classic", "61", "64"), ("1c77", "60.2", "62.2")]
-)
-def test_the_templates_name_their_advance_accounts(ledger, name, paid, received):
-    """An overpayment goes to an account of its own (D78): 61 / 64 of the classic chart."""
+@pytest.mark.parametrize("name", ["classic", "1c77"])
+def test_the_templates_keep_advances_on_the_settlement_account(ledger, name):
+    """One settlement account (D-new): no advance accounts — an overpayment stays on 60 /
+    62 with the counterparty; the user may still add one and give it the role."""
     from modern_gl.domain.accounts import ADVANCE_PAID, ADVANCE_RECEIVED
 
     cid = ledger.create_company(name)
     apply_chart_template(ledger, cid, name)
-    assert ledger.account_role(cid, ADVANCE_PAID) == ledger.account_id(cid, paid)
-    assert ledger.account_role(cid, ADVANCE_RECEIVED) == ledger.account_id(cid, received)
+    assert ledger.account_role(cid, ADVANCE_PAID) is None
+    assert ledger.account_role(cid, ADVANCE_RECEIVED) is None
 
 
 def test_an_old_company_gets_its_only_advance_account(ledger, conn):
@@ -149,6 +149,7 @@ def test_an_old_company_gets_its_only_advance_account(ledger, conn):
 
     cid = ledger.create_company("Old")
     apply_chart_template(ledger, cid, "classic")
+    add_advance_accounts(ledger, cid)
     ledger.add_account(cid, "61.9", "Ещё авансы", account_type="advance_received")
     conn.execute("DELETE FROM account_roles WHERE role LIKE 'advance%'")  # as before 0034
     conn.executescript((MIGRATIONS_DIR / "0034_advance_roles.sql").read_text(encoding="utf-8"))

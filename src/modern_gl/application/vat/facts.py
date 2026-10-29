@@ -2,9 +2,10 @@
 document's date, its amount and ƏDV, what was paid when — the amount and the ƏDV apart.
 Read from the posted documents of the common book; what a posting counts as follows the
 rule of the invoice number (`invoice_rules`, D120). The ƏDV is paid from the deposit
-account, or from a bank account straight to the supplier's deposit (`pays_vat`); an
-advance paid so without a number is the supplier's ƏDV advance, and an advance set
-against an e-qaimə pays its ƏDV out of it first (D145)."""
+account, or from a bank account straight to the supplier's deposit (`pays_vat`, D145).
+Only money counts as a payment: an advance set against the e-qaimə in the books (Dt 60 /
+Kt 60.2) moves none, and the money without a number is laid out by the module itself
+(`purchases`), whatever account the books keep it on."""
 
 from __future__ import annotations
 
@@ -19,7 +20,7 @@ from modern_gl.application.invoice_rules import (
     is_vat_accrual,
     turnover_sides,
 )
-from modern_gl.domain.accounts import ADVANCE_PAID, INPUT_VAT
+from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.infrastructure.db import Connection
 
@@ -57,19 +58,16 @@ class InvoiceFacts:
             self.payments.append(Payment(day, main, vat))
 
 
-def purchase_facts(
+def numbered_facts(
     conn: Connection, company_id: int, date_to: date | str, layers=COMMON
-) -> list[InvoiceFacts]:
-    """The purchases with ƏDV up to `date_to`, by number, earliest first: the ones whose
-    ƏDV went to the input VAT account."""
+) -> dict[tuple[str, str], InvoiceFacts]:
+    """The purchases whose ƏDV went to the input VAT account, by (kind, number), with the
+    money paid naming them up to `date_to`."""
     params = book_params(conn, company_id, date_to, date_to, layers)
     accounts = invoice_accounts(conn, company_id)
-    advances = ", ".join(str(i) for i, a in accounts.items() if a.account_type == ADVANCE_PAID)
-    # a number never debited to the input VAT account has no ƏDV and takes nothing from
-    # the supplier's ƏDV advance (none is owed on it): its postings are not read
+    # a number never debited to the input VAT account has no ƏDV: its postings are not read
     input_vat = ", ".join(str(i) for i, a in accounts.items() if a.account_type == INPUT_VAT)
     found: dict[tuple[str, str], InvoiceFacts] = {}
-    pools: dict[int | None, int] = {}  # the ƏDV advance of each supplier
     for p in conn.execute(
         f"""
         WITH {_DOCS}
@@ -78,44 +76,20 @@ def purchase_facts(
                p.dt_sc1, p.dt_sc2, p.dt_sc3, p.ct_sc1, p.ct_sc2, p.ct_sc3
         FROM postings p JOIN docs ON docs.id = p.document_id
         WHERE p.company_id = :company_id
-          AND ((p.invoice IS NULL AND (p.debit_account_id IN ({advances or "0"})
-                                       OR p.credit_account_id IN ({advances or "0"})))
-               OR (COALESCE(p.invoice_kind, ''), p.invoice) IN (
-                   SELECT COALESCE(v.invoice_kind, ''), v.invoice FROM postings v
-                   WHERE v.company_id = :company_id AND v.invoice IS NOT NULL
-                     AND v.debit_account_id IN ({input_vat or "0"})))
+          AND (COALESCE(p.invoice_kind, ''), p.invoice) IN (
+              SELECT COALESCE(v.invoice_kind, ''), v.invoice FROM postings v
+              WHERE v.company_id = :company_id AND v.invoice IS NOT NULL
+                AND v.debit_account_id IN ({input_vat or "0"}))
         ORDER BY docs.doc_date, p.document_id, p.line_no
         """,
         params,
     ):
-        if p["invoice"] is None:
-            _vat_advance(pools, p, accounts)
-            continue
         facts = found.setdefault((p["kind"], p["invoice"]), InvoiceFacts(p["kind"], p["invoice"]))
-        _count(facts, p, accounts, pools)
-    return [f for f in found.values() if f.vat > 0 and f.vat_settlement is not None and f.doc_date]
+        _count(facts, p, accounts)
+    return found
 
 
-def _vat_advance(pools: dict[int | None, int], p, accounts: dict[int, InvoiceAccount]) -> None:
-    """An advance without a number paid to the supplier's deposit (from ours, or from a
-    bank account as ƏDV) adds to their ƏDV advance; one back to our deposit takes away."""
-    debit, credit = accounts[p["debit_account_id"]], accounts[p["credit_account_id"]]
-    if debit.account_type == ADVANCE_PAID and credit.money:
-        if credit.account_type == "vat_deposit" or p["pays_vat"]:
-            who = _partner(debit, (p["dt_sc1"], p["dt_sc2"], p["dt_sc3"]))
-            pools[who] = pools.get(who, 0) + p["amount"]
-    elif credit.account_type == ADVANCE_PAID and debit.account_type == "vat_deposit":
-        who = _partner(credit, (p["ct_sc1"], p["ct_sc2"], p["ct_sc3"]))
-        pools[who] = pools.get(who, 0) - p["amount"]
-
-
-def _partner(account: InvoiceAccount, sc: tuple) -> int | None:
-    return sc[account.partner_at - 1] if account.partner_at is not None else None
-
-
-def _count(
-    facts: InvoiceFacts, p, accounts: dict[int, InvoiceAccount], pools: dict[int | None, int]
-) -> None:
+def _count(facts: InvoiceFacts, p, accounts: dict[int, InvoiceAccount]) -> None:
     """What one posting of the number is to the purchase."""
     debit, credit = accounts[p["debit_account_id"]], accounts[p["credit_account_id"]]
     dt_sc = (p["dt_sc1"], p["dt_sc2"], p["dt_sc3"])
@@ -134,13 +108,7 @@ def _count(
         _first(facts, p, credit, ct_sc)
     elif dt_turn and is_accrual(debit, credit):  # a return to the supplier
         facts.amount -= p["amount"]
-    elif dt_turn and credit.account_type == ADVANCE_PAID:  # Dt 60 / Kt 60.2: an advance set
-        who = _partner(credit, ct_sc)  # against: its ƏDV advance pays the ƏDV first
-        owed = max(facts.vat - sum(x.vat for x in facts.payments), 0)
-        vat = max(min(pools.get(who, 0), owed, p["amount"]), 0)
-        pools[who] = pools.get(who, 0) - vat
-        facts.pay(p["doc_date"], main=p["amount"] - vat, vat=vat)
-    elif dt_turn:  # Dt 60 / Kt 51 or Kt 54: a payment
+    elif dt_turn and credit.money:  # Dt 60 / Kt 51 or Kt 54: a payment
         if _pays_vat(facts, credit, p["debit_account_id"], dt_sc) or p["pays_vat"]:
             facts.pay(p["doc_date"], vat=p["amount"])
         else:

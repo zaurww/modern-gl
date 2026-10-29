@@ -5,6 +5,7 @@ import pytest
 from modern_gl.application.chart_csv import apply_chart_template, import_chart_csv
 from modern_gl.domain.errors import ValidationError
 from modern_gl.infrastructure.db import MIGRATIONS_DIR, connect
+from tests.helpers.advances import add_advance_accounts
 
 
 def classes(conn, cid):
@@ -24,8 +25,8 @@ def test_template_classes(ledger, conn):
     assert c["01"] == ("asset", 0)
     assert c["02"] == ("asset", 1)  # accumulated depreciation: contra-asset
     assert c["60.1"] == ("liability", 0)
-    assert c["60.2"] == ("asset", 0)  # advances paid
-    assert c["62.2"] == ("liability", 0)  # advances received
+    assert c["62.1"] == ("asset", 0)
+    assert "60.2" not in c  # one settlement account, no advance accounts (D-new)
     assert c["80"] == ("equity", 0)
     assert c["90.1"] == ("revenue", 0)
     assert c["90.2"] == ("expense", 0)
@@ -73,6 +74,7 @@ def test_csv_understands_1c_kind_column(ledger, conn, tmp_path):
 def test_changing_group_class_moves_subaccounts_that_followed_it(ledger, conn):
     cid = ledger.create_company("Классы")
     apply_chart_template(ledger, cid, "1c77")
+    add_advance_accounts(ledger, cid)
     ledger.set_account_class(cid, "62.2", "equity")  # set differently on purpose
     ledger.set_account_class(cid, "62", "revenue")
     c = classes(conn, cid)

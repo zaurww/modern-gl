@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import PostingInput
+from tests.helpers.advances import add_advance_accounts
 
 JUNE = ("2026-06-01", "2026-06-30")
 
@@ -14,6 +15,7 @@ def make_agency(ledger):
     the order kind)."""
     cid = ledger.create_company("Səyahət MMC")
     apply_chart_template(ledger, cid, "1c77", "az")
+    add_advance_accounts(ledger, cid)
     kind = {
         c: ledger.subconto_kind_id(cid, c) for c in ("counterparty", "contract", "bank_account")
     }

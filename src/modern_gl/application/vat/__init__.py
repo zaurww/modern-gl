@@ -4,9 +4,10 @@ says when and how much ƏDV is credited (purchases) and owed (sales), by the ver
 rule in force on the day."""
 
 from modern_gl.application.vat.credit import CreditEvent, credit_events
-from modern_gl.application.vat.facts import InvoiceFacts, Payment, purchase_facts
+from modern_gl.application.vat.facts import InvoiceFacts, Payment
 from modern_gl.application.vat.liability import LiabilityEvent, liability_events
 from modern_gl.application.vat.payer import payer_from
+from modern_gl.application.vat.purchases import purchase_facts
 from modern_gl.application.vat.rules import (
     LIABILITY_RULES,
     RULES,

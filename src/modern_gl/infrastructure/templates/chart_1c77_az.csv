@@ -45,10 +45,8 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 59;Maliyyə qoyuluşlarının dəyərsizləşməsinə görə ehtiyatlar;;;asset;1;;;
 60;Malsatan və podratçılarla hesablaşmalar;;1;liability;;1;;
 60.1;Malsatan və podratçılarla hesablaşmalar;60;;liability;;1;counterparty,contract;2
-60.2;Verilmiş avanslar;60;;asset;;1;counterparty,contract;2;advance_paid
 62;Alıcılar və sifarişçilərlə hesablaşmalar;;1;asset;;1;;
 62.1;Alıcılar və sifarişçilərlə hesablaşmalar;62;;asset;;1;counterparty,contract;2
-62.2;Alınmış avanslar;62;;liability;;1;counterparty,contract;2;advance_received
 63;Şübhəli borclar üzrə ehtiyatlar;;;asset;1;;counterparty;
 66;Qısamüddətli kreditlər və borclar üzrə hesablaşmalar;;;liability;;;counterparty,contract;
 67;Uzunmüddətli kreditlər və borclar üzrə hesablaşmalar;;;liability;;;counterparty,contract;

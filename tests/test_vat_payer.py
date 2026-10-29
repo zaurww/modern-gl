@@ -72,10 +72,11 @@ def test_the_vat_in_part_from_the_bank_in_part_from_the_deposit(invoice_firm):
 def test_an_advance_to_the_deposit_set_against_the_eqaime(invoice_firm):
     """On 01.03 Альфа gets an advance without a number: 500 from the bank (Dt 61 / Kt 51)
     and 90 from our deposit (Dt 61 / Kt 54) — an ƏDV advance of 90. MT04 of 15.03,
-    500 + 90; on 20.03 the advance is set against it (Dt 60 / Kt 61 590, MT04): its ƏDV
-    advance pays the ƏDV first — 90 of the ƏDV, 500 of the value — credited 90 on 20.03,
-    no warning. Without the deposit part (MT05: 590 from the bank to 61 on 02.03, set
-    against on 21.03) — 590 of the value, nothing credited."""
+    500 + 90: the advance pays it — 90 of the ƏDV, 500 of the value — credited 90 on 15.03,
+    the e-qaimə's day (the money was there before); setting the advance against it on 20.03
+    (Dt 60 / Kt 61 590, MT04) moves no money and changes nothing; no warning. Without the
+    deposit part (MT05: 590 from the bank to 61 on 02.03, set against on 21.03) — 590 of
+    the value, nothing credited."""
     conn, ledger, cid, acc, v = invoice_firm
     alfa = (v["Альфа"], v["Д-1"])
     post(
@@ -89,7 +90,7 @@ def test_an_advance_to_the_deposit_set_against_the_eqaime(invoice_firm):
         "2026-03-20",
         PostingInput(acc["60"], acc["61"], "590", alfa, alfa, invoice="MT04"),
     )
-    assert events(conn, cid, "MT04") == [("2026-03-20", 9_000)]
+    assert events(conn, cid, "MT04") == [("2026-03-15", 9_000)]
     (row,) = vat_payments(conn, cid, "2026-03-01", "2026-03-31").parties
     assert (row.no_number, row.deposit, row.tax, row.excess, row.reason) == (
         50_000,

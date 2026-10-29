@@ -16,6 +16,7 @@ from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import parse_rate
 from modern_gl.infrastructure.db import connect
+from tests.helpers.advances import add_advance_accounts
 from tests.helpers.qt import running_app
 
 
@@ -24,6 +25,7 @@ def setup_company(ledger: Ledger) -> int:
     its contract."""
     cid = ledger.create_company("ООО Банк")
     apply_chart_template(ledger, cid, "1c77", "ru")
+    add_advance_accounts(ledger, cid)
     banks = ledger.subconto_kind_id(cid, "bank_account")
     partners = ledger.subconto_kind_id(cid, "counterparty")
     contracts = ledger.subconto_kind_id(cid, "contract")

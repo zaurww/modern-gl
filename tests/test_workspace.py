@@ -22,7 +22,7 @@ def test_one_file_per_company(tmp_path):
     assert b.name == "Beta Gamma test.gl"
     assert [c.name for c in ws.companies()] == ["Alfa MMC", "Alfa MMC", "Beta / Gamma: test"]
     conn, _cid = open_company(a)
-    assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 43  # classic, D128; 76.9
+    assert conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 41  # D128; 76.9
     conn.close()
 
 

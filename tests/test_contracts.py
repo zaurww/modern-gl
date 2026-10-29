@@ -182,7 +182,7 @@ def suggestions(cat: Catalog, text: str) -> list[str]:
 def test_suggestions_follow_the_line(firm):
     _, _, _, cat = firm
     assert suggestions(cat, "26 ") == ["Аренда / "]  # after 26: its cost items
-    assert suggestions(cat, "26 Аренда / 6")[:2] == ["60 ", "61 "]
+    assert suggestions(cat, "26 Аренда / 6")[:2] == ["60 ", "62 "]
     assert suggestions(cat, "26 Аренда / 60 бе") == ["Бета, ", "+бе, "]  # or a new one
     assert suggestions(cat, "26 Аренда / 60 бета") == ["Бета, "]  # it is there: nothing new
     assert suggestions(cat, "26 Аренда / 60 Бета, ") == ["Без договора ", "Фактура 15 "]

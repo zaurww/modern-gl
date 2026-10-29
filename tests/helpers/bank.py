@@ -15,12 +15,14 @@ from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.ledger import PostingInput
 from modern_gl.application.queries import load_document
 from modern_gl.domain.currency import parse_rate
+from tests.helpers.advances import add_advance_accounts
 
 
 @pytest.fixture(name="bank_firm")
 def firm(ledger):
     cid = ledger.create_company("ООО Банк")
     apply_chart_template(ledger, cid, "1c77", "ru")
+    add_advance_accounts(ledger, cid)
     kind = {
         code: ledger.subconto_kind_id(cid, code)
         for code in (

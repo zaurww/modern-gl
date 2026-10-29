@@ -45,10 +45,8 @@ code;type
 59;investment
 60;payable
 60.1;payable
-60.2;advance_paid
 62;receivable
 62.1;receivable
-62.2;advance_received
 63;receivable
 66;short_term_loan
 67;long_term_loan
