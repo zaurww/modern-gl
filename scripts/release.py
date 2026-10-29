@@ -51,7 +51,7 @@ def main(argv: list[str]) -> None:
     # modern-gl-mcp holds its exe)
     run("uv", "version", version, "--no-sync")
     run("git", "add", "pyproject.toml", "uv.lock")
-    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT, check=False)  # noqa: S603, S607
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT, check=False)  # noqa: S607
     if staged.returncode:  # the version was not this one yet
         run("git", "commit", "-m", f"Версия {version}")
     run("git", "tag", "-a", f"v{version}", "-m", f"Modern GL {version}")
