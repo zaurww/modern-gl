@@ -1,4 +1,4 @@
-"""«Добавить субсчёт…» on an account that is not a group (D182): the
+"""«Добавить субсчёт…» on an account that is not a group (D183): the
 account becomes a group first. Its own history goes on as the first subaccount, named
 here; nothing posted changes — postings follow the account, not its code."""
 
