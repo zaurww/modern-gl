@@ -824,6 +824,33 @@ def test_the_window_loads_the_missing_rates(qtbot, firm, session, tmp_path):
     )
 
 
+def test_the_window_asks_where_the_fees_go(qtbot, firm, session, tmp_path):
+    """The file has a fee (1.00): the window shows the fee account of the settings (91.2)
+    above the lines; 26 chosen there is kept in the settings and the fee becomes 26."""
+    from modern_gl.desktop.bank_page.file_dialog import BankFileDialog
+
+    s, _messages = session
+    azn = kapital_file(tmp_path / "azn.xlsx", AZN_IBAN, "AZN", "5000", AZN_LINES)
+    dialog = BankFileDialog(s, [azn])
+    qtbot.addWidget(dialog)
+    fee = dialog.fee_account
+    assert not fee.isHidden() and fee.box.currentData() == firm["acc"]["91.2"]
+    fee.box.setCurrentIndex(fee.box.findData(firm["acc"]["26"]))
+    assert s.ledger.account_role(s.company_id, BANK_FEE) == firm["acc"]["26"]
+    row = next(r for r in dialog.rows.rows() if r.op.reference == "1002")
+    assert row.lines[0][0] == "26"
+
+
+def test_no_fee_in_the_file_no_question(qtbot, firm, session, tmp_path):
+    from modern_gl.desktop.bank_page.file_dialog import BankFileDialog
+
+    s, _messages = session
+    eur = kapital_file(tmp_path / "eur.xlsx", EUR_IBAN, "EUR", "2000", EUR_LINES[:0])
+    dialog = BankFileDialog(s, [eur])
+    qtbot.addWidget(dialog)
+    assert dialog.fee_account.isHidden()
+
+
 def test_a_file_of_an_account_not_known_waits_for_the_choice(qtbot, ledger, session, tmp_path):
     from modern_gl.desktop.bank_page.file_dialog import BankFileDialog
 

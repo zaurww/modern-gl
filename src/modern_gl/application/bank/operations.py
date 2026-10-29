@@ -206,6 +206,27 @@ def latest_direction(conn: Connection, company_id: int, counterparty_id: int) ->
     return row["direction"] if row else None
 
 
+def _fee_line(conn: Connection, company_id: int) -> BankLine | None:
+    """The fee account the bank's settings name (role bank_fee), with the subconto of its
+    latest fee line; None when the settings name none."""
+    row = conn.execute(
+        "SELECT account_id FROM account_roles WHERE company_id = ? AND role = 'bank_fee'",
+        (company_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    account_id = row["account_id"]
+    used = conn.execute(
+        "SELECT l.sc1, l.sc2, l.sc3 FROM bank_operation_lines l "
+        "JOIN bank_operations o ON o.company_id = l.company_id AND o.id = l.operation_id "
+        "JOIN documents d ON d.id = o.document_id "
+        "WHERE l.company_id = ? AND l.account_id = ? AND o.kind = ? "
+        "ORDER BY d.doc_date DESC, d.number DESC LIMIT 1",
+        (company_id, account_id, FEE),
+    ).fetchone()
+    return BankLine(account_id, 0, (used["sc1"], used["sc2"], used["sc3"]) if used else ())
+
+
 def last_lines(
     conn: Connection, company_id: int, direction: str, counterparty_id: int
 ) -> list[BankLine]:
@@ -214,11 +235,13 @@ def last_lines(
     Payments made through the journal count too: the latest posting between a bank
     account and an account with this counterparty."""
     row = conn.execute(
-        "SELECT o.id FROM bank_operations o JOIN documents d ON d.id = o.document_id "
+        "SELECT o.id, o.kind FROM bank_operations o JOIN documents d ON d.id = o.document_id "
         "WHERE o.company_id = ? AND o.direction = ? AND o.counterparty_id = ? "
         "ORDER BY d.doc_date DESC, d.number DESC LIMIT 1",
         (company_id, direction, counterparty_id),
     ).fetchone()
+    if row is not None and row["kind"] == FEE and (fee := _fee_line(conn, company_id)):
+        return [fee]  # the settings' account, not the one they replaced
     if row is not None:
         return [
             BankLine(r["account_id"], 0, (r["sc1"], r["sc2"], r["sc3"]))

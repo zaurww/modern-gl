@@ -22,6 +22,7 @@ import pytest
 
 from modern_gl.application.bank import (
     CUSTOMER,
+    FEE,
     IN,
     OTHER,
     OUT,
@@ -586,3 +587,28 @@ def test_an_advance_is_offset_against_a_later_e_qaime(ledger, firm):
         for i in open_invoices(ledger.conn, cid, v["alfa"], payable=True, on_date="2026-03-31")
     }
     assert left == {"MT002": 8_000}
+
+
+def test_a_fee_as_last_time_goes_to_the_account_of_the_settings(ledger, firm):
+    """A fee of Kapital Bank went to 80 before the settings named 91.2 (the 1C 7.7
+    template). The next fee of the bank, typed by hand, takes 91.2: "as last time"
+    keeps the counterparty's habit, not the account the settings replaced."""
+    f = firm
+    acc, v, cid = f["acc"], f["v"], f["cid"]
+    bank = ledger.add_subconto_value(cid, f["kind"]["counterparty"], "Kapital Bank")
+    old = BankOperationInput(
+        doc_date="2026-03-05",
+        direction=OUT,
+        account_id=acc["51"],
+        subconto=(v["azn"],),
+        kind=FEE,
+        counterparty_id=bank,
+        lines=(BankLine(acc["80"], 150, (bank,)),),
+        memo="Комиссия банка",
+    )
+    ledger.bank.save_bank_operation(cid, old, post=True)
+    lines = last_lines(ledger.conn, cid, OUT, bank)
+    assert [x.account_id for x in lines] == [acc["91.2"]]
+    # a payment of the same counterparty keeps its own account
+    ledger.set_account_role(cid, "bank_fee", None)
+    assert [x.account_id for x in last_lines(ledger.conn, cid, OUT, bank)] == [acc["80"]]

@@ -17,6 +17,7 @@ from modern_gl.application.bank.file_import import FileOperation, account_choice
 from modern_gl.application.bank.files import BankFile, read_bank_file
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
 from modern_gl.application.bank.statement import place_balance
+from modern_gl.desktop.bank_page.fee_account import FeeAccountChoice
 from modern_gl.desktop.bank_page.file_rates import FileRates
 from modern_gl.desktop.bank_page.import_rows import ImportRows
 from modern_gl.desktop.import_window import ImportWindow, say
@@ -62,6 +63,8 @@ class BankFileDialog(ImportWindow):
         self.rates_note.setWordWrap(True)
         self.rates_note.hide()
         self.root.addWidget(self.rates_note)
+        self.fee_account = FeeAccountChoice(session, lambda: self.preview())
+        self.root.addWidget(self.fee_account)
         self.rows = ImportRows()
         self.rows.itemChanged.connect(lambda *_: self._show_balances())
         self.rows.document_chosen.connect(self._open_document)
@@ -139,6 +142,7 @@ class BankFileDialog(ImportWindow):
         self.rows.blockSignals(True)
         self.rows.show_rows(rows, written=False)
         self.rows.blockSignals(False)
+        self.fee_account.show_for(rows)
         self.status.setText(text)
         can = any(row.state != KNOWN for row in rows)
         self.post_button.setEnabled(can)
@@ -162,6 +166,7 @@ class BankFileDialog(ImportWindow):
         self.status.setText(text)
         for box in self.accounts.values():
             box.setEnabled(False)
+        self.fee_account.setEnabled(False)
         self.rates.button.setVisible(False)
         self.post_button.setVisible(False)
         self.drafts_button.setVisible(False)
