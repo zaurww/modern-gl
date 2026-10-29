@@ -33,6 +33,7 @@ class BankSettingsDialog(QDialog):
     def __init__(self, session: Session, parent=None) -> None:
         super().__init__(parent)
         self.s = session
+        self.moved = 0  # old fees moved to the account chosen
         self.setWindowTitle(tr("Настройки банка"))
         self.setMinimumWidth(540)
         form = QFormLayout(self)
@@ -80,4 +81,36 @@ class BankSettingsDialog(QDialog):
         except LedgerError as exc:
             QMessageBox.warning(self, tr("Настройки банка"), str(exc))
             return
+        self._offer_fee_move()
         self.accept()
+
+    def _offer_fee_move(self) -> None:
+        """Fees loaded before the account was chosen stay where they went: offered to
+        move here, the open period only — otherwise every old one shows the old account."""
+        from modern_gl.application.bank.fee_moves import fees_elsewhere
+
+        fee = self.fee.currentData()
+        if fee is None:
+            return
+        elsewhere = fees_elsewhere(self.s.conn, self.s.company_id, fee)
+        if not elsewhere:
+            return
+        accounts = self.s.catalog.accounts
+        question = tr(
+            "Комиссии, загруженные раньше, стоят на другом счёте: {n} ({codes}). "
+            "Перенести их на {code}? Проведённые будут проведены заново, прежний вид — "
+            "в журнале действий.",
+            n=sum(len(ids) for ids in elsewhere.values()),
+            codes=", ".join(accounts[a].short for a in elsewhere),
+            code=accounts[fee].short,
+        )
+        if QMessageBox.question(self, tr("Настройки банка"), question) != (
+            QMessageBox.StandardButton.Yes
+        ):
+            return
+        try:
+            moved = self.s.ledger.bank.move_fees_to(self.s.company_id, fee)
+        except LedgerError as exc:
+            QMessageBox.warning(self, tr("Настройки банка"), str(exc))
+            return
+        self.moved = moved

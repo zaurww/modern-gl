@@ -242,7 +242,13 @@ class BankActions(ReportPage):
             self.refresh()
 
     def settings(self) -> None:
-        if BankSettingsDialog(self.s, self).exec() == QDialog.DialogCode.Accepted:
+        dialog = BankSettingsDialog(self.s, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if dialog.moved:
+            self.s.notify(tr("Комиссий перенесено: {n}", n=dialog.moved))
+            self.refresh()
+        else:
             self.s.notify(tr("Настройки банка сохранены"))
 
     def new_operation(self, direction: str) -> None:

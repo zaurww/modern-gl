@@ -968,3 +968,49 @@ def test_an_older_company_gets_the_account_on_first_need(ledger, firm, tmp_path)
     assert ledger.account_role(cid, UNIDENTIFIED) == made
     row = ledger.conn.execute("SELECT parent_id, two_sided FROM accounts WHERE id = ?", (made,))
     assert tuple(row.fetchone()) == (ledger.account_id(cid, "76"), 1)
+
+
+def test_fees_loaded_before_the_settings_move_to_their_account(ledger, firm, files):
+    """August's fee 1.00 went to 91.2; the settings then say 26. The fees on another
+    account are found (one) and moved: Dt 26 / Kt 51 1.00, still posted. In a closed
+    period a fee stays where it is: it is not offered."""
+    from modern_gl.application.bank.fee_moves import fees_elsewhere
+
+    cid, acc = firm["cid"], firm["acc"]
+    ledger.bank.import_bank_files(cid, files[:1], firm["places"])
+    ledger.set_account_role(cid, BANK_FEE, acc["26"])
+    fee = by_reference(ledger, cid)["1002"]
+    assert fees_elsewhere(ledger.conn, cid, acc["26"]) == {acc["91.2"]: [fee]}
+    ledger.set_closed_through(cid, "2026-08-31")
+    assert fees_elsewhere(ledger.conn, cid, acc["26"]) == {}
+    ledger.set_closed_through(cid, None)
+    assert ledger.bank.move_fees_to(cid, acc["26"]) == 1
+    moved, fee_lines = lines(ledger, cid, fee)
+    assert (moved.status, fee_lines) == ("posted", [("26", 100, "")])
+    assert fees_elsewhere(ledger.conn, cid, acc["26"]) == {}
+
+
+def test_the_settings_offer_to_move_the_old_fees(qtbot, firm, session, files, monkeypatch):
+    """«Сохранить» in «Настройки банка» with 26 for fees: the August fee on 91.2 is
+    offered and, «Yes», moved to 26."""
+    from PySide6.QtWidgets import QMessageBox
+
+    from modern_gl.desktop.bank_page.settings import BankSettingsDialog
+
+    s, _messages = session
+    s.ledger.bank.import_bank_files(s.company_id, files[:1], firm["places"])
+    asked: list[str] = []
+
+    def yes(_parent, _title, text, *_):
+        asked.append(text)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", staticmethod(yes))
+    dialog = BankSettingsDialog(s)
+    qtbot.addWidget(dialog)
+    dialog.fee.setCurrentIndex(dialog.fee.findData(firm["acc"]["26"]))
+    dialog._save()
+    assert len(asked) == 1 and "(91.2)" in asked[0]
+    assert dialog.moved == 1
+    fee = by_reference(s.ledger, s.company_id)["1002"]
+    assert lines(s.ledger, s.company_id, fee)[1] == [("26", 100, "")]

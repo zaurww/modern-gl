@@ -55,6 +55,17 @@ class BankImportCommands(BankCommands, BankStatementCommands):
             found[key] = existing
         return found, added
 
+    def move_fees_to(self, company_id: int, fee_account: int) -> int:
+        """The fees of the open period on other accounts go to `fee_account` (loaded before
+        the settings named it): each keeps its number and status — all or none. How many."""
+        from modern_gl.application.bank.fee_moves import fees_elsewhere
+
+        with transaction(self.conn):
+            return sum(
+                self.change_line_account(company_id, ids, old, fee_account)
+                for old, ids in fees_elsewhere(self.conn, company_id, fee_account).items()
+            )
+
     def unidentified_account(self, company_id: int) -> int:
         """The account of what nobody knows yet (D184): the settings' one; a
         company without it gets «76.9 Невыясненные поступления и списания» — under 76 when
