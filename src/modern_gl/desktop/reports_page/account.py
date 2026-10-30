@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.desktop.preferences import SUBCONTO_LEVELS, prefs
+from modern_gl.desktop.reports_page.table import INDENT
 from modern_gl.desktop.reports_page.view import (
     Column,
     ReportPage,
@@ -300,7 +301,7 @@ class SubcontoPage(AccountReportPage):
         columns = [
             Column(
                 " / ".join([*self._kinds()[:levels], *(["E-qaimə"] if invoices else [])]),
-                lambda r: "      " * r.depth + r.name,
+                lambda r: INDENT * r.depth + r.name,
             )
         ]
         if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN: on request

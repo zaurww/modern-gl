@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QVBoxLayout
 
+from modern_gl.desktop.reports_page.table import INDENT
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import (
@@ -77,10 +78,9 @@ class BooksPage(ReportPage):
         return compare_books(conn, self.s.company_id, self.params.date_to, self.only.isChecked())
 
     def present(self, data: list[BookRow]) -> None:
-        indent = "      "
         # `value`: in Excel a balance is a number, Dt +, Kt − (D104)
         columns = [
-            Column(tr("Счёт"), lambda r: indent * r.depth + r.code, width=90),
+            Column(tr("Счёт"), lambda r: INDENT * r.depth + r.code, width=90),
             Column(tr("Наименование"), lambda r: r.name),
             Column(
                 tr("Общий учёт"),

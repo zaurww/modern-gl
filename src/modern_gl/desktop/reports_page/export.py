@@ -1,7 +1,7 @@
 """Any report to Excel (D104): «⋯ → В Excel…» saves the table as a file Excel likes,
 Ctrl+C puts it on the clipboard. The table is read from what the page shows — its
 columns and rows — so every report has it without code of its own: amounts as numbers,
-the depth of a line (the 6-space steps the pages indent names by) as Excel's grouping."""
+the depth of a line (the INDENT steps the pages indent names by) as Excel's grouping."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from PySide6.QtCore import QLocale, QStandardPaths, QUrl
 from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 
-from modern_gl.desktop.reports_page.table import ReportModel
+from modern_gl.desktop.reports_page.table import INDENT, ReportModel
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.report_file import (
     ReportColumn,
@@ -26,7 +26,7 @@ from modern_gl.infrastructure.report_file import (
 if TYPE_CHECKING:
     from modern_gl.desktop.reports_page.view import ReportPage
 
-STEP = 6  # spaces of one level of a name in a report
+STEP = len(INDENT)  # spaces of one level of a name in a report
 
 
 def report_table(model: ReportModel, title: str, about: list[tuple[str, str]]) -> ReportTable:

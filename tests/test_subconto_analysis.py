@@ -145,13 +145,13 @@ def test_the_page_chooses_the_directory_and_drills_to_the_account(ledger, conn, 
     assert page.kind_id == order and page.title() == "Анализ субконто · Sifarişlər"
     assert [page._name(r) for r in page.model.rows] == [
         "S-001 Zaur, Antalya",
-        "      60.1 Malsatan və podratçılarla hesablaşmalar",
-        "      62.1 Alıcılar və sifarişçilərlə hesablaşmalar",
-        "      90.1 Satışdan gəlir",
+        "   60.1 Malsatan və podratçılarla hesablaşmalar",
+        "   62.1 Alıcılar və sifarişçilərlə hesablaşmalar",
+        "   90.1 Satışdan gəlir",
         "S-002 Firma MMC, bilet",
-        "      60.1 Malsatan və podratçılarla hesablaşmalar",
-        "      62.1 Alıcılar və sifarişçilərlə hesablaşmalar",
-        "      90.1 Satışdan gəlir",
+        "   60.1 Malsatan və podratçılarla hesablaşmalar",
+        "   62.1 Alıcılar və sifarişçilərlə hesablaşmalar",
+        "   90.1 Satışdan gəlir",
         "Итого",
     ]
     assert page.model.rows[-1].closing_ct == 120000  # 200 + 950 + 50

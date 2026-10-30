@@ -8,6 +8,7 @@ from PySide6.QtCore import Signal
 from PySide6.QtGui import QAction
 
 from modern_gl.desktop.reports_page.table import (
+    INDENT,
     SectionRow,
 )
 from modern_gl.desktop.reports_page.view import (
@@ -95,7 +96,7 @@ class OsvPage(ReportPage):
             for s in subconto.get(r.account_id, []):
                 row = OsvRow(
                     account_id=r.account_id,
-                    name="      " * (s.depth + 1) + s.name,
+                    name=INDENT * (s.depth + 1) + s.name,
                     depth=r.depth + 1,
                     subconto=s.path,
                 )
@@ -110,7 +111,7 @@ class OsvPage(ReportPage):
         for r in rows:
             result.append(r)
             for c in currency.get(r.account_id, []) if r.account_id else []:
-                row = CurrencyLine(name=f"      {c.code}  ·  {tr('в валюте')}", depth=r.depth + 1)
+                row = CurrencyLine(name=f"{INDENT}{c.code}  ·  {tr('в валюте')}", depth=r.depth + 1)
                 row.add(c)
                 result.append(row)
         return result
@@ -148,7 +149,7 @@ class OsvPage(ReportPage):
         columns = [
             Column(
                 tr("Счёт"),
-                lambda r: "" if isinstance(r, SectionRow) else "      " * max(r.depth, 0) + r.code,
+                lambda r: "" if isinstance(r, SectionRow) else INDENT * max(r.depth, 0) + r.code,
                 width=90,
                 icon=lambda r: class_icon(r.account_class) if isinstance(r, SectionRow) else None,
             ),

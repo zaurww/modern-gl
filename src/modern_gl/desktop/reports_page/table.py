@@ -40,6 +40,7 @@ LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 # brackets that hang right; a pale grid and zebra rows — as the user sets them (D103, D127).
 
 NAME_MAX = 380  # px: a longer name is cut with "…" (the whole of it shows under the mouse)
+INDENT = "   "  # one level of a name (a subaccount, a subconto) under its group
 
 GROUP_GAP = 24  # px of air in front of each Dt/Kt pair
 

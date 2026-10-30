@@ -11,8 +11,6 @@ from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.reports_page.view import Column
 from modern_gl.desktop.widgets import segments
 
-INDENT = "      "
-
 
 def quantity_text(quantity: int, precision: int) -> str:
     """A quantity as typed («12», «1.5»); zero — an empty cell (DESIGN.md 3)."""
