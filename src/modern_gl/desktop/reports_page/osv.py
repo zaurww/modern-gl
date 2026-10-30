@@ -26,6 +26,7 @@ from modern_gl.desktop.reports_page.osv_tree import (
     node_of,
     read_nodes,
 )
+from modern_gl.desktop.reports_page.osv_views import OsvViews
 from modern_gl.desktop.reports_page.table import (
     INDENT,
     Column,
@@ -102,7 +103,7 @@ class OsvPage(ReportPage):
             [("top", N_("Основные счета")), ("sub", N_("Субсчета")), ("subconto", "Субконто")],
             lambda: None,
         )
-        self.top_only, self.expand = buttons["top"], buttons["subconto"]
+        self.top_only, self.sub, self.expand = buttons["top"], buttons["sub"], buttons["subconto"]
         self.top_only.setToolTip(tr("Скрыть субсчета; суммы основных счетов не меняются"))
         self.expand.setToolTip(tr("Показать под каждым счётом остатки по всем его субконто"))
         buttons["sub"].setChecked(True)
@@ -123,7 +124,9 @@ class OsvPage(ReportPage):
         # what the user opened under the accounts, and the order of rows
         self.osv: reports.Osv | None = None
         self.tree = OsvTree()
+        self._wanted: dict[NodeKey, str] = {}  # the nodes a read in progress is for
         self.sort: tuple[str, bool] | None = None  # (sort_id of a column, descending)
+        self.views = OsvViews(self)  # «⋯ → Вид „…“», saved in the company's file
         captions = self.table.horizontalHeader()
         captions.setSectionsClickable(True)
         captions.setSortIndicatorShown(True)
@@ -153,7 +156,8 @@ class OsvPage(ReportPage):
             )
         if self.s.parallel_books:
             items += [None, (tr("Сравнить книги"), self.compare_books.emit)]
-        return [*items, None, *super().more_items()]
+        views = self.views.items()
+        return [*items, *([None, *views] if views else []), None, *super().more_items()]
 
     def title(self) -> str:
         return tr("ОСВ")
@@ -164,24 +168,29 @@ class OsvPage(ReportPage):
     # ---- reading -----------------------------------------------------------------------
 
     def job(self):
+        """fetch() with the opened nodes taken now, on the window's thread."""
+        self._wanted = dict(self.tree.opened)
+        return self.fetch
+
+    def fetch(self, conn: Connection) -> tuple[reports.Osv, dict[NodeKey, list[ExpandRow]]]:
         """The trial balance and the rows of every opened node, read together."""
-        opened = dict(self.tree.opened)
         p, cid = self.params, self.s.company_id
-
-        def read(conn: Connection) -> tuple[reports.Osv, dict[NodeKey, list[ExpandRow]]]:
-            osv = reports.trial_balance(conn, cid, p.date_from, p.date_to, p.layers)
-            found: dict[NodeKey, list[ExpandRow]] = {}
-            read_nodes(conn, cid, p, opened, found)
-            return osv, found
-
-        return read
-
-    def fetch(self, conn: Connection) -> Any:
-        return self.job()(conn)
+        osv = reports.trial_balance(conn, cid, p.date_from, p.date_to, p.layers)
+        found: dict[NodeKey, list[ExpandRow]] = {}
+        read_nodes(conn, cid, p, self._wanted, found)
+        return osv, found
 
     def present(self, data: Any) -> None:
         self.osv, self.tree.read = data
         self._show_rows()
+        self.show_subtitle()
+
+    def show_subtitle(self) -> None:
+        """The period, the book — and the name of the view the page shows."""
+        text = self.params.describe(self.s.parallel_books and self.has_book)
+        if self.views.current is not None:
+            text += SEPARATOR + tr("вид «{name}»", name=self.views.current)
+        self.header.subtitle.setText(text)
 
     def _read_missing(self, then: NodeKey | None = None) -> None:
         """Read the rows of the nodes just opened (one query for nodes alike), then

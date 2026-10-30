@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import date
 from itertools import chain
+from typing import Any
 
 from modern_gl.application.common import company_row
 from modern_gl.domain.dates import iso_date
@@ -321,6 +323,27 @@ class TemplateData:
     name: str
     memo: str
     lines: list[TemplateLineData] = field(default_factory=list)
+
+
+@dataclass
+class ReportView:
+    """A saved view of a report (D-new-interactive-osv): its name and settings."""
+
+    id: int
+    name: str
+    settings: dict[str, Any]
+
+
+def report_views(conn: Connection, company_id: int, report: str) -> list[ReportView]:
+    """The saved views of a report, alphabetically."""
+    found = [
+        ReportView(r["id"], r["name"], json.loads(r["settings"]))
+        for r in conn.execute(
+            "SELECT id, name, settings FROM report_views WHERE company_id = ? AND report = ?",
+            (company_id, report),
+        )
+    ]
+    return sorted(found, key=lambda v: sort_key(v.name))
 
 
 def list_templates(conn: Connection, company_id: int) -> list[TemplateData]:

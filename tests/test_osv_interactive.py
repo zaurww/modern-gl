@@ -26,8 +26,16 @@ from modern_gl.desktop import theme
 from modern_gl.desktop.reports_page import OsvPage, ReportParams
 from modern_gl.desktop.reports_page.osv_tree import ExpandedRow
 from modern_gl.desktop.session import Session
+from tests.helpers.contract_books import contract_books
 from tests.helpers.qt import running_app
-from tests.test_subconto_report import books  # noqa: F401 the fixture
+
+
+@pytest.fixture
+def books():
+    conn, ledger, cid, v = contract_books()
+    yield conn, ledger, cid, v
+    conn.close()
+
 
 MARCH = ReportParams(date(2026, 3, 1), date(2026, 3, 31))
 FEB_MARCH = ReportParams(date(2026, 2, 1), date(2026, 3, 31))
@@ -45,14 +53,14 @@ def cols(row):
 
 
 @pytest.fixture
-def session(qtbot, books):  # noqa: F811 the fixture
+def session(qtbot, books):
     theme.apply(running_app())
     conn, ledger, cid, _ = books
     return Session(conn, ledger, cid, "Firma", Catalog(conn, cid), notify=lambda _: None)
 
 
 @pytest.fixture
-def values(books) -> dict[str, int]:  # noqa: F811 the fixture
+def values(books) -> dict[str, int]:
     *_, v = books
     return v
 
