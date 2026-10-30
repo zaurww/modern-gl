@@ -136,9 +136,12 @@ class ReportTable(QTableView):
         hh.setStretchLastSection(False)
         columns = self.report.columns
         self.widths = {}
+        # the amounts in columns of one width — the widest of them: an empty «Кт» next
+        # to a full «Дт» would otherwise be a narrow slit (D190 review)
+        amounts = [self.content_width(i) for i, c in enumerate(columns) if c.money]
         for i, col in enumerate(columns):
             hh.setSectionResizeMode(i, QHeaderView.ResizeMode.Interactive)
-            width = self.content_width(i)
+            width = max(amounts) if col.money else self.content_width(i)
             if col.money or col.right:
                 width += QFontMetrics(self.font()).horizontalAdvance(")")
             if col.group and (i == 0 or columns[i - 1].group != col.group):

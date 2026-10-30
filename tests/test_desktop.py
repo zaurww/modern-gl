@@ -1174,3 +1174,17 @@ def test_closing_a_page_opens_only_the_page_it_came_from(window):
     assert made == []
     assert window.page_stack.key_of(window.stack.currentWidget()) == ("osv",)
     assert set(window.pages) <= before
+
+
+def test_amount_columns_share_one_width(demo_window, qtbot):
+    """An empty «Кт» next to a full «Дт» is as wide: the amounts stand in equal columns."""
+    from modern_gl.desktop.reports_page import OsvPage
+
+    demo_window.show_place(("osv",))
+    page = demo_window.stack.currentWidget()
+    assert isinstance(page, OsvPage)
+    table = page.table
+    money = [i for i, c in enumerate(page.model.columns) if c.money]
+    widths = {table.columnWidth(i) for i in money}
+    assert len(money) == 6 and len(widths) <= 2  # equal, the first of a pair + GROUP_GAP
+    assert max(widths) - min(widths) in (0, 24)
