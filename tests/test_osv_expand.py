@@ -103,9 +103,7 @@ def test_a_group_sums_its_subaccounts(demo, conn):
 
 
 def test_several_accounts_in_one_query(demo, conn):
-    found = expand_many(
-        conn, demo.company_id, [demo.acc["221"], demo.acc["222"]], *FEB, by="corr"
-    )
+    found = expand_many(conn, demo.company_id, [demo.acc["221"], demo.acc["222"]], *FEB, by="corr")
     assert {a: [(r.code, cols(r)) for r in rows] for a, rows in found.items()} == {
         demo.acc["221"]: [("222", (0, 0, 0, 200000, 0, 0))],
         demo.acc["222"]: [("221", (0, 0, 200000, 0, 0, 0))],

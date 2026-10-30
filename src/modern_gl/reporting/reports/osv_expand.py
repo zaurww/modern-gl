@@ -48,7 +48,7 @@ class ExpandRow(Turnovers):
     code: str = ""  # a corr account's code
 
 
-def expand_rows(  # noqa: PLR0913 the report's settings, as the other reports take them
+def expand_rows(
     conn: Connection,
     company_id: int,
     account: int,
@@ -59,12 +59,10 @@ def expand_rows(  # noqa: PLR0913 the report's settings, as the other reports ta
     by: str = "sc1",
 ) -> list[ExpandRow]:
     """The rows under one account (or under the row of its `steps`) split `by` a kind."""
-    return expand_many(conn, company_id, [account], date_from, date_to, layers, steps, by)[
-        account
-    ]
+    return expand_many(conn, company_id, [account], date_from, date_to, layers, steps, by)[account]
 
 
-def expand_many(  # noqa: PLR0913 the report's settings, as the other reports take them
+def expand_many(
     conn: Connection,
     company_id: int,
     accounts: Sequence[int],

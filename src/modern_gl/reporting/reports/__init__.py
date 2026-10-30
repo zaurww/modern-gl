@@ -22,14 +22,25 @@ from modern_gl.reporting.report_common import (
 )
 from modern_gl.reporting.reports.card import account_analysis, account_card
 from modern_gl.reporting.reports.osv import trial_balance
-from modern_gl.reporting.reports.osv_expand import ExpandRow, Step, expand_many, expand_rows
+from modern_gl.reporting.reports.osv_expand import (
+    CORR,
+    MONTH,
+    SUBCONTO_KINDS,
+    ExpandRow,
+    Step,
+    expand_many,
+    expand_rows,
+)
 from modern_gl.reporting.reports.subconto import subconto_balance
 from modern_gl.reporting.reports.subconto_analysis import subconto_analysis
 from modern_gl.reporting.reports.subconto_card import subconto_card
 
 __all__ = [
     "COMMON",
+    "CORR",
     "IFRS",
+    "MONTH",
+    "SUBCONTO_KINDS",
     "TAX",
     "AccountCard",
     "CardLine",

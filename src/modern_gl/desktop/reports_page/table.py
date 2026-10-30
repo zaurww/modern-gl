@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.domain.money import format_minor
+from modern_gl.domain.money import SCALE, format_minor, round_ratio
 from modern_gl.reporting.reports import OsvRow
 
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
@@ -92,10 +92,15 @@ def set_grid(on: bool) -> None:
     prefs().set_grid(on)
 
 
-def figure(minor: int | None) -> str:
-    """An amount in a report: nothing is an empty cell, a negative is in brackets."""
+def figure(minor: int | None, scale: int = 1) -> str:
+    """An amount in a report: nothing is an empty cell, a negative is in brackets;
+    `scale` 1 000 or 1 000 000 — in thousands or millions, whole (D-new-interactive-osv)."""
     if not minor:
         return ""
+    if scale > 1:
+        whole = round_ratio(abs(minor), scale * 10**SCALE)
+        text = f"{whole:,}".replace(",", " ")
+        return "" if not whole else f"({text})" if minor < 0 else text
     return f"({format_minor(-minor)})" if minor < 0 else format_minor(minor)
 
 
@@ -118,6 +123,7 @@ class ReportModel(QAbstractTableModel):
         self.tone: Callable[[Any], str | None] = lambda r: None
         self.banded: list[bool] = []
         self.bands = True  # a list (the chart of accounts) goes without
+        self.scale = 1  # figures in thousands (1000) or millions, whole
         self.all_columns: list[Column] = []  # with the ones the user hid
         self.shown: Callable[[Column], bool] = lambda c: not c.optional
         self.arrange: Callable[[list[Column]], list[Column]] = lambda cols: cols  # the order
@@ -176,7 +182,7 @@ class ReportModel(QAbstractTableModel):
     def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
         row, col = self.rows[index.row()], self.columns[index.column()]
         if role == Qt.ItemDataRole.DisplayRole:
-            return self._text(row, col)
+            return self._text(row, col, self.scale)
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return RIGHT if col.money or col.right else LEFT
         if role == Qt.ItemDataRole.FontRole and self.emphasis(row):
@@ -194,10 +200,10 @@ class ReportModel(QAbstractTableModel):
         return None
 
     @staticmethod
-    def _text(row, col: Column) -> str:
+    def _text(row, col: Column, scale: int = 1) -> str:
         value = col.get(row)
         if col.money:
-            return figure(value)
+            return figure(value, scale)
         return "" if value is None else str(value)
 
     def _foreground(self, row, col: Column) -> QColor | None:
