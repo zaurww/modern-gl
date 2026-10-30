@@ -1762,7 +1762,7 @@ AZ: dict[str, str] = {
     "Остатки и обороты всех счетов за период": "Dövr üzrə bütün hesabların qalıq və dövriyyələri",
     "Остатки счёта по контрагентам, договорам, статьям": "Hesabın kontragent, müqavilə və maddələr üzrə qalıqları",
     "Проводки счёта за период с остатком": "Hesabın dövr üzrə yazılışları və qalığı",
-    "Обороты счёта по корреспондирующим счетам": "Hesabın müxabirləşən hesablar üzrə dövriyyələri",
+    "Обороты счёта по корреспондирующим счетам": "Hesabın qarşılıqlı hesablar üzrə dövriyyələri",
     "Общий учёт, МСФО и налоговый учёт на одну дату": "Ümumi uçot, MHBS və vergi uçotu bir tarixə",
     "Всё о компании текстом в одном архиве zip": "Şirkət haqqında hər şey mətn şəklində, bir zip arxivində",
     "Проводки периода по номерам e-qaimə: суммы, ƏDV, остаток": "Dövrün yazılışları e-qaimə nömrələri üzrə: məbləğ, ƏDV, qalıq",

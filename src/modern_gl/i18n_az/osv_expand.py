@@ -2,7 +2,7 @@
 column, the precision."""
 
 AZ: dict[str, str] = {
-    "Корсчета": "Müxabir hesablar",
+    "Корсчета": "Qarşılıqlı hesablar",
     "Свернуть": "Bağla",
     "Развернуть все": "Hamısını aç",
     "Свернуть все": "Hamısını bağla",
