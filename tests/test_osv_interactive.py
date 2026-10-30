@@ -285,3 +285,18 @@ def test_the_more_menu_marks_the_view(page):
         "    В миллионах",
     ]
     assert page.footer.text().endswith("Ctrl+→ — развернуть все")
+
+
+def test_the_right_click_menu_opens_a_row_too(page):
+    """«Развернуть ▸ Корсчета» of the context menu: a QAction's triggered(bool) must not
+    be taken for the kind (it once came as False)."""
+    from PySide6.QtWidgets import QMenu
+
+    sixty = next(r for r in page.model.rows if r.code == "60")
+    menu = QMenu(page)
+    page._fill_menu(menu, page.menu_actions(sixty))
+    split = next(a for a in menu.actions() if a.text() == "Развернуть")
+    corr = next(a for a in split.menu().actions() if a.text() == "Корсчета")
+    corr.trigger()
+    assert shown(page)[2:3] == [("26", "Общехозяйственные расходы", (0, 0, 30_000, 60_000, 0, 0))]
+    menu.deleteLater()

@@ -510,7 +510,7 @@ class OsvPage(ReportPage):
             kinds = self.kinds_at(key, acc)
             if kinds:
                 splits: list[MenuAction | None] = [
-                    (name, lambda k=kind: self.open_node(key, k)) for kind, name in kinds
+                    (name, lambda _=False, k=kind: self.open_node(key, k)) for kind, name in kinds
                 ]
                 actions.append((tr("Развернуть"), splits))
             if key in self.tree.opened:
