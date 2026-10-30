@@ -1,4 +1,4 @@
-"""Развороты ОСВ по месту (D-new-interactive-osv): one account's figures split by a
+"""Развороты ОСВ по месту (D190): one account's figures split by a
 subconto, by the corresponding accounts or by months — and a row split again.
 
 The demo books (tests/conftest.py build_demo), hand-calculated:

@@ -1,4 +1,4 @@
-"""Saved views of the trial balance (D-new-interactive-osv): «⋯ → Вид „…“» puts the
+"""Saved views of the trial balance (D190): «⋯ → Вид „…“» puts the
 page as it was — how deep, the splits under the accounts, the order, one column, the
 precision; «Сохранить вид…» keeps the page as it is now under a name, in the company's
 file (it names this company's accounts and directory elements)."""

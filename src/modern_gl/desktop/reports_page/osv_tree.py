@@ -1,4 +1,4 @@
-"""The rows of the trial balance as a tree the user opens by place (D-new-interactive-osv):
+"""The rows of the trial balance as a tree the user opens by place (D190):
 an account, under it what the user split it by — a subconto, the corresponding accounts,
 the months — and under any of those rows another split. What is opened and what was
 read for it is the `OsvTree`; `assemble` lays the rows out for the table, sorted as the

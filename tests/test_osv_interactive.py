@@ -1,4 +1,4 @@
-"""The trial balance opened by place (D-new-interactive-osv), as «Интерактивная ОСВ» for
+"""The trial balance opened by place (D190), as «Интерактивная ОСВ» for
 1C 7.7: → splits the row under the cursor, Shift+→ asks by what, ← folds it, Ctrl+→
 opens every account; a click on a caption sorts; «⋯» — one column, in thousands.
 

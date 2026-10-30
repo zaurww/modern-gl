@@ -1,4 +1,4 @@
-"""The trial balance opened by place (D-new-interactive-osv): the splits, the keys, one
+"""The trial balance opened by place (D190): the splits, the keys, one
 column, the precision."""
 
 AZ: dict[str, str] = {

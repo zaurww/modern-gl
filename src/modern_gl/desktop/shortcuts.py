@@ -103,7 +103,7 @@ KEYS: dict[str, Key] = {
         _k("add_charge", "Ins", Scope.GRID, N_("новый расход")),
         _k("copy_rows", "Ctrl+C", Scope.GRID, N_("копировать")),
         _k("paste_rows", "Ctrl+V", Scope.GRID, N_("вставить из Excel")),
-        # the trial balance opened by place (D-new-interactive-osv)
+        # the trial balance opened by place (D190)
         _k("expand", "Right", Scope.GRID, N_("развернуть")),
         _k("collapse", "Left", Scope.GRID, N_("свернуть")),
         _k("expand_by", "Shift+Right", Scope.GRID, N_("развернуть по…")),

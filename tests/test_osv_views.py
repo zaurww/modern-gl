@@ -1,4 +1,4 @@
-"""Saved views of the trial balance (D-new-interactive-osv): the page as it is — how
+"""Saved views of the trial balance (D190): the page as it is — how
 deep, the splits under the accounts, the order, one column, the precision — kept under a
 name in the company's file; «⋯ → Вид „…“» puts it back. The books of
 test_subconto_report."""

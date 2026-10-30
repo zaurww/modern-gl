@@ -1,5 +1,5 @@
 """The trial balance (ОСВ) — opened by place as «Интерактивная ОСВ» of 1C 7.7
-(D-new-interactive-osv): → splits a row by its next subconto (then the corr accounts,
+(D190): → splits a row by its next subconto (then the corr accounts,
 the months), Shift+→ asks by what, ← folds it; a click on a caption sorts; «⋯» —
 one column of balances, figures in thousands."""
 

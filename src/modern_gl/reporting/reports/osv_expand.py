@@ -1,4 +1,4 @@
-"""Развороты ОСВ по месту (D-new-interactive-osv): the figures of one account — or of one
+"""Развороты ОСВ по месту (D190): the figures of one account — or of one
 row under it — split by a subconto, by the corresponding accounts or by the months of
 the period, as «Интерактивная ОСВ» for 1C 7.7 does it.
 

@@ -1,4 +1,4 @@
--- Saved views of a report (D-new-interactive-osv): what the user opened in the trial
+-- Saved views of a report (D190): what the user opened in the trial
 -- balance — the splits under the accounts, the order, one column, the precision — kept
 -- under a name. In the company's file, not in the program's settings: a view names the
 -- accounts and the directory elements of this company. A view says nothing to the

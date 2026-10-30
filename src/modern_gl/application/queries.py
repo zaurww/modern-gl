@@ -327,7 +327,7 @@ class TemplateData:
 
 @dataclass
 class ReportView:
-    """A saved view of a report (D-new-interactive-osv): its name and settings."""
+    """A saved view of a report (D190): its name and settings."""
 
     id: int
     name: str

@@ -94,7 +94,7 @@ def set_grid(on: bool) -> None:
 
 def figure(minor: int | None, scale: int = 1) -> str:
     """An amount in a report: nothing is an empty cell, a negative is in brackets;
-    `scale` 1 000 or 1 000 000 — in thousands or millions, whole (D-new-interactive-osv)."""
+    `scale` 1 000 or 1 000 000 — in thousands or millions, whole (D190)."""
     if not minor:
         return ""
     if scale > 1:

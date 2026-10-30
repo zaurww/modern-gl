@@ -36,9 +36,7 @@ STATEMENTS_DETAIL = "reports/statements_detail"
 STATEMENTS_COLUMNS = "reports/statements_columns"
 STATEMENTS_PERCENT = "reports/statements_percent"  # a share of the revenue (D188)
 SUBCONTO_LEVELS = "reports/subconto_levels"
-OSV_COLUMNS = (
-    "reports/osv_columns"  # "pair" (Dt and Kt) or "net" (one column; D-new-interactive-osv)
-)
+OSV_COLUMNS = "reports/osv_columns"  # "pair" (Dt and Kt) or "net" (one column; D190)
 OSV_SCALE = "reports/osv_scale"  # figures whole in thousands (1000) or millions
 SUBCONTO_ANALYSIS_KIND = "reports/subconto_analysis_kind"  # the directory asked last
 STOCK_STATEMENT_VIEW = "reports/stock_statement_view"

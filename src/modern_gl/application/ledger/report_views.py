@@ -1,4 +1,4 @@
-"""Saved views of a report (D-new-interactive-osv): the splits, the order and the
+"""Saved views of a report (D190): the splits, the order and the
 columns of the trial balance kept under a name in the company's file."""
 
 from __future__ import annotations
