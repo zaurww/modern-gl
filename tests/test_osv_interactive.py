@@ -296,7 +296,9 @@ def test_the_right_click_menu_opens_a_row_too(page):
     menu = QMenu(page)
     page._fill_menu(menu, page.menu_actions(sixty))
     split = next(a for a in menu.actions() if a.text() == "Развернуть")
-    corr = next(a for a in split.menu().actions() if a.text() == "Корсчета")
+    submenu = split.menu()
+    assert isinstance(submenu, QMenu)
+    corr = next(a for a in submenu.actions() if a.text() == "Корсчета")
     corr.trigger()
     assert shown(page)[2:3] == [("26", "Общехозяйственные расходы", (0, 0, 30_000, 60_000, 0, 0))]
     menu.deleteLater()
