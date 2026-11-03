@@ -5,7 +5,6 @@ once."""
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 
 import pytest
@@ -15,7 +14,7 @@ from PySide6.QtWidgets import QPushButton
 from modern_gl import __version__
 from modern_gl.application import updates
 from modern_gl.application.updates import Release
-from modern_gl.desktop.preferences import UPDATES_CHECKED, Preferences
+from modern_gl.desktop.preferences import Preferences
 from modern_gl.desktop.updater import Sources, Updater
 
 SETUP_URL = "https://github.com/zaurww/modern-gl/releases/download/v9.9.9/modern-gl-9.9.9-setup.exe"
@@ -59,13 +58,6 @@ def test_newer_is_by_numbers(latest, current, newer):
     assert updates.is_newer(latest, current) is newer
 
 
-def test_once_a_day():
-    today = date(2026, 11, 3)
-    assert updates.due("", today)
-    assert updates.due("2026-11-02", today)
-    assert not updates.due("2026-11-03", today)
-
-
 def test_nothing_is_offered_without_a_connection_or_a_newer_version():
     def no_network() -> bytes:
         raise OSError("no connection")
@@ -79,10 +71,10 @@ def test_nothing_is_offered_without_a_connection_or_a_newer_version():
 def test_the_installer_runs_quietly_and_the_program_comes_back():
     setup, program = Path("C:/Temp/modern-gl-9.9.9-setup.exe"), Path("C:/P/modern-gl.exe")
     command = updates.install_command(setup, program)
-    assert command[:2] == ["cmd", "/c"]
-    line = command[2]
-    assert f'/wait "{setup}" /SILENT /CLOSEAPPLICATIONS' in line
-    assert line.endswith(f'& start "" "{program}"')
+    assert isinstance(command, str), "список экранирует кавычки — cmd их не читает (0.1.4)"
+    assert command.startswith('cmd /c start "" /wait ')
+    assert f'"{setup}" /SILENT /CLOSEAPPLICATIONS' in command
+    assert command.endswith(f'& start "" "{program}"')
 
 
 # ---- the sidebar's line --------------------------------------------------------------
@@ -100,7 +92,7 @@ class Fake:
         self.fetches = 0
         self.fetch_body = fetch
         self.fail_download = fail_download
-        self.commands: list[list[str]] = []
+        self.commands: list[str] = []
         self.quits = 0
         self.progress: list[tuple[int, int]] = []
         self.tmp_path = tmp_path
@@ -119,7 +111,7 @@ class Fake:
         target.write_bytes(b"setup")
         return target
 
-    def run(self, command: list[str]) -> None:
+    def run(self, command: str) -> None:
         self.commands.append(command)
 
     def quit(self) -> None:
@@ -135,7 +127,6 @@ def make(qtbot, tmp_path: Path, fake: Fake, installed: bool = True) -> tuple[QPu
         download=fake.download,
         run=fake.run,
         installed=installed,
-        today=lambda: date(2026, 11, 3),
         folder=tmp_path,
         pool=AtOnce(),
     )
@@ -148,21 +139,24 @@ def test_a_newer_version_is_offered_then_installed(qtbot, tmp_path):
     line, updater = make(qtbot, tmp_path, fake)
     updater.start()
     assert line.isVisibleTo(line) and "9.9.9" in line.text()
-    assert updater.prefs.text(UPDATES_CHECKED) == "2026-11-03"
+    assert not updater.timer.isActive()  # found: no more looks until the click
 
     line.click()
     assert (tmp_path / "modern-gl-9.9.9-setup.exe").read_bytes() == b"setup"
     assert fake.progress[-1] == (150, 150)
-    assert len(fake.commands) == 1 and "modern-gl-9.9.9-setup.exe" in fake.commands[0][2]
+    assert len(fake.commands) == 1 and "modern-gl-9.9.9-setup.exe" in fake.commands[0]
     assert fake.quits == 1
 
 
-def test_the_look_is_once_a_day(qtbot, tmp_path):
-    fake = Fake(tmp_path)
+def test_the_look_is_at_once_and_then_every_hour(qtbot, tmp_path):
+    """A fix must reach the colleague now, not tomorrow (user, 2026-11-03)."""
+    fake = Fake(tmp_path, fetch=lambda: github(__version__))
     _line, updater = make(qtbot, tmp_path, fake)
     updater.start()
-    updater.start()
     assert fake.fetches == 1
+    assert updater.timer.isActive() and updater.timer.interval() == 60 * 60 * 1000
+    updater.timer.timeout.emit()
+    assert fake.fetches == 2
 
 
 def test_nothing_is_shown_when_run_from_the_source(qtbot, tmp_path):

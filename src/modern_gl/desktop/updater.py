@@ -1,5 +1,6 @@
-"""A newer version offered at the bottom of the sidebar (D191): looked for once a
-day in the background; a click downloads the installer and runs it quietly — the program
+"""A newer version offered at the bottom of the sidebar (D191): looked for at every start
+and then every hour in the background — a fix must reach the colleague at once, not
+tomorrow; a click downloads the installer and runs it quietly — the program
 closes and comes back updated, the company files are not touched. Only the installed
 program is updated, never a run from the source."""
 
@@ -11,26 +12,27 @@ import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal
 from PySide6.QtWidgets import QPushButton
 
 from modern_gl import __version__
 from modern_gl.application import updates
 from modern_gl.application.updates import Release
-from modern_gl.desktop.preferences import UPDATES_CHECKED, Preferences
+from modern_gl.desktop.preferences import Preferences
 from modern_gl.i18n import tr
 from modern_gl.infrastructure import github_releases
 from modern_gl.infrastructure.github_releases import Progress
 
 logger = logging.getLogger(__name__)
 
+EVERY = 60 * 60 * 1000  # ms between looks while the program stays open
+
 Fetch = Callable[[], bytes]
 Download = Callable[[str, Path, Progress], Path]
-Run = Callable[[list[str]], None]
+Run = Callable[[str], None]
 
 
 class _Relay(QObject):
@@ -56,7 +58,7 @@ class _Job(QRunnable):
         self.relay.done.emit(result)
 
 
-def _start(command: list[str]) -> None:
+def _start(command: str) -> None:
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # Windows: no console behind cmd
     subprocess.Popen(command, creationflags=flags)  # noqa: S603 — our own installer
 
@@ -73,7 +75,6 @@ class Sources:
     download: Download = github_releases.download
     run: Run = _start
     installed: bool = field(default_factory=updates.installed_build)
-    today: Callable[[], date] = date.today
     folder: Path = field(default_factory=_temp)
     pool: Any = None  # the application's thread pool when None
 
@@ -99,16 +100,22 @@ class Updater(QObject):
         self.load_relay.done.connect(self._downloaded)
         self.load_relay.progress.connect(self._progress)
         self.load_relay.failed.connect(self._failed)
+        self.timer = QTimer(self)
+        self.timer.setInterval(EVERY)
+        self.timer.timeout.connect(self.check)
         self.line.hide()
         self.line.clicked.connect(self.install)
 
     def start(self) -> None:
-        """Look for a newer version — once a day, in the background, silently otherwise."""
-        s = self.sources
-        if not s.installed or not updates.due(self.prefs.text(UPDATES_CHECKED), s.today()):
+        """Look for a newer version now and then every hour — in the background, silently
+        when there is none or no connection."""
+        if not self.sources.installed:
             return
-        self.prefs.set(UPDATES_CHECKED, s.today().isoformat())
-        fetch = s.fetch
+        self.timer.start()  # before the look: a pool that runs at once may stop it
+        self.check()
+
+    def check(self) -> None:
+        fetch = self.sources.fetch
         self.pool.start(_Job(lambda: updates.newer_release(__version__, fetch), self.check_relay))
 
     def install(self) -> None:
@@ -127,6 +134,7 @@ class Updater(QObject):
         if not isinstance(release, Release):
             return
         self.release = release
+        self.timer.stop()  # found: the line stays until the click
         self.line.setText(tr("Вышла версия {version} — обновить", version=release.version))
         self.line.setEnabled(True)
         self.line.show()

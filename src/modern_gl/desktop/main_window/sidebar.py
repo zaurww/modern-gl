@@ -198,11 +198,12 @@ class Sidebar(QWidget):
         lay.addWidget(self.nav, 1)
         self.nav.setMouseTracking(True)
         self.nav.setItemDelegate(NavDelegate(self.nav))
-        # a newer version (desktop/updater.py): hidden until one is found
-        self.new_version = button("", "flat")
+        # a newer version (desktop/updater.py): hidden until one is found, then a red
+        # button — it must catch the eye (user, 2026-11-03: «красным цветом»)
+        self.new_version = button("", "dangerSolid")
         self.new_version.setFont(fonts().small)
         update = QHBoxLayout()
-        update.setContentsMargins(12, 0, 12, 0)
+        update.setContentsMargins(12, 0, 12, 8)
         update.addWidget(self.new_version)
         update.addStretch(1)
         lay.addLayout(update)

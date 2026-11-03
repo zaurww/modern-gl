@@ -5,6 +5,16 @@
 
 ## [Unreleased]
 
+## [0.1.6] — 2026-11-03
+
+### Изменено
+- Новая версия ищется при каждом запуске и затем раз в час, а не раз в день: исправление
+  доходит до коллеги сразу. Строка «Вышла версия …» — красная кнопка, чтобы заметить.
+
+### Исправлено
+- Установка обновления не запускалась («Windows cannot find '\'»): команда для cmd
+  передавалась списком, и кавычки в ней экранировались. Теперь одной строкой.
+
 ## [0.1.5] — 2026-11-03
 
 Без изменений в программе: выпуск для живой проверки обновления из программы (D191) —
@@ -81,7 +91,8 @@
   «всё или ничего»; AI-помощник по MCP; API и `modern-gl-cli` для разработчиков.
 - Интерфейс азербайджанский и русский, язык документов — настройка компании; темы.
 
-[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.6
 [0.1.5]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.5
 [0.1.4]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.4
 [0.1.3]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.3

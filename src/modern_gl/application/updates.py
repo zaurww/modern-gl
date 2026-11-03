@@ -8,7 +8,6 @@ import json
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 
 SETUP_SUFFIX = "-setup.exe"
@@ -45,11 +44,6 @@ def is_newer(latest: str, current: str) -> bool:
     return version_key(latest) > version_key(current)
 
 
-def due(checked: str, today: date) -> bool:
-    """Once a day: `checked` is the day of the last look (ISO date), empty at first."""
-    return checked != today.isoformat()
-
-
 def newer_release(current: str, fetch: Callable[[], bytes]) -> Release | None:
     """The release to offer, or None: nothing newer, no installer in it, no connection —
     quietly, an update is never urgent."""
@@ -71,9 +65,11 @@ def setup_path(release: Release, folder: Path) -> Path:
     return folder / f"modern-gl-{release.version}{SETUP_SUFFIX}"
 
 
-def install_command(setup: Path, program: Path) -> list[str]:
+def install_command(setup: Path, program: Path) -> str:
     """Run the installer quietly — it closes the program itself (Inno, CloseApplications)
     and shows only its progress — then start the program again, updated or not (a cancelled
-    setup gives the old one back): a line for cmd, which waits in between."""
+    setup gives the old one back): one line for cmd, which waits in between. One string, not
+    a list: a list would get its quotes escaped with backslashes, which cmd does not read
+    (0.1.4: «Windows cannot find '\'»)."""
     silent = f'"{setup}" /SILENT /CLOSEAPPLICATIONS /NORESTART /SP-'
-    return ["cmd", "/c", f'start "" /wait {silent} & start "" "{program}"']
+    return f'cmd /c start "" /wait {silent} & start "" "{program}"'
