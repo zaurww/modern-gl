@@ -21,13 +21,14 @@ def test_template_structure(company, conn):
         (company,),
     ).fetchall()
     by_code = {r["code"]: r for r in rows}
-    assert len(rows) == 95  # 91.3, 91.4 — interest (D128); 76.9 — unidentified; no 60.2, 62.2
+    assert len(rows) == 96  # 91.3, 91.4 — interest (D128); 76.9 — unidentified; no 60.2, 62.2
     assert by_code["60"]["is_group"] == 1
     assert by_code["60.1"]["parent"] == "60"
     assert by_code["26"]["is_group"] == 0
     assert by_code["02"]["two_sided"] == 0
     assert by_code["76.5"]["two_sided"] == 1
     assert by_code["76H"]["parent"] == "76"  # accrued expenses (D65)
+    assert by_code["76G"]["parent"] == "76"  # accrued income (D65 for sales)
 
 
 def test_typical_entries_on_template(ledger, conn, company):

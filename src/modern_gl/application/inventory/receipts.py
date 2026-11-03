@@ -9,6 +9,7 @@ from datetime import date
 from decimal import Decimal
 
 from modern_gl.application.common import fill_subconto, pad_subconto
+from modern_gl.application.inventory.accruals import line_expense_date
 from modern_gl.application.inventory.amounts import (
     blank,
     draft_quantity,
@@ -25,7 +26,6 @@ from modern_gl.application.inventory.model import (
 )
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.domain.currency import to_base, unit_rate
-from modern_gl.domain.dates import month_end
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
@@ -282,7 +282,7 @@ class ReceiptDraftCommands(StockCommands):
                 self._account(company_id, line_credit_account)
             line_credit_sc = pad_subconto(source.credit_subconto or credit_subconto)
             stock = source.item_id is not None
-            expense_date = self._line_expense_date(doc_type, source, line_no)
+            expense_date = line_expense_date(doc_type, source.item_id, source.expense_date, line_no)
             self._insert_line(
                 document_id,
                 company_id,
@@ -305,22 +305,6 @@ class ReceiptDraftCommands(StockCommands):
                     expense_date=expense_date,
                 ),
             )
-
-    @staticmethod
-    def _line_expense_date(doc_type: str, source: ReceiptLine, line_no: int) -> str | None:
-        """The month a purchased service's expense belongs to (D65), as its last day. Goods
-        come to stock on the document's date and have none."""
-        if source.expense_date is None or source.expense_date == "":
-            return None
-        if source.item_id is not None or doc_type != "receipt":
-            raise ValidationError(
-                tr(
-                    "строка {line}: месяц расхода указывается для услуг и расходов в покупке, "
-                    "не для товара",
-                    line=line_no,
-                )
-            )
-        return month_end(source.expense_date)
 
     def _expense_of(
         self, company_id: int, doc_type: str, source: ReceiptLine, line_no: int

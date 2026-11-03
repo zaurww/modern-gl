@@ -248,6 +248,88 @@ def test_a_purchase_imported_with_an_earlier_expense_month(shop, conn):
     assert not goods[0].has_expenses
 
 
+def test_a_sale_imported_with_an_earlier_income_month(shop, conn):
+    """Consulting of February on the sent e-qaimə of 07.03 (D192): 50.00 + ƏDV 9.00.
+    Posted: 28.02 Dt 76G / Kt 46 50.00; 07.03 Dt 62 / Kt 76G 50.00, Dt 46 / Kt 68.2 9.00,
+    Dt 62 / Kt 46 9.00. A sale of goods alone has no income month."""
+    shop.ledger.set_subconto_value_tax(shop.company_id, shop.customer, CUSTOMER_TIN)
+    row = {
+        "id": "s2",
+        "serialNumber": "MT2603000444",
+        "createdAt": "2026-03-07T10:00:00",
+        "kind": "defaultInvoice",
+        "receiver": {"tin": CUSTOMER_TIN, "name": "Alfa"},
+    }
+    service = {
+        "productName": "Konsaltinq",
+        "productGroup": {"code": "9995110000"},
+        "cost": "50",
+        "vat18": "50",
+    }
+    goods = {
+        "productName": "printer",
+        "productGroup": {"code": "8443"},
+        "quantity": "3",
+        "cost": "60",
+        "vat18": "60",
+    }
+    plans = plan_import(
+        conn,
+        shop.company_id,
+        [
+            parse_invoice(row, {**row, "items": [service]}, outgoing=True),
+            parse_invoice({**row, "id": "s3"}, {**row, "items": [goods]}, outgoing=True),
+        ],
+    )
+    assert [plan.has_expenses for plan in plans] == [True, False]
+    plans[0].expense_date = "2026-02-28"
+    draft, _goods = import_drafts(shop.inventory, shop.company_id, plans)
+    doc = shop.inventory.load_document(shop.company_id, draft)
+    (line,) = doc.lines
+    assert (line.item_id, line.amount, line.vat_amount, line.expense_date) == (
+        None,
+        5_000,
+        900,
+        "2026-02-28",
+    )
+    shop.inventory.update_sale_draft(  # the customer's contract is left to the user
+        shop.company_id,
+        draft,
+        "2026-03-07",
+        [
+            SaleLine(
+                None,
+                None,
+                None,
+                "50",
+                "9",
+                "Konsaltinq",
+                line_id=line.id,
+                expense_date=line.expense_date,
+            )
+        ],
+        shop.acc["62"],
+        [shop.customer, shop.contract],
+        vat_rate=1800,
+        invoice="MT2603000444",
+    )
+    shop.inventory.post_document(shop.company_id, draft)
+    assert [p[:3] for p in shop.postings(draft)] == [
+        ("62", "76G", 5_000),
+        ("46", "68.2", 900),
+        ("62", "46", 900),
+    ]
+    (accrual,) = [
+        a.gl_document_id for a in shop.inventory.load_document(shop.company_id, draft).accruals
+    ]
+    found = conn.execute(
+        "SELECT d.doc_date, p.debit_account_id, p.credit_account_id, p.amount "
+        "FROM postings p JOIN documents d ON d.id = p.document_id WHERE d.id = ?",
+        (accrual,),
+    ).fetchone()
+    assert tuple(found) == ("2026-02-28", shop.acc["76G"], shop.acc["46"], 5_000)
+
+
 def test_import_dialog_loads_shows_and_creates_drafts(shop, conn, qtbot, monkeypatch):
     """Signed in (a fake token), the dialog loads one received e-qaimə from a fake portal
     off the window's thread, shows it with its two lines, and makes one purchase draft."""

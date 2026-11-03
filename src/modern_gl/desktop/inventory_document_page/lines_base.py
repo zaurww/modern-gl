@@ -171,8 +171,8 @@ class InventoryLinesBase(QAbstractTableModel):
                 SC2,
                 SC3,
                 MEMO,
-                # last: rarely filled, so Enter after the expense's subconto skips past it
-                *([EXPENSE_MONTH] if doc_type == "receipt" else []),
+                # last: rarely filled, so Enter after the subconto skips past it
+                *([EXPENSE_MONTH] if doc_type in {"receipt", "sale"} else []),
             ]
 
     def _items(self) -> dict[int, ItemChoice]:
@@ -394,8 +394,9 @@ class InventoryLinesBase(QAbstractTableModel):
         return self.doc_type in {"sale", "receipt"} and row.item_id is None and not row.is_empty()
 
     def has_expenses(self) -> bool:
-        """A receipt with a line without an item shows the expense account columns."""
-        return self.doc_type == "receipt" and any(
+        """A receipt with a line without an item shows the expense account columns; a sale
+        with one, the month of its income («Доход за», D65)."""
+        return self.doc_type in {"receipt", "sale"} and any(
             row.item_id is None and not row.is_empty() for row in self.rows
         )
 
@@ -421,7 +422,7 @@ class InventoryLinesBase(QAbstractTableModel):
         if key == CURRENCY_AMOUNT:  # in a currency the manat amount follows from the rate
             return self.rate is not None
         if key == EXPENSE_MONTH:
-            return self.doc_type == "receipt"
+            return self.doc_type in {"receipt", "sale"}
         if key == AMOUNT and self.rate is not None:
             return False
         return self.doc_type != "landed_cost"

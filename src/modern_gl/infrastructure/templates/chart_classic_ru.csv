@@ -34,6 +34,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 75;Расчёты с учредителями;;;liability;;1;counterparty;
 76;Расчёты с разными дебиторами и кредиторами;;;liability;;1;counterparty,contract;
 76H;Начисленные расходы;;;liability;;;counterparty;;accrued_expenses
+76G;Начисленные доходы;;;asset;;;counterparty;;accrued_income
 76.9;Невыясненные поступления и списания;;;liability;;1;;;unidentified
 77;Отложенные налоговые обязательства;;;liability;;;;
 80;Прибыли и убытки;;;equity;;1;;;fx_gain,fx_loss,bank_fee

@@ -34,6 +34,7 @@ code;type
 75;other_liability
 76;other_liability
 76H;accrued_expenses
+76G;accrued_income
 76.9;other_liability
 77;deferred_tax_liability
 80;profit_loss

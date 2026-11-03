@@ -113,6 +113,7 @@ class LineInputs(InventoryLinesBase):
                 for position, key in enumerate((SALE1, SALE2, SALE3))
                 if self._takes_sale(row, key)
             ),
+            expense_date=row.expense_date if row.item_id is None else None,
         )
 
     @staticmethod

@@ -53,7 +53,15 @@ TITLES = {
 # on a sales account only these are the buyer's side (a sale, a return); anything else
 # written there — goods, a carrier (Dt 46 Kt 60), wages — is the cost of the sales
 BUYER_TYPES = frozenset(
-    {"receivable", "advance_received", "other_receivable", "cash", "bank", "transit"}
+    {
+        "receivable",
+        "advance_received",
+        "other_receivable",
+        "accrued_income",  # a service of an earlier month: Dt 76G / Kt 46 (D65, sales)
+        "cash",
+        "bank",
+        "transit",
+    }
 )
 MONEY_TYPES = frozenset({"cash", "bank", "transit", "vat_deposit"})
 LOAN_TYPES = frozenset({"short_term_loan", "long_term_loan"})

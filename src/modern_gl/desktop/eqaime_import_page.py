@@ -199,8 +199,8 @@ class EqaimeImportDialog(EqaimeImportForm):
         return item
 
     def _expense_month(self, plan: InvoicePlan) -> PickBox:
-        """The month of a purchase's services: the e-qaimə's own or one of the twelve
-        before it (D65); the choice goes into the plan."""
+        """The month of a purchase's (sale's) services: the e-qaimə's own or one of the
+        twelve before it (D65, D192); the choice goes into the plan."""
         box = PickBox()
         box.addItem(tr("месяц документа"), None)
         for last in earlier_months(plan.invoice.doc_date):
@@ -225,7 +225,7 @@ class EqaimeImportDialog(EqaimeImportForm):
         def chosen(_index: int) -> None:
             plan.attach_to = box.currentData()
             month = self.tree.itemWidget(item, EXPENSE_MONTH)
-            if month is not None:  # the purchase has its own month
+            if month is not None:  # the purchase (sale) has its own month
                 month.setEnabled(plan.attach_to is None)
             self._show_count()
 

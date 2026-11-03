@@ -72,7 +72,14 @@ def import_drafts(
                         company_id,
                         invoice.doc_date,
                         [
-                            _sale_line(conn, company_id, p, warehouse, plan.counterparty_id)
+                            _sale_line(
+                                conn,
+                                company_id,
+                                p,
+                                warehouse,
+                                plan.counterparty_id,
+                                plan.expense_date,
+                            )
                             for p in plan.lines
                         ],
                         account,
@@ -155,9 +162,11 @@ def _sale_line(
     plan: LinePlan,
     warehouse: int | None,
     counterparty: int,
+    expense_date: str | None,
 ) -> SaleLine:
     """A sale line; its sales group and the like (D61) as the item (the service) had the
-    last time it was sold."""
+    last time it was sold. `expense_date`: the month the sale's services belong to (D192),
+    the goods none."""
     line = plan.line
     goods = plan.item_id is not None
     return SaleLine(
@@ -170,6 +179,7 @@ def _sale_line(
         sale_subconto=remembered_sale_subconto(
             conn, company_id, plan.item_id, line.name, counterparty
         ),
+        expense_date=None if goods else expense_date,
     )
 
 

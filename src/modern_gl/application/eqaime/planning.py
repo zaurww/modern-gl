@@ -40,7 +40,7 @@ class InvoicePlan:
     existing: int | None = None  # the number of a document that has this e-qaimə already
     lines: list[LinePlan] = field(default_factory=list)
     skip_reason: str = ""
-    # a purchase's services of an earlier month (D65): the last day of that month
+    # a purchase's (sale's) services of an earlier month (D65, D192): the last day of it
     expense_date: str | None = None
     # the supplier's purchases waiting for an e-qaimə (D119), and the one this e-qaimə is
     # written into instead of a new draft (None: a new draft)
@@ -75,9 +75,14 @@ class InvoicePlan:
 
     @property
     def has_expenses(self) -> bool:
-        """A purchase with a line that is no item (a service, a fixed asset, an expense):
-        its expense may belong to an earlier month (D65)."""
-        return not self.invoice.outgoing and any(p.item_id is None for p in self.lines)
+        """A purchase with a line that is no item (a service, a fixed asset, an expense),
+        or a sale with a service line: its expense (income) may belong to an earlier
+        month (D65, D192). A return's lines are goods."""
+        if self.return_type is not None:
+            return False
+        if self.invoice.outgoing:
+            return any(p.item_id is None and p.line.service for p in self.lines)
+        return any(p.item_id is None for p in self.lines)
 
     @property
     def unresolved(self) -> int:
