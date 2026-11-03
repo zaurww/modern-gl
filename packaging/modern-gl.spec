@@ -26,7 +26,8 @@ a = Analysis(
     # the translations (`i18n_az`) are found with pkgutil, the modules of the ledger are
     # imported lazily: nothing names them, so every submodule is collected
     hiddenimports=collect_submodules("modern_gl"),
-    excludes=["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtPdf"],
+    # nothing of PySide6 is excluded: the portal window (portal_login) is the browser
+    # QtWebEngine, imported lazily — an exclusion is only found by a user (0.1.1)
     noarchive=False,
 )
 pyz = PYZ(a.pure)

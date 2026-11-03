@@ -53,3 +53,33 @@ def test_the_build_files_agree():
     assert "modern-gl.exe" in iss and "{app}\\_internal" in iss
     assert "packaging/modern-gl.spec" in workflow and "modern-gl.iss" in workflow
     assert "workflow_dispatch" in workflow and 'tags: ["v*"]' in workflow
+
+
+def test_the_build_excludes_nothing_the_program_imports():
+    """0.1.1 excluded QtWebEngine for size — and the portal window crashed at the colleague's."""
+    spec = (ROOT / "packaging" / "modern-gl.spec").read_text(encoding="utf-8")
+    found = re.search(r"excludes=\[(.*?)\]", spec, re.S)
+    excluded = set(re.findall(r"[\"']([\w.]+)[\"']", found.group(1))) if found else set()
+    imported: set[str] = set()
+    for path in (ROOT / "src" / "modern_gl").rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        imported.update(re.findall(r"^\s*from (PySide6\.\w+) import", text, re.M))
+        imported.update(re.findall(r"^\s*import (PySide6\.\w+)", text, re.M))
+    assert not excluded & imported, "сборка исключает то, что программа импортирует"
+
+
+def test_a_build_without_the_browser_says_so(qtbot, monkeypatch):
+    """A message instead of a crash when QtWebEngine is missing (the colleague's 0.1.1)."""
+    from modern_gl.desktop import portal_login
+
+    def no_browser(*_args, **_kwargs):
+        raise ImportError("No module named 'PySide6.QtWebEngineWidgets'")
+
+    shown: list[str] = []
+    monkeypatch.setattr(portal_login, "PortalLoginDialog", no_browser)
+    monkeypatch.setattr(
+        portal_login.QMessageBox, "warning", lambda _parent, _title, text: shown.append(text)
+    )
+    assert portal_login.sign_in(None, "1234567890") is None
+    assert len(shown) == 1
+    assert "браузер" in shown[0] or "brauzer" in shown[0]

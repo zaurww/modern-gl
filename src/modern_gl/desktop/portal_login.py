@@ -13,11 +13,11 @@ import time
 from collections.abc import Callable
 
 from PySide6.QtCore import QStandardPaths, QTimer, QUrl
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
 
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, caption
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.etaxes import BASE_URL, PORTAL_TOKEN_KEY
 
 
@@ -118,6 +118,11 @@ def waiting_for(token: str | None, company: str = "") -> str:
 
 LOGIN_URL = f"{BASE_URL}/eportal/login"
 
+NO_BROWSER = N_(
+    "В этой сборке программы нет встроенного браузера — вход на портал невозможен. "
+    "Установите полную версию: github.com/zaurww/modern-gl/releases"
+)
+
 _PAGE: list = []
 
 
@@ -182,7 +187,11 @@ def company_tin(token: str) -> str:
 def sign_in(parent: QWidget | None = None, company: str = "") -> str | None:
     """Open the portal and wait for the user to sign in (for the firm with the VÖEN
     `company`, if given); the token, or None."""
-    dialog = PortalLoginDialog(parent, company)
+    try:
+        dialog = PortalLoginDialog(parent, company)
+    except ImportError:  # a build without QtWebEngine (0.1.1 was one)
+        QMessageBox.warning(parent, tr("Вход на портал e-taxes"), tr(NO_BROWSER))
+        return None
     if dialog.exec() == QDialog.DialogCode.Accepted:
         return dialog.token
     return None

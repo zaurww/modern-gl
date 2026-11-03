@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-11-03
+
+### Исправлено
+- Установщик 0.1.1 не содержал встроенного браузера (QtWebEngine): «Загрузить с портала»
+  в покупках, продажах и ƏDV DH падало с ошибкой. Браузер снова в сборке; в сборке без
+  него программа теперь говорит об этом словами, а не падает.
+
 ## [0.1.1] — 2026-11-03
 
 ### Добавлено
@@ -54,6 +61,7 @@
   «всё или ничего»; AI-помощник по MCP; API и `modern-gl-cli` для разработчиков.
 - Интерфейс азербайджанский и русский, язык документов — настройка компании; темы.
 
-[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.0
