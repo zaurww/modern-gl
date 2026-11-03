@@ -1,4 +1,4 @@
-"""A newer version offered at the bottom of the sidebar (D-new-updates): looked for once a
+"""A newer version offered at the bottom of the sidebar (D191): looked for once a
 day in the background; a click downloads the installer and runs it quietly — the program
 closes and comes back updated, the company files are not touched. Only the installed
 program is updated, never a run from the source."""

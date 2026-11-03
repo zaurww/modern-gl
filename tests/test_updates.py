@@ -1,4 +1,4 @@
-"""A newer version offered in the sidebar (D-new-updates): what GitHub's answer means, once
+"""A newer version offered in the sidebar (D191): what GitHub's answer means, once
 a day, the download and the installer's start — with a fake GitHub and a pool that runs at
 once."""
 

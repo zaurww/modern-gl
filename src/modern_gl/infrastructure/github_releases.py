@@ -1,4 +1,4 @@
-"""The program's releases on GitHub (D-new-updates): the latest one and its installer.
+"""The program's releases on GitHub (D191): the latest one and its installer.
 Network only — what a release means for the running program is `application/updates`."""
 
 from __future__ import annotations

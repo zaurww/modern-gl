@@ -1,4 +1,4 @@
-"""A newer version offered in the sidebar (D-new-updates)."""
+"""A newer version offered in the sidebar (D191)."""
 
 AZ: dict[str, str] = {
     "Вышла версия {version} — обновить": "Yeni versiya {version} — yeniləyin",

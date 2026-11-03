@@ -1,4 +1,4 @@
-"""A newer version of the program (D-new-updates): what the latest release on GitHub means
+"""A newer version of the program (D191): what the latest release on GitHub means
 for the one running. Pure — the network is `infrastructure/github_releases`, the line in the
 sidebar and the installer's start are `desktop/updater`."""
 
