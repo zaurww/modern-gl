@@ -5,6 +5,11 @@
 
 ## [Unreleased]
 
+## [0.1.7] — 2026-11-03
+
+Без изменений в программе: выпуск для живой проверки обновления из 0.1.6 — красная кнопка,
+скачивание, тихая установка и перезапуск (D191).
+
 ## [0.1.6] — 2026-11-03
 
 ### Изменено
@@ -91,7 +96,8 @@
   «всё или ничего»; AI-помощник по MCP; API и `modern-gl-cli` для разработчиков.
 - Интерфейс азербайджанский и русский, язык документов — настройка компании; темы.
 
-[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.7
 [0.1.6]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.6
 [0.1.5]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.5
 [0.1.4]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.4
