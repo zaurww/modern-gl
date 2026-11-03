@@ -22,7 +22,7 @@ def kinds(conn, cid):
 
 
 def test_every_type_has_a_class_and_a_translation():
-    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 38
+    assert len(ACCOUNT_TYPES) == len(TYPE_CLASS) == 39
     assert {cls for _, cls, _ in ACCOUNT_TYPES} == {
         "asset",
         "liability",
@@ -163,7 +163,7 @@ def test_migration_types_old_companies_like_the_template(ledger, conn, template)
     conn.executescript(sql[sql.index("UPDATE accounts") :])
     # 76H came with D65 (0031), the ƏDV deposit 54 and 76.9 with the templates later, 09 and 77 of
     # the classic chart and 91.3, 91.4 of 1C 7.7 with D128: files typed by 0012 had none
-    later = {"76H", "54", "91.3", "91.4", "76.9"} | (
+    later = {"76H", "76G", "54", "91.3", "91.4", "76.9"} | (
         {"09", "77"} if template == "classic" else set()
     )
     assert {code: k for code, k in kinds(conn, cid).items() if code not in later} == {

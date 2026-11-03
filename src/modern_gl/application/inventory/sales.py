@@ -6,6 +6,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date
 
 from modern_gl.application.common import account_kinds, pad_subconto
+from modern_gl.application.inventory.accruals import line_expense_date
 from modern_gl.application.inventory.amounts import (
     blank,
     draft_quantity,
@@ -120,6 +121,7 @@ class SaleCommands(StockCommands):
             account_id = source.customer_account_id or customer_account_id
             if account_id is not None:
                 self._account(company_id, account_id)
+            expense_date = line_expense_date("sale", source.item_id, source.expense_date, line_no)
             sale_sc = [value for value in source.sale_subconto if value is not None]
             kinds = [self._subconto_value(company_id, value)["kind_id"] for value in sale_sc]
             if len(set(kinds)) != len(kinds) or len(kinds) > 3:
@@ -141,6 +143,7 @@ class SaleCommands(StockCommands):
                     line_id=source.line_id,
                     vat_amount=vat,
                     cost_subconto=sale_sc,
+                    expense_date=expense_date,
                 ),
             )
 

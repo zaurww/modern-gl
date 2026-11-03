@@ -296,7 +296,7 @@ def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path, monkeypa
     shutil.copytree(chart_csv.TEMPLATES_DIR, templates)
     for csv in templates.glob("chart_classic_*.csv"):
         lines = csv.read_text(encoding="utf-8").replace("?;", ";").splitlines(keepends=True)
-        later = ("76H;", "09;", "77;")
+        later = ("76H;", "76G;", "09;", "77;")
         csv.write_text("".join(x for x in lines if not x.startswith(later)), encoding="utf-8")
     monkeypatch.setattr(chart_csv, "TEMPLATES_DIR", templates)
     shop = make_shop(old, "classic")

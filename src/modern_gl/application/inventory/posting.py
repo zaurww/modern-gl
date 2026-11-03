@@ -422,6 +422,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
             postings = self._apply_landed_cost(company_id, doc, lines)
         elif doc["doc_type"] == "sale":
             postings = self._apply_sale(company_id, doc, lines)
+            accruals = self._accrue(company_id, doc, lines, postings)
         elif doc["doc_type"] in RETURN_TYPES:
             postings = self._apply_return(company_id, doc, lines)
             if doc["doc_type"] == SALE_RETURN:  # what came back may be issued again
@@ -445,7 +446,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
                         for line in lines
                     ],
                 )
-        if doc["doc_type"] == "receipt":
+        if doc["doc_type"] in {"receipt", "sale"}:
             self._finish_accruals(company_id, doc, accruals)
         self._finish(doc["id"], company_id, doc["doc_date"], postings, doc["memo"])
 
