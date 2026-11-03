@@ -1,6 +1,7 @@
 # Modern GL
 
 English: `README.en.md` — a short entry for an outside developer.
+Azərbaycanca: mühasib üçün baş kitab; [Releases](https://github.com/zaurww/modern-gl/releases).
 
 Настольная главная книга для бухгалтера в Азербайджане: проводки Дт/Кт с субконто как в
 1С 7.7, несколько компаний (файл на компанию), параллельные книги (общая / МСФО / налог).
