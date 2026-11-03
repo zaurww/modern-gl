@@ -61,6 +61,9 @@ class PortalLoginDialog(QDialog):
             else tr("Войдите через ASAN İmza и выберите компанию — окно закроется само.")
         )
         hint.setFont(fonts().small)
+        # the browser first: the button and the timer below refer to it
+        self.view = QWebEngineView(self)
+        self.view.setPage(_page_class()(_profile(), self.view))
         top = QHBoxLayout()
         top.addWidget(hint, 1)
         reload = button(tr("Обновить страницу"), "flat")
@@ -70,8 +73,6 @@ class PortalLoginDialog(QDialog):
         self.state = QLabel(waiting_for(None, company))  # what the window waits for now
         self.state.setFont(fonts().small)
         root.addWidget(self.state)
-        self.view = QWebEngineView(self)
-        self.view.setPage(_page_class()(_profile(), self.view))
         root.addWidget(self.view, 1)
         self.view.load(QUrl(LOGIN_URL))
         self.timer = QTimer(self)

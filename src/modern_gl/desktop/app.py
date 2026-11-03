@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
+from PySide6.QtCore import QStandardPaths, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -60,6 +60,9 @@ def year_demo_name(years: tuple[int, ...]) -> str:
 
 
 def main() -> int:
+    # the portal window is a QtWebEngine browser, imported later: Qt 6 wants this before
+    # the application exists
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
     app.setApplicationName("Modern GL")
     app.setOrganizationName("ModernGL")

@@ -5,6 +5,13 @@
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-11-03
+
+### Исправлено
+- Окно входа на портал не открывалось: кнопка «Обновить страницу» обращалась к браузеру
+  до его создания (с D115). Браузер создаётся первым; тест с подменным движком.
+- Qt 6: общий контекст OpenGL для встроенного браузера включается до создания программы.
+
 ## [0.1.2] — 2026-11-03
 
 ### Исправлено
@@ -61,7 +68,8 @@
   «всё или ничего»; AI-помощник по MCP; API и `modern-gl-cli` для разработчиков.
 - Интерфейс азербайджанский и русский, язык документов — настройка компании; темы.
 
-[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.3
 [0.1.2]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.0
