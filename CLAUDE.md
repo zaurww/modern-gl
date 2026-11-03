@@ -17,19 +17,19 @@
 - Типы: `uv run pyright` (тот же движок, что Pylance; должно быть 0 ошибок)
 - Программа: `uv run modern-gl` — компании это файлы `*.gl` в «Документы\Modern GL» (`--data <папка>` — другая папка, запоминается); `--demo` добавляет демо-компанию в пустую папку; `--demo-year` — компанию с целым 2026 годом во всех модулях (`demo_year/`), `--demo-years` — за 2025 и 2026
 - Скриншоты для проверки дизайна: `uv run python scripts/screenshots.py <папка>` — после любых изменений UI смотреть их
-- Демо в консоли: `uv run python scripts/demo.py`
+- Демо в консоли: `scripts/demo.py`
 - Размеры кода и документов: `uv run python tests/test_code_size.py`, `tests/test_docs_size.py`
 - Замеры на большой базе: `uv run python scripts/benchmark.py <папка> --postings 100000`
 - CLI: `uv run modern-gl-cli chart|trial-balance|export|import <файл.gl>` — JSON (`docs/API.md`, D130)
 - AI-помощник (MCP): `uv run modern-gl-mcp` (только чтение; `--allow-drafts` — AI готовит черновики) — подключение в `docs/ASSISTANT.md`
 
 ## Структура
-- `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt. Переводы — пакет `src/modern_gl/i18n_az/` (`core` — до сессии 57, новое — свой файл).
+- `src/modern_gl/domain` — деньги, даты, ошибки. Без SQL и Qt. Переводы — пакет `src/modern_gl/i18n_az/` (новое — свой файл).
 - `src/modern_gl/application/ledger/` — все операции записи и правила учёта: `Ledger` собран из групп (`companies`, `currencies`, `subconto`, `chart` + `account_types`, `templates`, `documents`, `validation`, `document_import`, `revaluation`, `opening`, `subconto_details`, `account_form`); общее модулей — `module.py`; счёт по умолчанию — `default_accounts.py` (по роли/типу, не по коду).
 - `src/modern_gl/application/` (общее): `books` — книги и `docs_cte` (D7); `invoices` + `invoice_rules` — проводки по номеру e-qaimə, неоплаченные (D120), `book_invoices` — e-qaimə; `attention` — реестр «Требует внимания»; `rebuild` — перестроение модулей (D101); `workspace` — файлы компаний; `chart_csv` — шаблон плана и импорт CSV; `queries`, `catalog` — чтение форм; `default_accounts`, `common`; `updates` (D191).
 - **Модули — пакет целиком, чтение и запись (D123):** `application/bank/` (счета, выписки, операции, авансы, ƏDV DH, файлы банков `files/`; запись — `*commands` → `BankModule`), `application/conversion/` (`calc` + `commands` → `ConversionModule`), `application/eqaime/` (импорт черновиков `parsing`/`planning`/`drafts`, `portal`, `commands` → `EqaimeModule`); `ledger.bank`/`.conversion`/`.eqaime` — ручки с ленивым импортом. Новый модуль — так же; его таблицы в `MODULE_TABLE`, пакет в `MODULE_CODE` (`test_architecture.py`).
 - `src/modern_gl/application/inventory/` — склад: `Inventory` собран так же из групп (`catalog`, `drafts`, `stock`, `receipts` — черновики поступления, `movements`, `sales`, `landed_cost`, `accruals`, `posting`, `rebuild` — перепровести с даты); `model` — константы и dataclass-строки, `amounts` — чистая арифметика.
-- `src/modern_gl/reporting/` — отчёты, агрегация в SQL: `reports/` (ОСВ `osv` + развороты `osv_expand` (D190), по субконто `subconto`, карточка и анализ `card`, субконто `subconto_analysis`, `subconto_card` — D125, D126), `report_common`, `plaintext` (hledger, D79), `handover` («Передача дел», D81), `inventory/` (склад; `declarations` — «Əlavə xərclər», D85).
+- `src/modern_gl/reporting/` — отчёты, агрегация в SQL: `reports/` (ОСВ `osv` + развороты `osv_expand` (D190), по субконто `subconto`, карточка и анализ `card`, субконто `subconto_analysis`, `subconto_card` — D125, D126), `report_common`, `plaintext` (hledger, D79), `handover` («Передача дел», D81), `flat_postings`/`flat_excel` (для сводной), `inventory/` (склад; `declarations` — «Əlavə xərclər», D85).
 - `src/modern_gl/api` — API для разработчиков (D130, `docs/API.md`): `open_company` → `Company`, `cli`; меняется только с `API_VERSION` (`tests/test_api.py`). Файл обмена — `application/exchange/` (`lines` — строки по именам, общие с AI) + `reporting/exchange.py` (`docs/EXCHANGE.md`).
 - `src/modern_gl/assistant` — MCP-сервер для AI (D83): `protocol`, `companies`, `answers`, `server`; `drafts` + `draft_tools` — черновики от AI (D84, `--allow-drafts`).
 - `src/modern_gl/infrastructure` — движок: `db.py`, `company_file.py` (файл компании движком), `backup.py`, `github_releases.py`; миграции (`migrations/NNNN_*.sql`), шаблоны плана `templates/`, CSV/Excel, порталы (`cbar`, `etaxes`).

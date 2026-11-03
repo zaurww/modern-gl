@@ -100,6 +100,13 @@ REPORTS = (
         "archive",
     ),
     Report(
+        "flat_postings",
+        GROUPS[1],
+        N_("Проводки для Excel"),
+        N_("Все проводки периода плоской таблицей для сводной: субконто по видам, остатки"),
+        "journal",
+    ),
+    Report(
         "action_log",
         GROUPS[1],
         N_("Журнал действий"),
