@@ -1,6 +1,6 @@
 [project]
 name = "modern-gl"
-version = "0.1.4"
+version = "0.1.5"
 description = "Keyboard-first double-entry general ledger (1C 7.7 style postings, parallel books)"
 requires-python = ">=3.12"
 dependencies = [
