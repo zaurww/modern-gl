@@ -164,13 +164,15 @@ class InventoryLinesBase(QAbstractTableModel):
                 *([CURRENCY_AMOUNT] if doc_type == "receipt" else []),
                 AMOUNT,
                 *([VAT] if doc_type in VAT_DOCUMENTS else []),
-                *([EXPENSE, ESC1, ESC2, ESC3, EXPENSE_MONTH] if doc_type == "receipt" else []),
+                *([EXPENSE, ESC1, ESC2, ESC3] if doc_type == "receipt" else []),
                 *([SALE1, SALE2, SALE3] if doc_type == "sale" else []),
                 ACCOUNT,
                 SC1,
                 SC2,
                 SC3,
                 MEMO,
+                # last: rarely filled, so Enter after the expense's subconto skips past it
+                *([EXPENSE_MONTH] if doc_type == "receipt" else []),
             ]
 
     def _items(self) -> dict[int, ItemChoice]:

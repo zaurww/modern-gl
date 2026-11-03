@@ -384,6 +384,7 @@ def test_receipt_page_takes_the_month_on_the_line(shop, conn, qtbot):
     page = receipt_page(shop, conn, qtbot, date(2026, 10, 5))
     model = page.model
     column = model.columns.index(EXPENSE_MONTH)
+    assert column == len(model.columns) - 1  # the last cell: Enter rarely needs to stop there
     assert page.table.isColumnHidden(column)  # goods only so far
     repair_line(shop, page)
     assert not page.table.isColumnHidden(column)
