@@ -5,6 +5,14 @@
 
 ## [Unreleased]
 
+## [0.1.4] — 2026-11-03
+
+### Добавлено
+- Обновление из программы: раз в день программа спрашивает GitHub о новой версии и
+  показывает внизу боковой панели «Вышла версия … — обновить»; по щелчку скачивает
+  установщик и ставит его сама, программа закрывается и открывается обновлённой. Файлы
+  компаний не трогаются.
+
 ## [0.1.3] — 2026-11-03
 
 ### Исправлено
@@ -68,7 +76,8 @@
   «всё или ничего»; AI-помощник по MCP; API и `modern-gl-cli` для разработчиков.
 - Интерфейс азербайджанский и русский, язык документов — настройка компании; темы.
 
-[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/zaurww/modern-gl/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.4
 [0.1.3]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.3
 [0.1.2]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.2
 [0.1.1]: https://github.com/zaurww/modern-gl/releases/tag/v0.1.1

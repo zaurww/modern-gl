@@ -200,3 +200,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D188 | Колонки ОПиУ по субконто, строки под группами плана, процент от выручки | принято | [D188-statement-columns-by-subconto.md](D188-statement-columns-by-subconto.md) |
 | D189 | Релиз и обновления: версия в одном месте, установщик, тег собирает | принято | [D189-release-updates.md](D189-release-updates.md) |
 | D190 | ОСВ по месту: развороты, сортировка, одна колонка, точность, сохранённые виды | принято | [D190-interactive-osv.md](D190-interactive-osv.md) |
+| D-new | Обновление из программы: раз в день спросить GitHub, тихая установка | принято | [D-new-updates.md](D-new-updates.md) |

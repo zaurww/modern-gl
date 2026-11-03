@@ -33,7 +33,7 @@ from modern_gl.desktop import icons
 from modern_gl.desktop.reports_hub.catalog import HUB, PIN_KEYS
 from modern_gl.desktop.shortcuts import key_line
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import Chip, trailing_icon
+from modern_gl.desktop.widgets import Chip, button, trailing_icon
 from modern_gl.i18n import N_, tr
 
 KEY_ROLE = Qt.ItemDataRole.UserRole
@@ -198,6 +198,15 @@ class Sidebar(QWidget):
         lay.addWidget(self.nav, 1)
         self.nav.setMouseTracking(True)
         self.nav.setItemDelegate(NavDelegate(self.nav))
+        # a newer version (desktop/updater.py): hidden until one is found
+        self.new_version = button("", "flat")
+        self.new_version.setFont(fonts().small)
+        update = QHBoxLayout()
+        update.setContentsMargins(12, 0, 12, 0)
+        update.addWidget(self.new_version)
+        update.addStretch(1)
+        lay.addLayout(update)
+        self.new_version.hide()
         self.hint = QLabel()
         self.hint.setObjectName("tertiary")
         self.hint.setFont(fonts().small)

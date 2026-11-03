@@ -31,6 +31,7 @@ from modern_gl.desktop.preferences import (
     THEME,
     prefs,
 )
+from modern_gl.desktop.updater import Updater
 from modern_gl.infrastructure import logs
 from modern_gl.infrastructure.db import connect
 
@@ -95,6 +96,8 @@ def main() -> int:
     if not window.start():
         return 0
     window.show()
+    updater = Updater(window.sidebar.new_version, remembered, app.quit)
+    updater.start()  # once a day: «Вышла версия …» at the bottom of the sidebar
     code = app.exec()
     window.shutdown()
     return code

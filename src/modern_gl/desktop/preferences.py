@@ -21,6 +21,7 @@ USER_NAME = "user_name"  # who works (D82)
 LANGUAGE = "language"
 THEME = "theme"
 MIRROR_SETTING = "backup_mirror"  # the second folder for backups (D97)
+UPDATES_CHECKED = "updates/checked"  # the day the program last looked for a newer version
 # ---- the look of tables --------------------------------------------------------------
 ZEBRA = "reports/zebra"  # «Оформление → Полосы в таблицах», off by default (D103)
 GRID = "reports/grid"  # «Оформление → Сетка в отчётах», on by default (D127)
