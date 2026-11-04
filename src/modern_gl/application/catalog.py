@@ -80,7 +80,7 @@ class Catalog:
 
     def reload(self) -> None:
         self._load_accounts()
-        self.counted = counted_accounts(self.conn, self.company_id)  # quantity (D-new)
+        self.counted = counted_accounts(self.conn, self.company_id)  # quantity (D199)
         self._load_kinds()
         self._load_values()
         self.currencies: dict[int, CurrencyInfo] = {

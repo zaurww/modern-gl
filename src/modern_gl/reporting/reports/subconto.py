@@ -238,7 +238,7 @@ def _subconto_quantity(
     conn: Connection, params: dict, positions: tuple[int, ...], invoices: bool = False
 ) -> dict[Key, QuantityMoves]:
     """How many of each subconto value, and of each row above it, on the counted accounts
-    of the report (D-new): none — an empty dict."""
+    of the report (D199): none — an empty dict."""
     depth = len(positions) + invoices
     keys = ", ".join(f"m.sc{n}" for n in range(depth))
     found: dict[Key, QuantityMoves] = defaultdict(QuantityMoves)

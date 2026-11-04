@@ -1,5 +1,5 @@
 """Quantities: whole millionths of a unit (a chair, a kilogram), never `float`. The stock
-module and the quantity of a posting (D-new) count in the same units."""
+module and the quantity of a posting (D199) count in the same units."""
 
 from __future__ import annotations
 

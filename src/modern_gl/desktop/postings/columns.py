@@ -16,7 +16,7 @@ from modern_gl.application.table_text import POSTING_HEADERS, subconto_header
 from modern_gl.i18n import fold
 
 DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO, INVOICE = 0, 4, 8, 9, 10, 11, 12, 13
-QUANTITY = 14  # a counted account (01, 10, 12…, D-new); shown before the amount
+QUANTITY = 14  # a counted account (01, 12…, D199); shown before the amount
 CURRENCY_COLUMNS = (CURRENCY, CURRENCY_AMOUNT, RATE)
 HEADERS = [
     "Дебет",

@@ -37,7 +37,7 @@ def balance_row(line: BalanceLine, other_id: int | None) -> PostingRow:
         rate=Fraction(amount, cur) if cur and amount else None,
         rate_auto=False,  # the balance's own manat, not the day's rate
         quantity=quantity,
-        # fewer typed: their share of the sum at the average (D-new)
+        # fewer typed: their share of the sum at the average (D199)
         unit_cost=Fraction(amount, quantity) if quantity else None,
     )
 

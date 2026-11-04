@@ -28,7 +28,7 @@ class BalanceLine:
     amount: int
     currency_id: int | None = None
     currency_amount: int | None = None
-    quantity: int | None = None  # a counted account (D-new): how many are left, same sign
+    quantity: int | None = None  # a counted account (D199): how many are left, same sign
 
 
 def balance_lines(

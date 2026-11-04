@@ -1,4 +1,4 @@
-"""The quantity of a counted account in a report (D-new): 01, 12… — how many chairs at
+"""The quantity of a counted account in a report (D199): 01, 12… — how many chairs at
 the start, came, went, are left; a cell with nothing is empty, as a zero amount is."""
 
 from __future__ import annotations

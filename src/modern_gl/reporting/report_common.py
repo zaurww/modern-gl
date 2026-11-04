@@ -85,7 +85,7 @@ class Osv:
 
 @dataclass
 class QuantityMoves:
-    """How many on a counted account (D-new), in millionths of a unit: at the start,
+    """How many on a counted account (D199), in millionths of a unit: at the start,
     in (debit) and out (credit) in the period."""
 
     opening: int = 0
@@ -153,7 +153,7 @@ class CardLine:
     currency_credit: int = 0
     invoice: str = ""  # e-qaimə number
     invoice_kind: str = ""  # "customs": a customs declaration
-    # a counted account (D-new): how many came in / went out, and how many after the line
+    # a counted account (D199): how many came in / went out, and how many after the line
     quantity_debit: int = 0
     quantity_credit: int = 0
     quantity_balance: int = 0
@@ -163,7 +163,7 @@ class CardLine:
 class AccountCard:
     opening: int
     lines: list[CardLine] = field(default_factory=list)
-    # a counted account (01, 12…, D-new): how many at the start; None — no quantity kept
+    # a counted account (01, 12…, D199): how many at the start; None — no quantity kept
     quantity_opening: int | None = None
     # currency accounts: net balance (Dt - Ct) in each currency, at start and at end
     currency_opening: dict[str, int] = field(default_factory=dict)

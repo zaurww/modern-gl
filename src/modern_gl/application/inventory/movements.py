@@ -314,7 +314,7 @@ class MovementCommands(ReceiptDraftCommands):
         if line["offset_account_id"] is None:
             raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
         in_currency = doc["currency_id"] is not None
-        # a fixed asset, a low-value item…: the books count them too (D-new)
+        # a fixed asset, a low-value item…: the books count them too (D199)
         counted = line["quantity"] and is_counted(
             self.conn, doc["company_id"], line["cost_account_id"]
         )

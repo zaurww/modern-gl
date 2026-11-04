@@ -1,4 +1,4 @@
-"""Which accounts keep a quantity (D-new): an asset account, not a contra one, whose
+"""Which accounts keep a quantity (D199): an asset account, not a contra one, whose
 subconto is a directory of objects — fixed assets, intangibles, any directory where each
 purchase line is its own element (D194: low-value items on 12). 01, 08, 12 count; 02,
 26, 60 do not. Goods (10, 41) are counted by the stock module, which posts no quantity:

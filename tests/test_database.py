@@ -84,7 +84,7 @@ FROZEN = {
     "0061_report_views.sql": "a477a8f7abf7ccf2",
     "0062_accrued_income.sql": "240527be33d912a7",
     "0063_kind_per_line.sql": "bada74f41e413a11",
-    "0064_posting_quantity.sql": "90253cf100070c89",
+    "0064_posting_quantity.sql": "082436d33cf4605b",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

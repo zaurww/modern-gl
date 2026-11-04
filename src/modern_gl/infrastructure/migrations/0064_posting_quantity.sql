@@ -1,4 +1,4 @@
--- Quantity in the books (D-new): a posting on an account of objects (01, 08, 12 with
+-- Quantity in the books (D199): a posting on an account of objects (01, 08, 12 with
 -- its own directory…) may say how many — in millionths of a unit, as the stock module
 -- counts (domain.quantity); its sign follows the amount (a storno is negative). NULL:
 -- no quantity. Which accounts are counted is not stored: it follows their subconto

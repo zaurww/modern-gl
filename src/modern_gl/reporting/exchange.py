@@ -76,7 +76,7 @@ def _line(p: Row, accounts: dict[int, str], names: dict[int, str]) -> dict:
         line["customs" if p["invoice_kind"] == "customs" else "e_qaime"] = p["invoice"]
     if p["pays_vat"]:
         line["pays_vat"] = True
-    if p["quantity"] is not None:  # 01, 12…: how many (D-new)
+    if p["quantity"] is not None:  # 01, 12…: how many (D199)
         line["quantity"] = format_quantity(p["quantity"], QUANTITY_SCALE)
     if p["line_memo"]:
         line["memo"] = p["line_memo"]

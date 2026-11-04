@@ -40,7 +40,7 @@ class PostingInput:
     invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a customs declaration
     # a payment from a bank account to the supplier's ƏDV deposit: it pays the ƏDV (D145)
     pays_vat: bool = False
-    # how many (a counted account — 01, 10, 12…, D-new): "3", "0.5"; None — not said
+    # how many (a counted account — 01, 10, 12…, D199): "3", "0.5"; None — not said
     quantity: str | int | Decimal | None = None
 
 

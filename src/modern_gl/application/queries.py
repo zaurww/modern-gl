@@ -52,7 +52,7 @@ class PostingData:
     invoice: str = ""  # e-qaimə number
     invoice_kind: str = ""  # "customs": the number of a customs declaration
     pays_vat: bool = False  # paid to the supplier's ƏDV deposit from a bank account
-    quantity: int | None = None  # a counted account: millionths of a unit (D-new)
+    quantity: int | None = None  # a counted account: millionths of a unit (D199)
 
 
 @dataclass
