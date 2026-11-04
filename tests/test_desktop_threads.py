@@ -4,6 +4,7 @@ job outlives the window that started it without taking the program down."""
 from __future__ import annotations
 
 import ast
+import gc
 import threading
 from pathlib import Path
 
@@ -136,6 +137,7 @@ def test_a_finished_job_is_freed_on_the_window_thread_only(qtbot):
     ]
     loaders = [loader for _thread, loader in portal_worker._RUNNING.values()]
     qtbot.waitUntil(lambda: all(r.done for r in runs))
+    gc.collect()  # the old code died here: the wrapper freed under a worker's deleteLater
     portal_worker.wait_all()
     assert portal_worker._RUNNING == {}
     assert not any(isValid(loader) for loader in loaders)
