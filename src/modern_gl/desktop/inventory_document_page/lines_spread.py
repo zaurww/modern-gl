@@ -1,8 +1,9 @@
 """One value for many lines of a purchase: an account chosen on one service line goes to
 the others still without one, a cost item to the lines of that account without one (ten
 lines of one e-qaimə for one expense are typed once);
-a value picked with several lines selected goes to all of them; a fixed asset (an
-intangible) of each line is its own element, named by the line (D172)."""
+a value picked with several lines selected goes to all of them; an object (a fixed asset,
+a low-value item: a directory of objects, `Catalog.kind_per_line`) of each line is its
+own element, named by the line (D172, D173)."""
 
 from __future__ import annotations
 
@@ -15,8 +16,6 @@ from modern_gl.desktop.inventory_document_page.columns import (
 )
 from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
 
-# directories where each line is an element of its own: an asset is not shared by lines
-PER_LINE_KINDS = {"fixed_asset", "intangible"}
 # cells whose value can be set on several selected lines at once
 MANY_KEYS = LIST_KEYS - {ITEM, KIND}
 
@@ -34,7 +33,7 @@ class LineSpread(InventoryLinesBase):
 
     def spread_expense_subconto(self, row_index: int, position: int) -> None:
         """A category (a cost item) of the line to the lines of the same account where it
-        is empty; an asset (`PER_LINE_KINDS`) is each line's own and is not spread."""
+        is empty; an object (`is_per_line`) is each line's own and is not spread."""
         source = self.rows[row_index]
         value = source.expense_subconto[position]
         key = f"esc{position + 1}"
@@ -65,12 +64,13 @@ class LineSpread(InventoryLinesBase):
             self.setData(self.index(row, column), value)
 
     def is_per_line(self, row_index: int, key: str) -> bool:
-        """The cell is a fixed asset (an intangible) of the line: an element of its own."""
+        """The cell is an object of the line (a fixed asset, a low-value item: its
+        directory is one of objects): an element of its own."""
         kind = self.kind_at(row_index, key) if key in ESC_KEYS else None
-        return kind is not None and self.s.catalog.kind_codes.get(kind) in PER_LINE_KINDS
+        return kind is not None and self.s.catalog.kind_per_line.get(kind, False)
 
     def lines_without_object(self) -> list[tuple[int, str, str]]:
-        """(row, line name, column key) of the service lines whose fixed asset (intangible)
+        """(row, line name, column key) of the service lines whose object (a fixed asset…)
         is not chosen yet."""
         found = []
         for row_index, row in enumerate(self.rows):

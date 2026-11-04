@@ -20,6 +20,7 @@ from modern_gl.application.inventory import (
     SaleLine,
 )
 from modern_gl.application.ledger import Ledger
+from modern_gl.application.ledger import subconto as ledger_subconto
 from modern_gl.desktop.inventory_document_page import (
     AMOUNT,
     ITEM,
@@ -299,6 +300,8 @@ def test_migration_keeps_inventory_and_sets_the_sale_accounts(tmp_path, monkeypa
         later = ("76H;", "76G;", "09;", "77;")
         csv.write_text("".join(x for x in lines if not x.startswith(later)), encoding="utf-8")
     monkeypatch.setattr(chart_csv, "TEMPLATES_DIR", templates)
+    # directories of objects (`per_line`, 0063) came later too
+    monkeypatch.setattr(ledger_subconto, "OBJECT_KIND_CODES", frozenset())
     shop = make_shop(old, "classic")
     old.execute("DELETE FROM account_roles WHERE role NOT IN ('input_vat', 'fx_transit')")
     old.execute(
