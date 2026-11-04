@@ -30,6 +30,7 @@ from modern_gl.application.ledger.subconto_details import (
     SubcontoDetailCommands,
     ValueDetails,
 )
+from modern_gl.application.ledger.tags import TagCommands
 from modern_gl.application.ledger.templates import TemplateCommands
 
 if TYPE_CHECKING:
@@ -62,6 +63,7 @@ class Ledger(
     RevaluationCommands,
     DocumentCommands,
     SubcontoDetailCommands,
+    TagCommands,
     ReportViewCommands,
 ):
     """The core's write use cases of one database (each group in its own module). The

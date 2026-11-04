@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from modern_gl.application.ledger.subconto import SubcontoCommands
+from modern_gl.application.ledger.tags import TagCommands
 from modern_gl.i18n import fold
 from modern_gl.infrastructure.db import transaction
 
@@ -24,7 +25,7 @@ class ValueDetails:
     tags: tuple[int, ...] | None = None
 
 
-class SubcontoDetailCommands(SubcontoCommands):
+class SubcontoDetailCommands(SubcontoCommands, TagCommands):
     """Use cases of the element's window: the element and its details in one transaction."""
 
     def add_detailed_value(
