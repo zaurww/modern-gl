@@ -17,6 +17,7 @@ from modern_gl.application.queries import (
     load_document,
 )
 from modern_gl.desktop.document_page.clipboard import ClipboardPart
+from modern_gl.desktop.document_page.fill import FillPart
 from modern_gl.desktop.document_page.rates import RatesPart
 from modern_gl.desktop.document_page.templates import TemplatesPart
 from modern_gl.desktop.history_dialog import HistoryDialog
@@ -40,7 +41,7 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
 
-class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
+class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
     def __init__(
         self,
         session: Session,
@@ -180,8 +181,9 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
     def menu_items(self) -> list[MenuItem]:
         """What "⋯" offers for the document as it is now."""
         doc = self.doc
+        fill = (tr("Заполнить остатком…"), self.fill_from_balance)
         if doc is None:  # not saved yet
-            return [(tr("Сделать шаблоном"), self.save_as_template)]
+            return [fill, (tr("Сделать шаблоном"), self.save_as_template)]
         source = doc.inventory_number
         history = (tr("История изменений"), self.show_history)
         if self.s.read_only:  # viewing (D80): where the postings came from, their story
@@ -197,7 +199,7 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart):
                 copy,
             ]
         posted = doc.status == "posted"
-        items: list[MenuItem] = []
+        items: list[MenuItem] = [] if self.model.read_only else [fill]
         if posted and doc.reversal_of is None:
             items.append((tr("Отменить проведение"), self.unpost))
         items.append(copy)

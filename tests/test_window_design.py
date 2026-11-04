@@ -69,7 +69,13 @@ OTHER_DIALOGS = {
     "ValueDialog",
 }
 # forms checked live by the general rules (test_the_form_is_as_designed below)
-FORMS = {"ChangeAccountDialog", "CrashDialog", "SplitAccountDialog", "VerificationDialog"}
+FORMS = {
+    "ChangeAccountDialog",
+    "CrashDialog",
+    "FillBalanceDialog",
+    "SplitAccountDialog",
+    "VerificationDialog",
+}
 IMPORT_WINDOWS = {
     "EqaimeImportForm",
     "EqaimeImportDialog",
@@ -309,8 +315,22 @@ def split_account_form() -> QWidget:
     return SplitAccountDialog(session, catalog.by_code["76"])
 
 
+def fill_balance_form() -> QWidget:
+    """«Заполнить остатком» in a document, as it opens: the account is typed first."""
+    from modern_gl.desktop.fill_balance_dialog import FillBalanceDialog
+    from modern_gl.infrastructure.db import connect
+
+    conn = connect(":memory:")
+    shop = make_shop(conn, "classic")
+    cid = shop.company_id
+    catalog = Catalog(conn, cid)
+    session = Session(conn, shop.ledger, cid, "Mağaza", catalog)
+    return FillBalanceDialog(session, "2026-12-31", ("common",), None)
+
+
 FORM_STEPS = {
     "ChangeAccountDialog": change_account_form,
+    "FillBalanceDialog": fill_balance_form,
     "CrashDialog": crash_form,
     "SplitAccountDialog": split_account_form,
     "VerificationDialog": verification_form,
@@ -339,7 +359,8 @@ def test_the_form_is_as_designed(qtbot, name):
     qtbot.addWidget(form)
     form.show()
     qtbot.wait(10)
-    assert form_problems(form) == [], name
+    problems = form_problems(form)
+    assert problems == [], (name, problems)
 
 
 def test_every_form_is_checked_live():
