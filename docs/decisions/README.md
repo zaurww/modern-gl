@@ -202,6 +202,6 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D190 | ОСВ по месту: развороты, сортировка, одна колонка, точность, сохранённые виды | принято | [D190-interactive-osv.md](D190-interactive-osv.md) |
 | D191 | Обновление из программы: спросить GitHub при запуске и раз в час, тихая установка | принято | [D191-updates.md](D191-updates.md) |
 | D192 | «Доход за» в продаже: доход прошлого месяца по поздней e-qaimə — через счёт 76G «Начисленные доходы» | принято | [D192-income-month.md](D192-income-month.md) |
-| D193 | «Проводки для Excel»: плоская таблица для сводной, без отчётов в программе | заменено D-new-remove-flat-postings | [D193-flat-excel-postings.md](D193-flat-excel-postings.md) |
+| D193 | «Проводки для Excel»: плоская таблица для сводной, без отчётов в программе | заменено D195 | [D193-flat-excel-postings.md](D193-flat-excel-postings.md) |
 | D194 | Справочник объектов или категорий: признак справочника, не список в коде | принято (уточняет D173, D174) | [D194-directory-objects.md](D194-directory-objects.md) |
-| D-new | «Проводки для Excel» убран; отчёты — окна с фильтрами по модулям | принято | [D-new-remove-flat-postings.md](D-new-remove-flat-postings.md) |
+| D195 | «Проводки для Excel» убран; отчёты — окна с фильтрами по модулям | принято | [D195-remove-flat-postings.md](D195-remove-flat-postings.md) |
