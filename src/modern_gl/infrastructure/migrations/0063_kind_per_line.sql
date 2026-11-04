@@ -1,4 +1,4 @@
--- A directory of objects or of categories (D-new, refines D173): a purchase line on
+-- A directory of objects or of categories (D194, refines D173): a purchase line on
 -- account 12 with a user-made directory of low-value items took the element typed on the
 -- first line for all nine lines, as a cost item does. Which directories are objects (each
 -- line of a purchase its own element, named by the line) was a list in the code (fixed
