@@ -14,6 +14,7 @@ from modern_gl.application.ledger.inputs import PostingInput
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import KINDS, normalize_invoice
 from modern_gl.domain.money import to_minor
+from modern_gl.domain.quantity import to_quantity
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row
 
@@ -41,6 +42,7 @@ class PostingRecord:
     invoice: str | None  # the e-qaimə (or customs declaration) number; None without one
     invoice_kind: str | None  # None: an e-qaimə or no number
     pays_vat: int  # 0/1
+    quantity: int | None = None  # millionths of a unit (domain.quantity); None — not said
 
     # the content columns of `postings`, in the table's order
     COLUMNS: ClassVar[tuple[str, ...]] = (
@@ -59,6 +61,7 @@ class PostingRecord:
         "invoice",
         "invoice_kind",
         "pays_vat",
+        "quantity",
     )
 
     @classmethod
@@ -87,6 +90,10 @@ class PostingRecord:
                 )
             except (TypeError, ValueError) as e:
                 raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
+        try:
+            quantity = None if blank(p.quantity) else to_quantity(p.quantity or 0) or None
+        except (TypeError, ValueError) as e:
+            raise ValidationError(tr("строка {line}: {error}", line=line_no, error=e)) from e
         return cls(
             p.debit_account_id,
             p.credit_account_id,
@@ -99,6 +106,7 @@ class PostingRecord:
             invoice,
             invoice_kind(p) if invoice else None,
             int(p.pays_vat),
+            quantity,
         )
 
     def params(self) -> tuple[object, ...]:
@@ -111,6 +119,7 @@ class PostingRecord:
             self,
             amount=-self.amount,
             currency_amount=None if self.currency_amount is None else -self.currency_amount,
+            quantity=None if self.quantity is None else -self.quantity,
         )
 
     def as_dict(self) -> dict[str, object]:
@@ -123,6 +132,11 @@ INSERT_POSTING = (
     f"INSERT INTO postings (company_id, document_id, line_no, {', '.join(PostingRecord.COLUMNS)}) "
     f"VALUES (?, ?, ?, {PLACEHOLDERS})"
 )
+
+
+def blank(value: object) -> bool:
+    """Nothing typed: None or spaces."""
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def invoice_kind(p: PostingInput) -> str | None:

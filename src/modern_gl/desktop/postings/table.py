@@ -43,6 +43,7 @@ from modern_gl.desktop.postings.columns import (
     DT,
     INVOICE,
     MEMO,
+    QUANTITY,
     RATE,
     EntryHints,
     UnknownValueError,
@@ -235,6 +236,7 @@ class PostingsTable(QTableView):
             (RATE, 72),
             (AMOUNT, 120),
             (INVOICE, 150),
+            (QUANTITY, 80),
         ):
             self.setColumnWidth(col, w)
         hh.setSectionResizeMode(MEMO, QHeaderView.ResizeMode.Stretch)
@@ -243,23 +245,29 @@ class PostingsTable(QTableView):
             if pos not in used:
                 self.setColumnHidden(DT + pos, True)
                 self.setColumnHidden(CT + pos, True)
-        self._shown: tuple[bool, bool] | None = None
+        self._shown: tuple[bool, bool, bool] | None = None
         self._fit_columns()
         model.changed.connect(self._fit_columns)
         model.modelReset.connect(self._fit_columns)
 
     def _fit_columns(self) -> None:
         """Currency columns appear only while a line is in a currency, the e-qaimə column
-        while a line is on a settlement or ƏDV account."""
+        while a line is on a settlement or ƏDV account, the quantity while one is on a
+        counted account."""
         m = self.model()
         rows = range(m.rowCount())
-        shown = (any(m.in_currency(r) for r in rows), any(m.takes_invoice(r) for r in rows))
+        shown = (
+            any(m.in_currency(r) for r in rows),
+            any(m.takes_invoice(r) for r in rows),
+            any(m.applies(r, QUANTITY) for r in rows),
+        )
         if shown == self._shown:
             return
         self._shown = shown
         for col in CURRENCY_COLUMNS:
             self.setColumnHidden(col, not shown[0])
         self.setColumnHidden(INVOICE, not shown[1])
+        self.setColumnHidden(QUANTITY, not shown[2])
         self._fit_subconto_widths()
 
     MEMO_MIN = 200  # the memo keeps room to be read

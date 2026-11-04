@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from modern_gl.application.common import group_path
 from modern_gl.application.currencies import CurrencyInfo, list_currencies
+from modern_gl.application.quantities import counted_accounts
 from modern_gl.domain.accounts import OPENING_BALANCE, SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import fold, sort_key, tr
@@ -79,6 +80,7 @@ class Catalog:
 
     def reload(self) -> None:
         self._load_accounts()
+        self.counted = counted_accounts(self.conn, self.company_id)  # quantity (D-new)
         self._load_kinds()
         self._load_values()
         self.currencies: dict[int, CurrencyInfo] = {

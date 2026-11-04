@@ -29,7 +29,8 @@ from modern_gl.domain.currency import (
     to_base,
 )
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import format_minor
+from modern_gl.domain.money import format_minor, round_ratio
+from modern_gl.domain.quantity import QUANTITY_SCALE, format_quantity
 from modern_gl.i18n import tr
 
 
@@ -81,6 +82,10 @@ class PostingsModel(PostingsClipboard):
             return currency.code if currency else ""
         if side == "rate":
             return "" if r.rate is None else format_unit_rate(r.rate)
+        if side == "quantity":
+            if r.quantity is None or not self.counts(row):
+                return ""
+            return format_quantity(r.quantity, QUANTITY_SCALE)
         if side in ("amount", "currency_amount"):
             value = getattr(r, side)
             if value is None:
@@ -101,7 +106,7 @@ class PostingsModel(PostingsClipboard):
         side, _ = column_role(col)
         if self._is_placeholder(row, col):
             return QColor(P.tertiary)  # placeholder with the subconto kind name
-        if side in ("amount", "currency_amount"):
+        if side in ("amount", "currency_amount", "quantity"):
             value = getattr(self.rows[row], side)
             return QColor(P.red) if value is not None and value < 0 else None
         if side == "rate":
@@ -129,21 +134,15 @@ class PostingsModel(PostingsClipboard):
                 self._sync_invoice(row)
         elif side in ("currency", "currency_amount", "rate"):
             self._set_currency_field(r, side, value)
+        elif side == "quantity":
+            self._set_quantity(r, value)
         elif side == "invoice":
             r.invoice = value or ""
             r.invoice_auto = False
             if r.invoice and self.inherit_invoices:
                 self._spread_invoice(row)
         elif side == "amount":
-            if self.formulas:
-                r.formula = value
-            elif isinstance(value, InCurrency):  # "500 EUR" typed in the amount cell
-                self._set_currency_field(r, "currency", value.currency_id)
-                self._set_currency_field(r, "currency_amount", value.amount)
-                side = "currency"  # the whole row changed
-            else:
-                r.amount = value
-                r.formula = ""  # typed by hand: no longer follows the operation amount
+            side = self._set_amount(r, value)
         else:
             r.memo = value
         if side in ("amount", "memo", "invoice"):
@@ -152,6 +151,29 @@ class PostingsModel(PostingsClipboard):
             self._row_changed(row)
         self.changed.emit()
         return True
+
+    def _set_amount(self, r: PostingRow, value) -> str:
+        """The amount cell; "500 EUR" typed there makes the line a currency one — then
+        the whole row changed ("currency")."""
+        if self.formulas:
+            r.formula = value
+        elif isinstance(value, InCurrency):
+            self._set_currency_field(r, "currency", value.currency_id)
+            self._set_currency_field(r, "currency_amount", value.amount)
+            return "currency"
+        else:
+            r.amount = value
+            r.formula = ""  # typed by hand: no longer follows the operation amount
+        return "amount"
+
+    @staticmethod
+    def _set_quantity(r: PostingRow, value: int | None) -> None:
+        """A line of a balance filled in takes the amount of its quantity at the average
+        (3 chairs of 10 — 3/10 of their sum); the amount stays the user's to correct."""
+        r.quantity = value
+        if value and r.unit_cost is not None:
+            r.amount = round_ratio(r.unit_cost.numerator * value, r.unit_cost.denominator)
+            r.formula = ""
 
     @staticmethod
     def _clear_auto_invoice(row: PostingRow) -> None:
@@ -369,6 +391,7 @@ class PostingsModel(PostingsClipboard):
                     invoice=invoice,
                     invoice_kind=r.invoice_kind if invoice else "",
                     pays_vat=r.pays_vat,
+                    quantity=r.quantity if self.counts(n - 1) else None,
                 )
             )
         if not result:

@@ -52,6 +52,7 @@ class PostingData:
     invoice: str = ""  # e-qaimə number
     invoice_kind: str = ""  # "customs": the number of a customs declaration
     pays_vat: bool = False  # paid to the supplier's ƏDV deposit from a bank account
+    quantity: int | None = None  # a counted account: millionths of a unit (D-new)
 
 
 @dataclass
@@ -302,6 +303,7 @@ def load_document(conn: Connection, company_id: int, doc_id: int) -> DocumentDat
                 p["invoice"] or "",
                 p["invoice_kind"] or "",
                 bool(p["pays_vat"]),
+                p["quantity"],
             )
         )
     return doc

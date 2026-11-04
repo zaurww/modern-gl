@@ -28,6 +28,7 @@ class BalanceLine:
     amount: int
     currency_id: int | None = None
     currency_amount: int | None = None
+    quantity: int | None = None  # a counted account (D-new): how many are left, same sign
 
 
 def balance_lines(
@@ -59,21 +60,22 @@ def balance_lines(
         {docs_cte()},
         moves AS (
             SELECT p.debit_account_id AS account_id, p.dt_sc1 AS sc1, p.dt_sc2 AS sc2,
-                   p.dt_sc3 AS sc3, p.currency_id, p.amount, p.currency_amount
+                   p.dt_sc3 AS sc3, p.currency_id, p.amount, p.currency_amount, p.quantity
             FROM postings p JOIN docs ON docs.id = p.document_id
             WHERE p.company_id = :company_id
               AND p.debit_account_id IN (SELECT id FROM tree)
               AND (:skip IS NULL OR p.document_id <> :skip)
             UNION ALL
             SELECT p.credit_account_id, p.ct_sc1, p.ct_sc2, p.ct_sc3, p.currency_id,
-                   -p.amount, -p.currency_amount
+                   -p.amount, -p.currency_amount, -p.quantity
             FROM postings p JOIN docs ON docs.id = p.document_id
             WHERE p.company_id = :company_id
               AND p.credit_account_id IN (SELECT id FROM tree)
               AND (:skip IS NULL OR p.document_id <> :skip)
         )
         SELECT m.account_id, m.sc1, m.sc2, m.sc3, m.currency_id,
-               SUM(m.amount) AS amount, SUM(m.currency_amount) AS currency_amount
+               SUM(m.amount) AS amount, SUM(m.currency_amount) AS currency_amount,
+               SUM(m.quantity) AS quantity
         FROM moves m
         GROUP BY m.account_id, m.sc1, m.sc2, m.sc3, m.currency_id
         """,
@@ -86,9 +88,10 @@ def balance_lines(
             r["amount"],
             r["currency_id"],
             r["currency_amount"] if r["currency_id"] is not None else None,
+            r["quantity"] or None,
         )
         for r in rows
-        if r["amount"] or (r["currency_id"] is not None and r["currency_amount"])
+        if r["amount"] or (r["currency_id"] is not None and r["currency_amount"]) or r["quantity"]
     ]
     return sorted(lines, key=_order(conn, company_id, lines))
 

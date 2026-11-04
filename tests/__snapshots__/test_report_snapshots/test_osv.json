@@ -128,6 +128,7 @@
         "path": [
           1
         ],
+        "quantity": null,
         "turnover_ct": 0,
         "turnover_dt": 0,
         "value_id": 1
@@ -144,6 +145,7 @@
         "path": [
           2
         ],
+        "quantity": null,
         "turnover_ct": 50000,
         "turnover_dt": 0,
         "value_id": 2

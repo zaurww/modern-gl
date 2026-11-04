@@ -21,7 +21,8 @@ def balance_row(line: BalanceLine, other_id: int | None) -> PostingRow:
     empty: list[int | None] = [None, None, None]
     cur = abs(line.currency_amount) if line.currency_amount is not None else None
     amount = abs(line.amount)
-    if line.amount > 0 or (line.amount == 0 and (line.currency_amount or 0) > 0):
+    quantity = abs(line.quantity) if line.quantity else None
+    if line.amount > 0 or (line.amount == 0 and (line.currency_amount or line.quantity or 0) > 0):
         debit, debit_sc, credit, credit_sc = other_id, empty, line.account_id, subconto
     else:
         debit, debit_sc, credit, credit_sc = line.account_id, subconto, other_id, empty
@@ -35,6 +36,9 @@ def balance_row(line: BalanceLine, other_id: int | None) -> PostingRow:
         currency_amount=cur,
         rate=Fraction(amount, cur) if cur and amount else None,
         rate_auto=False,  # the balance's own manat, not the day's rate
+        quantity=quantity,
+        # fewer typed: their share of the sum at the average (D-new)
+        unit_cost=Fraction(amount, quantity) if quantity else None,
     )
 
 

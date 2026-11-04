@@ -31,6 +31,7 @@ POSTING_HEADERS = {
     "currency": header_names("Валюта"),
     "currency_amount": header_names("В валюте", "Сумма в валюте"),
     "rate": header_names("Курс"),
+    "quantity": header_names("Кол-во", "Количество"),
     "memo": header_names("Содержание", "Комментарий"),
     "invoice": header_names(
         "E-qaimə", "E-qaime", "Е-гаимя", "Qaimə", "Номер e-qaimə", "Счёт-фактура"

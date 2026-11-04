@@ -27,6 +27,7 @@ from modern_gl.domain.currency import (
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import normalize_invoice
 from modern_gl.domain.money import to_minor
+from modern_gl.domain.quantity import to_quantity
 from modern_gl.i18n import tr
 
 
@@ -53,15 +54,23 @@ class PostingsClipboard(PostingsBase):
             return text
         if side == "amount" and self.is_currency(row) and (found := self._in_currency(text)):
             return found
-        if side in ("amount", "currency_amount"):
-            if ARITHMETIC.search(text):  # a small calculator: 1180*18/118
-                value = formula.evaluate(text)
-            else:
-                value = to_minor(plain_number(text))
-            if value <= 0:
-                raise ValueError(tr("сумма должна быть больше нуля"))
-            return value
+        if side in ("amount", "currency_amount", "quantity"):
+            return self._parse_number(side, text)
         return text
+
+    @staticmethod
+    def _parse_number(side: str, text: str) -> int:
+        """An amount (with a small calculator: 1180*18/118) or a quantity, above zero."""
+        if side == "quantity":
+            value = to_quantity(plain_number(text))
+            if value <= 0:
+                raise ValueError(tr("количество должно быть больше нуля"))
+            return value
+        calculated = ARITHMETIC.search(text)
+        value = formula.evaluate(text) if calculated else to_minor(plain_number(text))
+        if value <= 0:
+            raise ValueError(tr("сумма должна быть больше нуля"))
+        return value
 
     def _parse_subconto(self, row: int, col: int, text: str) -> int:
         kind = self.kind_at(row, col)

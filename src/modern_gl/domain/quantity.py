@@ -23,6 +23,11 @@ def to_quantity(value: str | int | Decimal) -> int:
     return int(result.scaleb(QUANTITY_SCALE))
 
 
+def from_quantity(quantity: int) -> Decimal:
+    """Stored millionths back to the exact value `to_quantity` reads."""
+    return Decimal(quantity).scaleb(-QUANTITY_SCALE)
+
+
 def format_quantity(quantity: int, precision: int = 3) -> str:
     """Format an internal quantity without insignificant zeroes."""
     value = Decimal(quantity).scaleb(-QUANTITY_SCALE)

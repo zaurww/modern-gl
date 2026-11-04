@@ -18,11 +18,13 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.desktop.postings.columns import (
     ALIGN_LEFT,
     ALIGN_RIGHT,
+    AMOUNT,
     CURRENCY,
     CURRENCY_COLUMNS,
     HEADERS,
     INVOICE,
     NUMBER_COLUMNS,
+    QUANTITY,
     PostingRow,
     column_role,
 )
@@ -68,8 +70,10 @@ class PostingsBase(QAbstractTableModel):
         return None
 
     def column_order(self) -> list[int]:
-        """Columns in the order they are shown, typed and pasted."""
-        return list(range(self.columnCount()))
+        """Columns in the order they are shown, typed and pasted: the quantity before
+        the amount."""
+        order = [c for c in range(self.columnCount()) if c != QUANTITY]
+        return [*order[: order.index(AMOUNT)], QUANTITY, *order[order.index(AMOUNT) :]]
 
     def is_number(self, col: int) -> bool:
         return col in NUMBER_COLUMNS
@@ -96,6 +100,11 @@ class PostingsBase(QAbstractTableModel):
             self.is_currency(row) and self.rows[row].currency_id is not None
         )
 
+    def counts(self, row: int) -> bool:
+        """The line hits a counted account (01, 10, 12…): it may say how many."""
+        r = self.rows[row]
+        return not self.formulas and bool({r.debit, r.credit} & self.catalog.counted)
+
     def takes_invoice(self, row: int) -> bool:
         """The line is on a settlement or ƏDV account: it may name its e-qaimə."""
         r = self.rows[row]
@@ -120,6 +129,8 @@ class PostingsBase(QAbstractTableModel):
             return self.in_currency(row)
         if col == INVOICE:
             return self.takes_invoice(row)
+        if col == QUANTITY:
+            return self.counts(row)
         _, pos = column_role(col)
         return pos is None or self.kind_at(row, col) is not None
 

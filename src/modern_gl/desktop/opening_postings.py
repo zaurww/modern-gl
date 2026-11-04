@@ -18,6 +18,7 @@ from modern_gl.desktop.postings import (
     HEADERS,
     INVOICE,
     MEMO,
+    QUANTITY,
     PostingRow,
     PostingsModel,
     header_columns,
@@ -102,6 +103,8 @@ class OpeningPostingsModel(PostingsModel):
         return header_columns(cells, OPENING_FIELDS)
 
     def applies(self, row: int, col: int) -> bool:
+        if col == QUANTITY:  # opening balances: amounts only (for now)
+            return False
         return col == CREDIT_AMOUNT or super().applies(row, col)
 
     # ---- values ----------------------------------------------------------------------

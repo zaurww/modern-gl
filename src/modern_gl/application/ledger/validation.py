@@ -9,6 +9,7 @@ from modern_gl.application.common import MAX_SUBCONTO, require_open
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.inputs import SIDES
 from modern_gl.application.ledger.subconto import SubcontoCommands
+from modern_gl.application.quantities import counted_accounts
 from modern_gl.application.queries import is_opening_document
 from modern_gl.domain.accounts import OPENING_BALANCE
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
@@ -68,9 +69,11 @@ class PostingChecks(SubcontoCommands):
                 (company_id,),
             )
         }
+        counted = counted_accounts(self.conn, company_id)
         for p in postings:
             self._validate_currency(p, accounts, values, currencies)
             self._validate_line(p, accounts, values, optional, is_reversal, posted)
+            _validate_quantity(p, counted)
 
     def _require_open_period(self, company_id: int, doc: Row, hint: str = "") -> None:
         """A document is changed only in the open period; `hint` — what to do instead."""
@@ -297,3 +300,18 @@ class PostingChecks(SubcontoCommands):
                     line=line,
                 )
             )
+
+
+def _validate_quantity(p: Row, counted: set[int]) -> None:
+    """A quantity belongs to a counted account (01, 10, 12…) and has the amount's sign."""
+    if p["quantity"] is None:
+        return
+    line = p["line_no"]
+    if not {p["debit_account_id"], p["credit_account_id"]} & counted:
+        raise ValidationError(
+            tr("строка {line}: количество — только у счёта объектов (ОС, малоценные…)", line=line)
+        )
+    if p["quantity"] * p["amount"] < 0:
+        raise ValidationError(
+            tr("строка {line}: у количества и суммы должен быть один знак", line=line)
+        )
