@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from modern_gl.domain import quantity
 from modern_gl.domain.accounts import (
     COST_OF_SALES,
     INCOMING_CONTRIBUTION,
@@ -19,8 +20,8 @@ from modern_gl.domain.accounts import (
 )
 from modern_gl.i18n import N_
 
-QUANTITY_SCALE = 6
-QUANTITY_FACTOR = 10**QUANTITY_SCALE
+QUANTITY_SCALE = quantity.QUANTITY_SCALE  # the units of domain.quantity
+QUANTITY_FACTOR = quantity.QUANTITY_FACTOR
 ALLOCATION_METHODS = ("value", "quantity", "manual")
 # VAT rates are in hundredths of a percent; a receipt starts with the standard rate.
 VAT_RATE_SCALE = 10_000
