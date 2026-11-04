@@ -11,16 +11,29 @@ from modern_gl.domain.tax_id import resident_tax_id
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import IntegrityError, insert, transaction
 
+# directories of objects from the start: a fixed asset (an intangible) is each purchase
+# line's own element, not shared by lines (D173)
+OBJECT_KIND_CODES = frozenset({"fixed_asset", "intangible"})
+
 
 class SubcontoCommands(LedgerBase):
     """Use cases of directories (subconto kinds), their elements and tags; audited."""
 
     def add_subconto_kind(
-        self, company_id: int, code: str | None, name: str, owner_kind_id: int | None = None
+        self,
+        company_id: int,
+        code: str | None,
+        name: str,
+        owner_kind_id: int | None = None,
+        per_line: bool | None = None,
     ) -> int:
         """Add a directory. Without a code (user-made directories) one is generated.
         With `owner_kind_id` its elements belong to elements of that directory, like
-        contracts to counterparties (a 1C "подчинённый справочник")."""
+        contracts to counterparties (a 1C "подчинённый справочник"). `per_line`: a
+        directory of objects, each line of a purchase its own element (D173); by default
+        the fixed assets and intangibles are, the others are categories."""
+        if per_line is None:
+            per_line = code in OBJECT_KIND_CODES
         with transaction(self.conn):
             if code is None:
                 taken = {
@@ -33,14 +46,40 @@ class SubcontoCommands(LedgerBase):
                 while f"custom_{n}" in taken:
                     n += 1
                 code = f"custom_{n}"
+            # the column only when needed: a file of an older schema takes categories
+            columns = ["company_id", "code", "name", "owner_kind_id"]
+            params: list[object] = [company_id, code, name, owner_kind_id]
+            if per_line:
+                columns.append("per_line")
+                params.append(1)
             kind_id = insert(
                 self.conn,
-                "INSERT INTO subconto_kinds (company_id, code, name, owner_kind_id) "
-                "VALUES (?, ?, ?, ?)",
-                (company_id, code, name, owner_kind_id),
+                f"INSERT INTO subconto_kinds ({', '.join(columns)}) "
+                f"VALUES ({', '.join('?' * len(columns))})",
+                params,
             )
             self._audit(company_id, "subconto_kind", kind_id, "create", {"code": code})
         return kind_id
+
+    def set_subconto_kind_per_line(self, company_id: int, kind_id: int, per_line: bool) -> None:
+        """A directory of objects (each purchase line its own element, named by the line)
+        or of categories (one element goes to the lines of its account). Audited."""
+        with transaction(self.conn):
+            row = self.conn.execute(
+                "SELECT per_line FROM subconto_kinds WHERE company_id = ? AND id = ?",
+                (company_id, kind_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError(tr("справочник не найден"))
+            if bool(row["per_line"]) == per_line:
+                return
+            self.conn.execute(
+                "UPDATE subconto_kinds SET per_line = ? WHERE company_id = ? AND id = ?",
+                (int(per_line), company_id, kind_id),
+            )
+            self._audit(
+                company_id, "subconto_kind", kind_id, "set_per_line", {"per_line": per_line}
+            )
 
     def subconto_kind_id(self, company_id: int, code: str) -> int:
         """The id of a directory by its code ("counterparty", "contract"…); NotFoundError

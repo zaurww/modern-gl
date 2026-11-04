@@ -239,6 +239,10 @@ def main() -> None:
     shot("8b_directories")
     directories.refresh(select_kind=session.catalog.by_code["60"].sc_kinds[1])
     shot("8b2_contracts")
+    assets = sc_kind(session.catalog.by_code["01"], 0)
+    assert assets is not None  # 01 has the fixed assets: a directory of objects (D173)
+    directories.refresh(select_kind=assets)
+    shot("8b3_directory_objects")
     from modern_gl.desktop.directories_page import ValueDialog
 
     contracts = sc_kind(session.catalog.by_code["60"], 1)

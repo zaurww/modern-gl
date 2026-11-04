@@ -22,7 +22,14 @@ from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.desktop.widgets import EmptyState, PageHeader, button, caption, hide_when_viewing
+from modern_gl.desktop.widgets import (
+    EmptyState,
+    MenuItem,
+    PageHeader,
+    button,
+    caption,
+    hide_when_viewing,
+)
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import sort_key, tr
 
@@ -40,7 +47,7 @@ class DirectoriesForm(PageWidget):
 
         self.header = PageHeader(tr("Справочники"), "")
         # one blue button on the page (D86): «+ New element»; a new directory is rare
-        add_kind = self.header.more(lambda: [(tr("+ Новый справочник"), self.add_kind)])
+        add_kind = self.header.more(self._more_items)
         root.addWidget(self.header)
 
         body = QHBoxLayout()
@@ -115,6 +122,22 @@ class DirectoriesForm(PageWidget):
         item = self.kinds.currentItem()
         return item.data(KIND_ROLE) if item else None
 
+    def _more_items(self) -> list[MenuItem]:
+        """«⋯»: a new directory; the current one — objects or categories (D173)."""
+        items: list[MenuItem] = [(tr("+ Новый справочник"), self.add_kind)]
+        kind_id = self.kind_id()
+        if kind_id is not None:
+            per_line = self.s.catalog.kind_per_line.get(kind_id, False)
+            items += [
+                None,
+                (
+                    ("✓  " if per_line else "     ")
+                    + tr("Объекты: у каждой строки покупки свой элемент"),
+                    lambda: self.set_per_line(kind_id, not per_line),
+                ),
+            ]
+        return items
+
     def refresh(self, select_kind: int | None = None, keep_value: bool = False) -> None:
         cat = self.s.catalog
         current = select_kind or self.kind_id()
@@ -141,11 +164,14 @@ class DirectoriesForm(PageWidget):
             return
         self.kind_title.setText(cat.kinds[kind_id])
         accounts = cat.accounts_using(kind_id)
-        self.used_in.setText(
+        used = (
             tr("Используется на счетах: {codes}", codes=", ".join(a.short for a in accounts))
             if accounts
             else tr("Пока не используется ни на одном счёте")
         )
+        if cat.kind_per_line.get(kind_id, False):
+            used += "   ·   " + tr("объекты: у каждой строки покупки свой элемент")
+        self.used_in.setText(used)
         values = cat.all_values(kind_id)
         tree = cat.tree(kind_id)
         grouped = any(value.is_group for value in values)
@@ -238,6 +264,9 @@ class DirectoriesForm(PageWidget):
 
     # ---- hooks: the page's commands (page.py) --------------------------------------
     def add_kind(self) -> None:
+        raise NotImplementedError
+
+    def set_per_line(self, kind_id: int, per_line: bool) -> None:
         raise NotImplementedError
 
     def add_group(self) -> None:
