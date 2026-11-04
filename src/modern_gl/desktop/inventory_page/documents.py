@@ -11,6 +11,7 @@ from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.posting_peek import bind_peek
 from modern_gl.desktop.reports_page import Column, ReportModel
 from modern_gl.desktop.reports_page.table import ROW_HEIGHT, ReportDelegate
+from modern_gl.desktop.table_sort import sortable
 from modern_gl.desktop.widgets import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -22,6 +23,7 @@ class DocumentsPart(InventoryForm):
         self.documents_model = ReportModel()
         self.documents = ListTable(self.documents_model, ROW_HEIGHT, wrap=False)
         self.documents.setItemDelegate(ReportDelegate(self.documents))  # as the stock above
+        sortable(self.documents)
         self.documents.doubleClicked.connect(
             lambda index: self._open_document(index.data(Qt.ItemDataRole.UserRole))
         )
@@ -43,7 +45,12 @@ class DocumentsPart(InventoryForm):
         )
         self.documents_model.set(
             [
-                Column(tr("Дата"), lambda row: ru_date(row.doc_date), width=110),
+                Column(
+                    tr("Дата"),
+                    lambda row: ru_date(row.doc_date),
+                    width=110,
+                    sort=lambda row: (row.doc_date, row.number),
+                ),
                 Column(tr("№"), lambda row: row.number, width=65),
                 Column(
                     tr("Операция"),

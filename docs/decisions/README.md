@@ -206,3 +206,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D194 | Справочник объектов или категорий: признак справочника, не список в коде | принято (уточняет D173, D174) | [D194-directory-objects.md](D194-directory-objects.md) |
 | D195 | «Проводки для Excel» убран; отчёты — окна с фильтрами по модулям | принято | [D195-remove-flat-postings.md](D195-remove-flat-postings.md) |
 | D196 | Загрузка e-qaimə: новая услуга поставщика получает счёт как в форме покупки | принято (уточняет D45, D76) | [D196-import-expense-guess.md](D196-import-expense-guess.md) |
+| D-new | Списки «Alış»/«Satış» и склада: сортировка по заголовку; период у покупок и продаж | принято | [D-new-list-sort-period.md](D-new-list-sort-period.md) |
