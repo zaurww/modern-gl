@@ -5,6 +5,7 @@ an item still move stock."""
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QAbstractItemView, QLineEdit, QMessageBox
@@ -15,9 +16,10 @@ from modern_gl.application.trade_batch import BulkPosting, open_lines, post_draf
 from modern_gl.desktop.batch_post_dialog import BatchPostDialog
 from modern_gl.desktop.eqaime_import_page import EqaimeImportDialog
 from modern_gl.desktop.eqaime_reconciliation_page import EqaimeReconciliationDialog
-from modern_gl.desktop.reports_page import Column, ReportPage
+from modern_gl.desktop.reports_page import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
+from modern_gl.desktop.table_sort import sortable
 from modern_gl.desktop.widgets import (
     EmptyState,
     MenuItem,
@@ -36,6 +38,11 @@ from modern_gl.reporting.trade import (
     TradeDocument,
     trade_documents,
 )
+
+
+def _date_key(r: TradeDocument) -> tuple[str, int]:
+    """By the day, then the number: a day's documents in their order."""
+    return r.doc_date, r.number
 
 
 @dataclass(frozen=True)
@@ -75,7 +82,7 @@ KINDS = {
 
 
 class TradePage(ReportPage):
-    has_period = False
+    has_book = False  # documents of the module, not of a book
     open_inventory_document = Signal(int)
     new_inventory_document = Signal(str)
     imported = Signal()  # drafts created from the portal or posted: the other section too
@@ -83,7 +90,11 @@ class TradePage(ReportPage):
     def __init__(self, session: Session, doc_type: str) -> None:
         self.kind = KINDS[doc_type]
         self.key = self.kind.key
-        super().__init__(session, tr(self.kind.title))
+        # the year by default: drafts of an earlier month are not out of sight
+        year = session.working_date.year
+        super().__init__(
+            session, tr(self.kind.title), ReportParams(date(year, 1, 1), date(year, 12, 31))
+        )
         self.search = QLineEdit()
         self.search.setObjectName("search")
         self.search.setPlaceholderText(tr("Контрагент, VÖEN или e-qaimə"))
@@ -108,6 +119,7 @@ class TradePage(ReportPage):
         self.empty = EmptyState("○", tr(self.kind.empty), tr(self.kind.empty_hint))
         self.stack.addWidget(self.empty)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        sortable(self.table)  # a caption click: by supplier, amount, status…
         self.table.selectionModel().selectionChanged.connect(lambda *_: self._show_post_button())
         bind(self.table, "delete", self.delete_selected)  # not while typing a search
         self.refresh()
@@ -136,19 +148,21 @@ class TradePage(ReportPage):
         return tr(self.kind.title)
 
     def build(self) -> None:
-        rows = trade_documents(self.s.conn, self.s.company_id, self.kind.doc_type)
+        period = (self.params.date_from.isoformat(), self.params.date_to.isoformat())
+        rows = trade_documents(self.s.conn, self.s.company_id, self.kind.doc_type, period=period)
         needle = fold(self.search.text().strip())
-        if needle:
+        if needle:  # «qaralama» / «черновик» — the drafts only
             rows = [
                 r
                 for r in rows
-                if needle in fold(f"{r.counterparties} {r.tax_ids} {self._invoice(r)}")
+                if needle
+                in fold(f"{r.counterparties} {r.tax_ids} {self._invoice(r)} {self._status(r)}")
             ]
         at = self.table.currentIndex()  # read again, the cursor stays on its document
         was = self.model.rows[at.row()].id if at.isValid() else None
         self.model.set(
             [
-                Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100),
+                Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=100, sort=_date_key),
                 Column(tr("№"), lambda r: r.number, width=60),
                 Column(tr(self.kind.counterparty), self._counterparty),
                 Column(
@@ -172,8 +186,8 @@ class TradePage(ReportPage):
             ],
             rows,
         )
-        row = next((i for i, r in enumerate(rows) if r.id == was), None)
-        if row is not None:
+        row = next((i for i, r in enumerate(self.model.rows) if r.id == was), None)
+        if row is not None:  # the rows as sorted
             self.table.setCurrentIndex(self.model.index(row, at.column()))
         self.header.subtitle.setText(tr("Документов: {n}", n=len(rows)))
         total = sum(r.total for r in rows if r.status == "posted")

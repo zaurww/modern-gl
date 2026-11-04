@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date
+
 import pytest
 
 from modern_gl.application.catalog import Catalog
@@ -118,3 +120,48 @@ def test_warehouse_list_leaves_out_trade_without_goods(shop, conn):
     listed = [d.id for d in list_inventory_documents(conn, shop.company_id)]
     assert listed == [purchase, sale]  # oldest first; the service draft is not here
     assert [d.id for d in list_inventory_documents(conn, shop.company_id, limit=1)] == [sale]
+
+
+def test_a_period_a_caption_click_and_the_word_draft_choose_the_rows(shop, conn, qtbot):
+    """Sales of January: the sale 60.00 + 10.80 = 70.80 (posted), the draft 25.00 (a
+    service, no VAT). A draft of 2025 is outside the year shown. «Итого» clicked: 25.00,
+    70.80; again: 70.80, 25.00; a third time: as read (by date). «Статус» clicked:
+    «Проведён» before «Черновик» (the alphabet), again — the drafts first. «черновик»
+    typed: the draft alone."""
+    _purchase, sale, draft = fill(shop)
+    old = shop.inventory.create_sale_draft(
+        shop.company_id,
+        "2025-12-30",
+        [SaleLine(None, None, None, "20", memo="Çatdırılma")],
+        shop.acc["62"],
+        [shop.customer, shop.contract],
+    )
+    session = Session(conn, shop.ledger, shop.company_id, "Mağaza", Catalog(conn, shop.company_id))
+    sales = TradePage(session, SALE)
+    qtbot.addWidget(sales)
+    assert [r.id for r in sales.model.rows] == [sale, draft]  # 2026 only
+
+    sales.period.set_period(date(2025, 12, 1), date(2026, 1, 31))
+    assert [r.id for r in sales.model.rows] == [old, sale, draft]
+    sales.period.set_period(date(2026, 1, 1), date(2026, 12, 31))
+
+    captions = sales.table.horizontalHeader()
+    total = [c.title for c in sales.model.columns].index("Итого")
+    captions.sectionClicked.emit(total)
+    assert [r.total for r in sales.model.rows] == [2_500, 7_080]
+    captions.sectionClicked.emit(total)
+    assert [r.total for r in sales.model.rows] == [7_080, 2_500]
+    sales.refresh()  # read again: the order stays
+    assert [r.total for r in sales.model.rows] == [7_080, 2_500]
+    captions.sectionClicked.emit(total)
+    assert [r.id for r in sales.model.rows] == [sale, draft]
+
+    status = [c.title for c in sales.model.columns].index("Статус")
+    captions.sectionClicked.emit(status)
+    assert [r.status for r in sales.model.rows] == ["posted", "draft"]
+    captions.sectionClicked.emit(status)
+    assert [r.status for r in sales.model.rows] == ["draft", "posted"]
+    assert sales.drafts_to_post()[0].id == draft  # the rows the button posts follow the order
+
+    sales.search.setText("черновик")
+    assert [r.id for r in sales.model.rows] == [draft]

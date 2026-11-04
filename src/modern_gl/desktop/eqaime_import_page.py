@@ -298,11 +298,18 @@ class EqaimeImportDialog(EqaimeImportForm):
         )
         if unresolved:
             child.setForeground(BECOMES, QColor(P.amber))
+        elif plan.found in ("other", "supplier"):  # a guess: louder than the sure ones
+            child.setForeground(BECOMES, QColor(P.text))
         return child
 
     def _becomes(self, plan: LinePlan, outgoing: bool) -> str:
         catalog = self.s.catalog
-        how = {"history": tr("как в прошлый раз"), "name": tr("по названию")}.get(plan.found, "")
+        how = {
+            "history": tr("как в прошлый раз"),
+            "name": tr("по названию"),
+            "other": tr("как у другого поставщика — проверьте"),
+            "supplier": tr("последний расход поставщика — проверьте"),
+        }.get(plan.found, "")
         if plan.item_id is not None:
             name = item_name(self.s.conn, self.s.company_id, plan.item_id)
             text = tr("товар «{name}»", name=name)

@@ -44,6 +44,7 @@ from modern_gl.desktop.reports_page import (
     VatReceiptsPage,
     VatRegisterPage,
 )
+from modern_gl.desktop.trade_page import TradePage
 
 
 def sc_kind(account: AccountInfo, position: int) -> int:
@@ -524,6 +525,12 @@ def main() -> None:
     session.catalog.reload()  # its new cost item
     win.show_place(("purchases",))
     shot("8c0_purchases")
+    purchases = cast(TradePage, win.stack.currentWidget())
+    total = 6  # «Итого»
+    purchases.table.horizontalHeader().sectionClicked.emit(total)
+    purchases.table.horizontalHeader().sectionClicked.emit(total)
+    shot("8c0b_purchases_sorted")  # by the total, the largest first
+    purchases.table.horizontalHeader().sectionClicked.emit(total)
     win.open_inventory_document(waiting)
     shot("8c10_purchase_awaiting")
     win.show_place(("home",))

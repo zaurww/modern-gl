@@ -136,6 +136,58 @@ def test_plan_remembers_what_a_line_became_last_time(shop, conn):
     assert plan.unresolved == 0
 
 
+def test_a_new_service_takes_the_suppliers_last_expense_or_the_same_name_elsewhere(shop, conn):
+    """The supplier's only posted service was «Kartric» to 26 [Təmir]; «Printerin təmiri»
+    is new to it: the import suggests 26 [Təmir], marked «supplier». Then another supplier's
+    «Printerin təmiri» goes to 44 [Reklam]: the same name elsewhere wins, marked «other».
+    Goods («Printer») are found by the item's name as before; nothing is left to choose."""
+    kind = shop.ledger.subconto_kind_id(shop.company_id, "cost_item")
+    repair = shop.ledger.add_subconto_value(shop.company_id, kind, "Təmir")
+    shop.ledger.set_subconto_value_tax(shop.company_id, shop.supplier[0], SUPPLIER_TIN)
+
+    def post(memo: str, account: str, value: int, party: list[int]) -> None:
+        shop.inventory.post_receipt(
+            shop.company_id,
+            "2026-02-01",
+            [
+                ReceiptLine(
+                    None,
+                    None,
+                    None,
+                    "40",
+                    memo,
+                    expense_account_id=shop.acc[account],
+                    expense_subconto=[value],
+                )
+            ],
+            shop.acc["60"],
+            party,
+        )
+
+    post("Kartric", "26", repair, shop.supplier)
+    invoice = parse_invoice(*received("MT2603000222"), outgoing=False)
+    plan = plan_import(conn, shop.company_id, [invoice])[0]
+    goods, service = plan.lines
+    assert (goods.item_id, goods.found) == (shop.item, "name")
+    assert (service.account_id, service.subconto[0], service.found) == (
+        shop.acc["26"],
+        repair,
+        "supplier",
+    )
+    assert plan.unresolved == 0
+
+    counterparty = shop.ledger.subconto_kind_id(shop.company_id, "counterparty")
+    other = shop.ledger.add_subconto_value(shop.company_id, counterparty, "Beta")
+    advert = shop.ledger.add_subconto_value(shop.company_id, kind, "Reklam")
+    post("PRINTERIN TƏMİRİ", "44", advert, [other])
+    service = plan_import(conn, shop.company_id, [invoice])[0].lines[1]
+    assert (service.account_id, service.subconto[0], service.found) == (
+        shop.acc["44"],
+        advert,
+        "other",
+    )
+
+
 def test_import_a_sale_and_skip_a_return(shop, conn):
     """A sent e-qaimə: 3 printers 60.00 + VAT 10.80 to a known customer → a sale draft;
     a return e-qaimə is not imported."""

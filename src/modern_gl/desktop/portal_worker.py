@@ -5,7 +5,13 @@ QThread + moveToThread; a window closed while its thread still ran took the thre
 
 Now the thread belongs to no window: it is kept here until it finishes. The window's side
 (`PortalRun`) is its child, so a closed window gets nothing more — Qt drops the
-connections of a destroyed object."""
+connections of a destroyed object.
+
+The thread and its loader die on the window's thread only, after the thread is joined
+(`_finished`). Before, `thread.finished → loader.deleteLater` destroyed the loader's C++
+object inside the worker thread while Python still held its wrapper on the window's
+thread: two threads over one object's lifetime, and once in a while CI's pytest-xdist
+worker died with it (`test_currency_ui`)."""
 
 from __future__ import annotations
 
@@ -13,13 +19,15 @@ from collections.abc import Callable
 from typing import Any
 
 from PySide6.QtCore import QObject, Qt, QThread, Slot
+from shiboken6 import delete, isValid
 
 from modern_gl.desktop.eqaime_portal_loader import PortalLoader
 
 Job = Callable[[Callable[[str], None]], object]
 
-# threads not finished yet and their loaders: nothing else holds them
-_RUNNING: dict[QThread, PortalLoader] = {}
+# threads not finalized yet, by the wrapper's id, with their loaders: nothing else
+# holds them, so nothing of them is freed from another thread
+_RUNNING: dict[int, tuple[QThread, PortalLoader]] = {}
 
 
 class PortalRun(QObject):
@@ -70,19 +78,31 @@ def run_on_portal(
     loader.failed.connect(run.on_failed)
     for signal in (loader.loaded, loader.failed):  # quit is thread-safe: called at once,
         signal.connect(thread.quit, Qt.ConnectionType.DirectConnection)  # not queued
-    thread.finished.connect(loader.deleteLater)
-    thread.finished.connect(lambda: _finished(thread))
-    _RUNNING[thread] = loader
+    # a Python callable, not a slot: Qt queues it to the window's thread
+    thread.finished.connect(lambda: _finished(id(thread)))
+    _RUNNING[id(thread)] = (thread, loader)
     thread.start()
     return run
 
 
-def _finished(thread: QThread) -> None:
-    _RUNNING.pop(thread, None)
-    thread.deleteLater()
+def _finished(key: int) -> None:
+    """On the window's thread, once the worker's loop ended: join the thread, then delete
+    the loader and the thread here — the loader is not deleted from the thread it lived
+    in, and nothing of it runs any more."""
+    found = _RUNNING.pop(key, None)
+    if found is None:
+        return  # finalized by `wait_all` already
+    thread, loader = found
+    thread.wait()
+    if isValid(loader):
+        delete(loader)
+    if isValid(thread):
+        thread.deleteLater()
 
 
 def wait_all() -> None:
-    """Every portal thread finished (on quitting, in tests)."""
-    for thread in list(_RUNNING):
+    """Every portal thread finished and finalized (on quitting, in tests): the queued
+    `_finished` of a thread joined here finds nothing left to do."""
+    for key, (thread, _loader) in list(_RUNNING.items()):
         thread.wait()
+        _finished(key)
