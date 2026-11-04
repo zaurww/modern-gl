@@ -10,7 +10,6 @@ from modern_gl.desktop.reports_page.account import REPORTS, CardPage, SubcontoPa
 from modern_gl.desktop.reports_page.action_log import ActionLogPage
 from modern_gl.desktop.reports_page.books import BooksPage
 from modern_gl.desktop.reports_page.chart import ChartPage
-from modern_gl.desktop.reports_page.flat_postings import FlatPostingsPage
 from modern_gl.desktop.reports_page.osv import OsvPage
 from modern_gl.desktop.reports_page.report_table import NAME_MIN, ReportTable
 from modern_gl.desktop.reports_page.statements import StatementsPage
@@ -45,7 +44,6 @@ __all__ = [
     "CardPage",
     "ChartPage",
     "Column",
-    "FlatPostingsPage",
     "MenuAction",
     "OsvPage",
     "ReportModel",
