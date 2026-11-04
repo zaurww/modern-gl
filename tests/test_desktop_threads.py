@@ -4,10 +4,12 @@ job outlives the window that started it without taking the program down."""
 from __future__ import annotations
 
 import ast
+import gc
 import threading
 from pathlib import Path
 
 from PySide6.QtWidgets import QWidget
+from shiboken6 import isValid
 
 from modern_gl.desktop import portal_worker
 
@@ -121,3 +123,22 @@ def test_a_portal_job_says_how_it_went(qtbot):
     )
     qtbot.waitUntil(lambda: run.done)
     assert heard == ["1 из 1", 42]
+
+
+def test_a_finished_job_is_freed_on_the_window_thread_only(qtbot):
+    """The loader is deleted after its thread is joined, by the window's thread — not by
+    a deleteLater inside the worker while Python still holds the wrapper (a rare crash
+    of CI's xdist worker in test_currency_ui). Many jobs in a row leave nothing behind."""
+    window = QWidget()
+    qtbot.addWidget(window)
+    runs = [
+        portal_worker.run_on_portal(window, lambda progress, n=n: n, print, print, print)
+        for n in range(40)
+    ]
+    loaders = [loader for _thread, loader in portal_worker._RUNNING.values()]
+    qtbot.waitUntil(lambda: all(r.done for r in runs))
+    gc.collect()  # the old code died here: the wrapper freed under a worker's deleteLater
+    portal_worker.wait_all()
+    assert portal_worker._RUNNING == {}
+    assert not any(isValid(loader) for loader in loaders)
+    qtbot.wait(50)  # the queued `_finished` of each thread finds nothing left to do
