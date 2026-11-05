@@ -22,6 +22,8 @@ OUTPUT_VAT = "output_vat"
 SALES_VAT = "sales_vat"
 # A purchase whose expense belongs to an earlier month (D65): the accrual is credited here
 ACCRUED_EXPENSES = "accrued_expenses"
+# A sale whose income belongs to an earlier month (D65 for sales): the accrual is debited here
+ACCRUED_INCOME = "accrued_income"
 # A payment beyond what is owed (D78): an advance paid to a supplier (60.2), received from
 # a customer (62.2); without such an account it stays on the settlement account itself.
 # Not taken by type: «none» is a choice (the templates of 1C 7.7 name 60.2 and 62.2).
@@ -49,6 +51,7 @@ ACCOUNT_ROLES = (
     OUTPUT_VAT,
     SALES_VAT,
     ACCRUED_EXPENSES,
+    ACCRUED_INCOME,
     ADVANCE_PAID,
     ADVANCE_RECEIVED,
     INCOMING_SURPLUS,
@@ -67,6 +70,7 @@ ROLE_TYPES = {
     SALES_REVENUE: "sales",
     COST_OF_SALES: "cost_of_sales",
     ACCRUED_EXPENSES: "accrued_expenses",
+    ACCRUED_INCOME: "accrued_income",
     INCOMING_SURPLUS: "other_income",
     INCOMING_CONTRIBUTION: "share_capital",
     INCOMING_GIFT: "other_income",
@@ -84,6 +88,8 @@ ACCOUNT_TYPES = (
     ("receivable", "asset", N_("Покупатели и заказчики")),
     ("advance_paid", "asset", N_("Авансы выданные")),
     ("other_receivable", "asset", N_("Прочая дебиторская задолженность")),
+    # not a settlement by e-qaimə: Dt 62 / Kt 76G is no payment of the invoice (D65, sales)
+    ("accrued_income", "asset", N_("Начисленные доходы")),
     ("input_vat", "asset", N_("НДС к возмещению")),
     ("inventory", "asset", N_("Запасы")),
     # the first types of a class are current (within a year), NONCURRENT_TYPES follow (D89);

@@ -213,7 +213,7 @@ def test_osv_and_card_show_amounts_in_currency(session, qtbot):
     qtbot.addWidget(osv)
     osv.in_currency.setChecked(True)
     names = [osv.model.index(i, 1).data() for i in range(osv.model.rowCount())]
-    row = names.index("      USD  ·  в валюте")
+    row = names.index("   USD  ·  в валюте")
     assert osv.model.index(row, 6).data() == "100.00"  # closing Dt in USD
     assert osv.model.index(osv.model.rowCount() - 1, 6).data() == "170.00"  # total in AZN
 

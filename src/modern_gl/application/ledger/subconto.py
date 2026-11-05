@@ -8,19 +8,32 @@ from modern_gl.application.common import where_used
 from modern_gl.application.ledger.base import LedgerBase, account_label
 from modern_gl.domain.errors import NotFoundError, ValidationError
 from modern_gl.domain.tax_id import resident_tax_id
-from modern_gl.i18n import fold, tr
-from modern_gl.infrastructure.db import IntegrityError, Row, insert, transaction
+from modern_gl.i18n import tr
+from modern_gl.infrastructure.db import IntegrityError, insert, transaction
+
+# directories of objects from the start: a fixed asset (an intangible) is each purchase
+# line's own element, not shared by lines (D173)
+OBJECT_KIND_CODES = frozenset({"fixed_asset", "intangible"})
 
 
 class SubcontoCommands(LedgerBase):
     """Use cases of directories (subconto kinds), their elements and tags; audited."""
 
     def add_subconto_kind(
-        self, company_id: int, code: str | None, name: str, owner_kind_id: int | None = None
+        self,
+        company_id: int,
+        code: str | None,
+        name: str,
+        owner_kind_id: int | None = None,
+        per_line: bool | None = None,
     ) -> int:
         """Add a directory. Without a code (user-made directories) one is generated.
         With `owner_kind_id` its elements belong to elements of that directory, like
-        contracts to counterparties (a 1C "подчинённый справочник")."""
+        contracts to counterparties (a 1C "подчинённый справочник"). `per_line`: a
+        directory of objects, each line of a purchase its own element (D173); by default
+        the fixed assets and intangibles are, the others are categories."""
+        if per_line is None:
+            per_line = code in OBJECT_KIND_CODES
         with transaction(self.conn):
             if code is None:
                 taken = {
@@ -33,14 +46,40 @@ class SubcontoCommands(LedgerBase):
                 while f"custom_{n}" in taken:
                     n += 1
                 code = f"custom_{n}"
+            # the column only when needed: a file of an older schema takes categories
+            columns = ["company_id", "code", "name", "owner_kind_id"]
+            params: list[object] = [company_id, code, name, owner_kind_id]
+            if per_line:
+                columns.append("per_line")
+                params.append(1)
             kind_id = insert(
                 self.conn,
-                "INSERT INTO subconto_kinds (company_id, code, name, owner_kind_id) "
-                "VALUES (?, ?, ?, ?)",
-                (company_id, code, name, owner_kind_id),
+                f"INSERT INTO subconto_kinds ({', '.join(columns)}) "
+                f"VALUES ({', '.join('?' * len(columns))})",
+                params,
             )
             self._audit(company_id, "subconto_kind", kind_id, "create", {"code": code})
         return kind_id
+
+    def set_subconto_kind_per_line(self, company_id: int, kind_id: int, per_line: bool) -> None:
+        """A directory of objects (each purchase line its own element, named by the line)
+        or of categories (one element goes to the lines of its account). Audited."""
+        with transaction(self.conn):
+            row = self.conn.execute(
+                "SELECT per_line FROM subconto_kinds WHERE company_id = ? AND id = ?",
+                (company_id, kind_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError(tr("справочник не найден"))
+            if bool(row["per_line"]) == per_line:
+                return
+            self.conn.execute(
+                "UPDATE subconto_kinds SET per_line = ? WHERE company_id = ? AND id = ?",
+                (int(per_line), company_id, kind_id),
+            )
+            self._audit(
+                company_id, "subconto_kind", kind_id, "set_per_line", {"per_line": per_line}
+            )
 
     def subconto_kind_id(self, company_id: int, code: str) -> int:
         """The id of a directory by its code ("counterparty", "contract"…); NotFoundError
@@ -303,8 +342,6 @@ class SubcontoCommands(LedgerBase):
                 {"from": old["owner_id"], "to": owner_id},
             )
 
-    # ---- tags (D64) -------------------------------------------------------------------
-
     def set_optional_subconto(
         self, company_id: int, account: int | str, positions: Iterable[int]
     ) -> None:
@@ -357,107 +394,6 @@ class SubcontoCommands(LedgerBase):
             ).fetchone()
             is not None
         )
-
-    def add_tag(self, company_id: int, name: str) -> int:
-        """A tag of the company: «Связанная сторона», «Арендодатель»."""
-        name = " ".join(name.split())
-        with transaction(self.conn):
-            self._company(company_id)
-            self._check_tag_name(company_id, name)
-            tag_id = insert(
-                self.conn, "INSERT INTO tags (company_id, name) VALUES (?, ?)", (company_id, name)
-            )
-            self._audit(company_id, "tag", tag_id, "create", {"name": name})
-        return tag_id
-
-    def rename_tag(self, company_id: int, tag_id: int, name: str) -> None:
-        """Rename a tag (spaces collapsed); ValidationError if another tag has the name. Audited."""
-        name = " ".join(name.split())
-        with transaction(self.conn):
-            old = self._tag(company_id, tag_id)
-            if old["name"] == name:
-                return
-            self._check_tag_name(company_id, name, tag_id)
-            self.conn.execute(
-                "UPDATE tags SET name = ? WHERE company_id = ? AND id = ?",
-                (name, company_id, tag_id),
-            )
-            self._audit(company_id, "tag", tag_id, "rename", {"from": old["name"], "to": name})
-
-    def delete_tag(self, company_id: int, tag_id: int) -> None:
-        """A tag says nothing to postings: it goes, and comes off every element."""
-        with transaction(self.conn):
-            old = self._tag(company_id, tag_id)
-            values = [
-                r["value_id"]
-                for r in self.conn.execute(
-                    "SELECT value_id FROM subconto_value_tags WHERE company_id = ? AND tag_id = ?",
-                    (company_id, tag_id),
-                )
-            ]
-            self.conn.execute(
-                "DELETE FROM tags WHERE company_id = ? AND id = ?",
-                (
-                    company_id,
-                    tag_id,
-                ),
-            )
-            self._audit(
-                company_id, "tag", tag_id, "delete", {"name": old["name"], "values": values}
-            )
-
-    def set_subconto_value_tags(
-        self, company_id: int, value_id: int, tag_ids: Iterable[int]
-    ) -> None:
-        """The tags an element has, all at once (a group has none: it is not posted)."""
-        wanted = set(tag_ids)
-        with transaction(self.conn):
-            value = self._subconto_value(company_id, value_id)
-            if value["is_group"] and wanted:
-                raise ValidationError(tr("у группы не бывает тегов — только у элементов"))
-            for tag_id in wanted:
-                self._tag(company_id, tag_id)
-            old = {
-                r["tag_id"]
-                for r in self.conn.execute(
-                    "SELECT tag_id FROM subconto_value_tags WHERE company_id = ? AND value_id = ?",
-                    (company_id, value_id),
-                )
-            }
-            if old == wanted:
-                return
-            self.conn.executemany(
-                "DELETE FROM subconto_value_tags "
-                "WHERE company_id = ? AND value_id = ? AND tag_id = ?",
-                [(company_id, value_id, t) for t in old - wanted],
-            )
-            self.conn.executemany(
-                "INSERT INTO subconto_value_tags (company_id, value_id, tag_id) VALUES (?, ?, ?)",
-                [(company_id, value_id, t) for t in wanted - old],
-            )
-            self._audit(
-                company_id,
-                "subconto_value",
-                value_id,
-                "set_tags",
-                {"from": sorted(old), "to": sorted(wanted)},
-            )
-
-    def _tag(self, company_id: int, tag_id: int) -> Row:
-        row = self.conn.execute(
-            "SELECT * FROM tags WHERE company_id = ? AND id = ?", (company_id, tag_id)
-        ).fetchone()
-        if row is None:
-            raise NotFoundError(tr("тег не найден"))
-        return row
-
-    def _check_tag_name(self, company_id: int, name: str, tag_id: int | None = None) -> None:
-        """Not empty, and not another tag's name (any case, İ and i alike)."""
-        if not name:
-            raise ValidationError(tr("название не может быть пустым"))
-        for r in self.conn.execute("SELECT id, name FROM tags WHERE company_id = ?", (company_id,)):
-            if r["id"] != tag_id and fold(r["name"]) == fold(name):
-                raise ValidationError(tr("тег «{name}» уже есть", name=r["name"]))
 
     def _check_owner(self, company_id: int, kind_id: int, owner_id: int | None) -> int | None:
         """The owner must be an element of the directory that owns `kind_id`.

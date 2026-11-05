@@ -191,7 +191,7 @@ def test_a_storno_negates_the_record_and_keeps_the_rest(demo):
     record = PostingRecord.from_input(line, 1)
     assert record.params() == (
         demo.acc["201"], bank, 17_000, None, None, None,
-        None, None, None, "по счёту", usd, 10_000, None, None, 0,
+        None, None, None, "по счёту", usd, 10_000, None, None, 0, None,
     )  # fmt: skip
     assert record.negated().params()[2] == -17_000
     assert record.negated().params()[11] == -10_000

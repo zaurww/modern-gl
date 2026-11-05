@@ -199,8 +199,8 @@ class EqaimeImportDialog(EqaimeImportForm):
         return item
 
     def _expense_month(self, plan: InvoicePlan) -> PickBox:
-        """The month of a purchase's services: the e-qaimə's own or one of the twelve
-        before it (D65); the choice goes into the plan."""
+        """The month of a purchase's (sale's) services: the e-qaimə's own or one of the
+        twelve before it (D65, D192); the choice goes into the plan."""
         box = PickBox()
         box.addItem(tr("месяц документа"), None)
         for last in earlier_months(plan.invoice.doc_date):
@@ -225,7 +225,7 @@ class EqaimeImportDialog(EqaimeImportForm):
         def chosen(_index: int) -> None:
             plan.attach_to = box.currentData()
             month = self.tree.itemWidget(item, EXPENSE_MONTH)
-            if month is not None:  # the purchase has its own month
+            if month is not None:  # the purchase (sale) has its own month
                 month.setEnabled(plan.attach_to is None)
             self._show_count()
 
@@ -298,11 +298,18 @@ class EqaimeImportDialog(EqaimeImportForm):
         )
         if unresolved:
             child.setForeground(BECOMES, QColor(P.amber))
+        elif plan.found in ("other", "supplier"):  # a guess: louder than the sure ones
+            child.setForeground(BECOMES, QColor(P.text))
         return child
 
     def _becomes(self, plan: LinePlan, outgoing: bool) -> str:
         catalog = self.s.catalog
-        how = {"history": tr("как в прошлый раз"), "name": tr("по названию")}.get(plan.found, "")
+        how = {
+            "history": tr("как в прошлый раз"),
+            "name": tr("по названию"),
+            "other": tr("как у другого поставщика — проверьте"),
+            "supplier": tr("последний расход поставщика — проверьте"),
+        }.get(plan.found, "")
         if plan.item_id is not None:
             name = item_name(self.s.conn, self.s.company_id, plan.item_id)
             text = tr("товар «{name}»", name=name)

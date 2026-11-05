@@ -84,6 +84,20 @@ class Osv:
 
 
 @dataclass
+class QuantityMoves:
+    """How many on a counted account (D199), in millionths of a unit: at the start,
+    in (debit) and out (credit) in the period."""
+
+    opening: int = 0
+    incoming: int = 0
+    outgoing: int = 0
+
+    @property
+    def closing(self) -> int:
+        return self.opening + self.incoming - self.outgoing
+
+
+@dataclass
 class SubcontoRow(Turnovers):
     value_id: int | None = None
     name: str = ""
@@ -96,6 +110,8 @@ class SubcontoRow(Turnovers):
     invoice: str | None = None
     # a currency account: net balance (Dt - Ct) at the end in each currency ("USD": …)
     currency_closing: dict[str, int] = field(default_factory=dict)
+    # a counted account (01, 12…): how many; None — the account keeps no quantity
+    quantity: QuantityMoves | None = None
 
 
 @dataclass
@@ -137,12 +153,18 @@ class CardLine:
     currency_credit: int = 0
     invoice: str = ""  # e-qaimə number
     invoice_kind: str = ""  # "customs": a customs declaration
+    # a counted account (D199): how many came in / went out, and how many after the line
+    quantity_debit: int = 0
+    quantity_credit: int = 0
+    quantity_balance: int = 0
 
 
 @dataclass
 class AccountCard:
     opening: int
     lines: list[CardLine] = field(default_factory=list)
+    # a counted account (01, 12…, D199): how many at the start; None — no quantity kept
+    quantity_opening: int | None = None
     # currency accounts: net balance (Dt - Ct) in each currency, at start and at end
     currency_opening: dict[str, int] = field(default_factory=dict)
     currency_closing: dict[str, int] = field(default_factory=dict)
@@ -150,6 +172,12 @@ class AccountCard:
     @property
     def closing(self) -> int:
         return self.lines[-1].balance if self.lines else self.opening
+
+    @property
+    def quantity_closing(self) -> int | None:
+        if self.quantity_opening is None or not self.lines:
+            return self.quantity_opening
+        return self.lines[-1].quantity_balance
 
 
 @dataclass

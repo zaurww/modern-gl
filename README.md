@@ -1,6 +1,7 @@
 # Modern GL
 
 English: `README.en.md` — a short entry for an outside developer.
+Azərbaycanca: mühasib üçün baş kitab; [Releases](https://github.com/zaurww/modern-gl/releases).
 
 Настольная главная книга для бухгалтера в Азербайджане: проводки Дт/Кт с субконто как в
 1С 7.7, несколько компаний (файл на компанию), параллельные книги (общая / МСФО / налог).
@@ -23,8 +24,9 @@ uv export --no-dev --format requirements-txt --no-hashes -o requirements.txt   #
 
 В Linux без экрана: `QT_QPA_PLATFORM=offscreen` и библиотеки `libegl1 libgl1 libxkbcommon0
 libfontconfig1 libdbus-1-3` (как в `.github/workflows/ci.yml`; там же `hledger`). Скриншоты —
-`uv run python scripts/screenshots.py <папка>`. Сборка для Windows — тег `v*`
-(`.github/workflows/release.yml`, `packaging/modern-gl.spec`); изменения — `CHANGELOG.md`.
+`uv run python scripts/screenshots.py <папка>`. Выпуск — `uv run python scripts/release.py
+<версия> --push`: тег `v*` собирает установщик и zip для Windows (`.github/workflows/release.yml`,
+`packaging/`) в GitHub Release; что изменилось — `CHANGELOG.md`.
 
 ## Как устроено
 

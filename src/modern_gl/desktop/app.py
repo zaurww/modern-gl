@@ -12,7 +12,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
+from PySide6.QtCore import QStandardPaths, Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from modern_gl import demo_year, i18n
@@ -30,6 +31,7 @@ from modern_gl.desktop.preferences import (
     THEME,
     prefs,
 )
+from modern_gl.desktop.updater import Updater
 from modern_gl.infrastructure import logs
 from modern_gl.infrastructure.db import connect
 
@@ -59,6 +61,9 @@ def year_demo_name(years: tuple[int, ...]) -> str:
 
 
 def main() -> int:
+    # the portal window is a QtWebEngine browser, imported later: Qt 6 wants this before
+    # the application exists
+    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
     app = QApplication(sys.argv)
     app.setApplicationName("Modern GL")
     app.setOrganizationName("ModernGL")
@@ -66,6 +71,7 @@ def main() -> int:
     remembered = prefs()
     theme.use_theme(remembered.text(THEME, theme.DEFAULT_THEME))
     theme.apply(app)
+    app.setWindowIcon(QIcon(str(Path(__file__).parent / "resources" / "app.png")))
     qt_texts.install(app)
     select_whole_on_entry(app)
     lang = remembered.text(LANGUAGE, i18n.DEFAULT)
@@ -90,6 +96,8 @@ def main() -> int:
     if not window.start():
         return 0
     window.show()
+    updater = Updater(window.sidebar.new_version, remembered, app.quit)
+    updater.start()  # once a day: «Вышла версия …» at the bottom of the sidebar
     code = app.exec()
     window.shutdown()
     return code

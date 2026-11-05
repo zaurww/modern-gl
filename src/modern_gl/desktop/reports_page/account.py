@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.desktop.preferences import SUBCONTO_LEVELS, prefs
+from modern_gl.desktop.reports_page.quantity import quantity_columns
+from modern_gl.desktop.reports_page.table import INDENT
 from modern_gl.desktop.reports_page.view import (
     Column,
     ReportPage,
@@ -28,7 +30,7 @@ from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
-from modern_gl.reporting.report_common import CardLine
+from modern_gl.reporting.report_common import CardLine, QuantityMoves
 from modern_gl.reporting.reports import SubcontoRow, Turnovers
 
 # ОСВ по субконто: how deep (an index of «Детализация»; -1: the deepest the account has)
@@ -104,6 +106,9 @@ class CardEdge:
     currency: str = ""
     currency_debit: int | None = None
     currency_credit: int | None = None
+    quantity_debit: int | None = None
+    quantity_credit: int | None = None
+    quantity_balance: int | None = None
     invoice: str = ""
     invoice_kind: str = ""
 
@@ -148,14 +153,27 @@ class CardPage(AccountReportPage):
                 Column(tr("Дт"), lambda ln: ln.currency_debit, money=True, group=tr("В валюте")),
                 Column(tr("Кт"), lambda ln: ln.currency_credit, money=True, group=tr("В валюте")),
             ]
+        if card.quantity_opening is not None:  # 01, 12…: how many came, went, are left
+            columns += quantity_columns(
+                [
+                    ("Приход", lambda ln: ln.quantity_debit),
+                    ("Расход", lambda ln: ln.quantity_credit),
+                    ("Остаток", lambda ln: ln.quantity_balance),
+                ]
+            )
         if any(ln.invoice for ln in card.lines):
             columns.insert(3, Column(tr("E-qaimə"), invoice_text, width=1))
-        opening = CardEdge(tr("Сальдо на начало"), card.opening)
+        opening = CardEdge(
+            tr("Сальдо на начало"), card.opening, quantity_balance=card.quantity_opening
+        )
         closing = CardEdge(
             tr("Обороты и сальдо на конец"),
             card.closing,
             sum(ln.debit for ln in card.lines),
             sum(ln.credit for ln in card.lines),
+            quantity_debit=sum(ln.quantity_debit for ln in card.lines),
+            quantity_credit=sum(ln.quantity_credit for ln in card.lines),
+            quantity_balance=card.quantity_closing,
         )
         self.model.set(
             columns,
@@ -300,7 +318,7 @@ class SubcontoPage(AccountReportPage):
         columns = [
             Column(
                 " / ".join([*self._kinds()[:levels], *(["E-qaimə"] if invoices else [])]),
-                lambda r: "      " * r.depth + r.name,
+                lambda r: INDENT * r.depth + r.name,
             )
         ]
         if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN: on request
@@ -308,6 +326,21 @@ class SubcontoPage(AccountReportPage):
         columns += turnover_columns()
         if any(r.currency_closing for r in rows):  # a foreign partner: USD and EUR apart
             columns.append(Column(tr("В валюте на конец"), self._in_currency, width=200))
+        if any(r.quantity is not None for r in rows):  # 01, 12…: how many of each
+            total.quantity = QuantityMoves()
+            for r in rows:
+                if r.depth == 0 and r.quantity is not None:
+                    total.quantity.opening += r.quantity.opening
+                    total.quantity.incoming += r.quantity.incoming
+                    total.quantity.outgoing += r.quantity.outgoing
+            columns += quantity_columns(
+                [
+                    ("На начало", lambda r: r.quantity and r.quantity.opening),
+                    ("Приход", lambda r: r.quantity and r.quantity.incoming),
+                    ("Расход", lambda r: r.quantity and r.quantity.outgoing),
+                    ("На конец", lambda r: r.quantity and r.quantity.closing),
+                ]
+            )
         self.model.set(
             columns,
             [*rows, total] if rows else [],

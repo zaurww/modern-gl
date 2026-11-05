@@ -23,12 +23,14 @@ from modern_gl.application.ledger.inputs import (
     TemplateLine,
 )
 from modern_gl.application.ledger.opening import OpeningBalanceCommands, opening_posting
+from modern_gl.application.ledger.report_views import ReportViewCommands
 from modern_gl.application.ledger.revaluation import RevaluationCommands
 from modern_gl.application.ledger.subconto_details import (
     NO_TAX,
     SubcontoDetailCommands,
     ValueDetails,
 )
+from modern_gl.application.ledger.tags import TagCommands
 from modern_gl.application.ledger.templates import TemplateCommands
 
 if TYPE_CHECKING:
@@ -61,6 +63,8 @@ class Ledger(
     RevaluationCommands,
     DocumentCommands,
     SubcontoDetailCommands,
+    TagCommands,
+    ReportViewCommands,
 ):
     """The core's write use cases of one database (each group in its own module). The
     modules are objects of their own over the same connection — `ledger.bank`,

@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QCheckBox, QComboBox
 
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.preferences import SUBCONTO_ANALYSIS_KIND, prefs
+from modern_gl.desktop.reports_page.table import INDENT
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams, turnover_columns
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import balance_text, caption
@@ -19,8 +20,6 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
 from modern_gl.reporting.reports import SubcontoAnalysisRow
-
-INDENT = "      "
 
 
 class SubcontoAnalysisPage(ReportPage):

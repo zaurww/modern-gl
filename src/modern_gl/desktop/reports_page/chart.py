@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import AccountInfo
 from modern_gl.desktop.account_dialog import AccountDialog
 from modern_gl.desktop.reports_page.report_table import ReportTable
-from modern_gl.desktop.reports_page.table import NAME_MAX
+from modern_gl.desktop.reports_page.table import INDENT, NAME_MAX
 from modern_gl.desktop.reports_page.view import (
     Column,
     MenuAction,
@@ -121,7 +121,7 @@ class ChartPage(ReportPage):
 
         # what the account is (the type) reads right after its name; the details follow
         columns = [
-            Column(tr("Код"), lambda a: ("      " if a.parent_id else "") + a.code, key="code"),
+            Column(tr("Код"), lambda a: (INDENT if a.parent_id else "") + a.code, key="code"),
             Column(tr("Наименование"), name, key="name"),
             Column(
                 tr("Тип"), self._type_text, icon=lambda a: class_icon(a.account_class), key="type"

@@ -45,6 +45,7 @@ from modern_gl.desktop.reports_page import (
     VatReceiptsPage,
     VatRegisterPage,
 )
+from modern_gl.desktop.trade_page import TradePage
 
 
 def sc_kind(account: AccountInfo, position: int) -> int:
@@ -245,6 +246,10 @@ def main() -> None:
     shot("8b_directories")
     directories.refresh(select_kind=session.catalog.by_code["60"].sc_kinds[1])
     shot("8b2_contracts")
+    assets = sc_kind(session.catalog.by_code["01"], 0)
+    assert assets is not None  # 01 has the fixed assets: a directory of objects (D173)
+    directories.refresh(select_kind=assets)
+    shot("8b3_directory_objects")
     from modern_gl.desktop.directories_page import ValueDialog
 
     contracts = sc_kind(session.catalog.by_code["60"], 1)
@@ -526,6 +531,12 @@ def main() -> None:
     session.catalog.reload()  # its new cost item
     win.show_place(("purchases",))
     shot("8c0_purchases")
+    purchases = cast(TradePage, win.stack.currentWidget())
+    total = 6  # «Итого»
+    purchases.table.horizontalHeader().sectionClicked.emit(total)
+    purchases.table.horizontalHeader().sectionClicked.emit(total)
+    shot("8c0b_purchases_sorted")  # by the total, the largest first
+    purchases.table.horizontalHeader().sectionClicked.emit(total)
     win.open_inventory_document(waiting)
     shot("8c10_purchase_awaiting")
     win.show_place(("home",))

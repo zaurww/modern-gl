@@ -6,23 +6,15 @@ from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
 from modern_gl.application.inventory.model import QUANTITY_FACTOR, QUANTITY_SCALE, VAT_RATE_SCALE
+from modern_gl.domain import quantity
 from modern_gl.domain.currency import parse_rate
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.money import from_minor, read_decimal, round_ratio, to_minor
+from modern_gl.domain.money import from_minor, round_ratio, to_minor
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row
 
-_QUANTITY_QUANTUM = Decimal(1).scaleb(-QUANTITY_SCALE)
-
-
-def to_quantity(value: str | int | Decimal) -> int:
-    """Convert a user quantity to millionths of a base unit, without float rounding."""
-    result = read_decimal(value, "quantities")
-    if result != result.quantize(_QUANTITY_QUANTUM):
-        raise ValueError(
-            tr("больше {n} знаков после запятой: {value}", n=QUANTITY_SCALE, value=value)
-        )
-    return int(result.scaleb(QUANTITY_SCALE))
+to_quantity = quantity.to_quantity  # moved to domain.quantity: one unit for every count
+format_quantity = quantity.format_quantity
 
 
 def vat_of(amount: int, rate: int | None) -> int:
@@ -39,13 +31,6 @@ def unit_price(amount: int, quantity: int) -> int | None:
 def line_amount(price: int, quantity: int) -> int:
     """The amount of a line from its unit price, half away from zero."""
     return round_ratio(price * quantity, QUANTITY_FACTOR)
-
-
-def format_quantity(quantity: int, precision: int = 3) -> str:
-    """Format an internal quantity without insignificant zeroes."""
-    value = Decimal(quantity).scaleb(-QUANTITY_SCALE)
-    text = f"{value:.{precision}f}"
-    return text.rstrip("0").rstrip(".") if "." in text else text
 
 
 def blank(value: object) -> bool:

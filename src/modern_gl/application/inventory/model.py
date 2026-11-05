@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from modern_gl.domain import quantity
 from modern_gl.domain.accounts import (
     COST_OF_SALES,
     INCOMING_CONTRIBUTION,
@@ -19,8 +20,8 @@ from modern_gl.domain.accounts import (
 )
 from modern_gl.i18n import N_
 
-QUANTITY_SCALE = 6
-QUANTITY_FACTOR = 10**QUANTITY_SCALE
+QUANTITY_SCALE = quantity.QUANTITY_SCALE  # the units of domain.quantity
+QUANTITY_FACTOR = quantity.QUANTITY_FACTOR
 ALLOCATION_METHODS = ("value", "quantity", "manual")
 # VAT rates are in hundredths of a percent; a receipt starts with the standard rate.
 VAT_RATE_SCALE = 10_000
@@ -28,6 +29,7 @@ STANDARD_VAT_RATE = 1800
 VAT_DOCUMENTS = frozenset({"receipt", "sale", "purchase_return", "sale_return"})  # with VAT
 # the account a receipt's accrual goes to when the chart has none (D65)
 ACCRUED_CODE = "76H"
+ACCRUED_INCOME_CODE = "76G"  # a sale's accrual, when the chart has none (D65 for sales)
 # the accounts a sale posts to (roles) as the settings name them
 SALE_ROLE_NAMES = {
     SALES_REVENUE: "Выручка",
@@ -134,6 +136,9 @@ class SaleLine:
     customer_subconto: Sequence[int | None] = ()
     line_id: int | None = None
     sale_subconto: Sequence[int | None] = ()
+    # a service whose income belongs to an earlier month (D65 for sales): any day of that
+    # month; the sale accrues it on the month's last day
+    expense_date: date | str | None = None
 
 
 @dataclass(frozen=True)
@@ -289,14 +294,14 @@ class InventoryLineData:
     # sale accounts' subconto (SaleLine.sale_subconto)
     cost_account_id: int | None = None
     cost_subconto: tuple[int | None, int | None, int | None] = (None, None, None)
-    # a receipt's line without an item accrued in an earlier month: its last day (D65)
+    # a receipt's (sale's) line without an item accrued in an earlier month: its last day (D65)
     expense_date: str | None = None
     returned_line_id: int | None = None  # a return's line: the line it returns
 
 
 @dataclass(frozen=True)
 class AccrualData:
-    """A receipt's accrual of one month (D65): the GL document dated its last day."""
+    """A receipt's (sale's) accrual of one month (D65): the GL document dated its last day."""
 
     expense_date: str
     gl_document_id: int

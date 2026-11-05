@@ -22,6 +22,15 @@ from modern_gl.reporting.report_common import (
 )
 from modern_gl.reporting.reports.card import account_analysis, account_card
 from modern_gl.reporting.reports.osv import trial_balance
+from modern_gl.reporting.reports.osv_expand import (
+    CORR,
+    MONTH,
+    SUBCONTO_KINDS,
+    ExpandRow,
+    Step,
+    expand_many,
+    expand_rows,
+)
 from modern_gl.reporting.reports.reconciliation import (
     ActLine,
     ActPartner,
@@ -36,7 +45,10 @@ from modern_gl.reporting.reports.subconto_card import subconto_card
 
 __all__ = [
     "COMMON",
+    "CORR",
     "IFRS",
+    "MONTH",
+    "SUBCONTO_KINDS",
     "TAX",
     "AccountCard",
     "ActLine",
@@ -44,10 +56,12 @@ __all__ = [
     "CardLine",
     "CorrRow",
     "CurrencyRow",
+    "ExpandRow",
     "Osv",
     "OsvRow",
     "Party",
     "ReconciliationAct",
+    "Step",
     "SubcontoAnalysisRow",
     "SubcontoCard",
     "SubcontoCardLine",
@@ -56,6 +70,8 @@ __all__ = [
     "account_analysis",
     "account_card",
     "act_partners",
+    "expand_many",
+    "expand_rows",
     "reconciliation_act",
     "subconto_analysis",
     "subconto_balance",

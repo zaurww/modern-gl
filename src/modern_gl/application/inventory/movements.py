@@ -17,7 +17,9 @@ from modern_gl.application.inventory.model import (
 )
 from modern_gl.application.inventory.receipts import ReceiptDraftCommands
 from modern_gl.application.ledger import PostingInput
+from modern_gl.application.quantities import is_counted
 from modern_gl.domain.errors import ValidationError
+from modern_gl.domain.quantity import from_quantity
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Row, transaction
 
@@ -312,6 +314,10 @@ class MovementCommands(ReceiptDraftCommands):
         if line["offset_account_id"] is None:
             raise ValidationError(tr("строка {line}: не указан счёт", line=line_no))
         in_currency = doc["currency_id"] is not None
+        # a fixed asset, a low-value item…: the books count them too (D199)
+        counted = line["quantity"] and is_counted(
+            self.conn, doc["company_id"], line["cost_account_id"]
+        )
         return PostingInput(
             line["cost_account_id"],
             line["offset_account_id"],
@@ -323,4 +329,5 @@ class MovementCommands(ReceiptDraftCommands):
             money(line["currency_amount"] or 0) if in_currency else None,
             doc["invoice"] or "",
             doc["invoice_kind"] or "",
+            quantity=from_quantity(line["quantity"]) if counted else None,
         )

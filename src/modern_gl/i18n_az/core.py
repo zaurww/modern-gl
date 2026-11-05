@@ -1396,10 +1396,6 @@ AZ: dict[str, str] = {
     "Начисленные расходы": "Hesablanmış xərclər",
     "Расход за": "Xərc dövrü",
     "месяц документа": "sənədin ayı",
-    "Месяц расхода по услугам, если e-qaimə пришла позже: расход начисляется "
-    "последним днём этого месяца (Дт затрат / Кт 76H), долг поставщику и НДС — "
-    "датой e-qaimə": "Xidmət xərcinin ayı, e-qaimə gec gəlibsə: xərc həmin ayın son günü "
-    "hesablanır (Dt xərc / Kt 76H), malsatana borc və ƏDV — e-qaimənin tarixi ilə",
     "Начисление": "Hesablama",
     "Проводки начисления расхода в месяце услуги": "Xidmət ayında xərcin hesablanma yazılışları",
     "Начисление расхода по поступлению №{n}": "Alış №{n} üzrə xərcin hesablanması",
@@ -1762,7 +1758,7 @@ AZ: dict[str, str] = {
     "Остатки и обороты всех счетов за период": "Dövr üzrə bütün hesabların qalıq və dövriyyələri",
     "Остатки счёта по контрагентам, договорам, статьям": "Hesabın kontragent, müqavilə və maddələr üzrə qalıqları",
     "Проводки счёта за период с остатком": "Hesabın dövr üzrə yazılışları və qalığı",
-    "Обороты счёта по корреспондирующим счетам": "Hesabın müxabirləşən hesablar üzrə dövriyyələri",
+    "Обороты счёта по корреспондирующим счетам": "Hesabın qarşılıqlı hesablar üzrə dövriyyələri",
     "Общий учёт, МСФО и налоговый учёт на одну дату": "Ümumi uçot, MHBS və vergi uçotu bir tarixə",
     "Всё о компании текстом в одном архиве zip": "Şirkət haqqında hər şey mətn şəklində, bir zip arxivində",
     "Проводки периода по номерам e-qaimə: суммы, ƏDV, остаток": "Dövrün yazılışları e-qaimə nömrələri üzrə: məbləğ, ƏDV, qalıq",

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from modern_gl.application.common import group_path
 from modern_gl.application.currencies import CurrencyInfo, list_currencies
+from modern_gl.application.quantities import counted_accounts
 from modern_gl.domain.accounts import OPENING_BALANCE, SETTLEMENT_TYPES, VAT_TYPES
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import fold, sort_key, tr
@@ -79,6 +80,7 @@ class Catalog:
 
     def reload(self) -> None:
         self._load_accounts()
+        self.counted = counted_accounts(self.conn, self.company_id)  # quantity (D199)
         self._load_kinds()
         self._load_values()
         self.currencies: dict[int, CurrencyInfo] = {
@@ -121,11 +123,14 @@ class Catalog:
     def _load_kinds(self) -> None:
         """The subconto kinds, which belong to which (contracts to counterparties), the tags."""
         kinds = self.conn.execute(
-            "SELECT id, code, name, owner_kind_id FROM subconto_kinds WHERE company_id = ?",
+            "SELECT id, code, name, owner_kind_id, per_line FROM subconto_kinds "
+            "WHERE company_id = ?",
             (self.company_id,),
         ).fetchall()
         self.kinds: dict[int, str] = {r["id"]: r["name"] for r in kinds}
         self.kind_codes: dict[int, str] = {r["id"]: r["code"] for r in kinds}
+        # directories of objects: each purchase line its own element (D173)
+        self.kind_per_line: dict[int, bool] = {r["id"]: bool(r["per_line"]) for r in kinds}
         # contracts -> counterparties: elements of a kind belong to elements of another
         self.owner_kinds: dict[int, int] = {
             r["id"]: r["owner_kind_id"] for r in kinds if r["owner_kind_id"] is not None

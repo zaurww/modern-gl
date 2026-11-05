@@ -54,10 +54,10 @@ class SplitPart(InventoryDocumentForm):
         self.table.setCurrentIndex(self.model.index(new_row, current.column()))
 
     def _split_months(self, index: QPersistentModelIndex) -> None:
-        """«несколько месяцев…» picked in «Расход за»: the line becomes a line per month."""
+        """«несколько месяцев…» picked in «Расход за» («Доход за»): a line per month."""
         if not index.isValid():
             return
-        dialog = MonthRangeDialog(self, self.model.doc_date)
+        dialog = MonthRangeDialog(self, self.model.doc_date, income=self.doc_type == "sale")
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         try:
@@ -116,9 +116,11 @@ class MonthRangeDialog(QDialog):
     """The months an expense is spread over, evenly: from one month to another among the
     twelve before the document's."""
 
-    def __init__(self, parent: QWidget, doc_date: str) -> None:
+    def __init__(self, parent: QWidget, doc_date: str, income: bool = False) -> None:
         super().__init__(parent)
-        self.setWindowTitle(tr("Расход за несколько месяцев"))
+        self.setWindowTitle(
+            tr("Доход за несколько месяцев") if income else tr("Расход за несколько месяцев")
+        )
         self.setMinimumWidth(380)
         form = QFormLayout(self)
         form.addRow(QLabel(tr("Сумма строки делится поровну между месяцами")))

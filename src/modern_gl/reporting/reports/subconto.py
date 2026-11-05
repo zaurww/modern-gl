@@ -8,11 +8,13 @@ from collections.abc import Sequence
 from datetime import date
 
 from modern_gl.application.books import COMMON, book_params
+from modern_gl.application.quantities import counted_accounts
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
+    QuantityMoves,
     SubcontoRow,
     Turnovers,
     _accounts,
@@ -102,8 +104,15 @@ def subconto_balance(  # noqa: PLR0913 the report's settings, as the other repor
     for r in raw:
         _add_up(sums, tuple(r[f"sc{n}"] for n in range(depth)), r)
     in_currency = _subconto_currency(conn, params, positions, invoices)
+    quantities = _subconto_quantity(conn, params, positions, invoices)
+    for path in quantities:
+        sums[path]  # a row that has only a quantity left is shown too
     names = _value_names(conn, company_id, {v for path in sums for v in path})
-    return _subconto_tree(sums, in_currency, names, depth)
+    rows = _subconto_tree(sums, in_currency, names, depth, quantities)
+    if quantities or acc["id"] in counted_accounts(conn, company_id):
+        for row in rows:
+            row.quantity = row.quantity or QuantityMoves()
+    return rows
 
 
 def _add_up(sums: Sums, path: Key, r: Row) -> None:
@@ -141,6 +150,7 @@ def _subconto_tree(
     in_currency: dict[Key, dict[str, int]],
     names: dict[int | None, str],
     levels: int,
+    quantities: dict[Key, QuantityMoves] | None = None,
 ) -> list[SubcontoRow]:
     """The rows in tree order: each value, then the values under it; «не указано» first,
     the rest by name (e-qaimə by number). A silent row (nothing at all) is left out with
@@ -167,7 +177,11 @@ def _subconto_tree(
                 row.value_id, row.path = value, _values(path)
             row.add(Turnovers.from_net(*sums[path]))
             row.currency_closing = in_currency.get(path, {})
-            if not row.is_zero() or row.currency_closing:
+            row.quantity = (quantities or {}).get(path)
+            moved = row.quantity is not None and any(
+                (row.quantity.opening, row.quantity.incoming, row.quantity.outgoing)
+            )
+            if not row.is_zero() or row.currency_closing or moved:
                 result.append(row)
                 if len(path) < levels:
                     result += under(path)
@@ -218,3 +232,47 @@ def _subconto_currency(
             amounts = found[path[:k]]
             amounts[r["code"]] = amounts.get(r["code"], 0) + r["net"]
     return {path: {c: n for c, n in amounts.items() if n} for path, amounts in found.items()}
+
+
+def _subconto_quantity(
+    conn: Connection, params: dict, positions: tuple[int, ...], invoices: bool = False
+) -> dict[Key, QuantityMoves]:
+    """How many of each subconto value, and of each row above it, on the counted accounts
+    of the report (D199): none — an empty dict."""
+    depth = len(positions) + invoices
+    keys = ", ".join(f"m.sc{n}" for n in range(depth))
+    found: dict[Key, QuantityMoves] = defaultdict(QuantityMoves)
+    for r in conn.execute(
+        f"""
+        WITH {_DOCS_CTE},
+        moves AS (
+            SELECT docs.doc_date, {_sides("dt", positions, invoices)}, p.quantity AS q_in,
+                   0 AS q_out
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.debit_account_id IN (SELECT value FROM json_each(:accounts))
+              AND p.quantity IS NOT NULL
+            UNION ALL
+            SELECT docs.doc_date, {_sides("ct", positions, invoices)}, 0, p.quantity
+            FROM postings p CROSS JOIN docs
+            WHERE docs.id = p.document_id AND p.company_id = :company_id
+              AND p.credit_account_id IN (SELECT value FROM json_each(:accounts))
+              AND p.quantity IS NOT NULL
+        )
+        SELECT {keys},
+               SUM(CASE WHEN m.doc_date <  :date_from THEN m.q_in - m.q_out ELSE 0 END)
+                   AS opening,
+               SUM(CASE WHEN m.doc_date >= :date_from THEN m.q_in ELSE 0 END) AS q_in,
+               SUM(CASE WHEN m.doc_date >= :date_from THEN m.q_out ELSE 0 END) AS q_out
+        FROM moves m
+        GROUP BY {keys}
+        """,
+        params,
+    ):
+        path = tuple(r[f"sc{n}"] for n in range(depth))
+        for k in range(1, len(path) + 1):
+            moves = found[path[:k]]
+            moves.opening += r["opening"]
+            moves.incoming += r["q_in"]
+            moves.outgoing += r["q_out"]
+    return dict(found)

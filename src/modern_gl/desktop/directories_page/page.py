@@ -273,6 +273,17 @@ class DirectoriesPage(DirectoriesForm):
             tr("Справочник «{name}» создан. Подключите его к счёту в плане счетов.", name=name)
         )
 
+    def set_per_line(self, kind_id: int, per_line: bool) -> None:
+        """A directory of objects (each purchase line its own element, named by the line:
+        fixed assets, low-value items) or of categories (cost items), D173."""
+        name = self.s.catalog.kinds[kind_id]
+        self._apply(
+            lambda: self.s.ledger.set_subconto_kind_per_line(self.s.company_id, kind_id, per_line),
+            tr("«{name}»: объекты, у каждой строки покупки свой элемент", name=name)
+            if per_line
+            else tr("«{name}»: категории, один элемент на строки счёта", name=name),
+        )
+
     def _context_menu(self, pos) -> None:
         value = self._value_at(self.table.indexAt(pos))
         if value is None:

@@ -254,7 +254,11 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         self.btn_unpost = button(tr("Отменить проведение"), "flat")
         self.btn_gl = button(tr("Открыть проводки"), "flat")
         self.btn_accrual = button(tr("Начисление"), "flat")
-        self.btn_accrual.setToolTip(tr("Проводки начисления расхода в месяце услуги"))
+        self.btn_accrual.setToolTip(
+            tr("Проводки начисления дохода в месяце услуги")
+            if self.doc_type == "sale"
+            else tr("Проводки начисления расхода в месяце услуги")
+        )
         actions.addWidget(self.btn_delete)
         actions.addWidget(self.btn_unpost)
         actions.addWidget(self.btn_gl)

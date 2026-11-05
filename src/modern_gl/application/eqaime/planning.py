@@ -1,5 +1,7 @@
 """What each line of an e-qaimə would become: as last time from this counterparty, an
-item of the same name, or nothing yet."""
+item of the same name; a purchased service new to the supplier — the account the same
+service had from another supplier, else the supplier's last expense (as the purchase form,
+D76); or nothing yet. The import makes drafts: a suggestion is checked before posting."""
 
 from __future__ import annotations
 
@@ -19,7 +21,9 @@ class LinePlan:
     item_id: int | None = None
     account_id: int | None = None  # a purchase line without an item: where it goes
     subconto: tuple[int | None, ...] = ()
-    found: str = ""  # how it was found: "history", "name", "" (the user chooses)
+    # how it was found: "history", "name", "other" (the same service from another
+    # supplier), "supplier" (this supplier's last expense), "" (the user chooses)
+    found: str = ""
 
 
 @dataclass(frozen=True)
@@ -40,7 +44,7 @@ class InvoicePlan:
     existing: int | None = None  # the number of a document that has this e-qaimə already
     lines: list[LinePlan] = field(default_factory=list)
     skip_reason: str = ""
-    # a purchase's services of an earlier month (D65): the last day of that month
+    # a purchase's (sale's) services of an earlier month (D65, D192): the last day of it
     expense_date: str | None = None
     # the supplier's purchases waiting for an e-qaimə (D119), and the one this e-qaimə is
     # written into instead of a new draft (None: a new draft)
@@ -75,9 +79,14 @@ class InvoicePlan:
 
     @property
     def has_expenses(self) -> bool:
-        """A purchase with a line that is no item (a service, a fixed asset, an expense):
-        its expense may belong to an earlier month (D65)."""
-        return not self.invoice.outgoing and any(p.item_id is None for p in self.lines)
+        """A purchase with a line that is no item (a service, a fixed asset, an expense),
+        or a sale with a service line: its expense (income) may belong to an earlier
+        month (D65, D192). A return's lines are goods."""
+        if self.return_type is not None:
+            return False
+        if self.invoice.outgoing:
+            return any(p.item_id is None and p.line.service for p in self.lines)
+        return any(p.item_id is None for p in self.lines)
 
     @property
     def unresolved(self) -> int:
@@ -104,6 +113,7 @@ def plan_import(
         )
     }
     awaiting = _awaiting(conn, company_id)
+    expenses = _expenses(conn, company_id)
     plans = []
     for invoice in invoices:
         counterparty = known_counterparty(conn, company_id, invoice.party_tin, invoice.party_name)
@@ -124,6 +134,8 @@ def plan_import(
         history = _history(conn, company_id, source, counterparty)
         for line in invoice.lines:
             planned = _line_plan(line, history, items, plan.as_sale)
+            if not returned and not plan.as_sale and line.service and not planned.found:
+                planned = _suggested(line, counterparty, expenses)
             plan.lines.append(planned if not returned or planned.item_id else LinePlan(line))
         if plan.importable and not returned and not invoice.outgoing and counterparty:
             plan.awaiting = awaiting.get(counterparty, [])
@@ -191,6 +203,52 @@ def _line_plan(
             return LinePlan(line, found="history")  # sold as a service last time
     if not line.service and key in items:
         return LinePlan(line, item_id=items[key], found="name")
+    return LinePlan(line)
+
+
+@dataclass
+class _Expenses:
+    """Where posted purchase lines without an item went, the latest first wins: by the
+    line's name, and by the supplier (any value of the line's settlement subconto)."""
+
+    by_name: dict[str, tuple[int, tuple[int | None, ...]]] = field(default_factory=dict)
+    by_party: dict[int, tuple[int, tuple[int | None, ...]]] = field(default_factory=dict)
+
+
+def _expenses(conn: Connection, company_id: int) -> _Expenses:
+    """One read for the whole import (not a query per line)."""
+    found = _Expenses()
+    for row in conn.execute(
+        """
+        SELECT l.memo, l.cost_account_id, l.cost_sc1, l.cost_sc2, l.cost_sc3,
+               l.offset_sc1, l.offset_sc2, l.offset_sc3
+        FROM inventory_lines l
+        JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
+        WHERE l.company_id = ? AND d.doc_type = 'receipt' AND d.status = 'posted'
+          AND l.item_id IS NULL AND l.cost_account_id IS NOT NULL
+        ORDER BY d.doc_date DESC, d.id DESC, l.line_no
+        """,
+        (company_id,),
+    ):
+        booking = (row["cost_account_id"], (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"]))
+        name = fold(row["memo"].strip())
+        if name:
+            found.by_name.setdefault(name, booking)
+        for party in (row["offset_sc1"], row["offset_sc2"], row["offset_sc3"]):
+            if party is not None:
+                found.by_party.setdefault(party, booking)
+    return found
+
+
+def _suggested(line: EInvoiceLine, counterparty: int | None, expenses: _Expenses) -> LinePlan:
+    """A purchased service this supplier never sold by that name: the account the same
+    service had from another supplier, else this supplier's last expense (D76)."""
+    for found, booking in (
+        ("other", expenses.by_name.get(fold(line.name.strip()))),
+        ("supplier", expenses.by_party.get(counterparty) if counterparty else None),
+    ):
+        if booking is not None:
+            return LinePlan(line, account_id=booking[0], subconto=booking[1], found=found)
     return LinePlan(line)
 
 

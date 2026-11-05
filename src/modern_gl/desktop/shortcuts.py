@@ -103,6 +103,12 @@ KEYS: dict[str, Key] = {
         _k("add_charge", "Ins", Scope.GRID, N_("новый расход")),
         _k("copy_rows", "Ctrl+C", Scope.GRID, N_("копировать")),
         _k("paste_rows", "Ctrl+V", Scope.GRID, N_("вставить из Excel")),
+        # the trial balance opened by place (D190)
+        _k("expand", "Right", Scope.GRID, N_("развернуть")),
+        _k("collapse", "Left", Scope.GRID, N_("свернуть")),
+        _k("expand_by", "Shift+Right", Scope.GRID, N_("развернуть по…")),
+        _k("expand_all", "Ctrl+Right", Scope.GRID, N_("развернуть все")),
+        _k("collapse_all", "Ctrl+Left", Scope.GRID, N_("свернуть все")),
         # ---- typed into the table, not shortcuts ----------------------------------------
         _k("next_field", ("Return", "Tab"), Scope.TYPED, N_("дальше")),
         _k("previous_field", "Shift+Tab", Scope.TYPED, N_("назад")),
@@ -131,7 +137,10 @@ def bind(widget: QWidget, id: str, slot: Callable[[], object]) -> list[QShortcut
 
 def label(id: str) -> str:
     """The keys as shown to the user: «Ctrl+Enter», «Enter, Tab»."""
-    shown = dict.fromkeys(k.replace("Return", "Enter") for k in KEYS[id].keys)
+    shown = dict.fromkeys(
+        k.replace("Return", "Enter").replace("Right", "→").replace("Left", "←")
+        for k in KEYS[id].keys
+    )
     return ", ".join(shown)
 
 

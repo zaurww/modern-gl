@@ -29,7 +29,8 @@ EXPENSE = "expense"
 ESC1 = "esc1"
 ESC2 = "esc2"
 ESC3 = "esc3"
-# a receipt's line without an item: the earlier month its expense belongs to (D65)
+# a receipt's (sale's) line without an item: the earlier month its expense (income)
+# belongs to (D65)
 EXPENSE_MONTH = "expense_month"
 SEVERAL_MONTHS = -1  # the choice that splits the line over a range of months
 # a sale line: the subconto of the sale's own accounts (46; 90.1 / 90.2 / 90.3) that
@@ -92,7 +93,11 @@ HEADERS = {
     MEMO: N_("Комментарий"),
 }
 # a sale line is goods or a service: a line without an item, its memo says what it is
-SALE_HEADERS = {ITEM: N_("Товар / услуга"), MEMO: N_("Содержание")}
+SALE_HEADERS = {
+    ITEM: N_("Товар / услуга"),
+    MEMO: N_("Содержание"),
+    EXPENSE_MONTH: N_("Доход за"),  # a service of an earlier month (D65 for sales)
+}
 # a receipt line without an item: a service, a fixed asset or any expense bought
 RECEIPT_HEADERS = {ITEM: N_("Товар / услуга / ОС"), MEMO: N_("Содержание")}
 # the first subconto of the offset account, when the account itself is not shown (D90)
@@ -143,6 +148,7 @@ PASTE_HEADERS = [
     (header_names(N_("НДС"), "Сумма НДС", N_("ƏDV"), "ƏDV məbləği"), VAT),
     (header_names(N_("Корр. счёт"), N_("Счёт"), "Hesab"), ACCOUNT),
     (header_names(N_("Расход за"), "Месяц расхода", "Xərc dövrü", "Xərc ayı"), EXPENSE_MONTH),
+    (header_names(N_("Доход за"), "Месяц дохода", "Gəlir dövrü", "Gəlir ayı"), EXPENSE_MONTH),
     (header_names(N_("Комментарий"), N_("Содержание"), "Şərh", "Məzmun"), MEMO),
 ]
 # accounts before their subconto, the quantity before a price, a pasted amount over a price

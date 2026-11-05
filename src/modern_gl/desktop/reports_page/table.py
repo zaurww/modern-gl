@@ -28,7 +28,8 @@ from PySide6.QtWidgets import (
 
 from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.theme import P, fonts
-from modern_gl.domain.money import format_minor
+from modern_gl.domain.money import SCALE, format_minor, round_ratio
+from modern_gl.i18n import fold
 from modern_gl.reporting.reports import OsvRow
 
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
@@ -40,6 +41,7 @@ LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 # brackets that hang right; a pale grid and zebra rows — as the user sets them (D103, D127).
 
 NAME_MAX = 380  # px: a longer name is cut with "…" (the whole of it shows under the mouse)
+INDENT = "   "  # one level of a name (a subaccount, a subconto) under its group
 
 GROUP_GAP = 24  # px of air in front of each Dt/Kt pair
 
@@ -73,6 +75,18 @@ class Column:
     cell: bool = False
     optional: bool = False  # hidden until the user shows it (a right click on the captions)
     key: str = ""  # what the column choice remembers it by; the caption when empty
+    # what a list sorted by this column orders by (a date: the ISO date, not its text);
+    # by default the amount (`value`), else what the cell shows
+    sort: Callable[[Any], Any] | None = None
+
+
+def sort_value(col: Column, row: Any) -> Any:
+    """What a row is ordered by in this column; text without case or İ/ş (`fold`);
+    None — an empty cell, last either way."""
+    value = col.sort(row) if col.sort else col.value(row) if col.value else col.get(row)
+    if isinstance(value, str):
+        return fold(value) if value else None
+    return value
 
 
 def zebra() -> bool:
@@ -91,10 +105,15 @@ def set_grid(on: bool) -> None:
     prefs().set_grid(on)
 
 
-def figure(minor: int | None) -> str:
-    """An amount in a report: nothing is an empty cell, a negative is in brackets."""
+def figure(minor: int | None, scale: int = 1) -> str:
+    """An amount in a report: nothing is an empty cell, a negative is in brackets;
+    `scale` 1 000 or 1 000 000 — in thousands or millions, whole (D190)."""
     if not minor:
         return ""
+    if scale > 1:
+        whole = round_ratio(abs(minor), scale * 10**SCALE)
+        text = f"{whole:,}".replace(",", " ")
+        return "" if not whole else f"({text})" if minor < 0 else text
     return f"({format_minor(-minor)})" if minor < 0 else format_minor(minor)
 
 
@@ -117,16 +136,22 @@ class ReportModel(QAbstractTableModel):
         self.tone: Callable[[Any], str | None] = lambda r: None
         self.banded: list[bool] = []
         self.bands = True  # a list (the chart of accounts) goes without
+        self.scale = 1  # figures in thousands (1000) or millions, whole
         self.all_columns: list[Column] = []  # with the ones the user hid
+        self.source: list[Any] = []
         self.shown: Callable[[Column], bool] = lambda c: not c.optional
         self.arrange: Callable[[list[Column]], list[Column]] = lambda cols: cols  # the order
+        # a list sorted by a caption click (`ListTable.sortable`): (caption, descending)
+        self.order: tuple[str, bool] | None = None
 
     def set(
         self, columns, rows, emphasis=None, muted=None, total=None, section=None, tone=None
     ) -> None:
         self.beginResetModel()
         self.all_columns, self.rows = columns, rows
+        self.source = list(rows)  # as they came: the order a third click brings back
         self.columns = self._chosen()
+        self.rows = rows = self._ordered(rows)
         self.emphasis = emphasis or (lambda r: False)
         self.muted = muted or (lambda r: False)
         self.total = total or (lambda r: False)  # a rule above it
@@ -142,6 +167,40 @@ class ReportModel(QAbstractTableModel):
                 self.banded.append(run // BAND % 2 == 1)
                 run += 1
         self.endResetModel()
+
+    def _ordered(self, rows: list[Any]) -> list[Any]:
+        """The rows in the order chosen by a caption (a copy), else as they came."""
+        col = next((c for c in self.all_columns if self.order and c.title == self.order[0]), None)
+        if col is None or self.order is None:
+            return rows
+        values = [sort_value(col, r) for r in rows]
+        present = sorted(
+            (i for i, v in enumerate(values) if v is not None),
+            key=lambda i: values[i],
+            reverse=self.order[1],
+        )
+        return [rows[i] for i in present] + [
+            r for v, r in zip(values, rows, strict=True) if v is None
+        ]
+
+    def sort_by(self, section: int) -> None:
+        """A caption clicked: up, down, then the order the rows came in."""
+        title = self.columns[section].title
+        if self.order is None or self.order[0] != title:
+            self.order = (title, False)
+        elif not self.order[1]:
+            self.order = (title, True)
+        else:
+            self.order = None
+        self.set(
+            self.all_columns,
+            list(self.source),
+            self.emphasis,
+            self.muted,
+            self.total,
+            self.section,
+            self.tone,
+        )
 
     def _chosen(self) -> list[Column]:
         """The columns the user shows, in their order; the first one always."""
@@ -167,7 +226,10 @@ class ReportModel(QAbstractTableModel):
         if orientation != Qt.Orientation.Horizontal:
             return None
         if role == Qt.ItemDataRole.DisplayRole:
-            return self.title(section)
+            title = self.title(section)
+            if self.order is not None and self.columns[section].title == self.order[0]:
+                return f"{title} {'↓' if self.order[1] else '↑'}"  # a list sorted by it
+            return title
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return RIGHT if self.columns[section].money or self.columns[section].right else LEFT
         return None
@@ -175,7 +237,7 @@ class ReportModel(QAbstractTableModel):
     def data(self, index, role: int = Qt.ItemDataRole.DisplayRole):
         row, col = self.rows[index.row()], self.columns[index.column()]
         if role == Qt.ItemDataRole.DisplayRole:
-            return self._text(row, col)
+            return self._text(row, col, self.scale)
         if role == Qt.ItemDataRole.TextAlignmentRole:
             return RIGHT if col.money or col.right else LEFT
         if role == Qt.ItemDataRole.FontRole and self.emphasis(row):
@@ -193,10 +255,10 @@ class ReportModel(QAbstractTableModel):
         return None
 
     @staticmethod
-    def _text(row, col: Column) -> str:
+    def _text(row, col: Column, scale: int = 1) -> str:
         value = col.get(row)
         if col.money:
-            return figure(value)
+            return figure(value, scale)
         return "" if value is None else str(value)
 
     def _foreground(self, row, col: Column) -> QColor | None:

@@ -27,13 +27,12 @@ from datetime import date
 import pytest
 
 from modern_gl.application.catalog import Catalog
-from modern_gl.application.chart_csv import apply_chart_template
-from modern_gl.application.ledger import Ledger, PostingInput
+from modern_gl.application.ledger import Ledger
 from modern_gl.desktop import theme
 from modern_gl.desktop.reports_page import CardPage, ReportParams, SubcontoPage
 from modern_gl.desktop.session import Session
-from modern_gl.infrastructure.db import connect
 from modern_gl.reporting.reports import account_card, subconto_balance
+from tests.helpers.contract_books import contract_books
 from tests.helpers.qt import running_app
 
 MARCH = ("2026-03-01", "2026-03-31")
@@ -52,28 +51,7 @@ def cols(row):
 
 @pytest.fixture
 def books():
-    conn = connect(":memory:")
-    ledger = Ledger(conn, actor="test")
-    cid = ledger.create_company("Firma")
-    apply_chart_template(ledger, cid, "classic", "ru")
-    cp = ledger.subconto_kind_id(cid, "counterparty")
-    contract = ledger.subconto_kind_id(cid, "contract")
-    v = {name: ledger.add_subconto_value(cid, cp, name) for name in ("Альфа", "Бета")}
-    v["Аренда"] = ledger.add_subconto_value(
-        cid, ledger.subconto_kind_id(cid, "cost_item"), "Аренда"
-    )
-    for name in ("Д1", "Д2"):
-        v[name] = ledger.add_subconto_value(cid, contract, name, owner_id=v["Альфа"])
-    acc = {code: ledger.account_id(cid, code) for code in ("26", "60")}
-    rent = (v["Аренда"],)
-    for day, dt, ct, amount, dt_sc, ct_sc, invoice in (
-        ("2026-02-20", "26", "60", "1000", rent, (v["Альфа"], v["Д1"]), "MM001"),
-        ("2026-03-05", "26", "60", "400", rent, (v["Альфа"], v["Д2"]), "MM002"),
-        ("2026-03-10", "60", "26", "300", (v["Альфа"], v["Д1"]), rent, "MM001"),
-        ("2026-03-12", "26", "60", "200", rent, (v["Бета"],), ""),
-    ):
-        line = PostingInput(acc[dt], acc[ct], amount, dt_sc, ct_sc, invoice=invoice)
-        ledger.post_new(cid, day, [line])
+    conn, ledger, cid, v = contract_books()
     yield conn, ledger, cid, v
     conn.close()
 

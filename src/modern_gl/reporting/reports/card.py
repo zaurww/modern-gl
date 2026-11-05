@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from datetime import date
 
 from modern_gl.application.books import COMMON, book_params
+from modern_gl.application.quantities import counted_accounts
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
@@ -42,6 +43,8 @@ def account_card(
     raw = _card_rows(conn, params, subconto, invoice)
     opening = 0
     card = AccountCard(opening=0)
+    if set(json.loads(params["accounts"])) & counted_accounts(conn, company_id):
+        card.quantity_opening = 0
     for r in raw:
         if r["currency"]:
             net = r["cur_dt"] - r["cur_ct"]
@@ -52,6 +55,8 @@ def account_card(
             card.currency_closing[r["currency"]] = card.currency_closing.get(r["currency"], 0) + net
         if r["doc_date"] < params["date_from"]:
             opening = r["balance"]
+            if card.quantity_opening is not None:
+                card.quantity_opening = r["q_balance"]
             continue
         card.lines.append(_card_line(r))
     card.opening = opening
@@ -75,7 +80,8 @@ def _card_rows(
                    p.line_no, 0 AS side, p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END AS currency_id,
                    COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0) AS cur_dt,
-                   0 AS cur_ct, p.invoice, p.invoice_kind
+                   0 AS cur_ct, p.invoice, p.invoice_kind,
+                   COALESCE(p.quantity, 0) AS q_dt, 0 AS q_ct
             FROM postings p CROSS JOIN docs
             JOIN accounts own ON own.id = p.debit_account_id
             WHERE docs.id = p.document_id AND p.company_id = :company_id
@@ -86,7 +92,7 @@ def _card_rows(
                    p.line_no, 1, p.debit_account_id, 0, p.amount,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END,
                    0, COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0),
-                   p.invoice, p.invoice_kind
+                   p.invoice, p.invoice_kind, 0, COALESCE(p.quantity, 0)
             FROM postings p CROSS JOIN docs
             JOIN accounts own ON own.id = p.credit_account_id
             WHERE docs.id = p.document_id AND p.company_id = :company_id
@@ -96,7 +102,9 @@ def _card_rows(
         running AS (
             SELECT *, SUM(dt - ct) OVER (
                 ORDER BY doc_date, number, line_no, side ROWS UNBOUNDED PRECEDING
-            ) AS balance
+            ) AS balance, SUM(q_dt - q_ct) OVER (
+                ORDER BY doc_date, number, line_no, side ROWS UNBOUNDED PRECEDING
+            ) AS q_balance
             FROM lines
         )
         SELECT r.*, COALESCE(a.code, a.name) AS corr_code, c.code AS currency
@@ -132,6 +140,9 @@ def _card_line(r: Row) -> CardLine:
         currency_credit=r["cur_ct"],
         invoice=r["invoice"] or "",
         invoice_kind=r["invoice_kind"] or "",
+        quantity_debit=r["q_dt"],
+        quantity_credit=r["q_ct"],
+        quantity_balance=r["q_balance"],
     )
 
 

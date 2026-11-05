@@ -10,6 +10,7 @@ from typing import Protocol
 
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import from_minor
+from modern_gl.domain.quantity import from_quantity
 from modern_gl.i18n import N_, tr
 
 DEFAULT_LAYERS = (
@@ -39,6 +40,8 @@ class PostingInput:
     invoice_kind: str = ""  # domain.invoice: "" an e-qaimə, "customs" a customs declaration
     # a payment from a bank account to the supplier's ƏDV deposit: it pays the ƏDV (D145)
     pays_vat: bool = False
+    # how many (a counted account — 01, 10, 12…, D199): "3", "0.5"; None — not said
+    quantity: str | int | Decimal | None = None
 
 
 class TypedLine(Protocol):
@@ -98,6 +101,7 @@ def typed_posting(
     invoice: bool = True,
     invoice_kind: str = "",
     pays_vat: bool = False,
+    quantity: int | None = None,
 ) -> PostingInput:
     """Line `n` of a form as the ledger's input; `currency` / `invoice` — whether its
     accounts keep them (else what was typed there is not passed on)."""
@@ -121,6 +125,7 @@ def typed_posting(
         number,
         invoice_kind if number else "",
         pays_vat,
+        from_quantity(quantity) if quantity else None,
     )
 
 

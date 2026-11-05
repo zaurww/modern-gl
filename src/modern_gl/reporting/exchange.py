@@ -11,6 +11,7 @@ from typing import Any
 
 from modern_gl.application.books import BOOKS, book_params
 from modern_gl.application.exchange import FORMAT, VERSION
+from modern_gl.domain.quantity import QUANTITY_SCALE, format_quantity
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.plaintext import posted_documents
 from modern_gl.reporting.report_common import _accounts
@@ -75,6 +76,8 @@ def _line(p: Row, accounts: dict[int, str], names: dict[int, str]) -> dict:
         line["customs" if p["invoice_kind"] == "customs" else "e_qaime"] = p["invoice"]
     if p["pays_vat"]:
         line["pays_vat"] = True
+    if p["quantity"] is not None:  # 01, 12…: how many (D199)
+        line["quantity"] = format_quantity(p["quantity"], QUANTITY_SCALE)
     if p["line_memo"]:
         line["memo"] = p["line_memo"]
     return line

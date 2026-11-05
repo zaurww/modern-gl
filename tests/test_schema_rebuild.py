@@ -61,12 +61,15 @@ def rows_by_table_projection(rows: list[tuple], columns: list[str], keep: list[s
 def company_of_version(path: Path, version: int) -> None:
     """The demo year as the program of yesterday would have left it: written by the program
     of today, then copied into a file of schema `version` column by column (0048's longer
-    CHECK of account types is applied to the old file first). What later migrations moved
+    CHECK of account types is applied to the old file first; a type 0048 does not know, the
+    accrued income of 0062, could not pass its CHECK on the way, so that account is copied
+    without a type). What later migrations moved
     goes back to where yesterday kept it: the month of a purchase's expense and its accrual
     document on the purchase (0050)."""
     file_at_version(path, version, [])
     today = connect(":memory:")
     create_year_demo(Ledger(today))
+    today.execute("UPDATE accounts SET account_type = NULL WHERE account_type = 'accrued_income'")
     fill_the_empty_tables(today)
     old = sqlite3.connect(path, isolation_level=None)
     old.row_factory = sqlite3.Row

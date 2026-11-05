@@ -16,8 +16,12 @@
       "invoice": "",
       "invoice_kind": "",
       "memo": "",
-      "number": 4
+      "number": 4,
+      "quantity_balance": 0,
+      "quantity_credit": 0,
+      "quantity_debit": 0
     }
   ],
-  "opening": -20000
+  "opening": -20000,
+  "quantity_opening": null
 }

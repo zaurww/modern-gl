@@ -22,6 +22,7 @@ LINE_KEYS = {
     "currency",
     "currency_amount",
     "pays_vat",  # true: the ƏDV paid from a bank account to the supplier's deposit
+    "quantity",  # how many on a counted account (01, 12…), as text: "3", "0.5"
 }
 
 
@@ -56,6 +57,7 @@ def _line(cat: Catalog, i: int, p: object, exact: bool) -> PostingInput:
         str(p.get("e_qaime") or p.get("customs") or ""),
         "customs" if p.get("customs") else "",
         _flag(i, p.get("pays_vat", False)),
+        _amount(i, p["quantity"]) if p.get("quantity") is not None else None,
     )
 
 

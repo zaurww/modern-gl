@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl import __version__
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button
 from modern_gl.i18n import tr
@@ -91,7 +92,7 @@ def report_crash(
     kind: type[BaseException], error: BaseException, trace: TracebackType | None
 ) -> None:
     """`sys.excepthook`: the traceback to the log and to the user."""
-    details = "".join(traceback.format_exception(kind, error, trace))
+    details = f"Modern GL {__version__}\n" + "".join(traceback.format_exception(kind, error, trace))
     logger.error("unhandled exception\n%s", details)
     show_crash(details)
 

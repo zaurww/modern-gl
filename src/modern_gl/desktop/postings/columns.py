@@ -16,6 +16,7 @@ from modern_gl.application.table_text import POSTING_HEADERS, subconto_header
 from modern_gl.i18n import fold
 
 DT, CT, CURRENCY, CURRENCY_AMOUNT, RATE, AMOUNT, MEMO, INVOICE = 0, 4, 8, 9, 10, 11, 12, 13
+QUANTITY = 14  # a counted account (01, 12…, D199); shown before the amount
 CURRENCY_COLUMNS = (CURRENCY, CURRENCY_AMOUNT, RATE)
 HEADERS = [
     "Дебет",
@@ -32,8 +33,9 @@ HEADERS = [
     "Сумма",
     "Содержание",
     "E-qaimə",
+    "Кол-во",
 ]
-NUMBER_COLUMNS = (CURRENCY_AMOUNT, RATE, AMOUNT)
+NUMBER_COLUMNS = (CURRENCY_AMOUNT, RATE, AMOUNT, QUANTITY)
 # translated at display time: tr(HEADERS[i])
 ALIGN_RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 ALIGN_LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -51,6 +53,7 @@ def column_role(col: int) -> tuple[str, int | None]:
         RATE: "rate",
         AMOUNT: "amount",
         INVOICE: "invoice",
+        QUANTITY: "quantity",
     }
     return names.get(col, "memo"), None
 
@@ -105,6 +108,7 @@ HEADER_FIELDS = [  # header names -> column (subconto headers are handled separa
         ("amount", AMOUNT),
         ("memo", MEMO),
         ("invoice", INVOICE),
+        ("quantity", QUANTITY),
     )
 ]
 
@@ -150,6 +154,10 @@ class PostingRow:
     invoice_kind: str = ""  # "customs": a customs declaration (from a warehouse receipt)
     invoice_auto: bool = False  # inherited from a related line, safe to refresh
     pays_vat: bool = False  # kept as posted: the ƏDV paid to a supplier's deposit (bank form)
+    quantity: int | None = None  # a counted account: millionths of a unit (domain.quantity)
+    # manat per millionth of a unit of a balance filled in (D198): a quantity typed takes
+    # its amount at this average; None — the amount is typed
+    unit_cost: Fraction | None = None
 
     def is_empty(self) -> bool:
         return (
@@ -177,4 +185,5 @@ class PostingRow:
             invoice=p.invoice,
             invoice_kind=p.invoice_kind,
             pays_vat=p.pays_vat,
+            quantity=p.quantity if keep_sign or p.quantity is None else abs(p.quantity),
         )

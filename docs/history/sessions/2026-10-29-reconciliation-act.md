@@ -1,4 +1,4 @@
-# 2026-10-29, ветка claude/reconciliation-act (D-new: акт сверки)
+# 2026-10-29, ветка claude/reconciliation-act (D200: акт сверки)
 
 Пользователь: «ещё часто нужны бывают statement (üzləşmə aktı) и у покупателей, и у
 поставщиков».

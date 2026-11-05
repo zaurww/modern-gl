@@ -9,9 +9,10 @@ from collections.abc import Callable
 from PySide6.QtCore import Signal
 
 from modern_gl.desktop.preferences import STOCK_STATEMENT_VIEW
+from modern_gl.desktop.reports_page.table import INDENT
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.stock_reports.common import INDENT, quantity_column, view_switch
+from modern_gl.desktop.stock_reports.common import quantity_column, view_switch
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import money
 from modern_gl.i18n import N_, tr

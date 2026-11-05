@@ -1,35 +1,62 @@
 """A report as Excel likes it (D104): a plain table from A1 — one header row, frozen and
 filtered, a row per line, no merged cells and no colors. Amounts are numbers (manat with
-two decimals, negatives red), codes stay text («01» is not 1); the depth of a line is
-Excel's own row grouping (+/−) and a «Уровень» column to filter by, not spaces. What the
-report is — its title, period, book — is on a second sheet, so nothing sits above the
-table and it can go straight into a pivot or a filter. The same table, tab-separated, is
-what Ctrl+C puts on the clipboard."""
+two decimals, negatives red), dates are dates, codes stay text («01» is not 1); the depth
+of a line is Excel's own row grouping (+/−) and a «Уровень» column to filter by, not
+spaces. What the report is — its title, period, book — is on a second sheet, so nothing
+sits above the table and it can go straight into a pivot or a filter. A flat table meant
+for a pivot (`as_table`) is an Excel table, so a pivot on it grows with the next export.
+The same table, tab-separated, is what Ctrl+C puts on the clipboard."""
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 from modern_gl.i18n import tr
 
 MONEY_FORMAT = "#,##0.00;[Red]-#,##0.00"
+DATE_FORMAT = "DD.MM.YYYY"
 SHEET_NAME_BAD = "[]:*?/\\"
+MAX_WIDTH = 60
 
 
 @dataclass
 class ReportColumn:
-    """A column of a report file; a money column holds minor units."""
+    """A column of a report file; a money column holds minor units, a date column ISO
+    dates, a number column plain integers (a year, a document number) — the rest is text."""
 
     title: str
     money: bool = False  # cells are minor units (int) or None
     group: str = ""  # «Начальное сальдо» over its Dt and Kt: «Начальное сальдо · Дт»
+    date: bool = False  # cells are ISO dates ("2026-03-01") or None
+    number: bool = False  # cells are plain integers or None
 
     @property
     def caption(self) -> str:
         """The header of the column: with its group («Начальное сальдо · Дт»)."""
         return f"{self.group} · {self.title}" if self.group else self.title
+
+    def cell(self, value: object) -> Any:
+        """What goes into the cell: a Decimal, a date, an int, or text."""
+        if self.money:
+            return amount(value)
+        if self.date:
+            return date.fromisoformat(value) if isinstance(value, str) and value else None
+        if self.number:
+            return value if isinstance(value, int) else None
+        return "" if value is None else str(value)
+
+    def shown(self, value: object) -> str:
+        """The cell as Excel shows it, to size the column."""
+        if self.money:
+            return f"{amount(value):,.2f}" if isinstance(value, int) else ""
+        if self.date:
+            return "00.00.0000" if value else ""
+        return "" if value is None else str(value)
 
 
 @dataclass
@@ -50,6 +77,7 @@ class ReportTable:
     rows: list[ReportRow] = field(default_factory=list[ReportRow])
     # («Период», «01.10 — …»)
     about: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
+    as_table: bool = False  # an Excel table (ListObject): a pivot's source that grows
 
     @property
     def leveled(self) -> bool:
@@ -62,16 +90,31 @@ def amount(minor: object) -> Decimal | None:
     return Decimal(minor) / 100 if isinstance(minor, int) else None
 
 
-def write_xlsx(table: ReportTable, path: str | Path) -> None:
+def write_xlsx(table: ReportTable, path: str | Path, more: Sequence[ReportTable] = ()) -> None:
     """Write the report as an .xlsx: the table on the first sheet (header frozen, amounts as
-    numbers, lines as an outline), the report's parameters on «Параметры»."""
+    numbers, lines as an outline), `more` tables each on a sheet of their own, the
+    report's parameters on «Параметры»."""
     from openpyxl import Workbook
+
+    book = Workbook()
+    _write_sheet(book.worksheets[0], table)  # a new book has one sheet
+    for extra in more:
+        _write_sheet(book.create_sheet(sheet_name(extra.title)), extra)
+    about = book.create_sheet(sheet_name(tr("Параметры")))
+    for key, value in [(tr("Отчёт"), table.title), *table.about]:
+        about.append([key, value])
+    about.column_dimensions["A"].width = 18
+    about.column_dimensions["B"].width = 60
+    book.properties.title = table.title
+    book.save(str(path))
+
+
+def _write_sheet(sheet: Any, table: ReportTable) -> None:
     from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
     from openpyxl.worksheet.properties import Outline
+    from openpyxl.worksheet.table import Table, TableStyleInfo
 
-    book = Workbook()
-    sheet = book.worksheets[0]  # a new book has one sheet
     sheet.title = sheet_name(table.title)
     level_column = table.leveled
     headers = [c.caption for c in table.columns] + ([tr("Уровень")] if level_column else [])
@@ -79,10 +122,7 @@ def write_xlsx(table: ReportTable, path: str | Path) -> None:
     for cell in sheet[1]:
         cell.font = Font(bold=True)
     for r in table.rows:
-        values = [
-            amount(v) if c.money else ("" if v is None else str(v))
-            for c, v in zip(table.columns, r.cells, strict=True)
-        ]
+        values = [c.cell(v) for c, v in zip(table.columns, r.cells, strict=True)]
         sheet.append(values + ([r.level] if level_column else []))
         row = sheet.max_row
         if r.level:
@@ -91,21 +131,22 @@ def write_xlsx(table: ReportTable, path: str | Path) -> None:
             cell = sheet.cell(row, i)
             if c.money:
                 cell.number_format = MONEY_FORMAT
+            elif c.date:
+                cell.number_format = DATE_FORMAT
             if r.bold:
                 cell.font = Font(bold=True)
     sheet.sheet_properties.outlinePr = Outline(summaryBelow=False)  # a line above its detail
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = sheet.dimensions
+    if table.as_table and table.rows:
+        style = TableStyleInfo(name="TableStyleLight1", showRowStripes=False)
+        sheet.add_table(
+            Table(displayName=_table_name(table.title), ref=sheet.dimensions, tableStyleInfo=style)
+        )
+    else:
+        sheet.auto_filter.ref = sheet.dimensions
     for i, c in enumerate(table.columns, start=1):
-        longest = max([len(c.caption)] + [len(_shown(r.cells[i - 1], c.money)) for r in table.rows])
-        sheet.column_dimensions[get_column_letter(i)].width = min(longest + 2, 60)
-    about = book.create_sheet(sheet_name(tr("Параметры")))
-    for key, value in [(tr("Отчёт"), table.title), *table.about]:
-        about.append([key, value])
-    about.column_dimensions["A"].width = 18
-    about.column_dimensions["B"].width = 60
-    book.properties.title = table.title
-    book.save(str(path))
+        longest = max([len(c.caption)] + [len(c.shown(r.cells[i - 1])) for r in table.rows])
+        sheet.column_dimensions[get_column_letter(i)].width = min(longest + 2, MAX_WIDTH)
 
 
 def to_tsv(table: ReportTable, rows: list[ReportRow] | None = None, decimal: str = ".") -> str:
@@ -125,13 +166,13 @@ def to_tsv(table: ReportTable, rows: list[ReportRow] | None = None, decimal: str
     return "\n".join(lines) + "\n"
 
 
-def _shown(value: object, money: bool) -> str:
-    if money:
-        return f"{amount(value):,.2f}" if isinstance(value, int) else ""
-    return "" if value is None else str(value)
-
-
 def sheet_name(title: str) -> str:
     """Excel's sheet name: at most 31 characters, none of []:*?/\\."""
     clean = "".join(" " if ch in SHEET_NAME_BAD else ch for ch in title).strip()
     return clean[:31] or "Sheet"
+
+
+def _table_name(title: str) -> str:
+    """An Excel table name: letters, digits and underscores, not starting with a digit."""
+    clean = "".join(ch if ch.isalnum() else "_" for ch in title).strip("_")
+    return ("T_" + clean if not clean or clean[0].isdigit() else clean)[:255]

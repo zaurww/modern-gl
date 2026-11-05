@@ -198,4 +198,15 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D186 | Строка банка не исчезает молча | принято (уточняет D37, D78, D146, D180) | [D186-bank-visible-gaps.md](D186-bank-visible-gaps.md) |
 | D187 | Ручная строка банка узнаётся при загрузке файла | принято (уточняет D146, D186) | [D187-bank-hand-typed-links.md](D187-bank-hand-typed-links.md) |
 | D188 | Колонки ОПиУ по субконто, строки под группами плана, процент от выручки | принято | [D188-statement-columns-by-subconto.md](D188-statement-columns-by-subconto.md) |
-| D-new | Акт сверки с контрагентом (üzləşmə aktı) | принято | [D-new-reconciliation-act.md](D-new-reconciliation-act.md) |
+| D189 | Релиз и обновления: версия в одном месте, установщик, тег собирает | принято | [D189-release-updates.md](D189-release-updates.md) |
+| D190 | ОСВ по месту: развороты, сортировка, одна колонка, точность, сохранённые виды | принято | [D190-interactive-osv.md](D190-interactive-osv.md) |
+| D191 | Обновление из программы: спросить GitHub при запуске и раз в час, тихая установка | принято | [D191-updates.md](D191-updates.md) |
+| D192 | «Доход за» в продаже: доход прошлого месяца по поздней e-qaimə — через счёт 76G «Начисленные доходы» | принято | [D192-income-month.md](D192-income-month.md) |
+| D193 | «Проводки для Excel»: плоская таблица для сводной, без отчётов в программе | заменено D195 | [D193-flat-excel-postings.md](D193-flat-excel-postings.md) |
+| D194 | Справочник объектов или категорий: признак справочника, не список в коде | принято (уточняет D173, D174) | [D194-directory-objects.md](D194-directory-objects.md) |
+| D195 | «Проводки для Excel» убран; отчёты — окна с фильтрами по модулям | принято | [D195-remove-flat-postings.md](D195-remove-flat-postings.md) |
+| D196 | Загрузка e-qaimə: новая услуга поставщика получает счёт как в форме покупки | принято (уточняет D45, D76) | [D196-import-expense-guess.md](D196-import-expense-guess.md) |
+| D197 | Списки «Alış»/«Satış» и склада: сортировка по заголовку; период у покупок и продаж | принято | [D197-list-sort-period.md](D197-list-sort-period.md) |
+| D198 | «Заполнить остатком…»: остаток счёта по субконто — строки документа | принято | [D198-fill-balance.md](D198-fill-balance.md) |
+| D199 | Количество в книге: счета объектов (01, 08, 12) считают штуки | принято (опирается на D194, D198) | [D199-book-quantity.md](D199-book-quantity.md) |
+| D200 | Акт сверки с контрагентом (üzləşmə aktı) | принято | [D200-reconciliation-act.md](D200-reconciliation-act.md) |

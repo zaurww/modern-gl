@@ -18,6 +18,7 @@ from modern_gl.desktop.reports_page.statement_columns import (
     column_period,
     periods_of,
 )
+from modern_gl.desktop.reports_page.table import INDENT
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P
@@ -45,7 +46,6 @@ SECTIONS = (
     N_("Долгосрочные обязательства"),
     N_("Капитал"),
 )
-INDENT = "      "
 
 
 class StatementsPage(ReportPage):

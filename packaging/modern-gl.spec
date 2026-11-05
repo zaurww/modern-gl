@@ -6,7 +6,7 @@ icons and fonts (`desktop/resources`), the migrations and the chart templates
 
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).parent
 PACKAGE = ROOT / "src" / "modern_gl"
@@ -16,6 +16,8 @@ datas = [
     (str(PACKAGE / "infrastructure" / "migrations"), "modern_gl/infrastructure/migrations"),
     (str(PACKAGE / "infrastructure" / "templates"), "modern_gl/infrastructure/templates"),
 ]
+# the version the program shows comes from the package metadata (modern_gl.__version__)
+datas += copy_metadata("modern-gl")
 
 a = Analysis(
     [str(ROOT / "packaging" / "launch.py")],
@@ -24,7 +26,8 @@ a = Analysis(
     # the translations (`i18n_az`) are found with pkgutil, the modules of the ledger are
     # imported lazily: nothing names them, so every submodule is collected
     hiddenimports=collect_submodules("modern_gl"),
-    excludes=["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtPdf"],
+    # nothing of PySide6 is excluded: the portal window (portal_login) is the browser
+    # QtWebEngine, imported lazily — an exclusion is only found by a user (0.1.1)
     noarchive=False,
 )
 pyz = PYZ(a.pure)
@@ -35,5 +38,6 @@ exe = EXE(
     name="modern-gl",
     console=False,
     upx=False,
+    icon=str(ROOT / "packaging" / "modern-gl.ico"),
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="modern-gl")
