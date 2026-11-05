@@ -80,6 +80,7 @@ class AccountDialog(QDialog):
             row.addWidget(optional)
             form.addRow(tr("Субконто {i}", i=i), row)
         self._build_subconto_hint(form)
+        self._build_counted(form)
         root.addLayout(form)
 
         self.error = QLabel()
@@ -95,6 +96,12 @@ class AccountDialog(QDialog):
             self._load(account)
         else:
             self._prefill_child(parent_id)
+        for box in (*self.subconto, self.account_type):
+            box.currentIndexChanged.connect(self._fit_counted)
+        self.contra.toggled.connect(self._fit_counted)
+        self.group.toggled.connect(self._fit_counted)
+        self.counted.toggled.connect(self._counted_toggled)
+        self._fit_counted()
 
     def _build_fields(self, account: AccountInfo | None, parent_id: int | None) -> None:
         self.code = QLineEdit(account.code if account else "")
@@ -177,6 +184,77 @@ class AccountDialog(QDialog):
         self.subconto_hint.setWordWrap(True)
         self.subconto_hint.hide()
         form.addRow("", self.subconto_hint)
+
+    def _build_counted(self, form: QFormLayout) -> None:
+        """«Вести количество» (D201): an asset account of objects counts them (D199);
+        the switch is its directory's — one source of truth, said under it."""
+        self.counted = QCheckBox(tr("Вести количество (штуки)"))
+        self.counted_hint = QLabel()
+        self.counted_hint.setObjectName("tertiary")
+        self.counted_hint.setFont(fonts().small)
+        self.counted_hint.setWordWrap(True)
+        self._counted_touched = False  # a new account suggests it until the user decides
+        form.addRow("", self.counted)
+        form.addRow("", self.counted_hint)
+
+    def _kinds(self) -> list[int]:
+        if self.group.isChecked():
+            return []
+        return [b.currentData() for b in self.subconto if b.currentData() is not None]
+
+    def _counts_possible(self) -> bool:
+        """Only an asset, not a contra one, with a directory keeps a quantity (D199)."""
+        account_class, _ = self._choice()
+        if self.account is not None and self.account_type.currentData() in (AUTO, ""):
+            account_class = self.account.account_class
+        return account_class == "asset" and not self.contra.isChecked() and bool(self._kinds())
+
+    def _fit_counted(self, *_) -> None:
+        possible = self._counts_possible()
+        self.counted.setVisible(possible)
+        if not possible:
+            self.counted_hint.hide()
+            return
+        kinds, per_line = self._kinds(), self.s.catalog.kind_per_line
+        objects = [k for k in kinds if per_line.get(k)]
+        if not self._counted_touched:  # what the user ticked stays as ticked
+            suggested = self.account is None and self._suggest_counted(kinds)
+            self.counted.blockSignals(True)
+            self.counted.setChecked(bool(objects) or suggested)
+            self.counted.blockSignals(False)
+        self._show_counted_hint(objects or kinds[:1])
+
+    def _suggest_counted(self, kinds: list[int]) -> bool:
+        """A new account of fixed assets, intangibles or other assets with a directory no
+        other account uses yet — likely one of objects (low-value items on 12)."""
+        _, account_type = self._choice()
+        if account_type not in ("fixed_asset", "intangible", "other_asset"):
+            return False
+        return not any(set(a.sc_kinds) & {kinds[0]} for a in self.s.catalog.accounts.values())
+
+    def _counted_toggled(self, _on: bool) -> None:
+        self._counted_touched = True
+        self._fit_counted()
+
+    def _show_counted_hint(self, kinds: list[int]) -> None:
+        if not self.counted.isChecked() or not kinds:
+            self.counted_hint.hide()
+            return
+        cat = self.s.catalog
+        own = None if self.account is None else self.account.id
+        others = sorted(
+            a.short
+            for a in cat.accounts.values()
+            if a.id != own and not a.is_group and set(a.sc_kinds) & set(kinds)
+        )
+        text = tr(
+            "Справочник «{kind}» — объекты: у каждой строки покупки свой элемент.",
+            kind=", ".join(cat.kinds[k] for k in kinds),
+        )
+        if others:
+            text += " " + tr("Он же на счетах: {codes}", codes=", ".join(others))
+        self.counted_hint.setText(text)
+        self.counted_hint.show()
 
     def _build_buttons(self, root: QVBoxLayout) -> None:
         buttons = QHBoxLayout()
@@ -277,6 +355,7 @@ class AccountDialog(QDialog):
             two_sided=two_sided,
             currency=self.currency.currentData(),
             optional=frozenset(self._optional_positions(subconto)),
+            counted=self.counted.isChecked() if self._counts_possible() else None,
         )
         try:
             saved_id = led.save_account_form(
