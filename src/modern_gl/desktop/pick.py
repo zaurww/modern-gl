@@ -173,6 +173,20 @@ class PickBox(QLineEdit):
                 return True
         return super().eventFilter(watched, event)
 
+    def _show_on_click(self) -> None:
+        """The whole list, on what is chosen."""
+        self._open(self.text(), everything=True)
+
+    def mousePressEvent(self, event) -> None:
+        """A click shows what there is to choose from: nobody guesses the first letter."""
+        super().mousePressEvent(event)
+        if (
+            event.button() == Qt.MouseButton.LeftButton
+            and not self.isReadOnly()
+            and not self._popup().isVisible()
+        ):
+            self._show_on_click()
+
     def keyPressEvent(self, event) -> None:
         if event.key() in OPEN and not self._popup().isVisible():
             self._open(self.text(), everything=True)
@@ -230,6 +244,12 @@ class SuggestBox(PickBox):
         if self.hasFocus():
             self._open("", everything=True)
             self._popup().setCurrentIndex(QModelIndex())
+
+    def _show_on_click(self) -> None:
+        """The suggestions again, still nothing highlighted: what is typed stays unless
+        one is picked."""
+        if self._offered():
+            self._offer()
 
     def _typed(self) -> None:
         self._popup().hide()

@@ -78,9 +78,8 @@ class ChargesModel(QAbstractTableModel):
         self.s = session
         self.rate_of = rate_of  # currency id -> the rate on the document's date (or None)
         self.read_only = read_only
-        self.cost_types = {
-            c.id: c.label for c in landed_cost_type_choices(session.conn, session.company_id)
-        }
+        self.cost_types: dict[int, str] = {}
+        self.load_cost_types()
         self.rows = rows or [self.default_row()]
         # a warehouse only (D90): the supplier's account is put in by itself, unseen
         self.accounts_hidden = session.stock_only and self.default_row().account_id is not None
@@ -96,6 +95,11 @@ class ChargesModel(QAbstractTableModel):
             VAT,
             MEMO,
         ]
+
+    def load_cost_types(self) -> None:
+        self.cost_types = {
+            c.id: c.label for c in landed_cost_type_choices(self.s.conn, self.s.company_id)
+        }
 
     def default_row(self) -> ChargeRow:
         return ChargeRow(account_id=default_account(self.s.ledger, self.s.company_id, SUPPLIER))

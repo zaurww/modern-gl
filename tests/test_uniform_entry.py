@@ -171,3 +171,59 @@ def test_a_chosen_value_is_selected_whole_on_entering_its_field(qtbot, how):
     else:
         box.setFocus()
     qtbot.waitUntil(lambda: box.selectedText() == "60  Malsatanlar")
+
+
+def _basis_box(qtbot, box: PickBox) -> PickBox:
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+    window = QWidget()
+    lay = QVBoxLayout(window)
+    lay.addWidget(QLineEdit())
+    for label, data in (("E-qaimə", ""), ("Bəyannamə", "customs"), ("E-qaimə gözləyir", "wait")):
+        box.addItem(label, data)
+    lay.addWidget(box)
+    box.window_ref = window  # pyright: ignore[reportAttributeAccessIssue]  (kept alive)
+    shown(qtbot, window)
+    return box
+
+
+def _click(box: PickBox) -> None:
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+
+    QTest.mouseClick(box, Qt.MouseButton.LeftButton, pos=QPoint(4, box.height() // 2))
+
+
+def test_a_click_shows_the_whole_list_on_what_is_chosen(qtbot):
+    """A field of three choices says nothing of them until a letter is guessed: a click
+    opens all of it, the chosen one highlighted; Enter on another takes it."""
+    box = _basis_box(qtbot, PickBox())
+    box.setCurrentIndex(0)
+    _click(box)
+    popup = shown_list(qtbot)
+    assert items(popup) == ["E-qaimə", "Bəyannamə", "E-qaimə gözləyir"]
+    assert popup.currentIndex().row() == 0
+    qtbot.keyClick(popup, Qt.Key.Key_Down)
+    qtbot.keyClick(popup, Qt.Key.Key_Return)
+    assert box.currentData() == "customs" and not popup.isVisible()
+
+
+def test_a_click_on_a_read_only_choice_shows_nothing(qtbot):
+    box = _basis_box(qtbot, PickBox())
+    box.setCurrentIndex(1)
+    box.setReadOnly(True)
+    _click(box)
+    assert not box._popup().isVisible()
+
+
+def test_a_click_on_typed_text_suggests_without_taking(qtbot):
+    """Free text with suggestions (an e-qaimə number): a click offers the list, nothing
+    highlighted — the typed number stays unless one is picked."""
+    from modern_gl.desktop.pick import SuggestBox
+
+    box = _basis_box(qtbot, SuggestBox())
+    box.setText("MT2601000001")
+    _click(box)
+    popup = shown_list(qtbot)
+    assert not popup.currentIndex().isValid()
+    assert box.text() == "MT2601000001"

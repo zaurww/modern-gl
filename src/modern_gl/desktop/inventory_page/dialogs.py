@@ -72,6 +72,7 @@ class ItemDialog(QDialog):
         form = QFormLayout(self)
         self.name = QLineEdit(value.name if value else name)
         self.code = QLineEdit(value.code or "" if value else "")
+        self.code.setPlaceholderText(tr("необязательно"))  # a name is enough
         self.group = QComboBox()
         self.group.addItem(tr("— без группы"), None)
         kind = self._item_kind()

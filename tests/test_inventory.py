@@ -1663,6 +1663,7 @@ def test_the_item_dialog_of_a_new_company_offers_the_usual_units(ledger, conn, q
     ]
     notes = [label.text() for label in dialog.findChildren(QLabel)]
     assert "Вместе с товаром появится склад «Основной склад»" in notes
+    assert dialog.code.placeholderText() == "необязательно"  # the article: not asked for
     dialog._save()
     assert dialog.item_id is not None
     assert [c.label for c in unit_choices(conn, cid)] == ["шт  Штука"]

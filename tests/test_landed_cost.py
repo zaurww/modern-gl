@@ -581,3 +581,30 @@ def test_gl_document_taken_as_charge_opens_read_only(batch, conn):
     assert queries.load_document(conn, b.company_id, b.broker_doc).editable
     post_batch(b, [broker_fee(b)])
     assert not queries.load_document(conn, b.company_id, b.broker_doc).editable
+
+
+def test_a_cost_type_the_list_lacks_is_added_from_the_cell(batch, conn, qtbot):
+    """«Статья» took nothing in a company with no cost types yet (they were added only in
+    «Склад → ⋯»): a typed name is offered as "+ Добавить «…»", added and chosen."""
+    from modern_gl.desktop.landed_cost_page.columns import COST_TYPE
+    from modern_gl.reporting.inventory import landed_cost_type_choices
+    from tests.helpers.qt import completions
+
+    b = batch
+    page = lc_page(b, conn, qtbot)
+    page.show()
+    table, charges = page.charges_table, page.charges
+    index = charges.index(0, charges.columns.index(COST_TYPE))
+    table.setCurrentIndex(index)
+    table.edit(index)
+    editor = cell_editor(table, index)
+    editor.setText("Gömrük rüsumu")
+    editor.textEdited.emit(editor.text())
+    completer = completer_of(editor)
+    assert completions(completer)[-1] == "+ Добавить «Gömrük rüsumu»"
+    popup = popup_of(completer)
+    popup.setCurrentIndex(popup.model().index(popup.model().rowCount() - 1, 0))
+    qtbot.keyClick(popup, Qt.Key.Key_Return)
+    added = {c.label: c.id for c in landed_cost_type_choices(conn, b.company_id)}
+    assert charges.rows[0].cost_type_id == added["Gömrük rüsumu"]
+    assert charges.data(index) == "Gömrük rüsumu"

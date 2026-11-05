@@ -31,6 +31,7 @@ from modern_gl.desktop.cell_editing import (
 )
 from modern_gl.desktop.landed_cost_page.columns import (
     ACCOUNT,
+    COST_TYPE,
     NUMBER_KEYS,
     SC1,
     SC2,
@@ -50,6 +51,8 @@ class CellDelegate(QStyledItemDelegate):
     # (kind_id, name, owner_id) -> the new element's id: a subconto list offers
     # "+ Добавить «…»", as in the journal (see `attach_list`)
     add_value: Callable[[int, str, int | None], int] | None = None
+    # name -> the new cost type's id: «Статья» offers "+ Добавить «…»" too
+    add_cost_type: Callable[[str], int] | None = None
 
     def createEditor(self, parent, option, index):
         model = index.model()
@@ -61,7 +64,11 @@ class CellDelegate(QStyledItemDelegate):
             labels = [label for _, label in choices]
             attach_account_list(editor, labels, model.s.catalog, self._chosen)
         elif choices is not None:
-            can_add = key in {SC1, SC2, SC3} and self.add_value is not None
+            can_add = (
+                self.add_value is not None
+                if key in {SC1, SC2, SC3}
+                else key == COST_TYPE and self.add_cost_type is not None
+            )
             labels = [label for _, label in choices]
             attach_list(editor, labels, True, self._chosen, can_add=can_add)
         elif key in NUMBER_KEYS:
@@ -84,6 +91,9 @@ class CellDelegate(QStyledItemDelegate):
             model.setData(index, self.add_value(kind, text, model.owner_at(index.row(), key)))
             return
         try:
+            if editor.property("gl_add") and key == COST_TYPE and self.add_cost_type is not None:
+                model.setData(index, self.add_cost_type(text))
+                return
             value = model.parse(index.row(), model.key(index), editor.text())
             model.setData(index, value)
         except (LedgerError, LookupError, ValueError, ArithmeticError) as exc:

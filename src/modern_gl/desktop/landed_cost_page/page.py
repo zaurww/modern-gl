@@ -66,6 +66,7 @@ class LandedCostPage(LandedCostForm):
         super().__init__(session)
         self.delegate.error.connect(self.show_error)
         self.delegate.add_value = partial(add_typed_value, self.s)
+        self.delegate.add_cost_type = self._add_cost_type
         self._connect()
 
         self._set_models([], [], read_only=False)
@@ -191,6 +192,12 @@ class LandedCostPage(LandedCostForm):
         if not self.charges.read_only and not self.dirty:
             self.dirty = True
             self.title_changed.emit()
+
+    def _add_cost_type(self, name: str) -> int:
+        """A cost type typed in «Статья» that the list lacks: added, then chosen."""
+        type_id = self.inventory.add_landed_cost_type(self.s.company_id, name)
+        self.charges.load_cost_types()
+        return type_id
 
     def add_charge(self) -> None:
         if self.charges.read_only:
