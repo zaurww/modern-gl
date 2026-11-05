@@ -253,7 +253,7 @@ wheels = [
 
 [[package]]
 name = "modern-gl"
-version = "0.1.8"
+version = "0.1.9"
 source = { editable = "." }
 dependencies = [
     { name = "openpyxl" },
