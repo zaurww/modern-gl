@@ -20,6 +20,27 @@ class GoodsLinesPart(InventoryDocumentForm):
         self.model.goods_wanted.connect(
             lambda row: QTimer.singleShot(0, lambda: self._make_goods(row))
         )
+        self.model.stock_account_wanted.connect(self._set_stock_account)
+
+    def _set_stock_account(self, item_id: int, account_id: int) -> None:
+        """Another stock account picked on a goods line: it is the item's, so every
+        document of the item is posted again on it (D202)."""
+        try:
+            self.inventory.set_item_account(self.s.company_id, item_id, account_id)
+        except LedgerError as exc:
+            self.show_error(str(exc))
+            return
+        self.error.hide()
+        self.model.refresh_choices()
+        self.model.rows_changed()
+        self.postings.changed()
+        self.s.notify(
+            tr(
+                "«{name}»: счёт запасов — {account}",
+                name=self.model.items[item_id].label,
+                account=self.s.catalog.accounts[account_id].label,
+            )
+        )
 
     def _make_goods(self, row: int) -> None:
         """The line, and the other services not yet charged to an account, as new items

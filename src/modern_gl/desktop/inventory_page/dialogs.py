@@ -28,6 +28,7 @@ from modern_gl.i18n import N_, tr
 from modern_gl.reporting.inventory import (
     ItemDetails,
     item_details,
+    last_stock_account,
     stock_account_choices,
     unit_choices,
     unit_codes,
@@ -88,12 +89,14 @@ class ItemDialog(QDialog):
         self.accounts = QComboBox()
         for account in stock_account_choices(session.conn, session.company_id):
             self.accounts.addItem(account.label, account.id)
-        if item is not None:
+        if item is None:  # as the item before it: goods after goods, not the first account
+            last = last_stock_account(session.conn, session.company_id)
+            self.accounts.setCurrentIndex(max(self.accounts.findData(last), 0))
+        else:
             self.units.setCurrentIndex(max(self.units.findData(item.unit_id), 0))
             self.accounts.setCurrentIndex(max(self.accounts.findData(item.inventory_account_id), 0))
-            if item.used:  # its quantities and postings are in these
-                for box in (self.units, self.accounts):
-                    box.setEnabled(False)
+            if item.used:  # its quantities are in the unit; the account moves its postings
+                self.units.setEnabled(False)
         form.addRow(tr("Наименование"), self.name)
         form.addRow(tr("Артикул"), self.code)
         if self.group.count() > 1:  # the directory has groups
@@ -128,7 +131,12 @@ class ItemDialog(QDialog):
         if self.first_warehouse:
             notes.append(tr("Вместе с товаром появится склад «{name}»", name=tr(FIRST_WAREHOUSE)))
         if item is not None and item.used:
-            notes.append(tr("По товару есть документы: единица и счёт не меняются"))
+            notes.append(
+                tr(
+                    "По товару есть документы: единица не меняется; "
+                    "со сменой счёта они проведутся заново"
+                )
+            )
         for text in notes:
             note = QLabel(text)
             note.setObjectName("tertiary")

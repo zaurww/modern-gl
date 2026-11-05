@@ -82,7 +82,7 @@ def test_stock_balances_by_group_and_an_item_changed_while_unused(shop, conn):
         ("Kabel", "Kabellər", 3_000),
         ("Printer", "", 10_000),
     ]
-    with pytest.raises(ValidationError, match="единицу и счёт товара менять нельзя"):
+    with pytest.raises(ValidationError, match="единицу товара менять нельзя"):
         shop.inventory.update_item(cid, cable, unit, shop.acc["41"])
 
 

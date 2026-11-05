@@ -82,6 +82,10 @@ class LineSpread(InventoryLinesBase):
                     found.append((row_index, row.memo.strip(), key))
         return [(r, name, key) for r, name, key in found if name]
 
+    def rows_changed(self) -> None:
+        """What the lines show changed outside them (an item's stock account)."""
+        self._all_rows_changed()
+
     def _all_rows_changed(self) -> None:
         if self.rows:
             self.dataChanged.emit(

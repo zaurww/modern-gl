@@ -43,6 +43,11 @@ class InventoryBase(ModuleBase):
             self._kept[key] = read()
         return self._kept[key]  # type: ignore[return-value]
 
+    def _repost_item(self, company_id: int, item_id: int) -> None:
+        """The item's posted documents again, on its new stock account — made by the
+        rebuild (`RebuildCommands`), called by the catalog."""
+        raise NotImplementedError
+
     def _unit(self, company_id: int, unit_id: int) -> Row:
         row = self.conn.execute(
             "SELECT * FROM inventory_units WHERE company_id = ? AND id = ?",

@@ -59,6 +59,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
 )
 from modern_gl.desktop.session import Session
 from modern_gl.domain.dates import earlier_months, iso_date, month_code, month_name, parse_month
+from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     Choice,
@@ -99,6 +100,9 @@ class InventoryLinesBase(QAbstractTableModel):
     changed = Signal()
     # «Товар» chosen in «Вид» of a service line: the page makes it an item (row)
     goods_wanted = Signal(int)
+    # another stock account picked on a goods line (item, account): it is the item's, one
+    # for all its documents — the page changes the item (D202)
+    stock_account_wanted = Signal(int, int)
 
     def __init__(
         self,
@@ -197,10 +201,11 @@ class InventoryLinesBase(QAbstractTableModel):
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         if key == EXPENSE:  # goods come to a stock account through the warehouse only
             catalog = self.s.catalog
+            goods = self.is_stock_account_cell(row_index, key)
             return [
                 (account.id, account.label)
                 for account in catalog.leaf_accounts
-                if not catalog.is_stock_account(account.id)
+                if catalog.is_stock_account(account.id) == goods
             ]
         if key == EXPENSE_MONTH:
             return [*self.month_choices(), (SEVERAL_MONTHS, tr("несколько месяцев…"))]
@@ -240,10 +245,39 @@ class InventoryLinesBase(QAbstractTableModel):
         subconto = self._subconto_of(self.rows[row_index], key)
         return self.s.catalog.owner_in(account, subconto, int(key[-1]) - 1)
 
-    @staticmethod
-    def _account_of(row: InventoryGridRow, key: str) -> int | None:
-        """The account a subconto cell belongs to: the expense account's or the offset's."""
+    def _account_of(self, row: InventoryGridRow, key: str) -> int | None:
+        """The account of a cell: where the line goes — the stock account of its item, the
+        account of a service — or the account a subconto cell belongs to."""
+        if key == EXPENSE and row.item_id is not None:
+            item = self.items.get(row.item_id)
+            return item.account_id if item else None
         return row.expense_account_id if key in ESC_KEYS | {EXPENSE} else row.offset_account_id
+
+    def shows_stock_accounts(self) -> bool:
+        """A purchase says where its goods go: «Счёт» of a goods line is its item's stock
+        account. Not in a warehouse only (D90): the accounts are unseen there."""
+        return self.doc_type == "receipt" and not self.stock_only
+
+    def is_stock_account_cell(self, row_index: int, key: str) -> bool:
+        return (
+            key == EXPENSE
+            and self.shows_stock_accounts()
+            and self.rows[row_index].item_id is not None
+        )
+
+    def want_stock_account(self, item_id: int, account_id: int | None) -> None:
+        """Another stock account typed on a goods line: the page changes the item."""
+        item = self.items.get(item_id)
+        if account_id is None or item is None or account_id == item.account_id:
+            return
+        if not self.s.catalog.is_stock_account(account_id):
+            raise ValidationError(
+                tr(
+                    "«{account}» — не счёт запасов: у него нет субконто товара и склада",
+                    account=self.s.catalog.accounts[account_id].label,
+                )
+            )
+        self.stock_account_wanted.emit(item_id, account_id)
 
     @staticmethod
     def _subconto_of(row: InventoryGridRow, key: str) -> list[int | None]:
@@ -373,6 +407,8 @@ class InventoryLinesBase(QAbstractTableModel):
             return not self.rows[row].is_empty()
         if key in {WAREHOUSE, UNIT} and self.is_service(row):
             return False
+        if self.is_stock_account_cell(row, key):
+            return True
         if key in ESC_KEYS | {EXPENSE, EXPENSE_MONTH} and not self.is_service(row):
             return False
         if key in SALE_KEYS:

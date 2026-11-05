@@ -211,3 +211,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D199 | Количество в книге: счета объектов (01, 08, 12) считают штуки | принято (опирается на D194, D198) | [D199-book-quantity.md](D199-book-quantity.md) |
 | D200 | Акт сверки с контрагентом (üzləşmə aktı) | принято | [D200-reconciliation-act.md](D200-reconciliation-act.md) |
 | D201 | «Вести количество» в карточке счёта | принято (уточняет D199, D194) | [D201-account-quantity.md](D201-account-quantity.md) |
+| D202 | Счёт запасов товара: виден в покупке и меняется после документов | принято (уточняет D60, опирается на D101) | [D202-item-stock-account.md](D202-item-stock-account.md) |

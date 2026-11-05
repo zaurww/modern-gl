@@ -25,6 +25,7 @@ class Choice:
 class ItemChoice(Choice):
     unit: str
     precision: int
+    account_id: int  # its stock account: where a purchase of it goes
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,8 @@ def item_choices(conn: Connection, company_id: int) -> list[ItemChoice]:
     """Active items with their unit, by name."""
     rows = conn.execute(
         """
-        SELECT i.id, v.code, v.name, u.code AS unit_code, u.precision
+        SELECT i.id, v.code, v.name, u.code AS unit_code, u.precision,
+               i.inventory_account_id
         FROM inventory_items i
         JOIN subconto_values v ON v.company_id = i.company_id AND v.id = i.subconto_value_id
         JOIN inventory_units u ON u.company_id = i.company_id AND u.id = i.unit_id
@@ -72,9 +74,26 @@ def item_choices(conn: Connection, company_id: int) -> list[ItemChoice]:
         (company_id,),
     )
     return [
-        ItemChoice(r["id"], code_label(r["code"], r["name"]), r["unit_code"], r["precision"])
+        ItemChoice(
+            r["id"],
+            code_label(r["code"], r["name"]),
+            r["unit_code"],
+            r["precision"],
+            r["inventory_account_id"],
+        )
         for r in rows
     ]
+
+
+def last_stock_account(conn: Connection, company_id: int) -> int | None:
+    """The stock account of the item made last: a new item starts with it — goods after
+    goods go to 41, not to the first account of the chart."""
+    row = conn.execute(
+        "SELECT inventory_account_id FROM inventory_items WHERE company_id = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (company_id,),
+    ).fetchone()
+    return None if row is None else row["inventory_account_id"]
 
 
 def warehouse_choices(conn: Connection, company_id: int) -> list[Choice]:

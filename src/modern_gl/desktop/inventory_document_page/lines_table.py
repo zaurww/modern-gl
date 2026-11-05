@@ -79,6 +79,7 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
+    last_stock_account,
     stock_account_choices,
     unit_choices,
 )
@@ -122,7 +123,9 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         if key in LIST_KEYS:
             # Directory cells open with the whole list; the account list starts with typing.
             labels = [label for _, label in model.choices(index.row(), key)]
-            if key in {ACCOUNT, EXPENSE}:
+            if model.is_stock_account_cell(index.row(), key):
+                attach_list(editor, labels, True, self._chosen)  # two or three: all at once
+            elif key in {ACCOUNT, EXPENSE}:
                 attach_account_list(editor, labels, model.s.catalog, self._chosen)
             else:
                 # a new item or warehouse, like a new contract, is offered in the list
@@ -338,6 +341,8 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, not goods)
             if key in {KIND, EXPENSE, EXPENSE_MONTH}:  # a service line is there to change
                 self.setColumnHidden(column, not expenses)
+            if key == EXPENSE and goods and model.shows_stock_accounts():
+                self.setColumnHidden(column, False)  # where the goods go: their stock account
             if key == ACCOUNT:
                 self.setColumnHidden(column, model.accounts_hidden or in_header)
             if key in ESC_KEYS:
@@ -384,6 +389,20 @@ class InventoryLinesTable(QTableView):
 
     def model(self) -> InventoryLinesModel:
         return cast(InventoryLinesModel, super().model())
+
+    def moveCursor(self, cursorAction, modifiers):
+        """Enter and Tab pass by the stock account of a goods line: it is the item's, set
+        once — the arrows and the mouse reach it."""
+        index = super().moveCursor(cursorAction, modifiers)
+        step = QAbstractItemView.CursorAction
+        if (
+            cursorAction in (step.MoveNext, step.MovePrevious)
+            and index.isValid()
+            and self.model().is_stock_account_cell(index.row(), self.model().key(index))
+        ):
+            self.setCurrentIndex(index)
+            index = super().moveCursor(cursorAction, modifiers)
+        return index
 
     def closeEditor(self, editor, hint):
         index = self.currentIndex()
@@ -481,6 +500,8 @@ class NewNamesDialog(QDialog):
         self.account = QComboBox()
         for account in stock_account_choices(session.conn, session.company_id):
             self.account.addItem(account.label, account.id)
+        last = last_stock_account(session.conn, session.company_id)  # as the item before
+        self.account.setCurrentIndex(max(self.account.findData(last), 0))
         if items:
             form.addRow(tr("Единица новых товаров"), self.unit)
             form.addRow(tr("Счёт запасов"), self.account)

@@ -977,8 +977,7 @@ AZ: dict[str, str] = {
     "«{name}» — не группа этого справочника": "«{name}» bu soraqçanın qrupu deyil",
     "группу нельзя перенести в неё саму": "qrupu öz içinə köçürmək olmaz",
     "{label}: «{name}» — группа, выберите элемент из неё": "{label}: «{name}» qrupdur, ondan element seçin",
-    "По товару есть документы: единица и счёт не меняются": "Mal üzrə sənədlər var: ölçü vahidi və hesab dəyişmir",
-    "единицу и счёт товара менять нельзя: {reason}": "malın ölçü vahidini və hesabını dəyişmək olmaz: {reason}",
+    "единицу товара менять нельзя: {reason}": "malın ölçü vahidini dəyişmək olmaz: {reason}",
     "Товар сохранён": "Mal saxlanıldı",
     # session 18: deleting what was entered by mistake (D59)
     "Удалить «{name}»?": "«{name}» silinsin?",

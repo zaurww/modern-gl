@@ -105,19 +105,22 @@ class CatalogCommands(InventoryBase):
     def update_item(
         self, company_id: int, item_id: int, unit_id: int, inventory_account_id: int
     ) -> None:
-        """Another unit or stock account, while no document has the item: its quantities
-        and postings were made in the old ones. The name and group change in the directory."""
+        """Another unit or stock account. The unit — while no document has the item: its
+        quantities are in the old one. The account — with documents too: the warehouse
+        posts them again on the new one (`_repost_item`). The name and
+        group change in the directory."""
         with transaction(self.conn):
             item = self._item(company_id, item_id)
             if (item["unit_id"], item["inventory_account_id"]) == (unit_id, inventory_account_id):
                 return
             self._unit(company_id, unit_id)
             self._validate_inventory_account(company_id, inventory_account_id)
-            reason = where_used(self.conn, company_id, "inventory_items", item_id)
-            if reason is not None:
-                raise ValidationError(
-                    tr("единицу и счёт товара менять нельзя: {reason}", reason=reason)
-                )
+            if item["unit_id"] != unit_id:
+                reason = where_used(self.conn, company_id, "inventory_items", item_id)
+                if reason is not None:
+                    raise ValidationError(
+                        tr("единицу товара менять нельзя: {reason}", reason=reason)
+                    )
             self.conn.execute(
                 "UPDATE inventory_items SET unit_id = ?, inventory_account_id = ? "
                 "WHERE company_id = ? AND id = ?",
@@ -133,6 +136,13 @@ class CatalogCommands(InventoryBase):
                     "after": [unit_id, inventory_account_id],
                 },
             )
+            if item["inventory_account_id"] != inventory_account_id:
+                self._repost_item(company_id, item_id)
+
+    def set_item_account(self, company_id: int, item_id: int, inventory_account_id: int) -> None:
+        """Another stock account of the item, picked on a purchase line: its unit stays."""
+        unit_id = self._item(company_id, item_id)["unit_id"]
+        self.update_item(company_id, item_id, unit_id, inventory_account_id)
 
     def set_min_quantity(
         self, company_id: int, item_id: int, quantity: str | int | Decimal | None

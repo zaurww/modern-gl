@@ -182,7 +182,9 @@ def test_receipt_page_buys_a_service(shop, conn, qtbot, monkeypatch):
     qtbot.addWidget(page)
     model = page.model
     expense_column = model.columns.index(EXPENSE)
-    assert page.table.isColumnHidden(expense_column)  # goods only so far
+    # «Счёт» is there from the start: a goods line shows its item's stock account in it
+    assert not page.table.isColumnHidden(expense_column)
+    assert page.table.isColumnHidden(model.columns.index(ESC1))  # goods only so far
 
     monkeypatch.setattr(page, "_service_or_item", lambda text: "service")
     page._create_item(QPersistentModelIndex(model.index(0, 0)), "Printerin təmiri")

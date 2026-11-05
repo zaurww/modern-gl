@@ -91,6 +91,16 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineSpread):
             if self.doc_type == "sale":
                 return tr("Счёт расчётов с покупателем")
             return tr("Счёт расчётов / затрат")
+        if (
+            role == Qt.ItemDataRole.ToolTipRole
+            and orientation == Qt.Orientation.Horizontal
+            and self.columns[section] == EXPENSE
+            and self.shows_stock_accounts()
+        ):
+            return tr(
+                "Куда приходит строка: товар — на свой счёт запасов (сменить его можно "
+                "здесь — документы товара проведутся заново), услуга — на счёт затрат"
+            )
         if role == Qt.ItemDataRole.TextAlignmentRole and orientation == Qt.Orientation.Horizontal:
             numbers = self.columns[section] in NUMBER_KEYS  # like their cells
             return (
@@ -258,6 +268,9 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineSpread):
         elif key == ACCOUNT:
             self._set_account(row, value)
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
+        elif key == EXPENSE and row.item_id is not None:
+            self.want_stock_account(row.item_id, value)  # the item's own, not the line's
+            return True
         elif key == EXPENSE:
             row.expense_account_id = value
             self._drop_foreign(value, row.expense_subconto)
