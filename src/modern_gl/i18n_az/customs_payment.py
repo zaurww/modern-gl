@@ -25,6 +25,12 @@ AZ = {
         "bəyannamənin nömrəsini göstərin: ƏDV onunla əvəzləşdirilir"
     ),
     "укажите контрагента": "kontragenti göstərin",
+    "таможенный платёж — расход в манатах": "gömrük ödənişi manatla məxaricdir",
+    "по выписке {amount}, в строках {total}: разница {left}": (
+        "çıxarışda {amount}, sətirlərdə {total}: fərq {left}"
+    ),
+    "{total} из {amount}": "{amount} məbləğdən {total}",
+    "осталось {n}": "qalıb {n}",
     "укажите счёт НДС к возмещению в настройках склада": (
         "anbar parametrlərində əvəzləşdirilən ƏDV hesabını göstərin"
     ),

@@ -18,6 +18,7 @@ from modern_gl.application.bank import (
     BankStatement,
     transfer_targets,
 )
+from modern_gl.application.bank.operations import load_bank_operation
 from modern_gl.application.queries import document_owner
 from modern_gl.desktop.bank_page.change_account import ChangeAccountDialog
 from modern_gl.desktop.bank_page.customs_payment import CustomsPaymentDialog
@@ -255,12 +256,21 @@ class BankActions(ReportPage):
             self.s.notify(tr("Настройки банка сохранены"))
 
     def customs_payment(self) -> None:
-        """One payment to the customs, split by what it pays (D212)."""
+        """One payment to the customs, split by what it pays (D212): the marked line of the
+        statement, a new payment if none is marked."""
         place = self.place
         if place is None:
             return
         day = self.current.date_to if self.current else self.s.working_date.isoformat()
-        dialog = CustomsPaymentDialog(self.s, place.account_id, place.subconto, day, self)
+        operations, _others = self.marked() if self.lines_shown() else ([], 0)
+        loaded = (
+            load_bank_operation(self.s.conn, self.s.company_id, operations[0])
+            if len(operations) == 1
+            else None
+        )
+        dialog = CustomsPaymentDialog(
+            self.s, place.account_id, place.subconto, day, self, loaded=loaded
+        )
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.activated()
 

@@ -7,16 +7,22 @@ that is what the credit of the ƏDV reads (`vat/facts.py`)."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from modern_gl.application.bank.deposit_commands import VatDepositCommands
-from modern_gl.application.bank.operations import OTHER, OUT, BankLine, BankOperationInput
+from modern_gl.application.bank.operations import (
+    OTHER,
+    OUT,
+    BankLine,
+    BankOperationInput,
+    load_bank_operation,
+)
 from modern_gl.application.common import Subconto, fill_subconto
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import BATCH_EXPENSES_ACCOUNT, INPUT_VAT
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.invoice import CUSTOMS
-from modern_gl.domain.money import from_minor
+from modern_gl.domain.money import format_minor, from_minor
 from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import transaction
 
@@ -39,11 +45,17 @@ class CustomsPayment:
 
 
 class CustomsPaymentCommands(VatDepositCommands):
-    def save_customs_payment(self, company_id: int, payment: CustomsPayment) -> int:
-        """The bank's operation and the accrual of the ƏDV: both or neither."""
+    def save_customs_payment(
+        self, company_id: int, payment: CustomsPayment, operation_id: int | None = None
+    ) -> int:
+        """The bank's operation and the accrual of the ƏDV: both or neither. `operation_id`
+        — a line of a loaded statement: it stays the same line, with its day, sum and
+        reference; only what it pays is told. The bank's fee is a line of its own there."""
         lines = self._customs_lines(company_id, payment)
         if not lines:
             raise ValidationError(tr("укажите сумму платежа"))
+        if operation_id is not None:
+            return self._split_loaded_line(company_id, payment, lines, operation_id)
         memo = trd("Таможенный платёж {n}", n=payment.declaration).strip()
         with transaction(self.conn):
             if payment.vat:
@@ -59,6 +71,49 @@ class CustomsPaymentCommands(VatDepositCommands):
                     payment.subconto,
                     memo=memo,
                 ),
+                post=True,
+                checked=True,
+            )
+
+    def _split_loaded_line(
+        self,
+        company_id: int,
+        payment: CustomsPayment,
+        lines: list[BankLine],
+        operation_id: int,
+    ) -> int:
+        loaded = load_bank_operation(self.conn, company_id, operation_id)
+        total = sum(line.amount for line in lines)
+        if loaded.direction != OUT or loaded.currency_id is not None:
+            raise ValidationError(tr("таможенный платёж — расход в манатах"))
+        if total != loaded.total:
+            raise ValidationError(
+                tr(
+                    "по выписке {amount}, в строках {total}: разница {left}",
+                    amount=format_minor(loaded.total),
+                    total=format_minor(total),
+                    left=format_minor(loaded.total - total),
+                )
+            )
+        memo = trd("Таможенный платёж {n}", n=payment.declaration).strip()
+        with transaction(self.conn):
+            if payment.vat:
+                self._accrue_customs_vat(
+                    company_id, replace(payment, doc_date=loaded.doc_date), memo
+                )
+            return self.save_bank_operation(
+                company_id,
+                BankOperationInput(
+                    loaded.doc_date,
+                    OUT,
+                    loaded.account_id,
+                    tuple(lines),
+                    OTHER,
+                    loaded.subconto,
+                    memo=loaded.memo or memo,
+                    reference=loaded.reference,
+                ),
+                operation_id,
                 post=True,
                 checked=True,
             )

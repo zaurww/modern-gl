@@ -5,7 +5,14 @@ from datetime import date
 
 import pytest
 
-from modern_gl.application.bank import CustomsPayment
+from modern_gl.application.bank import (
+    OTHER,
+    OUT,
+    BankLine,
+    BankOperationInput,
+    CustomsPayment,
+    load_bank_operation,
+)
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.inventory import Inventory, ReceiptLine
 from modern_gl.application.ledger import Ledger
@@ -102,6 +109,64 @@ def test_the_short_declaration_pays_the_terminal_only(firm):
     firm.pay(terminal=3_540)
     assert firm.closing("19") == 0
     assert firm.closing("51") == -3_540
+
+
+def loaded_line(firm: Firm, amount: int) -> int:
+    """A line of a loaded statement nobody has told the account of: a draft."""
+    return firm.ledger.bank.save_bank_operation(
+        firm.cid,
+        BankOperationInput(
+            "2026-09-22",
+            OUT,
+            firm.acc["51"],
+            (BankLine(None, amount),),
+            OTHER,
+            firm.bank_sc,
+            memo="DGK ödəniş",
+            reference="1370756096",
+        ),
+        post=False,
+    )
+
+
+def payment(firm: Firm, **amounts) -> CustomsPayment:
+    return CustomsPayment(
+        "2026-01-01",  # the line's own day counts
+        firm.acc["51"],
+        firm.bank_sc,
+        firm.acc["60"],
+        terminal_party=firm.terminal,
+        customs_party=firm.customs,
+        **amounts,
+    )
+
+
+def test_a_loaded_line_is_split_and_stays_one_line(firm):
+    """718.00 of the statement: 100.00 + 118.00 + 500.00, the same line, reference and day."""
+    line = loaded_line(firm, 71_800)
+    saved = firm.ledger.bank.save_customs_payment(
+        firm.cid,
+        payment(firm, declaration="0126", fees=10_000, terminal=11_800, vat=50_000),
+        line,
+    )
+    assert saved == line
+    operation = load_bank_operation(firm.conn, firm.cid, line)
+    assert (operation.reference, operation.doc_date) == ("1370756096", "2026-09-22")
+    assert (operation.status, operation.total, operation.memo) == ("posted", 71_800, "DGK ödəniş")
+    assert firm.closing("51") == -71_800
+    assert firm.closing("19") == 50_000
+    facts = numbered_facts(firm.conn, firm.cid, "2026-12-31")[("customs", "0126")]
+    assert [(p.day, p.vat) for p in facts.payments] == [("2026-09-22", 50_000)]
+
+
+def test_a_loaded_line_must_add_up_to_the_bank(firm):
+    """718.00 in the bank, 700.00 typed: 18.00 short, nothing is written."""
+    line = loaded_line(firm, 71_800)
+    with pytest.raises(ValidationError, match=r"18\.00"):
+        firm.ledger.bank.save_customs_payment(
+            firm.cid, payment(firm, declaration="0126", fees=20_000, vat=50_000), line
+        )
+    assert firm.closing("19") == 0
 
 
 def test_vat_needs_a_declaration(firm):

@@ -68,7 +68,7 @@ def numbered_facts(
     # a number never debited to the input VAT account has no ƏDV: its postings are not read
     input_vat = ", ".join(str(i) for i, a in accounts.items() if a.account_type == INPUT_VAT)
     found: dict[tuple[str, str], InvoiceFacts] = {}
-    for p in conn.execute(
+    rows = conn.execute(
         f"""
         WITH {_DOCS}
         SELECT p.invoice, COALESCE(p.invoice_kind, '') AS kind, p.document_id, docs.doc_date,
@@ -83,10 +83,21 @@ def numbered_facts(
         ORDER BY docs.doc_date, p.document_id, p.line_no
         """,
         params,
-    ):
+    ).fetchall()
+    for p in rows:
         facts = found.setdefault((p["kind"], p["invoice"]), InvoiceFacts(p["kind"], p["invoice"]))
-        _count(facts, p, accounts)
+        _note_vat_settlement(facts, p, accounts)
+    for p in rows:
+        _count(found[(p["kind"], p["invoice"])], p, accounts)
     return found
+
+
+def _note_vat_settlement(facts: InvoiceFacts, p, accounts: dict[int, InvoiceAccount]) -> None:
+    """Who the ƏDV is owed to, before the payments are read: a statement's line is an older
+    document than the accrual made when it was told what it pays (D212)."""
+    debit, credit = accounts[p["debit_account_id"]], accounts[p["credit_account_id"]]
+    if is_vat_accrual(debit, credit) and debit.account_type == INPUT_VAT:
+        facts.vat_settlement = (p["credit_account_id"], (p["ct_sc1"], p["ct_sc2"], p["ct_sc3"]))
 
 
 def _count(facts: InvoiceFacts, p, accounts: dict[int, InvoiceAccount]) -> None:

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
 )
 
+from modern_gl.application.bank import BankOperation
 from modern_gl.application.bank.customs_payment import CustomsPayment
 from modern_gl.application.default_accounts import SUPPLIER, default_account
 from modern_gl.application.table_text import plain_number
@@ -25,8 +26,18 @@ from modern_gl.reporting.inventory import customs_declarations, last_customs_par
 
 
 class CustomsPaymentDialog(QDialog):
-    def __init__(self, session: Session, account_id: int, subconto, day: str, parent=None) -> None:
+    def __init__(
+        self,
+        session: Session,
+        account_id: int,
+        subconto,
+        day: str,
+        parent=None,
+        loaded: BankOperation | None = None,
+    ) -> None:
+        """`loaded` — the statement's line this payment is: its day and sum are the bank's."""
         super().__init__(parent)
+        self.loaded = loaded
         self.s = session
         self.account_id, self.subconto = account_id, tuple(subconto)
         self.setWindowTitle(tr("Таможенный платёж"))
@@ -40,7 +51,8 @@ class CustomsPaymentDialog(QDialog):
         )
         hint.setWordWrap(True)
         form.addRow(hint)
-        self.date = date_edit(date.fromisoformat(day))
+        self.date = date_edit(date.fromisoformat(loaded.doc_date if loaded else day))
+        self.date.setEnabled(loaded is None)
         form.addRow(tr("Дата"), self.date)
         self.declaration = QComboBox()
         self.declaration.setEditable(True)
@@ -101,7 +113,12 @@ class CustomsPaymentDialog(QDialog):
         except (ValueError, ArithmeticError):
             self.total.setText("")
             return
-        self.total.setText(money(total))
+        if self.loaded is None:
+            self.total.setText(money(total))
+            return
+        left = self.loaded.total - total
+        text = tr("{total} из {amount}", total=money(total), amount=money(self.loaded.total))
+        self.total.setText(text + (f" · {tr('осталось {n}', n=money(left))}" if left else ""))
 
     def payment(self) -> CustomsPayment:
         account = default_account(self.s.ledger, self.s.company_id, SUPPLIER)
@@ -122,7 +139,11 @@ class CustomsPaymentDialog(QDialog):
 
     def _save(self) -> None:
         try:
-            self.s.ledger.bank.save_customs_payment(self.s.company_id, self.payment())
+            self.s.ledger.bank.save_customs_payment(
+                self.s.company_id,
+                self.payment(),
+                self.loaded.id if self.loaded else None,
+            )
         except (LedgerError, ValueError, ArithmeticError) as exc:
             self.error.setText(str(exc))
             self.error.show()
