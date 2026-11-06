@@ -287,6 +287,7 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
         """Take a posted document out of the sequence: it becomes a draft without GL
         postings, and the documents after it are recalculated without it."""
         self._require_inventory_open(doc)
+        self._require_lines_not_charged(company_id, doc["id"], (), posted_only=True)
         later = self._withdraw_after(company_id, doc)
         self._withdraw(company_id, doc)
         gl_document_id = doc["gl_document_id"]

@@ -26,9 +26,6 @@ AZ = {
         "xərc kimi yalnız alışdakı xidmət götürülə bilər"
     ),
     "расход {n}: документ №{m} не проведён": "xərc {n}: №{m} sənəd keçirilməyib",
-    "расход {n}: услуга от {day} — партия не может быть раньше неё": (
-        "xərc {n}: xidmət {day} tarixlidir — partiya ondan əvvəl ola bilməz"
-    ),
     "расход {n}: в документе №{m} изменился счёт услуги": (
         "xərc {n}: №{m} sənəddə xidmətin hesabı dəyişib"
     ),

@@ -158,6 +158,15 @@ def test_the_service_moves_from_15_to_the_goods_and_no_new_debt_comes(shop):
     assert left == [(shop.other_line, 3_000)]
 
 
+def test_a_taken_service_says_in_its_posting_what_it_is(shop):
+    """No cost item on the line: the card of 15 shows the service's own words."""
+    doc = batch(shop, "2026-09-28", LandedCostCharge("640", source_line_id=shop.service_line))
+    shop.inventory.post_document(shop.cid, doc)
+    gl = shop.inventory.load_document(shop.cid, doc).gl_document_id
+    memos = shop.conn.execute("SELECT memo FROM postings WHERE document_id = ?", (gl,)).fetchall()
+    assert [row["memo"] for row in memos] == ["Xidmət YGB №01261000379327"]
+
+
 def test_a_service_cannot_be_taken_beyond_what_it_is(shop):
     first = batch(shop, "2026-09-28", LandedCostCharge("600", source_line_id=shop.service_line))
     shop.inventory.post_document(shop.cid, first)
@@ -166,10 +175,40 @@ def test_a_service_cannot_be_taken_beyond_what_it_is(shop):
         shop.inventory.post_document(shop.cid, second)
 
 
-def test_a_batch_cannot_be_earlier_than_the_service(shop):
+def test_a_batch_may_be_earlier_than_the_service_and_is_rebuilt(shop):
+    """The goods on 21.09, the broker's e-qaimə on 28.09. Posted again from the start, the
+    batch comes first, with the purchase out of the sequence: nothing changes. 15: 30.00."""
     doc = batch(shop, "2026-09-21", LandedCostCharge("640", source_line_id=shop.service_line))
-    with pytest.raises(ValidationError):
-        shop.inventory.post_document(shop.cid, doc)
+    shop.inventory.post_document(shop.cid, doc)
+    assert balance(shop, "15") == (3_000, 0)
+    assert shop.inventory.rebuild_postings(shop.cid, "2026-01-01") == []
+    assert balance(shop, "41") == (164_000, 0)
+
+
+def test_a_purchase_is_not_unposted_from_under_an_earlier_batch(shop):
+    doc = batch(shop, "2026-09-21", LandedCostCharge("640", source_line_id=shop.service_line))
+    shop.inventory.post_document(shop.cid, doc)
+    with pytest.raises(ValidationError, match="№"):
+        shop.inventory.unpost_document(shop.cid, shop.service_doc)
+    assert balance(shop, "41") == (164_000, 0)
+
+
+def test_a_posted_batch_edited_in_place_takes_a_later_service(shop):
+    """A batch typed on 15 and posted on 21.09 takes the service of 28.09 afterwards: its
+    postings stay, the service no longer waits."""
+    doc = batch(shop, "2026-09-21", LandedCostCharge("640", shop.procurement))
+    shop.inventory.post_document(shop.cid, doc)
+    line = shop.inventory.load_document(shop.cid, doc).lines[0]
+    with shop.inventory.reposting(shop.cid, doc):
+        shop.inventory.update_landed_cost_draft(
+            shop.cid,
+            doc,
+            "2026-09-21",
+            [LandedCostTarget(shop.goods_line, line_id=line.id)],
+            [LandedCostCharge("640", source_line_id=shop.service_line)],
+        )
+    assert balance(shop, "15") == (3_000, 0)
+    assert [row.line_id for row in waiting_lines(shop.conn, shop.cid)] == [shop.other_line]
 
 
 def test_only_a_service_of_a_purchase_can_be_taken(shop):

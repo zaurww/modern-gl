@@ -338,12 +338,17 @@ class DraftCommands(InventoryBase):
             )
 
     def _require_lines_not_charged(
-        self, company_id: int, document_id: int, keep: set[int] | tuple[()]
+        self,
+        company_id: int,
+        document_id: int,
+        keep: set[int] | tuple[()],
+        posted_only: bool = False,
     ) -> None:
-        """A service line a batch took as its expense stays until it is out of the batch."""
+        """A service line a batch took as its expense stays until it is out of the batch;
+        `posted_only` — a posted batch: a purchase is not unposted from under it."""
         for row in self.conn.execute(
             """
-            SELECT own.id, own.line_no, d.number
+            SELECT own.id, own.line_no, d.number, d.status
             FROM inventory_lines own
             JOIN landed_cost_charge_lines k
               ON k.company_id = own.company_id AND k.source_line_id = own.id
@@ -354,7 +359,7 @@ class DraftCommands(InventoryBase):
             """,
             (company_id, document_id),
         ):
-            if row["id"] not in keep:
+            if row["id"] not in keep and (row["status"] == "posted" or not posted_only):
                 raise ValidationError(
                     tr(
                         "строка {line}: она взята расходом партии (документ №{n}) — "

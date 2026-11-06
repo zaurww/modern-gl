@@ -15,7 +15,6 @@ from modern_gl.application.inventory.amounts import (
 from modern_gl.application.inventory.model import LandedCostCharge
 from modern_gl.application.inventory.stock import StockCommands
 from modern_gl.domain.currency import to_base, unit_rate
-from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import tr
@@ -163,7 +162,7 @@ class ChargeCommands(StockCommands):
         """A purchase's service line an expense takes: a line of a purchase, with no item."""
         row = self.conn.execute(
             """
-            SELECT l.*, d.number, d.status, d.doc_date, d.doc_type
+            SELECT l.*, d.number, d.gl_document_id, d.doc_type
             FROM inventory_lines l
             JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
             WHERE l.company_id = ? AND l.id = ?
@@ -180,22 +179,15 @@ class ChargeCommands(StockCommands):
         return row
 
     def _require_line_left(self, company_id: int, doc: Row, charge: Row) -> None:
-        """A service taken: posted, not after the batch (the batch moves what is already on
-        its account, and the two are posted again in that order), still on the same account
-        and with enough of it left."""
+        """A service taken: of a posted purchase, still on the same account and with enough
+        of it left. The batch may be earlier: the e-qaimə of a service comes after the goods;
+        posted again from a day, such a purchase is out of the sequence for a moment, its GL
+        document stays — only a purchase really not posted has none."""
         n = charge["line_no"]
         line = self._charge_line(company_id, charge["source_line_id"])
-        if line["status"] != "posted":
+        if line["gl_document_id"] is None:
             raise ValidationError(
                 tr("расход {n}: документ №{m} не проведён", n=n, m=line["number"])
-            )
-        if line["doc_date"] > doc["doc_date"]:
-            raise ValidationError(
-                tr(
-                    "расход {n}: услуга от {day} — партия не может быть раньше неё",
-                    n=n,
-                    day=ru_date(line["doc_date"]),
-                )
             )
         if line["cost_account_id"] != charge["account_id"]:
             raise ValidationError(
@@ -223,6 +215,13 @@ class ChargeCommands(StockCommands):
             return charge["memo"]
         if charge["cost_type_id"] is not None:
             return self._cost_type(company_id, charge["cost_type_id"])["name"]
+        if charge["source_line_id"] is not None:  # what the service says it is
+            return self._charge_line(company_id, charge["source_line_id"])["memo"] or doc["memo"]
+        if charge["source_document_id"] is not None:
+            posting = self._cost_source(
+                company_id, charge["source_document_id"], charge["source_line_no"]
+            )
+            return posting["memo"] or doc["memo"]
         return doc["memo"]
 
     def _require_charge_complete(self, company_id: int, doc: Row, charge: Row) -> None:
