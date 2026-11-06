@@ -14,6 +14,7 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
+    LINE_MEMO,
     SubcontoCard,
     SubcontoCardLine,
     _accounts,
@@ -66,7 +67,8 @@ def _lines(conn: Connection, params: dict, only: str) -> list[Row]:
         f"""
         WITH {_DOCS_CTE},
         lines AS (
-            SELECT docs.doc_date, docs.number, docs.id AS document_id, docs.memo, p.line_no,
+            SELECT docs.doc_date, docs.number, docs.id AS document_id, {LINE_MEMO},
+                   p.line_no,
                    p.debit_account_id, p.credit_account_id, p.amount, p.invoice, p.invoice_kind,
                    {on_dt} AS on_dt, {on_ct} AS on_ct
             FROM postings p CROSS JOIN docs

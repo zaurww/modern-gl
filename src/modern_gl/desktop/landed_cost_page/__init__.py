@@ -20,6 +20,7 @@ from modern_gl.desktop.landed_cost_page.page import LandedCostPage
 from modern_gl.desktop.landed_cost_page.pickers import (
     BatchCostDialog,
     cost_source_picker,
+    receipt_picker,
     source_label,
 )
 
@@ -36,5 +37,6 @@ __all__ = [
     "ChargeRow",
     "LandedCostPage",
     "cost_source_picker",
+    "receipt_picker",
     "source_label",
 ]

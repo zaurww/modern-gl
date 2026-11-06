@@ -14,6 +14,8 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
 
 _DOCS_CTE = docs_cte("d.id, d.doc_date, d.number, d.memo")
+# what a card's line says: the posting's own memo, the document's without one
+LINE_MEMO = "COALESCE(NULLIF(p.memo, ''), docs.memo) AS memo"
 
 
 @dataclass

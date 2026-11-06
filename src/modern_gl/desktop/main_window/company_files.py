@@ -238,6 +238,7 @@ class CompanySession(QObject):
 
     def _use_company(self, conn: Connection, company_id: int, path: Path, read_only: bool) -> None:
         old_date = self.session.working_date if self.session else None
+        old_period = self.session.report_period if self.session else None
         self.close()
         self.conn, self.company_path = conn, path
         self.ledger = Ledger(conn, actor=self.user_name())
@@ -257,6 +258,7 @@ class CompanySession(QObject):
         self.session.last_backup = lambda: self._last_backup(path)
         if old_date:
             self.session.working_date = old_date
+        self.session.report_period = old_period  # chosen for the program, not a company
         if not read_only:  # a snapshot viewed writes nothing (D80)
             self._log_session("open")
         self.opened.emit(name)

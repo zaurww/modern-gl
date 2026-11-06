@@ -87,6 +87,15 @@ def month_of(d: date) -> ReportParams:
     return ReportParams(*month_days(d.year, d.month))
 
 
+def usual_period(session: Session) -> ReportParams:
+    """The period a report opens with: the one last chosen in a report, the whole year
+    of the working date before any was."""
+    if session.report_period is not None:
+        return ReportParams(*session.report_period)
+    year = session.working_date.year
+    return ReportParams(date(year, 1, 1), date(year, 12, 31))
+
+
 def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:
     warns = {"opening": warn_opening, "closing": warn_closing}
     return [
@@ -114,6 +123,9 @@ class ReportPage(PageWidget):
 
     key: tuple[Any, ...] = ("report",)  # what opens the page again; [0] is its kind
     has_period = True
+    # the period is the page's own — not the last report's, and not the next one's: the
+    # working date's month (ƏDV is declared monthly) or what the page asks for (a list)
+    own_period = False
     choosable_columns = True  # «Колонки…»: a page with a choice of its own says no
     has_book = True  # the book choice, when the company keeps parallel books
     summary_on_top = True
@@ -123,7 +135,9 @@ class ReportPage(PageWidget):
         super().__init__()
         self.setObjectName("page")
         self.s = session
-        self.params = params or month_of(session.working_date)
+        self.params = params or (
+            month_of(session.working_date) if self.own_period else usual_period(session)
+        )
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 30, 40, 24)
         root.setSpacing(16)
@@ -168,7 +182,7 @@ class ReportPage(PageWidget):
             self.period = PeriodField(
                 (self.params.date_from, self.params.date_to), self.s.working_date
             )
-            self.period.changed.connect(self.refresh)
+            self.period.changed.connect(self._period_chosen)
             self.book = QComboBox()
             for name, _ in BOOKS:
                 self.book.addItem(tr(name))
@@ -186,6 +200,12 @@ class ReportPage(PageWidget):
             bar.addStretch(1)  # no «Сформировать»: a change shows at once, F5 reads again
             root.addLayout(bar)
             self.bar = bar
+
+    def _period_chosen(self) -> None:
+        """The period typed or picked here is the next report's too."""
+        if not self.own_period:
+            self.s.report_period = self.period.period()
+        self.refresh()
 
     def add_to_bar(self, *widgets: QWidget, gap: int = 6) -> None:
         """A page's own choices in the bar, after the period and the book (DESIGN.md 2)."""

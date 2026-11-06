@@ -32,6 +32,7 @@ from modern_gl.desktop.reports_page.view import (
     ReportPage,
     ReportParams,
     month_of,
+    usual_period,
 )
 
 REPORTS["subconto_card"] = SubcontoCardPage  # from «Анализ субконто» (D126)
@@ -64,4 +65,5 @@ __all__ = [
     "VatRegisterPage",
     "figure",
     "month_of",
+    "usual_period",
 ]

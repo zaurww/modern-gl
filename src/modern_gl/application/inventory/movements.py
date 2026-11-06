@@ -223,14 +223,16 @@ class MovementCommands(ReceiptDraftCommands):
                 amount,
             ),
         )
-        in_currency = doc["currency_id"] is not None and doc["doc_type"] == "receipt"
+        purchase = doc["doc_type"] == "receipt"
+        in_currency = doc["currency_id"] is not None and purchase
+        says_nothing = purchase and not line["memo"] and not doc["memo"]
         return PostingInput(
             item["inventory_account_id"],
             line["offset_account_id"],
             money(amount),
             self._inventory_subconto(company_id, item, warehouse),
             offset_subconto(line),
-            line["memo"],
+            item["name"] if says_nothing else line["memo"],
             doc["currency_id"] if in_currency else None,
             money(line["currency_amount"] or 0) if in_currency else None,
             doc["invoice"] or "",

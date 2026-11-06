@@ -132,6 +132,7 @@ def report_rows(declarations: list[Declaration]) -> list[_Row]:
 class LandedCostReportPage(ReportPage):
     key = ("landed_report",)
     has_book = False  # the warehouse keeps one book
+    own_period = True  # a list to work in: the year, whatever a report was asked for
     open_inventory_document = Signal(int)
 
     def __init__(self, session: Session) -> None:

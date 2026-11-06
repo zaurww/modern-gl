@@ -1,4 +1,4 @@
-"""The other side of a statement's line (D-new-bank-parties): the bank's file never adds a
+"""The other side of a statement's line (D205): the bank's file never adds a
 counterparty — the bank's spelling is a hint, the name comes from the tax portal. A line
 whose sender the directory lacks waits as a draft that keeps the sender's VÖEN and name;
 the counterparty is found by them once it is there.
