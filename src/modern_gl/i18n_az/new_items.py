@@ -13,6 +13,12 @@ AZ = {
     "Похожие уже есть. Это они или новые товары?": (
         "Oxşarları artıq var. Bunlar onlardır, yoxsa yeni mallar?"
     ),
+    "По строкам": "Sətirlər üzrə",
+    "Выберите покупку: в партию войдут все её строки (Ctrl / Shift — несколько). "
+    "Поиск — по номеру ГТД, e-qaimə, поставщику, товару.": (
+        "Alışı seçin: partiyaya onun bütün sətirləri düşəcək (Ctrl / Shift — bir neçəsi). "
+        "Axtarış — YGB, e-qaimə nömrəsi, malsatan, mal üzrə."
+    ),
     "Похожие есть среди скрытых товаров: {names}": (
         "Gizlədilmiş mallar arasında oxşarları var: {names}"
     ),

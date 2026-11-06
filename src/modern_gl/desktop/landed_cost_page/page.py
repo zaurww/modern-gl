@@ -39,9 +39,9 @@ from modern_gl.desktop.landed_cost_page.models import ChargesModel, TargetsModel
 from modern_gl.desktop.landed_cost_page.pickers import (
     BatchCostDialog,
     cost_source_picker,
-    receipt_picker,
     source_label,
 )
+from modern_gl.desktop.landed_cost_page.receipt_picker import receipt_picker
 from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.session import Session

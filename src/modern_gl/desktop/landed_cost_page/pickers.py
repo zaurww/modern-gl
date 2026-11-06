@@ -47,7 +47,6 @@ from modern_gl.reporting.inventory import (
     CostSource,
     batch_cost,
     cost_sources,
-    receipt_line_choices,
 )
 from modern_gl.reporting.inventory.costs import BatchCharge
 
@@ -118,13 +117,7 @@ class PickerDialog(QDialog):
             for row in self.all_rows
             if first <= row.doc_date <= last and (usual is None or usual(row))
         ]
-        rows = [
-            row
-            for row in rows
-            if not needle
-            or needle in fold(" ".join(str(c.get(row)) for c in self.columns if not c.money))
-            or needle in format_minor(getattr(row, "amount", 0)).replace(" ", "")
-        ]
+        rows = [row for row in rows if not needle or self._matches(row, needle)]
         self.model.set(self.columns, rows)
         header = self.table.horizontalHeader()
         for n, column in enumerate(self.columns):
@@ -136,34 +129,13 @@ class PickerDialog(QDialog):
         if rows:
             self.table.selectRow(0)
 
+    def _matches(self, row, needle: str) -> bool:
+        return needle in fold(
+            " ".join(str(c.get(row)) for c in self.columns if not c.money)
+        ) or needle in format_minor(getattr(row, "amount", 0)).replace(" ", "")
+
     def chosen(self) -> list:
         return [self.model.rows[i.row()] for i in self.table.selectionModel().selectedRows()]
-
-
-def receipt_picker(session: Session, parent=None) -> PickerDialog:
-    rows = receipt_line_choices(session.conn, session.company_id)
-    columns = [
-        Column(tr("Дата"), lambda r: ru_date(r.doc_date), width=96),
-        Column("№", lambda r: r.number, width=56),
-        Column(tr("Товар"), lambda r: r.item_name),
-        Column(tr("Склад"), lambda r: r.warehouse_name, width=130),
-        Column(
-            tr("Количество"),
-            lambda r: format_quantity(r.quantity, r.precision),
-            width=100,
-            right=True,
-        ),
-        Column(tr("Стоимость"), lambda r: r.amount, money=True, width=110),
-        Column(tr("Комментарий"), lambda r: r.memo, width=180),
-    ]
-    return PickerDialog(
-        tr("Партия: поступления"),
-        tr("Выберите строки поступлений (Ctrl / Shift — несколько). Поиск — по товару, номеру…"),
-        columns,
-        rows,
-        session,
-        parent,
-    )
 
 
 def cost_source_picker(session: Session, exclude: int | None, parent=None) -> PickerDialog:

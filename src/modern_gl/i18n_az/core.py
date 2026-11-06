@@ -1015,7 +1015,6 @@ AZ: dict[str, str] = {
     "+ Поступления…": "+ Daxilolmalar…",
     "Партия: название или номер инвойса": "Partiya: adı və ya invoys nömrəsi",
     "Партия: поступления": "Partiya: daxilolmalar",
-    "Выберите строки поступлений (Ctrl / Shift — несколько). Поиск — по товару, номеру…": "Daxilolma sətirlərini seçin (Ctrl / Shift — bir neçəsi). Axtarış — mal, nömrə üzrə…",
     "Расход из проводки": "Yazılışdan xərc",
     "Все проводки": "Bütün yazılışlar",
     "Уже введённая проводка (фактура брокера, таможни…): её дебет перейдёт в стоимость товаров. Показан нераспределённый остаток.": "Artıq daxil edilmiş yazılış (broker, gömrük fakturası…): onun debeti malların dəyərinə keçəcək. Bölüşdürülməmiş qalıq göstərilir.",

@@ -65,6 +65,7 @@ OTHER_DIALOGS = {
     "PickerDialog",
     "PortalLoginDialog",  # the portal's own page in a browser
     "ReasonDialog",
+    "ReceiptPicker",
     "SplitLineDialog",
     "TagsDialog",
     "UnusedItemsDialog",
