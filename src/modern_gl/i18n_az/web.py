@@ -1,4 +1,4 @@
-"""The reports in a browser (D-new-web-reports)."""
+"""The reports in a browser (D207)."""
 
 from __future__ import annotations
 

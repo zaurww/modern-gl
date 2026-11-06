@@ -1,4 +1,4 @@
-"""The reports in a browser (D-new-web-reports): only reading, on this computer only.
+"""The reports in a browser (D207): only reading, on this computer only.
 
 Figures — the golden example of conftest (hand-calculated there): February 2026,
 531 opening Ct 200, turnover Ct 500, closing Ct 700; total closing 10 700 / 10 700.
