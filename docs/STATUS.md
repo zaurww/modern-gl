@@ -22,6 +22,7 @@
   `ruff check`, `ruff format --check`, `pyright` (0 ошибок; strict — D170, `pyproject.toml`); CI —
   ubuntu и windows, покрытие 90 % (D161). Скриншоты: `scripts/screenshots.py <папка> az`.
 - Замеры: `uv run python scripts/benchmark.py <папка> --postings 100000` (`--stock`).
+- Браузер — D207.
 
 ## Что умеет программа
 Подробности — в решениях и летописи сессий.
