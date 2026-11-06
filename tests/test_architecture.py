@@ -4,6 +4,9 @@ when the debt is paid, the test asks to remove the allowance."""
 
 import ast
 import re
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -102,6 +105,57 @@ def test_core_does_not_read_module_tables(path):
 def test_core_does_not_import_modules(path):
     bad = {m for m in imports(path) if m.startswith(MODULE_CODE)}
     assert not bad, f"ядро {rel(path)} импортирует модули {sorted(bad)}"
+
+
+def test_the_core_works_with_no_module_installed():
+    """The two tests above read the imports; this one runs the core in a process where
+    every module's package refuses to load (as if it were not installed): a company of the
+    classic chart, a posted document, the trial balance, a closed period. Dt 80 / Kt 88
+    1 000.00: the turnover of January is 1 000.00 on each side."""
+    script = textwrap.dedent(
+        """
+        import sys
+        from importlib.abc import MetaPathFinder
+
+        MODULES = %r
+
+        class NoModules(MetaPathFinder):
+            def find_spec(self, name, path=None, target=None):
+                if name.startswith(MODULES):
+                    raise ImportError(f"{name}: a module, and the core asked for it")
+
+        sys.meta_path.insert(0, NoModules())
+
+        from modern_gl.application.chart_csv import apply_chart_template
+        from modern_gl.application.ledger import Ledger, PostingInput
+        from modern_gl.infrastructure.db import connect
+        from modern_gl.reporting.reports.osv import trial_balance
+
+        conn = connect(":memory:")
+        ledger = Ledger(conn, actor="test")
+        company = ledger.create_company("Nüvə MMC")
+        apply_chart_template(ledger, company, "classic", "ru")
+        account = {
+            row["code"]: row["id"]
+            for row in conn.execute("SELECT code, id FROM accounts WHERE code IN ('80', '88')")
+        }
+        posting = PostingInput(account["80"], account["88"], "1000.00")
+        ledger.post_new(company, "2026-01-15", [posting], "Nüvə")
+        ledger.set_closed_through(company, "2026-01-31")
+        total = trial_balance(conn, company, "2026-01-01", "2026-01-31").total
+        assert (total.turnover_dt, total.turnover_ct) == (100_000, 100_000), total
+        loaded = sorted(name for name in sys.modules if name.startswith(MODULES))
+        assert not loaded, loaded
+        """
+    )
+    run = subprocess.run(  # noqa: S603 our own script and interpreter
+        [sys.executable, "-c", script % (MODULE_CODE,)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert run.returncode == 0, run.stderr
 
 
 @pytest.mark.parametrize(

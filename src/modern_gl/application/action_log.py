@@ -35,6 +35,7 @@ OBJECTS: dict[str, str] = {
     "landed_cost_type": N_("Вид доп. расходов"),
     "account": N_("Счёт"),
     "account_role": N_("Роль счёта"),
+    "inventory_sale_account": N_("Счета продажи"),
     "currency": N_("Валюта"),
     "subconto_kind": N_("Справочник"),
     "subconto_value": N_("Элемент справочника"),
@@ -112,6 +113,9 @@ _LABELS: dict[str, str] = {
     ),
     "account": "SELECT id, code FROM accounts WHERE company_id = ? AND id IN ({ids})",
     "account_role": "SELECT id, code FROM accounts WHERE company_id = ? AND id IN ({ids})",
+    "inventory_sale_account": (
+        "SELECT id, code FROM accounts WHERE company_id = ? AND id IN ({ids})"
+    ),
     "currency": "SELECT id, code FROM currencies WHERE company_id = ? AND id IN ({ids})",
     "bank_account": "SELECT id, name FROM subconto_values WHERE company_id = ? AND id IN ({ids})",
     **{

@@ -202,3 +202,36 @@ def receipt_line_choices(conn: Connection, company_id: int) -> list[ReceiptLineC
         (company_id,),
     )
     return [ReceiptLineChoice(**dict(r)) for r in rows]
+
+
+@dataclass(frozen=True)
+class SaleAccountsRow:
+    """A stock account in the settings' table of sale accounts and the accounts chosen
+    for the sales of its goods (role -> account); a role it lacks takes the company's."""
+
+    stock_account: Choice
+    own: dict[str, int]
+
+
+def sale_account_rows(conn: Connection, company_id: int) -> list[SaleAccountsRow]:
+    """The stock accounts the table shows: those goods are on and those with sale accounts
+    of their own — every stock account while the company has neither."""
+    own: dict[int, dict[str, int]] = {}
+    for row in conn.execute(
+        "SELECT stock_account_id, role, account_id FROM inventory_sale_accounts "
+        "WHERE company_id = ?",
+        (company_id,),
+    ):
+        own.setdefault(row["stock_account_id"], {})[row["role"]] = row["account_id"]
+    shown = set(own) | {
+        row["inventory_account_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT inventory_account_id FROM inventory_items WHERE company_id = ?",
+            (company_id,),
+        )
+    }
+    return [
+        SaleAccountsRow(account, own.get(account.id, {}))
+        for account in stock_account_choices(conn, company_id)
+        if not shown or account.id in shown
+    ]

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGridLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.inventory import (
     INCOMING_REASONS,
+    SALE_ACCOUNT_ROLES,
     SALE_ROLE_NAMES,
     USUAL_UNITS,
     Inventory,
@@ -29,6 +31,7 @@ from modern_gl.reporting.inventory import (
     ItemDetails,
     item_details,
     last_stock_account,
+    sale_account_rows,
     stock_account_choices,
     unit_choices,
     unit_codes,
@@ -219,12 +222,16 @@ class InventorySettingsDialog(QDialog):
         form.addRow(sale)
         self.sale_roles = {
             role: self._account_list(
-                role, tr("— счёт покупателя —") if role == SALES_VAT else tr("— не указан —")
+                role,
+                tr("— счёт покупателя —") if role == SALES_VAT else tr("— не указан —"),
+                width=18 if role in SALE_ACCOUNT_ROLES else 28,
             )
             for role in SALE_ROLE_NAMES
         }
+        self._build_sale_accounts(form)
         for role, combo in self.sale_roles.items():
-            form.addRow(tr(SALE_ROLE_NAMES[role]), combo)
+            if role not in SALE_ACCOUNT_ROLES:  # those are in the table above
+                form.addRow(tr(SALE_ROLE_NAMES[role]), combo)
         self._build_incoming(form)
         form.addRow(
             self._hint(
@@ -242,6 +249,38 @@ class InventorySettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
+    def _build_sale_accounts(self, form: QFormLayout) -> None:
+        """The table of the sale accounts: the revenue and the cost of sales of the whole
+        company, and under them the stock accounts — the goods of one (41) may be sold on
+        other accounts than the materials of another (10). The warehouse's own table."""
+        self.sale_accounts: dict[tuple[int, str], QComboBox] = {}
+        grid = QGridLayout()
+        for column, role in enumerate(SALE_ACCOUNT_ROLES, 1):
+            head = QLabel(tr(SALE_ROLE_NAMES[role]))
+            head.setObjectName("tertiary")
+            head.setFont(fonts().small)
+            grid.addWidget(head, 0, column)
+            grid.setColumnStretch(column, 1)
+            grid.addWidget(self.sale_roles[role], 1, column)
+        grid.addWidget(QLabel(tr("Общий счёт")), 1, 0)
+        rows = sale_account_rows(self.s.conn, self.s.company_id)
+        for line, row in enumerate(rows, 2):
+            grid.addWidget(QLabel(row.stock_account.label), line, 0)
+            for column, role in enumerate(SALE_ACCOUNT_ROLES, 1):
+                combo = self._account_combo(tr("— общий —"), row.own.get(role), width=18)
+                self.sale_accounts[row.stock_account.id, role] = combo
+                grid.addWidget(combo, line, column)
+        form.addRow(grid)
+        if rows:
+            form.addRow(
+                self._hint(
+                    N_(
+                        "У товаров счёта запасов могут быть свои счета продажи. После "
+                        "смены продажи открытого периода проведутся заново."
+                    )
+                )
+            )
+
     def _build_incoming(self, form: QFormLayout) -> None:
         """The account each reason of a mədaxil credits (D91)."""
         incoming = QLabel(tr("Оприходование"))
@@ -255,15 +294,18 @@ class InventorySettingsDialog(QDialog):
             form.addRow(tr(name), self.incoming_roles[role])
         form.addRow(self._hint(N_("Оприходование: Дт счёт товара / Кт счёт причины.")))
 
-    def _account_list(self, role: str, empty: str) -> QComboBox:
+    def _account_list(self, role: str, empty: str, width: int = 28) -> QComboBox:
+        current = self.s.ledger.account_role(self.s.company_id, role)
+        return self._account_combo(empty, current, width)
+
+    def _account_combo(self, empty: str, current: int | None, width: int = 28) -> QComboBox:
         combo = QComboBox()
         # long account names do not squeeze the labels
         combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        combo.setMinimumContentsLength(28)
+        combo.setMinimumContentsLength(width)
         combo.addItem(empty, None)
         for account in self.s.catalog.leaf_accounts:
             combo.addItem(account.label, account.id)
-        current = self.s.ledger.account_role(self.s.company_id, role)
         combo.setCurrentIndex(max(combo.findData(current), 0))
         return combo
 
@@ -281,6 +323,10 @@ class InventorySettingsDialog(QDialog):
             for role, combo in roles.items():
                 if combo.currentData() != self.s.ledger.account_role(self.s.company_id, role):
                     self.s.ledger.set_account_role(self.s.company_id, role, combo.currentData())
+            Inventory(self.s.conn, actor=self.s.ledger.actor).set_sale_accounts(
+                self.s.company_id,
+                {key: combo.currentData() for key, combo in self.sale_accounts.items()},
+            )
         except LedgerError as exc:
             QMessageBox.warning(self, tr("Настройки склада"), str(exc))
             return

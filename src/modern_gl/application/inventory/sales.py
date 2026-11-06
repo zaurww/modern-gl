@@ -175,11 +175,17 @@ class SaleCommands(StockCommands):
 
     def sale_kinds(self, company_id: int) -> list[int]:
         """The subconto kinds a sale line is asked for (D61): those of the sale accounts
-        (revenue, cost of sales, the VAT charge) but the item and the warehouse, which the
-        line gives itself. A kind the customer's account has comes from the customer."""
+        (revenue, cost of sales, the VAT charge — the company's and those a stock account
+        has of its own) but the item and the warehouse, which the line gives itself. A
+        kind the customer's account has comes from the customer."""
         result: list[int] = []
-        for role in (SALES_REVENUE, COST_OF_SALES, SALES_VAT):
-            account_id = self.ledger.account_role(company_id, role)
+        roles = (SALES_REVENUE, COST_OF_SALES, SALES_VAT)
+        own = self.conn.execute(  # of the stock accounts that have their own (the table)
+            "SELECT account_id FROM inventory_sale_accounts WHERE company_id = ? ORDER BY id",
+            (company_id,),
+        ).fetchall()
+        accounts = [self.ledger.account_role(company_id, role) for role in roles]
+        for account_id in (*accounts, *(row["account_id"] for row in own)):
             if account_id is None:
                 continue
             account = self._account(company_id, account_id)
@@ -194,9 +200,9 @@ class SaleCommands(StockCommands):
         VAT is charged from another account), the VAT to pay once per customer (and per
         subconto of the VAT charge account), and for goods Dr cost of sales / Cr inventory
         at the average cost. The sale accounts take their subconto by kind from the
-        customer's, the item's, the warehouse's and the line's own values (D61)."""
-        revenue_id = self._sale_account(company_id, SALES_REVENUE)
-        sales_vat_id = self.ledger.account_role(company_id, SALES_VAT)
+        customer's, the item's, the warehouse's and the line's own values (D61). The
+        revenue and the cost of sales of goods are those of their stock account, if it
+        has its own; a service's revenue is the company's."""
         invoice = doc["invoice"] or ""
         revenue: list[PostingInput] = []
         costs: list[PostingInput] = []
@@ -206,10 +212,13 @@ class SaleCommands(StockCommands):
             customer_sc = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
             values = self._sale_values(company_id, line)
             memo = line["memo"]
+            item = None
             if line["item_id"] is not None:
                 item = self._item(company_id, line["item_id"])
                 memo = memo or item["name"]
                 costs.append(self._sale_cost(company_id, doc, line, item, memo, values))
+            revenue_id = self._sale_account(company_id, SALES_REVENUE, item)
+            sales_vat_id = self._vat_charge_account(company_id, revenue_id)
             revenue.append(
                 PostingInput(
                     line["offset_account_id"],
@@ -269,7 +278,7 @@ class SaleCommands(StockCommands):
     ) -> PostingInput:
         """Take a goods line from stock: its movement, and Dr cost of sales / Cr inventory."""
         warehouse = self._warehouse(company_id, line["warehouse_id"])
-        cost_id = self._sale_account(company_id, COST_OF_SALES)
+        cost_id = self._sale_account(company_id, COST_OF_SALES, item)
         amount = self._cost(company_id, item, warehouse, line["quantity"], doc["id"])
         self.conn.execute(
             "UPDATE inventory_lines SET expense_amount = ?, cost_account_id = ? "
@@ -318,8 +327,47 @@ class SaleCommands(StockCommands):
             for (debit_id, debit_sc, customer_sc), amount in totals.items()
         ]
 
-    def _sale_account(self, company_id: int, role: str) -> int:
-        account_id = self.ledger.account_role(company_id, role)
+    def _vat_charge_account(self, company_id: int, revenue_id: int) -> int | None:
+        """The account a line's VAT is charged from; None — the customer's own. Where it
+        is charged from the revenue itself (Dt 62 / Kt 46 with the VAT, Dt 46 / Kt 68.2),
+        that is the revenue account of the line — its stock account's own, if it has one."""
+        charge = self._role_account(company_id, SALES_VAT)
+        if charge is not None and charge == self._role_account(company_id, SALES_REVENUE):
+            return revenue_id
+        return charge
+
+    def _role_account(self, company_id: int, role: str) -> int | None:
+        """The company's account of a role, read once while documents are recalculated."""
+        return self._kept_row(
+            ("role", company_id, role), lambda: self.ledger.account_role(company_id, role)
+        )
+
+    def _own_sale_account(self, company_id: int, stock_account_id: int, role: str) -> int | None:
+        """The account chosen for the sales of the goods on this stock account (the
+        warehouse's table), None when it has none of its own."""
+        return self._kept_row(
+            ("sale account", company_id, stock_account_id, role),
+            lambda: self._read_own_sale_account(company_id, stock_account_id, role),
+        )
+
+    def _read_own_sale_account(
+        self, company_id: int, stock_account_id: int, role: str
+    ) -> int | None:
+        row = self.conn.execute(
+            "SELECT account_id FROM inventory_sale_accounts "
+            "WHERE company_id = ? AND stock_account_id = ? AND role = ?",
+            (company_id, stock_account_id, role),
+        ).fetchone()
+        return None if row is None else row["account_id"]
+
+    def _sale_account(self, company_id: int, role: str, item: Row | None = None) -> int:
+        """The account a sale posts to: for goods — the one of their stock account, if
+        it has its own; else (and for a service) the company's."""
+        if item is not None:
+            own = self._own_sale_account(company_id, item["inventory_account_id"], role)
+            if own is not None:
+                return own
+        account_id = self._role_account(company_id, role)
         if account_id is None:
             raise ValidationError(
                 tr(

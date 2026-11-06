@@ -39,7 +39,6 @@ from modern_gl.domain.accounts import (
     FX_LOSS,
     OUTPUT_VAT,
     SALES_REVENUE,
-    SALES_VAT,
 )
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.errors import ValidationError
@@ -382,9 +381,9 @@ class ReturnCommands(SaleCommands):
         item = self._item(company_id, line["item_id"])
         warehouse = self._warehouse(company_id, line["warehouse_id"])
         cost = self._returned_cost(company_id, doc, line, item, warehouse)
-        revenue_id = self._sale_account(company_id, SALES_REVENUE)
-        cost_id = self._sale_account(company_id, COST_OF_SALES)
-        sales_vat_id = self.ledger.account_role(company_id, SALES_VAT)
+        revenue_id = self._sale_account(company_id, SALES_REVENUE, item)
+        cost_id = self._sale_account(company_id, COST_OF_SALES, item)
+        sales_vat_id = self._vat_charge_account(company_id, revenue_id)
         self.conn.execute(
             "UPDATE inventory_lines SET inventory_amount = ?, cost_account_id = ? "
             "WHERE company_id = ? AND id = ?",
@@ -441,11 +440,14 @@ class ReturnCommands(SaleCommands):
     def _sale_return_vat(self, company_id: int, invoice: str, lines: Sequence[Row]):
         """The ƏDV back: Dt output ƏDV / Ct the account it was charged from (the customer's
         own when none is chosen), one posting per account and customer."""
-        sales_vat_id = self.ledger.account_role(company_id, SALES_VAT)
         totals: dict[tuple[int, tuple[int | None, ...], tuple[int | None, ...]], int] = {}
         for line in lines:
             if not line["vat_amount"]:
                 continue
+            item = self._item(company_id, line["item_id"])
+            sales_vat_id = self._vat_charge_account(
+                company_id, self._sale_account(company_id, SALES_REVENUE, item)
+            )
             customer = (line["offset_sc1"], line["offset_sc2"], line["offset_sc3"])
             credit_sc = (
                 customer
