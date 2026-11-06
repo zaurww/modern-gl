@@ -34,6 +34,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     WAREHOUSE,
     InventoryPaste,
     UnknownNameError,
+    header_key,
     paste_columns,
 )
 from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
@@ -79,7 +80,9 @@ class LinesClipboard(InventoryLinesBase):
         """Lines copied from Excel become lines of the document: by the header line if
         there is one (Товар, Количество, Цена, Сумма… in any order), else in the order
         of the table from the current column. `shown(column)` tells if it is visible.
-        One line goes into the current row; more fill it if empty, then new rows."""
+        One line goes into the current row. More lines go down from it, as in Excel: a
+        column of quantities or prices into the lines there, new rows past the last; only
+        names on a line with its own item come as new lines, nothing is overwritten."""
         lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         while lines and not lines[-1].strip():
             lines.pop()
@@ -88,14 +91,18 @@ class LinesClipboard(InventoryLinesBase):
         if not cells or self.read_only:
             return result
         mapping = paste_columns(cells[0], self.columns)
-        if mapping is not None:
+        if mapping is not None or self._titled_column(cells, start_column):
             cells = cells[1:]
+        width = max((len(line) for line in cells), default=0)
+        names = self._reaches_item(mapping, start_row, start_column, width, shown)
         target = start_row
         for n, line in enumerate(cells, start=1):
             if not any(cell.strip() for cell in line):
+                target += not names  # an empty cell of a column: its line stays as it is
                 continue
-            needs_row = target >= len(self.rows) or not self.rows[target].is_empty()
-            if (len(cells) > 1 or target >= len(self.rows)) and needs_row:
+            while target > len(self.rows):
+                self.insert_row()
+            if target == len(self.rows) or (names and len(cells) > 1 and self._has_goods(target)):
                 self.insert_row(target)
             keys = mapping or self._columns_in_order(target, start_column, shown)
             pasted = {
@@ -111,6 +118,27 @@ class LinesClipboard(InventoryLinesBase):
             target += 1
         self.changed.emit()
         return result
+
+    def _titled_column(self, cells: list[list[str]], column: int) -> bool:
+        """One column copied with its title: «Miqdar» above the numbers of that column."""
+        return (
+            len(cells) > 1
+            and len(cells[0]) == 1
+            and header_key(cells[0][0]) == self.columns[column]
+        )
+
+    def _reaches_item(self, mapping, row: int, column: int, width: int, shown) -> bool:
+        """Do the pasted cells have an item column? Without one they fill lines there."""
+        if mapping is not None:
+            return ITEM in mapping
+        if row >= len(self.rows):
+            return True
+        return ITEM in self._columns_in_order(row, column, shown)[:width]
+
+    def _has_goods(self, row_index: int) -> bool:
+        """The line says what it is: an item, or a service by its memo."""
+        row = self.rows[row_index]
+        return row.item_id is not None or bool(row.memo.strip())
 
     def _columns_in_order(self, row_index: int, start: int, shown) -> list[str]:
         """Without a header the cells follow the visible columns of the table

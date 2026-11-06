@@ -24,11 +24,14 @@ from modern_gl.desktop.inventory_document_page import (
     AMOUNT,
     ITEM,
     ITEM_MIN,
+    PRICE,
+    QUANTITY,
     SC1,
     VAT,
     WAREHOUSE,
     InventoryDocumentPage,
     InventoryGridRow,
+    NewNamesDialog,
 )
 from modern_gl.desktop.inventory_page import (
     InventoryPage,
@@ -1060,6 +1063,101 @@ def test_excel_lines_paste_into_a_receipt_by_header(inventory_demo, receipt_page
     assert len(model.to_inputs()) == 2  # complete: can be posted
 
 
+def at_column(page, key: str, row: int = 0) -> None:
+    page.table.setCurrentIndex(page.model.index(row, page.model.columns.index(key)))
+
+
+def test_excel_columns_pasted_one_by_one_fill_the_same_lines(inventory_demo, receipt_page):
+    """A declaration column by column: the names make the lines, the quantity and the price
+    go into those lines, no new ones. 2 × 10.00 = 20.00; 3 × 5.50 = 16.50."""
+    demo, model = inventory_demo, receipt_page.model
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A\nB\n")
+    at_column(receipt_page, QUANTITY)
+    receipt_page.paste("2\n3\n")
+    at_column(receipt_page, PRICE)
+    receipt_page.paste("10,00\n5,50\n")
+    filled = [row for row in model.rows if not row.is_empty()]
+    assert [row.item_id for row in filled] == [demo.item, demo.other_item]
+    assert [row.quantity for row in filled] == [2 * QUANTITY_FACTOR, 3 * QUANTITY_FACTOR]
+    assert [row.amount for row in filled] == [2_000, 1_650]
+
+
+def test_excel_column_goes_on_past_the_last_line(inventory_demo, receipt_page):
+    """More numbers than lines: the rest make new lines, after the filled ones."""
+    model = receipt_page.model
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A\n")
+    at_column(receipt_page, QUANTITY)
+    receipt_page.paste("2\n3\n")
+    filled = [row for row in model.rows if not row.is_empty()]
+    assert [row.item_id for row in filled] == [inventory_demo.item, None]
+    assert [row.quantity for row in filled] == [2 * QUANTITY_FACTOR, 3 * QUANTITY_FACTOR]
+
+
+def test_excel_empty_cell_of_a_column_keeps_its_line(inventory_demo, receipt_page):
+    """No quantity for the second name: the third number stays with the third name."""
+    model = receipt_page.model
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A\nB\nТовар A\n")
+    at_column(receipt_page, QUANTITY)
+    receipt_page.paste("2\n\n4\n")
+    assert [row.quantity for row in model.rows[:3]] == [
+        2 * QUANTITY_FACTOR,
+        None,
+        4 * QUANTITY_FACTOR,
+    ]
+
+
+def test_excel_column_with_its_title_keeps_the_lines(inventory_demo, receipt_page):
+    """«Miqdar» copied above the numbers is a title, not a value of the first line."""
+    model = receipt_page.model
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A\nB\n")
+    at_column(receipt_page, QUANTITY)
+    receipt_page.paste("Miqdar\n2\n3\n")
+    assert receipt_page.error.isHidden()
+    assert [row.quantity for row in model.rows[:2]] == [2 * QUANTITY_FACTOR, 3 * QUANTITY_FACTOR]
+
+
+def test_excel_names_pasted_after_the_quantities_join_them(inventory_demo, receipt_page):
+    """The other order: the names go to the lines that have no item yet."""
+    demo, model = inventory_demo, receipt_page.model
+    at_column(receipt_page, QUANTITY)
+    receipt_page.paste("2\n3\n")
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A\nB\n")
+    filled = [row for row in model.rows if not row.is_empty()]
+    assert [row.item_id for row in filled] == [demo.item, demo.other_item]
+    assert [row.quantity for row in filled] == [2 * QUANTITY_FACTOR, 3 * QUANTITY_FACTOR]
+
+
+def test_excel_whole_lines_do_not_overwrite_the_items_there(inventory_demo, receipt_page):
+    """New goods pasted on a filled line come as new lines; what was there stays."""
+    demo, model = inventory_demo, receipt_page.model
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A\n")
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("B\nB\n")
+    filled = [row.item_id for row in model.rows if not row.is_empty()]
+    assert filled == [demo.other_item, demo.other_item, demo.item]
+
+
+def test_excel_names_pasted_twice_are_not_added_twice(inventory_demo, receipt_page, monkeypatch):
+    """A trial paste, its lines deleted, the same names again: the items are found."""
+    monkeypatch.setattr(NewNamesDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+    model = receipt_page.model
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Yeni mal\nYeni mal\nBaşqa mal\n")
+    first = [row.item_id for row in model.rows[:3]]
+    assert first[0] == first[1] != first[2]
+    before = len(item_choices(receipt_page.s.conn, inventory_demo.company_id))
+    at_column(receipt_page, ITEM, 3)
+    receipt_page.paste("Yeni mal\nBaşqa mal\n")
+    assert [row.item_id for row in model.rows[3:5]] == [first[0], first[2]]
+    assert len(item_choices(receipt_page.s.conn, inventory_demo.company_id)) == before
+
+
 def test_excel_paste_without_header_follows_the_table(inventory_demo, receipt_page):
     model = receipt_page.model
     receipt_page.paste("Товар A\tОсновной\t2\tшт\t\t300")  # the unit column is skipped
@@ -1071,8 +1169,6 @@ def test_excel_paste_without_header_follows_the_table(inventory_demo, receipt_pa
 def test_excel_paste_adds_new_items_warehouses_and_subconto(
     inventory_demo, receipt_page, monkeypatch
 ):
-    from modern_gl.desktop.inventory_document_page import NewNamesDialog
-
     monkeypatch.setattr(NewNamesDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
     s, model = receipt_page.s, receipt_page.model
     receipt_page.paste(

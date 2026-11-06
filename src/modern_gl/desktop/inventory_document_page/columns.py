@@ -190,13 +190,19 @@ class InventoryPaste:
     units: dict[str, str] = field(default_factory=dict)  # a new item -> its pasted unit
 
 
+def header_key(cell: str) -> str | None:
+    """The column an Excel title stands for, if it is one."""
+    name = " ".join(fold(cell.strip()).split())
+    return next((key for names, key in PASTE_HEADERS if name in names), None)
+
+
 def paste_columns(cells: list[str], columns: list[str]) -> list[str | None] | None:
     """The columns of a header line, or None if the line is not a header."""
     result: list[str | None] = []
     position = 0
     for cell in cells:
         name = " ".join(fold(cell.strip()).split())
-        key = next((k for names, k in PASTE_HEADERS if name in names), None)
+        key = header_key(cell)
         if key is None and (sub := subconto_header(name, position)) is not None:
             _side, position = sub  # a warehouse line has one side of subconto
             key = f"sc{position}" if 1 <= position <= 3 else None
