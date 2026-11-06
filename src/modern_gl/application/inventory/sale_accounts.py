@@ -1,5 +1,5 @@
 """The accounts a sale of goods posts to, chosen for the stock account of the goods
-(D-new-stock-sale-accounts): the warehouse's own table over the company's account roles.
+(D210): the warehouse's own table over the company's account roles.
 «Товары» (41) may have another revenue and cost of sales than «Материалы» (10); a stock
 account without accounts of its own takes the company's (the roles of D34)."""
 

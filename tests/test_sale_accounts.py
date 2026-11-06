@@ -1,5 +1,5 @@
 """The accounts a sale of goods posts to, by the stock account of the goods
-(D-new-stock-sale-accounts): the warehouse's own table over the company's roles.
+(D210): the warehouse's own table over the company's roles.
 
 The shop of the classic chart: «Printer» is goods (41), «Kağız» is materials (10). The
 company's sale accounts are 46 for all three roles — the revenue with the VAT, the VAT

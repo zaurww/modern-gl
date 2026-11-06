@@ -1,4 +1,4 @@
-"""The table of sale accounts in the warehouse settings (D-new-stock-sale-accounts): the
+"""The table of sale accounts in the warehouse settings (D210): the
 stock accounts and the revenue and cost of sales each has of its own."""
 
 from __future__ import annotations

@@ -1,5 +1,5 @@
 """The sale accounts of a stock account: the warehouse's own table
-(D-new-stock-sale-accounts)."""
+(D210)."""
 
 AZ = {
     "Общий счёт": "Ümumi hesab",

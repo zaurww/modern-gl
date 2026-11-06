@@ -37,7 +37,7 @@ SALE_ROLE_NAMES = {
     OUTPUT_VAT: N_("НДС к уплате"),
     SALES_VAT: N_("НДС начисляется со счёта"),
 }
-# of them, those a stock account may have of its own (D-new-stock-sale-accounts)
+# of them, those a stock account may have of its own (D210)
 SALE_ACCOUNT_ROLES = (SALES_REVENUE, COST_OF_SALES)
 
 
