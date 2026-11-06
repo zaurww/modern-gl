@@ -8,6 +8,11 @@ AZ = {
         "kontragent soraqçada yoxdur: {name}, VÖEN {tin}"
     ),
     "контрагента нет в справочнике: {name}": "kontragent soraqçada yoxdur: {name}",
+    "За {period} e-qaimə не загружены: контрагентов и неоплаченные программа берёт "
+    "из них. Лучше сначала загрузить e-qaimə с портала, потом выписку.": (
+        "{period} üçün e-qaimə yüklənməyib: proqram kontragentləri və ödənilməmişləri "
+        "onlardan götürür. Əvvəlcə portaldan e-qaimə, sonra çıxarışı yükləmək daha yaxşıdır."
+    ),
     "контрагент в выписке не назван": "çıxarışda kontragent göstərilməyib",
     ", контрагентов нет в справочнике: {n}": ", soraqçada olmayan kontragentlər: {n}",
     "{name}, VÖEN {tin}": "{name}, VÖEN {tin}",

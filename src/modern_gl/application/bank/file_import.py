@@ -33,6 +33,7 @@ from modern_gl.application.bank.operations import (
     BankLine,
 )
 from modern_gl.application.bank.places import BankPlace, bank_places
+from modern_gl.application.free_money import free_money, lay_out
 from modern_gl.application.invoices import open_invoices
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
@@ -246,6 +247,15 @@ def payment_check(
                 "сумма больше долга по e-qaimə на {diff}", diff=format_minor(op.amount - total)
             )
         return invoices, why
+    # no number: what the money paid without one left unpaid — a number named is a fact
+    # and reads the books, a suggestion must not pay again what is paid
+    free = (
+        free_money(conn, company_id, counterparty, op.direction == OUT, op.day)
+        if counterparty is not None
+        else (0, 0)
+    )
+    left = lay_out(unpaid, *free)
+    owed = {i.invoice: (i.vat if op.pays_vat else i.amount) for i in left}
     suggested = tuple((n, still) for n, still in owed.items() if still > 0)
     if suggested:
         return suggested, why or tr("в назначении нет e-qaimə — разложено по старым")

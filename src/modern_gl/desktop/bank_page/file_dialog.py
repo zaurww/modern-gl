@@ -17,6 +17,7 @@ from modern_gl.application.bank.file_import import FileOperation, account_choice
 from modern_gl.application.bank.files import BankFile, read_bank_file
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
 from modern_gl.application.bank.statement import place_balance
+from modern_gl.application.invoices import eqaime_known
 from modern_gl.desktop.bank_page.fee_account import FeeAccountChoice
 from modern_gl.desktop.bank_page.file_rates import FileRates
 from modern_gl.desktop.bank_page.import_rows import ImportRows
@@ -63,6 +64,10 @@ class BankFileDialog(ImportWindow):
         self.rates_note.setWordWrap(True)
         self.rates_note.hide()
         self.root.addWidget(self.rates_note)
+        self.eqaime_note = QLabel()
+        self.eqaime_note.setWordWrap(True)
+        self.eqaime_note.hide()
+        self.root.addWidget(self.eqaime_note)
         self.fee_account = FeeAccountChoice(session, self.preview)
         self.root.addWidget(self.fee_account)
         self.rows = ImportRows()
@@ -133,10 +138,26 @@ class BankFileDialog(ImportWindow):
         except LedgerError as e:
             self._show_rows([], text=str(e))
             return
+        say(self.eqaime_note, self._eqaime_advice(seen), "warning")
         text = preview_summary(seen)
         if waiting:
             text = tr("Выберите счёт для: {files}.", files=", ".join(waiting)) + " " + text
         self._show_rows(drafts_first(seen.rows), text)
+
+    def _eqaime_advice(self, seen: FileImported) -> str:
+        """Senders the directory lacks and no e-qaimə of the file's months known: the
+        names and the unpaid come from the portal — better loaded first (D205, D206)."""
+        if not seen.unknown_parties or not self.files:
+            return ""
+        first = min(f.date_from for f in self.files)
+        last = max(f.date_to for f in self.files)
+        if eqaime_known(self.s.conn, self.s.company_id, first[:8] + "01", last):
+            return ""
+        return tr(
+            "За {period} e-qaimə не загружены: контрагентов и неоплаченные программа берёт "
+            "из них. Лучше сначала загрузить e-qaimə с портала, потом выписку.",
+            period=date_range(first, last, "–"),
+        )
 
     def _show_rows(self, rows: list[ImportRow], text: str) -> None:
         self.rows.blockSignals(True)

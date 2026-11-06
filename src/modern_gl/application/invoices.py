@@ -191,7 +191,7 @@ def open_invoices(
     number are taken off. The counterparty is known by its VÖEN as well: a second element
     of the directory with the same VÖEN is the same firm."""
     params = book_params(conn, company_id, on_date, on_date, layers)
-    parties, tin = _same_firm(conn, company_id, counterparty_id)
+    parties, tin = same_firm(conn, company_id, counterparty_id)
 
     def accrued(row: InvoiceRow) -> int:  # what the e-qaimə itself made owed
         return row.credit if payable else row.debit
@@ -232,6 +232,27 @@ def open_invoices(
     return [i for i in found if i.amount > 0 and i.invoice not in other_way]
 
 
+def eqaime_known(conn: Connection, company_id: int, date_from: str, date_to: str) -> bool:
+    """Whether the company knows any e-qaimə of the days: read from the portal, in a
+    purchase or sale, in a posting. None — they were likely not loaded yet."""
+    return bool(
+        conn.execute(
+            """
+            SELECT EXISTS (SELECT 1 FROM eqaime_portal WHERE company_id = :c
+                           AND doc_date BETWEEN :a AND :b)
+                OR EXISTS (SELECT 1 FROM inventory_documents WHERE company_id = :c
+                           AND invoice IS NOT NULL AND doc_date BETWEEN :a AND :b)
+                OR EXISTS (SELECT 1 FROM postings p
+                           JOIN documents d ON d.company_id = p.company_id
+                            AND d.id = p.document_id
+                           WHERE p.company_id = :c AND p.invoice IS NOT NULL
+                             AND d.doc_date BETWEEN :a AND :b) AS known
+            """,
+            {"c": company_id, "a": date_from, "b": date_to},
+        ).fetchone()["known"]
+    )
+
+
 def _other_way(conn: Connection, company_id: int, payable: bool) -> set[str]:
     """E-qaimə known to go the other way: sales when paying, purchases when money comes
     in (a purchase or sale document, or the portal's list) — an advance paid on a purchase
@@ -245,7 +266,7 @@ def _other_way(conn: Connection, company_id: int, payable: bool) -> set[str]:
     return {r[0] for r in rows}
 
 
-def _same_firm(conn: Connection, company_id: int, counterparty_id: int) -> tuple[set[int], str]:
+def same_firm(conn: Connection, company_id: int, counterparty_id: int) -> tuple[set[int], str]:
     """The counterparty and the elements of its directory with its VÖEN; the VÖEN."""
     row = conn.execute(
         "SELECT kind_id, COALESCE(tax_id, '') AS tin FROM subconto_values "
