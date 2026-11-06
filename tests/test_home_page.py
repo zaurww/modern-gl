@@ -40,9 +40,10 @@ def test_what_waits_on_the_day(ledger):
     rows = {r.text: r for r in attention(ledger.conn, c, "2026-02-28")}
     drafts = rows["Черновики в журнале"]
     assert (drafts.count, drafts.place, drafts.action) == (1, ("journal",), POST_DRAFTS)
-    # MT2601001842: 1 200.00 + ƏDV 216.00, nothing paid on its number
+    # MT2601001842: 1 200.00 + ƏDV 216.00 = 1 416.00, nothing paid on its number; 1 000.00
+    # paid to Alfa on 15.01 without one — 416.00 is what is really owed (ОСВ 60, Alfa)
     unpaid = rows["Неоплаченные e-qaimə поставщиков"]
-    assert (unpaid.count, unpaid.amount) == (1, 141600)
+    assert (unpaid.count, unpaid.amount) == (1, 41600)
     # the draft «Аренда за март» is dated 28.02: on the 27th nothing waits in the journal
     assert "Черновики в журнале" not in {r.text for r in attention(ledger.conn, c, "2026-02-27")}
 
@@ -77,7 +78,7 @@ def test_post_drafts_posts_and_leaves_what_cannot_post(ledger):
     assert osv["26"].turnover_dt == 55000 + 40000  # + the rent of March, 400.00
     rows = {r.text: r for r in attention(ledger.conn, c, "2026-02-28")}
     assert rows["Черновики в журнале"].count == 1  # the one left
-    assert rows["Неоплаченные e-qaimə поставщиков"].amount == 141600 + 40000
+    assert rows["Неоплаченные e-qaimə поставщиков"].amount == 41600 + 40000
 
 
 @pytest.fixture

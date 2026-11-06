@@ -82,11 +82,15 @@ class InvoicesPage(ReportPage):
             Column(tr("ƏDV"), lambda r: r.vat, money=True, width=110),
             Column(tr("Остаток"), self._balance, width=140, right=True),
         ]
+        if any(r.free for r in rows):  # paid before the number was known: said beside it
+            columns.append(
+                Column(tr("Оплачено без номера"), lambda r: r.free, money=True, width=150)
+            )
         if any(r.kind == CUSTOMS for r in rows):  # imports: customs declarations too
             columns[1] = Column(tr("Номер"), lambda r: r.invoice, width=170)
             columns.insert(1, Column(tr("Основание"), kind_name, width=110))
         self.model.set(columns, rows)
-        unpaid = [r for r in rows if r.balance]
+        unpaid = [r for r in rows if r.unpaid]
         text = tr("{n} e-qaimə", n=len(rows))
         if unpaid:
             text += "   ·   " + tr("не закрыто {n}", n=len(unpaid))

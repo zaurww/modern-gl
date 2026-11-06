@@ -34,11 +34,17 @@ class InvoiceRow:
     deposit: int = 0  # paid from or to the ƏDV deposit account (D41)
     documents: list[tuple[int, int]] = field(default_factory=list)  # (id, number)
     in_period: bool = False
+    free: int = 0  # of the balance, paid without a number (`free_money.mark_free_money`)
 
     @property
     def balance(self) -> int:
         """Dt - Kt of the settlement accounts: unpaid (a sale > 0, a purchase < 0)."""
         return self.debit - self.credit
+
+    @property
+    def unpaid(self) -> int:
+        """What is really left: the balance by number less the money without one."""
+        return max(abs(self.balance) - self.free, 0)
 
     @property
     def counterparty_id(self) -> int | None:

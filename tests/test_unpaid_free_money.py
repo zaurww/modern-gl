@@ -223,3 +223,51 @@ def test_the_form_of_the_payment_offers_what_it_pays(qtbot, ledger, firm):
     qtbot.addWidget(new)
     new._set_counterparty(firm["alfa"])
     assert new.open_invoices == []
+
+
+def test_the_report_keeps_the_books_and_says_what_was_paid(ledger, firm):
+    """E-qaimələr: the balance stays the books' (A −500.00, B −300.00); beside it what the
+    600.00 paid — A 500.00, B 100.00. A period with B alone says the same: the older A takes
+    its money first."""
+    from modern_gl.reporting.invoices import invoice_report
+
+    paid(ledger, firm, "2026-03-10", 60000)
+    bought(ledger, firm, "2026-03-20", "500", A)
+    bought(ledger, firm, "2026-03-21", "300", B)
+    cid = firm["cid"]
+    rows = invoice_report(ledger.conn, cid, "2026-03-01", "2026-03-25")
+    assert [(r.invoice, r.balance, r.free, r.unpaid) for r in rows] == [
+        (A, -50000, 50000, 0),
+        (B, -30000, 10000, 20000),
+    ]
+    [only_b] = invoice_report(ledger.conn, cid, "2026-03-21", "2026-03-25")
+    assert (only_b.invoice, only_b.free) == (B, 10000)
+
+
+def test_bu_gun_counts_what_is_really_unpaid(ledger, firm):
+    """One e-qaimə for 200.00, not two for 800.00."""
+    from modern_gl.reporting.invoices import unpaid_invoices as attention_rows
+
+    paid(ledger, firm, "2026-03-10", 60000)
+    bought(ledger, firm, "2026-03-20", "500", A)
+    bought(ledger, firm, "2026-03-21", "300", B)
+    suppliers = attention_rows(ledger.conn, firm["cid"], "2026-03-25")[0]
+    assert (suppliers.count, suppliers.amount) == (1, 20000)
+
+
+def test_two_elements_of_one_firm_are_one_debt(ledger, firm):
+    """The money went to a second element with Alfa's VÖEN: it pays the same e-qaimə."""
+    from modern_gl.reporting.invoices import invoice_report
+
+    cid = firm["cid"]
+    kind = ledger.subconto_kind_id(cid, "counterparty")
+    second = ledger.add_subconto_value(cid, kind, "Альфа (2)")
+    ledger.set_subconto_value_tax(cid, second, ALFA_TIN)
+    acc = firm["acc"]
+    bank = firm["place"].subconto
+    ledger.post_new(
+        cid, "2026-03-10", [PostingInput(acc["60.1"], acc["51"], "100", [second], list(bank))]
+    )
+    bought(ledger, firm, "2026-03-20", "500", A)
+    [row] = invoice_report(ledger.conn, cid, "2026-03-01", "2026-03-25")
+    assert (row.free, row.unpaid) == (10000, 40000)

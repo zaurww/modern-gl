@@ -13,6 +13,7 @@ AZ = {
         "{period} üçün e-qaimə yüklənməyib: proqram kontragentləri və ödənilməmişləri "
         "onlardan götürür. Əvvəlcə portaldan e-qaimə, sonra çıxarışı yükləmək daha yaxşıdır."
     ),
+    "Оплачено без номера": "Nömrəsiz ödənilib",
     "контрагент в выписке не назван": "çıxarışda kontragent göstərilməyib",
     ", контрагентов нет в справочнике: {n}": ", soraqçada olmayan kontragentlər: {n}",
     "{name}, VÖEN {tin}": "{name}, VÖEN {tin}",
