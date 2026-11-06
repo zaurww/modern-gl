@@ -1,6 +1,6 @@
 """What a counterparty paid without a number, set against the unpaid list: a payment made
 before its e-qaimə was known pays it, whatever was entered first — the order of entry
-changes nothing (D-new-unpaid-free-money). A calculation, oldest first as the ƏDV module
+changes nothing (D206). A calculation, oldest first as the ƏDV module
 lays the same money out (D185); no posting changes and a number stays what it was.
 
 The free money is the counterparty's balance without a number on its settlement and

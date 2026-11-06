@@ -1,4 +1,4 @@
-"""The unpaid list counts the money without a number (D-new-unpaid-free-money): a payment
+"""The unpaid list counts the money without a number (D206): a payment
 made before its e-qaimə was known pays it, whatever came first — laid out oldest first, as
 the ƏDV module lays it out (D185). Nothing is written: the postings stay as they are.
 
