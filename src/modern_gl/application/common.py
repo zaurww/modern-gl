@@ -151,6 +151,7 @@ USAGE_TEXTS: dict[str, str] = {
     "warehouses": N_("это склад"),
     "stock_movements": N_("по нему есть движения на складе"),
     "account_roles": N_("он выбран в настройках склада (роль счёта)"),
+    "inventory_sale_accounts": N_("он выбран в настройках склада (счета продажи)"),
     "bank_operations": N_("он есть в банковской операции"),
     "bank_operation_lines": N_("он есть в банковской операции"),
     "currency_conversions": N_("он есть в конвертации валюты"),

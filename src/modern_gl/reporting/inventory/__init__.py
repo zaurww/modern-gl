@@ -48,6 +48,7 @@ from modern_gl.reporting.inventory.item_card import (
     gross_profit,
     item_card,
 )
+from modern_gl.reporting.inventory.sale_accounts import SaleAccountsRow, sale_account_rows
 from modern_gl.reporting.inventory.shortages import Shortage, document_shortages
 from modern_gl.reporting.inventory.statement import (
     BY_ITEM,
@@ -93,6 +94,7 @@ __all__ = [
     "ProfitRow",
     "ReceiptDocumentChoice",
     "ReceiptLineChoice",
+    "SaleAccountsRow",
     "Shortage",
     "StatementRow",
     "StockBalance",
@@ -122,6 +124,7 @@ __all__ = [
     "percent_added",
     "receipt_documents",
     "receipt_line_choices",
+    "sale_account_rows",
     "stock_account_choices",
     "stock_accounts_balance",
     "stock_balances",

@@ -27,6 +27,7 @@ from modern_gl.application.inventory.model import (
     QUANTITY_FACTOR,
     QUANTITY_SCALE,
     RETURN_TYPES,
+    SALE_ACCOUNT_ROLES,
     SALE_RETURN,
     SALE_ROLE_NAMES,
     STANDARD_VAT_RATE,
@@ -48,7 +49,7 @@ from modern_gl.application.inventory.model import (
     TransferLine,
     UsualUnit,
 )
-from modern_gl.application.inventory.rebuild import RebuildCommands
+from modern_gl.application.inventory.sale_accounts import SaleAccountCommands
 from modern_gl.application.inventory.stock import StockShortageError
 from modern_gl.application.inventory.stock_count import (
     CountedLine,
@@ -65,6 +66,7 @@ __all__ = [
     "QUANTITY_FACTOR",
     "QUANTITY_SCALE",
     "RETURN_TYPES",
+    "SALE_ACCOUNT_ROLES",
     "SALE_RETURN",
     "SALE_ROLE_NAMES",
     "STANDARD_VAT_RATE",
@@ -102,6 +104,6 @@ __all__ = [
 ]
 
 
-class Inventory(StockCountCommands, AwaitingCommands, RebuildCommands):
+class Inventory(StockCountCommands, AwaitingCommands, SaleAccountCommands):
     """Write-side API for inventory catalogs, movements and landed cost; each group
     lives in its own module."""
