@@ -30,6 +30,7 @@ from modern_gl.desktop.landed_cost_page import (
     ChargeRow,
     LandedCostPage,
     cost_source_picker,
+    receipt_picker,
     source_label,
 )
 from modern_gl.desktop.session import Session
@@ -42,6 +43,7 @@ from modern_gl.reporting.inventory import (
     receipt_line_choices,
     stock_balances,
 )
+from modern_gl.reporting.reports import account_card
 from tests.helpers.qt import cell_editor, completer_of, popup_of
 
 
@@ -608,3 +610,57 @@ def test_a_cost_type_the_list_lacks_is_added_from_the_cell(batch, conn, qtbot):
     added = {c.label: c.id for c in landed_cost_type_choices(conn, b.company_id)}
     assert charges.rows[0].cost_type_id == added["Gömrük rüsumu"]
     assert charges.data(index) == "Gömrük rüsumu"
+
+
+def test_the_pickers_show_the_period_of_the_reports_and_it_can_be_changed(batch, conn, qtbot):
+    b = batch
+    b.inventory.post_receipt(
+        b.company_id,
+        "2025-12-20",
+        [ReceiptLine(b.item_a, b.main, "1", "5")],
+        b.payable,
+        [b.supplier],
+    )
+    page = lc_page(b, conn, qtbot)
+    picker = receipt_picker(page.s, page)
+    qtbot.addWidget(picker)
+    assert [row.doc_date for row in picker.model.rows] == ["2026-03-01", "2026-03-01"]
+    picker.period.set_period(date(2025, 12, 1), date(2025, 12, 31))
+    assert [row.doc_date for row in picker.model.rows] == ["2025-12-20"]
+    assert page.s.report_period is None  # the window's own: the reports stay as they are
+    sources = cost_source_picker(page.s, None, page)
+    qtbot.addWidget(sources)
+    assert [row.document_id for row in sources.model.rows] == [b.broker_doc]
+    sources.period.set_period(date(2026, 4, 1), date(2026, 4, 30))
+    assert sources.model.rows == []
+    page.s.report_period = (date(2025, 12, 1), date(2025, 12, 31))
+    remembered = receipt_picker(page.s, page)
+    qtbot.addWidget(remembered)
+    assert [row.doc_date for row in remembered.model.rows] == ["2025-12-20"]
+
+
+def test_a_purchase_without_a_memo_says_the_item_in_its_posting(batch, conn):
+    """Only when nothing was typed: the line's words first, then the document's."""
+    b = batch
+    b.inventory.post_receipt(
+        b.company_id,
+        "2026-03-03",
+        [ReceiptLine(b.item_a, b.main, "1", "7", "Образец")],
+        b.payable,
+        [b.supplier],
+    )
+    b.inventory.post_receipt(
+        b.company_id,
+        "2026-03-04",
+        [ReceiptLine(b.item_b, b.main, "1", "8")],
+        b.payable,
+        [b.supplier],
+        "Инвойс 12",
+    )
+    card = account_card(conn, b.company_id, "41", "2026-03-01", "2026-03-31")
+    assert [(ln.memo, ln.debit) for ln in card.lines] == [
+        ("Товар A", 10_000),
+        ("Товар B", 20_000),
+        ("Образец", 700),
+        ("Инвойс 12", 800),
+    ]

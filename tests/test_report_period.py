@@ -1,4 +1,4 @@
-"""The period a report opens with (D-new-report-period): the working date's whole year,
+"""The period a report opens with (D203): the working date's whole year,
 and after a period was chosen in a report — that one, in every report, until the program
 is closed (1C 7.7's «период итогов»). The ƏDV reports are monthly and keep to themselves."""
 

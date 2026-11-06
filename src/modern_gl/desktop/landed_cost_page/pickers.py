@@ -29,7 +29,8 @@ from modern_gl.application.inventory import (
     unit_price,
 )
 from modern_gl.desktop.list_table import ListTable
-from modern_gl.desktop.reports_page import Column, ReportModel
+from modern_gl.desktop.period_field import PeriodField
+from modern_gl.desktop.reports_page import Column, ReportModel, usual_period
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
@@ -56,8 +57,8 @@ def _list(selection: QAbstractItemView.SelectionMode) -> QTableView:
 
 
 class PickerDialog(QDialog):
-    """A searchable list to pick several rows from. With `usual`, only the usual rows are
-    shown until «Все» is ticked."""
+    """A searchable list to pick several rows from, of a period as in the reports (rows
+    have a `doc_date`). With `usual`, only the usual rows are shown until «Все» is ticked."""
 
     def __init__(
         self,
@@ -65,6 +66,7 @@ class PickerDialog(QDialog):
         hint: str,
         columns: list[Column],
         rows: list,
+        session: Session,
         parent=None,
         usual: Callable[[Any], bool] | None = None,
         all_title: str = "",
@@ -81,7 +83,10 @@ class PickerDialog(QDialog):
         self.search.setPlaceholderText(tr("Поиск"))
         self.usual = usual
         self.show_all = QCheckBox(all_title)
+        usual_days = usual_period(session)
+        self.period = PeriodField((usual_days.date_from, usual_days.date_to), session.working_date)
         search_bar = QHBoxLayout()
+        search_bar.addWidget(self.period)
         search_bar.addWidget(self.search, 1)
         search_bar.addWidget(self.show_all)
         self.show_all.setVisible(usual is not None)
@@ -98,14 +103,21 @@ class PickerDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.search.textChanged.connect(self._filter)
+        self.period.changed.connect(lambda: self._filter(self.search.text()))
         self.show_all.toggled.connect(lambda _on: self._filter(self.search.text()))
         self.table.doubleClicked.connect(lambda _index: self.accept())
         self._filter("")
+        self.search.setFocus()  # typing searches at once; the period is a Tab away
 
     def _filter(self, text: str) -> None:
         needle = fold(text.strip())
         usual = self.usual if self.usual and not self.show_all.isChecked() else None
-        rows = [row for row in self.all_rows if (usual is None or usual(row))]
+        first, last = (day.isoformat() for day in self.period.period())
+        rows = [
+            row
+            for row in self.all_rows
+            if first <= row.doc_date <= last and (usual is None or usual(row))
+        ]
         rows = [
             row
             for row in rows
@@ -149,6 +161,7 @@ def receipt_picker(session: Session, parent=None) -> PickerDialog:
         tr("Выберите строки поступлений (Ctrl / Shift — несколько). Поиск — по товару, номеру…"),
         columns,
         rows,
+        session,
         parent,
     )
 
@@ -173,6 +186,7 @@ def cost_source_picker(session: Session, exclude: int | None, parent=None) -> Pi
         ),
         columns,
         rows,
+        session,
         parent,
         usual=lambda r: r.debit_class == "expense",
         all_title=tr("Все проводки"),
