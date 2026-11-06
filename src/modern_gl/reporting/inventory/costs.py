@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from modern_gl.application import attention
 from modern_gl.application.attention import Attention, attention_source
 from modern_gl.application.inventory.landed_cost_charges import allocated_sql, taken_of_line_sql
+from modern_gl.domain.accounts import BATCH_EXPENSES_ACCOUNT
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 
@@ -66,10 +67,11 @@ def _waiting_accounts(conn: Connection, company_id: int) -> set[int]:
     By the type, not the code; goods accounts have directories, production has cost items."""
     rows = conn.execute(
         "SELECT id FROM accounts WHERE company_id = ? AND account_type = 'inventory' "
-        "AND sc1_kind_id IS NULL AND sc2_kind_id IS NULL AND sc3_kind_id IS NULL",
-        (company_id,),
+        "AND sc1_kind_id IS NULL AND sc2_kind_id IS NULL AND sc3_kind_id IS NULL "
+        "UNION SELECT account_id FROM account_roles WHERE company_id = ? AND role = ?",
+        (company_id, company_id, BATCH_EXPENSES_ACCOUNT),
     )
-    return {row["id"] for row in rows}
+    return {row[0] for row in rows}
 
 
 def waiting_lines(

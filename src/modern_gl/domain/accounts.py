@@ -35,6 +35,8 @@ INCOMING_SURPLUS = "incoming_surplus"
 INCOMING_CONTRIBUTION = "incoming_contribution"
 INCOMING_PRODUCTION = "incoming_production"
 INCOMING_GIFT = "incoming_gift"
+# what a batch's expenses wait on until they are in the cost of goods (15, D212)
+BATCH_EXPENSES_ACCOUNT = "batch_expenses_account"
 # What nobody knows yet (D184): a line of a bank's statement whose account
 # the program cannot tell is posted here, so the bank's balance meets the books; it is moved
 # to its account later. A company without one gets it on first need (76.9).
@@ -58,6 +60,7 @@ ACCOUNT_ROLES = (
     INCOMING_CONTRIBUTION,
     INCOMING_PRODUCTION,
     INCOMING_GIFT,
+    BATCH_EXPENSES_ACCOUNT,
     UNIDENTIFIED,
 )
 # Without an account chosen for a role, the only account of this type plays it (D35).

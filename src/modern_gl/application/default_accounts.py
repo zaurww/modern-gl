@@ -6,7 +6,7 @@ other)."""
 from __future__ import annotations
 
 from modern_gl.application.ledger import Ledger
-from modern_gl.domain.accounts import COST_OF_SALES, FX_GAIN, FX_LOSS
+from modern_gl.domain.accounts import BATCH_EXPENSES_ACCOUNT, COST_OF_SALES, FX_GAIN, FX_LOSS
 from modern_gl.domain.currency import NO_CURRENCY
 
 SUPPLIER = "supplier"  # a purchase, the opening stock: what the company owes for goods
@@ -19,9 +19,15 @@ VAT_DEPOSIT_ACCOUNT = "vat_deposit_account"  # the ƏDV deposit (D41)
 CARD_ACCOUNT = "card_account"  # a business card (D78)
 EXCHANGE_GAIN = "exchange_gain"  # revaluation of currency balances
 EXCHANGE_LOSS = "exchange_loss"
+LANDED_COST = "landed_cost"  # where a batch's expense starts (D212)
 
 # purpose -> (role, account type, currency: None any / False manat only / True currency)
-_BY_ROLE = {COST_OF_GOODS: COST_OF_SALES, EXCHANGE_GAIN: FX_GAIN, EXCHANGE_LOSS: FX_LOSS}
+_BY_ROLE = {
+    COST_OF_GOODS: COST_OF_SALES,
+    EXCHANGE_GAIN: FX_GAIN,
+    EXCHANGE_LOSS: FX_LOSS,
+    LANDED_COST: BATCH_EXPENSES_ACCOUNT,
+}
 _BY_TYPE: dict[str, tuple[str, bool | None]] = {
     SUPPLIER: ("payable", None),
     CUSTOMER: ("receivable", None),

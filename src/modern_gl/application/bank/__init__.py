@@ -26,7 +26,7 @@ from modern_gl.application.bank.advances import (
     payment_lines,
 )
 from modern_gl.application.bank.check_commands import BankCheckCommands
-from modern_gl.application.bank.deposit_commands import VatDepositCommands
+from modern_gl.application.bank.customs_payment import CustomsPayment, CustomsPaymentCommands
 from modern_gl.application.bank.file_commands import BankFileCommands
 from modern_gl.application.bank.operations import (
     BANK_TYPES,
@@ -79,7 +79,7 @@ from modern_gl.application.bank.statements import (
 )
 
 
-class BankModule(VatDepositCommands, BankFileCommands, BankCheckCommands):
+class BankModule(CustomsPaymentCommands, BankFileCommands, BankCheckCommands):
     """The bank's write scenarios (D47, D78, D112, D146): one object per ledger,
     `ledger.bank`."""
 
@@ -117,6 +117,7 @@ __all__ = [
     "BankOperationInput",
     "BankPlace",
     "BankStatement",
+    "CustomsPayment",
     "Statement",
     "StatementLine",
     "allocate",

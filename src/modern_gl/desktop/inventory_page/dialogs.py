@@ -24,7 +24,7 @@ from modern_gl.application.inventory import (
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.domain.accounts import INPUT_VAT, SALES_VAT
+from modern_gl.domain.accounts import BATCH_EXPENSES_ACCOUNT, INPUT_VAT, SALES_VAT
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import N_, tr
 from modern_gl.reporting.inventory import (
@@ -217,6 +217,16 @@ class InventorySettingsDialog(QDialog):
         form.addRow(
             self._hint(N_("Поступление с НДС: Дт этот счёт [поставщик] / Кт счёт расчётов."))
         )
+        self.landed_cost = self._account_list(BATCH_EXPENSES_ACCOUNT, tr("— не указан —"))
+        form.addRow(tr("Счёт дополнительных расходов"), self.landed_cost)
+        form.addRow(
+            self._hint(
+                N_(
+                    "Расходы партии ждут здесь и уходят в стоимость товара: "
+                    "Дт счёт товара / Кт этот счёт."
+                )
+            )
+        )
         sale = QLabel(tr("Продажа"))
         sale.setFont(fonts().heading)
         form.addRow(sale)
@@ -319,7 +329,12 @@ class InventorySettingsDialog(QDialog):
 
     def _save(self) -> None:
         try:
-            roles = {INPUT_VAT: self.input_vat, **self.sale_roles, **self.incoming_roles}
+            roles = {
+                INPUT_VAT: self.input_vat,
+                BATCH_EXPENSES_ACCOUNT: self.landed_cost,
+                **self.sale_roles,
+                **self.incoming_roles,
+            }
             for role, combo in roles.items():
                 if combo.currentData() != self.s.ledger.account_role(self.s.company_id, role):
                     self.s.ledger.set_account_role(self.s.company_id, role, combo.currentData())

@@ -20,6 +20,7 @@ from modern_gl.application.bank import (
 )
 from modern_gl.application.queries import document_owner
 from modern_gl.desktop.bank_page.change_account import ChangeAccountDialog
+from modern_gl.desktop.bank_page.customs_payment import CustomsPaymentDialog
 from modern_gl.desktop.bank_page.deposit_reconcile import DepositReconcileDialog
 from modern_gl.desktop.bank_page.dialogs import BankAccountDialog, PeriodDialog
 from modern_gl.desktop.bank_page.entry import ONE, TWO
@@ -100,6 +101,8 @@ class BankActions(ReportPage):
             items.append((tr("Загрузить с портала…"), self.load_from_portal))
             items.append((tr("Сверить с порталом…"), self.reconcile_with_portal))
         else:
+            if self.level != ACCOUNTS and place is not None and place.currency_id is None:
+                items.append((tr("Таможенный платёж…"), self.customs_payment))
             items.append((tr("Загрузить выписку из файла…"), self.load_bank_files))
         if self.level != ACCOUNTS:
             items.append((tr("Реквизиты счёта…"), self.edit_account))
@@ -250,6 +253,16 @@ class BankActions(ReportPage):
             self.refresh()
         else:
             self.s.notify(tr("Настройки банка сохранены"))
+
+    def customs_payment(self) -> None:
+        """One payment to the customs, split by what it pays (D212)."""
+        place = self.place
+        if place is None:
+            return
+        day = self.current.date_to if self.current else self.s.working_date.isoformat()
+        dialog = CustomsPaymentDialog(self.s, place.account_id, place.subconto, day, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.activated()
 
     def new_operation(self, direction: str) -> None:
         """A new operation on this account, dated by the statement (its last day) or the

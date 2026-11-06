@@ -33,7 +33,7 @@ from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import NotFoundError, ValidationError
-from modern_gl.domain.invoice import normalize_invoice
+from modern_gl.domain.invoice import CUSTOMS, normalize_invoice
 from modern_gl.domain.money import from_minor
 from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import Row, transaction
@@ -452,10 +452,24 @@ class BankCommands(ModuleBase):
                     data.currency_id,
                     None if data.currency_id is None else from_minor(line.amount),
                     line.invoice,
+                    invoice_kind=self._kind_of_number(company_id, line.invoice),
                     pays_vat=line.pays_vat,
                 )
             )
         return postings
+
+    def _kind_of_number(self, company_id: int, number: str) -> str:
+        """A customs declaration is paid under its own kind: the number is one of the books
+        already, an e-qaimə of the same digits would be another (D212)."""
+        found = (
+            normalize_invoice(number)
+            and self.conn.execute(
+                "SELECT 1 FROM postings WHERE company_id = ? AND invoice = ? "
+                "AND invoice_kind = ? LIMIT 1",
+                (company_id, normalize_invoice(number), CUSTOMS),
+            ).fetchone()
+        )
+        return CUSTOMS if found else ""
 
     def _bank_row(self, company_id: int, operation_id: int) -> Row:
         row = self.conn.execute(

@@ -106,6 +106,29 @@ def item_choices(conn: Connection, company_id: int) -> list[ItemChoice]:
     ]
 
 
+def customs_declarations(conn: Connection, company_id: int) -> list[str]:
+    """The numbers of the customs declarations of posted purchases, newest first."""
+    rows = conn.execute(
+        "SELECT invoice, MAX(doc_date) AS day FROM inventory_documents "
+        "WHERE company_id = ? AND invoice_kind = 'customs' AND status = 'posted' "
+        "GROUP BY invoice ORDER BY day DESC",
+        (company_id,),
+    )
+    return [row["invoice"] for row in rows]
+
+
+def last_customs_party(conn: Connection, company_id: int) -> int | None:
+    """Who the ƏDV of the last declaration was owed to: the customs, as a rule."""
+    row = conn.execute(
+        "SELECT p.ct_sc1 FROM postings p "
+        "JOIN account_roles r ON r.company_id = p.company_id AND r.account_id = p.debit_account_id "
+        "WHERE p.company_id = ? AND p.invoice_kind = 'customs' AND r.role = 'input_vat' "
+        "ORDER BY p.document_id DESC LIMIT 1",
+        (company_id,),
+    ).fetchone()
+    return None if row is None else row["ct_sc1"]
+
+
 def hidden_item_names(conn: Connection, company_id: int) -> list[str]:
     """The names of the items hidden from the lists: a new name may be one of them."""
     rows = conn.execute(

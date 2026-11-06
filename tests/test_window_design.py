@@ -57,6 +57,7 @@ OTHER_DIALOGS = {
     "HistoryDialog",
     "InventorySettingsDialog",
     "InvoicePicker",
+    "CustomsPaymentDialog",
     "ItemDialog",
     "MonthRangeDialog",
     "NewItemsDialog",
