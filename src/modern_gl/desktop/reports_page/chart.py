@@ -18,7 +18,7 @@ from modern_gl.desktop.reports_page.view import (
     Column,
     MenuAction,
     ReportPage,
-    month_of,
+    usual_period,
 )
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
@@ -144,7 +144,7 @@ class ChartPage(ReportPage):
 
     def drill(self, row) -> None:
         if row is not None:
-            self.open_report.emit("card", row.id, month_of(self.s.working_date))
+            self.open_report.emit("card", row.id, usual_period(self.s))
 
     def _current(self):
         idx = self.table.currentIndex()

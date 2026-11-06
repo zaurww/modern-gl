@@ -41,7 +41,7 @@ from modern_gl.desktop.reports_page import (
     VatPaymentsPage,
     VatReceiptsPage,
     VatRegisterPage,
-    month_of,
+    usual_period,
 )
 from modern_gl.desktop.stock_reports import GrossProfitPage, ItemCardPage, StockStatementPage
 from modern_gl.desktop.theme import P
@@ -160,7 +160,7 @@ class ReportPlaces(QObject):
         account_id = ask_account(s.catalog, report.id, tr(report.title), self.nav.owner)
         if account_id is not None:
             self._remember(report.id)
-            self.open_report(report.id, account_id, month_of(s.working_date))
+            self.open_report(report.id, account_id, usual_period(s))
 
     def open_statements(self, view: str) -> None:
         """«Финансовая отчётность» on the view asked: one page for the three (D99)."""

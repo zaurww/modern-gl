@@ -12,7 +12,7 @@ from modern_gl.desktop.command_palette import Entry, matches
 from modern_gl.desktop.directories_page import DirectoriesPage
 from modern_gl.desktop.main_window.sidebar import sections
 from modern_gl.desktop.reports_hub.catalog import names
-from modern_gl.desktop.reports_page import month_of
+from modern_gl.desktop.reports_page import usual_period
 from modern_gl.desktop.widgets import ru_date
 from modern_gl.i18n import tr
 from modern_gl.reporting.trade import PURCHASE, SALE
@@ -91,7 +91,7 @@ def _accounts(win: MainWindow, query: str) -> list[Entry]:
         entry = Entry(
             group,
             account.label,
-            lambda a=account.id: win.open_report("card", a, month_of(s.working_date)),
+            lambda a=account.id: win.open_report("card", a, usual_period(s)),
             card,
             "account",
             account.code,

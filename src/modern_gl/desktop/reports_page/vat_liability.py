@@ -21,6 +21,7 @@ def invoice_text(row: LiabilityRow) -> str:
 class VatLiabilityPage(ReportPage):
     key = ("vat_liability",)
     has_book = False  # the facts are the common book's
+    own_period = True  # ƏDV is declared by the month
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("ƏDV продаж к уплате"), params)

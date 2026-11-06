@@ -86,6 +86,7 @@ class TradePage(ReportPage):
     open_inventory_document = Signal(int)
     new_inventory_document = Signal(str)
     imported = Signal()  # drafts created from the portal or posted: the other section too
+    own_period = True  # a list to work in, not a report: the year, whatever was chosen
 
     def __init__(self, session: Session, doc_type: str) -> None:
         self.kind = KINDS[doc_type]

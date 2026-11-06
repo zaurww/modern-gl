@@ -29,6 +29,9 @@ class Session:
     company_name: str
     catalog: Catalog
     working_date: date = field(default_factory=date.today)  # 1C "рабочая дата"
+    # the period last chosen in a report: the next report opens with it, until the
+    # program is closed (1C's «период итогов»); None — the working date's year
+    report_period: tuple[date, date] | None = None
     read_only: bool = False  # open for viewing (D80): a snapshot, nothing is written
     notify: Callable[[str], None] = print
     # the window's toast with «Undo»; without it the message alone is told (tests)

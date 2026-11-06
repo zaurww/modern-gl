@@ -96,6 +96,7 @@ def lines(data: VatRegister) -> list[Line]:
 class VatRegisterPage(ReportPage):
     key = ("vat_register",)
     has_book = False  # the facts are the common book's
+    own_period = True  # ƏDV is declared by the month
 
     def __init__(self, session: Session, params: ReportParams | None = None) -> None:
         super().__init__(session, tr("Реестр e-qaimə"), params)
