@@ -105,7 +105,7 @@ def test_core_does_not_import_modules(path):
 
 
 @pytest.mark.parametrize(
-    "layer", ["domain", "application", "reporting", "infrastructure", "assistant"]
+    "layer", ["domain", "application", "reporting", "infrastructure", "assistant", "web"]
 )
 def test_no_qt_outside_desktop(layer):
     bad = [
@@ -143,7 +143,9 @@ SQLITE_ONLY = re.compile(
 )
 
 
-@pytest.mark.parametrize("layer", ["domain", "application", "reporting", "desktop", "assistant"])
+@pytest.mark.parametrize(
+    "layer", ["domain", "application", "reporting", "desktop", "assistant", "web"]
+)
 def test_database_engine_only_in_infrastructure(layer):
     bad = {}
     for path in files(layer):
@@ -265,7 +267,7 @@ LAYERS: list[tuple[str, ...]] = [
     ("infrastructure",),
     ("application",),
     ("reporting",),
-    ("desktop", "assistant", "api", "demo_data", "demo_year"),
+    ("desktop", "assistant", "api", "web", "demo_data", "demo_year"),
 ]
 
 
