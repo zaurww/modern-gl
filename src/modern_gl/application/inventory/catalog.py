@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection, Iterator, Mapping
+from contextlib import contextmanager
 from decimal import Decimal
 
 from modern_gl.application.common import where_used
 from modern_gl.application.inventory.amounts import blank, to_quantity
 from modern_gl.application.inventory.base import InventoryBase
-from modern_gl.application.inventory.model import INCOMING_REASONS, QUANTITY_SCALE, UsualUnit
+from modern_gl.application.inventory.model import (
+    INCOMING_REASONS,
+    QUANTITY_SCALE,
+    NewItem,
+    UsualUnit,
+)
 from modern_gl.domain.accounts import FX_GAIN
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import fold, tr
@@ -195,6 +202,76 @@ class CatalogCommands(InventoryBase):
                 )
             self.ledger.delete_subconto_value(company_id, value_id)
 
+    def unused_items(self, company_id: int) -> list[tuple[int, str]]:
+        """(directory element, name) of the items nothing refers to, by name: no document,
+        draft or posting has them. One pass for a window, not for a list on a page."""
+        rows = self.conn.execute(
+            "SELECT i.id, v.id AS value_id, v.name FROM inventory_items i "
+            "JOIN subconto_values v ON v.company_id = i.company_id "
+            "AND v.id = i.subconto_value_id WHERE i.company_id = ? ORDER BY v.name",
+            (company_id,),
+        ).fetchall()
+        return [
+            (row["value_id"], row["name"])
+            for row in rows
+            if where_used(self.conn, company_id, "inventory_items", row["id"]) is None
+            and where_used(
+                self.conn,
+                company_id,
+                "subconto_values",
+                row["value_id"],
+                ignore=("inventory_items",),
+            )
+            is None
+        ]
+
+    def delete_values(self, company_id: int, value_ids: Collection[int]) -> None:
+        """Several elements at once: all of them or, if one is used, none."""
+        with transaction(self.conn):
+            for value_id in value_ids:
+                self.delete_value(company_id, value_id)
+
+    @contextmanager
+    def adding_items(self, company_id: int, new: Mapping[int, NewItem]) -> Iterator[dict[int, int]]:
+        """A document saved with the new items of its lines, in one transaction: `new` — a
+        stand-in id of the form -> the item; the block gets stand-in -> item. An error in
+        the block takes the items back: no document, no items. A name an active item has
+        by now takes that item."""
+        with transaction(self.conn):
+            known = self._items_by_name(company_id)
+            made = {}
+            for stand_in, item in new.items():
+                key = fold(item.name.strip())
+                if key not in known:
+                    unit = self._unit_of(company_id, item.unit)
+                    known[key] = self.add_new_item(company_id, item.name, unit, item.account_id)
+                made[stand_in] = known[key]
+            yield made
+
+    def _unit_of(self, company_id: int, unit: int | str) -> int:
+        """A unit by its id, its code or name; a new one if there is none."""
+        if isinstance(unit, int):
+            return unit
+        needle = fold(unit.strip())
+        for row in self.conn.execute(
+            "SELECT id, code, name FROM inventory_units WHERE company_id = ? ORDER BY id",
+            (company_id,),
+        ).fetchall():
+            if needle in {fold(row["code"]), fold(row["name"])}:
+                return row["id"]
+        return self.add_unit(company_id, unit, unit)
+
+    def _items_by_name(self, company_id: int) -> dict[str, int]:
+        return {
+            fold(row["name"]): row["id"]
+            for row in self.conn.execute(
+                "SELECT i.id, v.name FROM inventory_items i "
+                "JOIN subconto_values v ON v.company_id = i.company_id "
+                "AND v.id = i.subconto_value_id WHERE i.company_id = ? AND v.active = 1",
+                (company_id,),
+            )
+        }
+
     def add_new_item(
         self,
         company_id: int,
@@ -236,15 +313,7 @@ class CatalogCommands(InventoryBase):
         same order. A name an active item has already takes that item, the same name twice
         is one item — nothing is added twice."""
         with transaction(self.conn):
-            known = {
-                fold(row["name"]): row["id"]
-                for row in self.conn.execute(
-                    "SELECT i.id, v.name FROM inventory_items i "
-                    "JOIN subconto_values v ON v.company_id = i.company_id "
-                    "AND v.id = i.subconto_value_id WHERE i.company_id = ? AND v.active = 1",
-                    (company_id,),
-                )
-            }
+            known = self._items_by_name(company_id)
             result = []
             for name in names:
                 key = fold(name.strip())

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QDialog,
 )
 
+from modern_gl.application.inventory import NewItem
 from modern_gl.desktop.cell_editing import resolve_choice
 from modern_gl.desktop.inventory_document_page.columns import (
     ITEM,
@@ -17,8 +18,9 @@ from modern_gl.desktop.inventory_document_page.form import InventoryDocumentForm
 from modern_gl.desktop.inventory_document_page.lines_table import (
     NewNamesDialog,
 )
+from modern_gl.desktop.inventory_document_page.new_items_dialog import NewItemsDialog
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import fold, tr
+from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
     unit_choices,
 )
@@ -72,7 +74,8 @@ class ClipboardPart(InventoryDocumentForm):
         return result
 
     def _add_unknown(self, result: InventoryPaste) -> bool:
-        """Add the new items, warehouses and subconto in one go and put them in place."""
+        """The names the lists lack, in one window. Warehouses and subconto are added at
+        once; an item stays a name on its lines until the document is saved (D209)."""
         names: dict[tuple[str, int | None, str], None] = {}
         for _, key, text, kind_id in result.unknown:
             group = ITEM if key == ITEM else WAREHOUSE if kind_id is None else "sc"
@@ -82,53 +85,69 @@ class ClipboardPart(InventoryDocumentForm):
             f"{titles[group] if kind_id is None else self.s.catalog.kinds[kind_id]}: {text}"
             for group, kind_id, text in list(names)[:12]
         )
-        items = any(group == ITEM for group, _, _ in names)
-        dialog = NewNamesDialog(self.s, listing, items, self)
+        if len(names) > 12:
+            listing += f"\n{tr('и ещё {n}', n=len(names) - 12)}"
+        new_names = [text for group, _, text in names if group == ITEM]
+        dialog = (
+            NewItemsDialog(self.s, listing, new_names, self.model.choices(0, ITEM), self)
+            if new_names
+            else NewNamesDialog(self.s, listing, False, self)
+        )
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
-        if items and dialog.account.currentData() is None:
+        if new_names and dialog.account.currentData() is None:
             raise LookupError(tr("В плане счетов нет счёта с субконто Товар и Склад"))
-        units: dict[str, int] = {}
         created: dict[tuple, int] = {}
-        cid = self.s.company_id
         for row, key, text, kind_id in result.unknown:
             if key == ITEM:
-                if (ITEM, text) not in created:
-                    unit = self._unit(result.units.get(text) or dialog.unit.currentText(), units)
-                    account = int(dialog.account.currentData())
-                    created[(ITEM, text)] = self.inventory.add_item(cid, text, unit, account)
-                value = created[(ITEM, text)]
-            elif kind_id is None:  # a warehouse
-                if (WAREHOUSE, text) not in created:
-                    created[(WAREHOUSE, text)] = self.inventory.add_warehouse(cid, text)
-                value = created[(WAREHOUSE, text)]
-            else:  # a contract belongs to the counterparty its line has by then
-                owner = self.model.owner_at(row, key)
-                if (kind_id, text, owner) not in created:
-                    value_id = self.s.ledger.add_subconto_value(cid, kind_id, text, owner_id=owner)
-                    self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
-                    created[(kind_id, text, owner)] = value_id
-                value = created[(kind_id, text, owner)]
-            self.s.catalog.reload()
-            self.model.refresh_choices()
+                value = self._item_of(text, result, dialog, created)
+            else:
+                value = self._add_named(row, key, text, kind_id, created)
             self.model.setData(self.model.index(row, self.model.columns.index(key)), value)
         return True
 
-    def _unit(self, text: str, made: dict[str, int]) -> int:
-        """A unit by its code or name; a new one if there is none."""
+    def _item_of(self, text: str, result, dialog, created: dict[tuple, int]) -> int:
+        """The item picked in the window for a new name, else a new one on the lines."""
+        if (ITEM, text) not in created:
+            found = dialog.picked(text)
+            if found is None:
+                unit, shown = self._unit(result.units.get(text) or dialog.unit.currentText())
+                item = NewItem(text, unit, int(dialog.account.currentData()))
+                found = self.model.add_new_item(item, shown)
+            created[(ITEM, text)] = found
+        return created[(ITEM, text)]
+
+    def _add_named(self, row: int, key: str, text: str, kind_id, created: dict[tuple, int]) -> int:
+        """A warehouse or a subconto element: added now, the line takes it."""
+        cid = self.s.company_id
+        if kind_id is None:
+            if (WAREHOUSE, text) not in created:
+                created[(WAREHOUSE, text)] = self.inventory.add_warehouse(cid, text)
+            value = created[(WAREHOUSE, text)]
+        else:  # a contract belongs to the counterparty its line has by then
+            owner = self.model.owner_at(row, key)
+            if (kind_id, text, owner) not in created:
+                value_id = self.s.ledger.add_subconto_value(cid, kind_id, text, owner_id=owner)
+                self.s.catalog.add_value(value_id, kind_id, text, owner_id=owner)
+                created[(kind_id, text, owner)] = value_id
+            value = created[(kind_id, text, owner)]
+        self.s.catalog.reload()
+        self.model.refresh_choices()
+        return value
+
+    def _unit(self, text: str) -> tuple[int | str, str]:
+        """A unit by its code or name, else the text of a new one; and what the line shows."""
         text = text.strip()
         choices = [(c.id, c.label) for c in unit_choices(self.s.conn, self.s.company_id)]
         try:
             found = resolve_choice(choices, text) if text else None
         except LookupError:
             found = None
-        if found is None:
-            if not text:
-                raise LookupError(tr("Заполните название и единицу"))
-            if fold(text) not in made:
-                made[fold(text)] = self.inventory.add_unit(self.s.company_id, text, text)
-            found = made[fold(text)]
-        return found
+        if found is not None:
+            return found, dict(choices)[found].split("  ", 1)[0]
+        if not text:
+            raise LookupError(tr("Заполните название и единицу"))
+        return text, text
 
     def copy(self) -> None:
         QApplication.clipboard().setText(self.model.copy_text(self._shown))

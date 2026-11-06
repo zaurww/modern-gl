@@ -85,6 +85,21 @@ def item_choices(conn: Connection, company_id: int) -> list[ItemChoice]:
     ]
 
 
+def hidden_item_names(conn: Connection, company_id: int) -> list[str]:
+    """The names of the items hidden from the lists: a new name may be one of them."""
+    rows = conn.execute(
+        """
+        SELECT v.name
+        FROM inventory_items i
+        JOIN subconto_values v ON v.company_id = i.company_id AND v.id = i.subconto_value_id
+        WHERE i.company_id = ? AND v.active = 0
+        ORDER BY v.name
+        """,
+        (company_id,),
+    )
+    return [row["name"] for row in rows]
+
+
 def last_stock_account(conn: Connection, company_id: int) -> int | None:
     """The stock account of the item made last: a new item starts with it — goods after
     goods go to 41, not to the first account of the chart."""

@@ -161,6 +161,16 @@ class ReturnLine:
 
 
 @dataclass(frozen=True)
+class NewItem:
+    """An item a document's line names and the directory lacks: made when it is saved. The
+    unit — a unit's id, or the text of a unit to find by its code or name, or to make."""
+
+    name: str
+    unit: int | str
+    account_id: int
+
+
+@dataclass(frozen=True)
 class UsualUnit:
     """A unit offered before the company has it: made with the item that takes it."""
 

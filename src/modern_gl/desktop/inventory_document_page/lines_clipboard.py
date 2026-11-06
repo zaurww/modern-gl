@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from PySide6.QtCore import (
     Qt,
 )
 
 from modern_gl.application.inventory import (
+    NewItem,
     to_quantity,
 )
 from modern_gl.application.table_text import plain_number
-from modern_gl.desktop.cell_editing import resolve_choice
+from modern_gl.desktop.cell_editing import exact_choice, resolve_choice
 from modern_gl.desktop.inventory_document_page.columns import (
     ACCOUNT,
     AMOUNT,
@@ -41,6 +44,9 @@ from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesB
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import N_, tr
+from modern_gl.reporting.inventory import ItemChoice
+
+NEW_ITEM_PRECISION = 3  # as a new unit has; the unit itself is known when it is saved
 
 
 class LinesClipboard(InventoryLinesBase):
@@ -48,7 +54,9 @@ class LinesClipboard(InventoryLinesBase):
         """The value of a cell from pasted text. Raises UnknownNameError for a new name."""
         text = text.strip()
         if key in {ITEM, WAREHOUSE, TO_WAREHOUSE}:
-            value = resolve_choice(self.choices(row_index, key), text)
+            # an item by its whole name: a fragment goes to the window of new names
+            find = exact_choice if key == ITEM else resolve_choice
+            value = find(self.choices(row_index, key), text)
             if value is None:
                 raise UnknownNameError(key, text)
             return value
@@ -118,6 +126,32 @@ class LinesClipboard(InventoryLinesBase):
             target += 1
         self.changed.emit()
         return result
+
+    def add_new_item(self, item: NewItem, unit: str) -> int:
+        """A name the directory lacks, on the lines until the document is saved: a stand-in
+        id below zero behaves as an item; `unit` — what the line shows."""
+        stand_in = -len(self.new_items) - 1
+        self.new_items[stand_in] = item
+        self.new_choices[stand_in] = ItemChoice(
+            stand_in, item.name, unit, NEW_ITEM_PRECISION, item.account_id
+        )
+        self.items[stand_in] = self.new_choices[stand_in]
+        return stand_in
+
+    def set_new_item_account(self, stand_in: int, account_id: int) -> None:
+        self.new_items[stand_in] = replace(self.new_items[stand_in], account_id=account_id)
+        self.new_choices[stand_in] = replace(self.new_choices[stand_in], account_id=account_id)
+        self.items[stand_in] = self.new_choices[stand_in]
+
+    def new_items_on_lines(self) -> dict[int, NewItem]:
+        """The new names some line still has; a deleted line takes its name away."""
+        used = {row.item_id for row in self.rows if not row.is_empty()}
+        return {k: item for k, item in self.new_items.items() if k in used}
+
+    def new_items_saved(self) -> None:
+        self.new_items.clear()
+        self.new_choices.clear()
+        self.refresh_choices()
 
     def _titled_column(self, cells: list[list[str]], column: int) -> bool:
         """One column copied with its title: «Miqdar» above the numbers of that column."""

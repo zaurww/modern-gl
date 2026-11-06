@@ -98,7 +98,9 @@ class PostingsClipboard(PostingsBase):
     def paste(self, text: str, start_row: int, start_col: int, shown) -> PasteResult:
         """Put lines copied from Excel into the grid (see the module docstring).
         `shown(col)` tells whether a column is visible. A single line goes into the
-        current row; more lines fill the current row if it is empty, then new rows."""
+        current row. More lines go down from it, as in Excel: a column of amounts into the
+        lines there, new rows past the last; only accounts on a line with its own come as
+        new lines, nothing is overwritten."""
         lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
         while lines and not lines[-1].strip():
             lines.pop()
@@ -109,12 +111,18 @@ class PostingsClipboard(PostingsBase):
         mapping = self.header_columns(cells[0])
         if mapping is not None:
             cells = cells[1:]
+        width = max((len(line) for line in cells), default=0)
+        accounts = self._reaches_account(mapping, start_row, start_col, width, shown)
         target = start_row
         for n, line in enumerate(cells, start=1):
             if not any(c.strip() for c in line):
+                target += not accounts  # an empty cell of a column: its line stays as it is
                 continue
-            needs_row = target >= len(self.rows) or not self.rows[target].is_empty()
-            if (len(cells) > 1 or target >= len(self.rows)) and needs_row:
+            while target > len(self.rows):
+                self.insert_row(len(self.rows))
+            if target == len(self.rows) or (
+                accounts and len(cells) > 1 and self._has_accounts(target)
+            ):
                 self.insert_row(target)
             if mapping is not None:
                 self._paste_by_header(target, line, mapping, n, result)
@@ -124,6 +132,20 @@ class PostingsClipboard(PostingsBase):
             target += 1
         self.changed.emit()
         return result
+
+    def _reaches_account(self, mapping, row: int, col: int, width: int, shown) -> bool:
+        """Do the pasted cells have an account column? Without one they fill lines there."""
+        if mapping is not None:
+            return DT in mapping or CT in mapping
+        if row >= len(self.rows):
+            return True
+        order = self.column_order()
+        filled = [c for c in order[order.index(col) :] if shown(c) and self.applies(row, c)]
+        return bool({DT, CT} & set(filled[:width]))
+
+    def _has_accounts(self, row_index: int) -> bool:
+        row = self.rows[row_index]
+        return row.debit is not None or row.credit is not None
 
     def header_columns(self, cells: list[str]) -> list[int | None] | None:
         return header_columns(cells)

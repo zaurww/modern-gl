@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 
 from PySide6.QtWidgets import (
@@ -294,6 +295,8 @@ class InventoryDocumentPage(
             posted = self.doc is not None and self.doc.status == "posted"
             post = post or posted  # edited in place: posted again at once
             document_id = self._write(post)
+            self.model.new_items_saved()
+            self.s.catalog.reload()
             if post and not posted:
                 self._post_saved(document_id)
         except (LedgerError, ValueError, TypeError) as exc:
@@ -317,12 +320,21 @@ class InventoryDocumentPage(
 
     def _write(self, post: bool) -> int:
         """Save the document as typed; a posted one is edited in place — posted again,
-        later documents recalculated. A draft is posted after (`post_document`)."""
-        if self.doc is not None and self.doc.status == "posted":
-            inputs = self.model.to_inputs(complete=True)
-            with self.inventory.reposting(self.s.company_id, self.doc.id):
-                return self._save_draft(inputs)
-        return self._save_draft(self.model.to_inputs(complete=post))
+        later documents recalculated. A draft is posted after (`post_document`). The new
+        names of its lines become items with it, in the same transaction (D209)."""
+        posted = self.doc is not None and self.doc.status == "posted"
+        inputs = self.model.to_inputs(complete=post or posted)
+        with self.inventory.adding_items(
+            self.s.company_id, self.model.new_items_on_lines()
+        ) as made:
+            lines = [
+                replace(line, item_id=made[line.item_id]) if line.item_id in made else line
+                for line in inputs
+            ]
+            if self.doc is not None and posted:
+                with self.inventory.reposting(self.s.company_id, self.doc.id):
+                    return self._save_draft(lines)
+            return self._save_draft(lines)
 
     def postings_preview(self) -> PostingPreview:
         """Posted and not edited — its postings; else what «Провести» would post."""

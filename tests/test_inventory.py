@@ -19,6 +19,7 @@ from modern_gl.application.inventory import (
     to_quantity,
     vat_of,
 )
+from modern_gl.application.inventory.similar import similar_choices
 from modern_gl.desktop.inventory_document_page import (
     ACCOUNT,
     AMOUNT,
@@ -1158,6 +1159,124 @@ def test_excel_names_pasted_twice_are_not_added_twice(inventory_demo, receipt_pa
     assert len(item_choices(receipt_page.s.conn, inventory_demo.company_id)) == before
 
 
+def new_names_accepted(monkeypatch) -> None:
+    monkeypatch.setattr(NewNamesDialog, "exec", lambda self: QDialog.DialogCode.Accepted)
+
+
+def items_named(page, company_id: int, name: str) -> list:
+    return [c for c in item_choices(page.s.conn, company_id) if c.label == name]
+
+
+def test_a_pasted_fragment_is_not_taken_for_another_item(inventory_demo, receipt_page, monkeypatch):
+    """«Товар» is in the names of A and B, «Товар A1» has A in it: neither is taken for
+    them, the window asks; left new, they are names of their own."""
+    new_names_accepted(monkeypatch)
+    demo, model = inventory_demo, receipt_page.model
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A1\nТовар\n")
+    assert model.rows[0].item_id not in (demo.item, demo.other_item)
+    assert model.items[model.rows[0].item_id].label == "Товар A1"
+    assert model.items[model.rows[1].item_id].label == "Товар"
+
+
+def test_a_similar_item_picked_in_the_window_goes_on_the_line(
+    inventory_demo, receipt_page, monkeypatch
+):
+    demo, model = inventory_demo, receipt_page.model
+
+    def pick_it(dialog):
+        picker = dialog.pickers["Товар A-"]
+        picker.setCurrentIndex(picker.findData(demo.item))
+        return QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(NewNamesDialog, "exec", pick_it)
+    at_column(receipt_page, ITEM)
+    receipt_page.paste("Товар A-\n")
+    assert model.rows[0].item_id == demo.item
+    assert not model.new_items
+
+
+def test_pasted_names_are_not_items_until_the_document_is_saved(
+    inventory_demo, receipt_page, monkeypatch
+):
+    """A trial paste, its lines deleted: the save writes the one line left and its item."""
+    new_names_accepted(monkeypatch)
+    demo, page, model = inventory_demo, receipt_page, receipt_page.model
+    before = len(item_choices(page.s.conn, demo.company_id))
+    page.paste(
+        "Товар\tСклад\tКоличество\tСумма\nYeni mal\tОсновной\t2\t300\nSınaq\tОсновной\t1\t10\n"
+    )
+    assert len(item_choices(page.s.conn, demo.company_id)) == before
+    assert model.rows[0].item_id < 0
+    model.remove_row(1)
+    assert page.save(False), page.error.text()
+    assert len(item_choices(page.s.conn, demo.company_id)) == before + 1
+    assert len(items_named(page, demo.company_id, "Yeni mal")) == 1
+    assert not items_named(page, demo.company_id, "Sınaq")
+    saved = page.model.rows[0].item_id
+    assert saved > 0
+    assert page.model.items[saved].label == "Yeni mal"
+
+
+def test_a_document_that_does_not_save_leaves_no_items(inventory_demo, receipt_page, monkeypatch):
+    new_names_accepted(monkeypatch)
+    demo, page = inventory_demo, receipt_page
+
+    def refuse(*_args, **_kwargs):
+        raise ValidationError("нельзя")
+
+    page.paste("Товар\tСклад\tКоличество\tСумма\nYeni mal\tОсновной\t2\t300\n")
+    monkeypatch.setattr(page.inventory, "create_receipt_draft", refuse)
+    assert not page.save(False)
+    assert not items_named(page, demo.company_id, "Yeni mal")
+    assert page.model.rows[0].item_id < 0  # still on its line, for the next try
+
+
+def test_the_postings_preview_leaves_new_names_as_names(inventory_demo, receipt_page, monkeypatch):
+    new_names_accepted(monkeypatch)
+    demo, page = inventory_demo, receipt_page
+    page.paste("Товар\tСклад\tКоличество\tСумма\tСубконто\nYeni mal\tОсновной\t2\t300\tПоставщик\n")
+    assert page.postings_preview().postings
+    assert not items_named(page, demo.company_id, "Yeni mal")
+    assert page.save(True), page.error.text()
+    assert len(items_named(page, demo.company_id, "Yeni mal")) == 1
+
+
+def test_unused_items_go_together_and_a_used_one_stays(inventory_demo, conn):
+    demo = inventory_demo
+    inventory = demo.inventory
+    unit = inventory.add_unit(demo.company_id, "kq", "kq")
+    account = item_choices(conn, demo.company_id)[0].account_id
+    first = inventory.add_item(demo.company_id, "Boş 1", unit, account)
+    second = inventory.add_item(demo.company_id, "Boş 2", unit, account)
+    inventory.create_receipt_draft(
+        demo.company_id,
+        date(2026, 1, 10),
+        [ReceiptLine(second, None, None, None)],
+        None,
+    )
+    unused = dict(inventory.unused_items(demo.company_id))
+    assert "Boş 1" in unused.values()
+    assert "Boş 2" not in unused.values()  # a draft has it
+    value_of_used = conn.execute(
+        "SELECT subconto_value_id AS v FROM inventory_items WHERE id = ?", (second,)
+    ).fetchone()["v"]
+    with pytest.raises(ValidationError):  # all or none
+        inventory.delete_values(demo.company_id, [*unused, value_of_used])
+    assert {c.id for c in item_choices(conn, demo.company_id)} >= {first, second}
+    inventory.delete_values(demo.company_id, list(unused))
+    left = {c.id for c in item_choices(conn, demo.company_id)}
+    assert first not in left and second in left
+
+
+def test_similar_names_by_a_simple_rule():
+    items = [(1, "A1  Datçik HM9B-30T"), (2, "Printer"), (3, "HM9B")]
+    assert [i for i, _ in similar_choices("DATCIK hm9b 30t", items)] == [1, 3]
+    assert similar_choices("Datçik HM9B", items)[0][0] == 1  # the same start first
+    assert similar_choices("Skaner", items) == []
+    assert similar_choices("A", items) == []  # too short to mean anything
+
+
 def test_excel_paste_without_header_follows_the_table(inventory_demo, receipt_page):
     model = receipt_page.model
     receipt_page.paste("Товар A\tОсновной\t2\tшт\t\t300")  # the unit column is skipped
@@ -1177,14 +1296,18 @@ def test_excel_paste_adds_new_items_warehouses_and_subconto(
         "Товар C\tНовый склад\t1\tкг\t100\tНовый поставщик\n"
     )
     assert receipt_page.error.isHidden()
-    items = {c.label: c for c in item_choices(s.conn, s.company_id)}
-    assert items["Товар C"].unit == "кг"  # the pasted unit, made new
     first, second = model.rows[:2]
-    assert first.item_id == second.item_id == items["Товар C"].id  # added once
+    assert first.item_id == second.item_id  # added once
+    assert model.items[first.item_id].unit == "кг"  # the pasted unit
     assert first.warehouse_id == second.warehouse_id is not None
     assert first.offset_subconto[0] == second.offset_subconto[0] is not None
     assert s.catalog.value(first.offset_subconto[0]).name == "Новый поставщик"
     assert first.amount == 50_000
+    assert receipt_page.save(False), receipt_page.error.text()
+    items = {c.label: c for c in item_choices(s.conn, s.company_id)}
+    assert items["Товар C"].unit == "кг"  # the unit made new with the item
+    first, second = receipt_page.model.rows[:2]
+    assert first.item_id == second.item_id == items["Товар C"].id
 
 
 def test_inventory_lines_copy_for_excel_and_back(inventory_demo, receipt_page, qtbot):

@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.inventory import Inventory
+from modern_gl.desktop.inventory_page.unused_items import delete_unused_items
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.session import Session
@@ -116,6 +117,7 @@ class InventoryForm(PageWidget):
                     else []
                 ),
                 (self._idle_mark() + tr("Товары без остатка"), self._toggle_idle),
+                (tr("Удалить неиспользованные товары…"), self._delete_unused),
                 None,
                 (tr("+ Единица"), self.add_unit),
                 (tr("+ Склад"), self.add_warehouse),
@@ -214,6 +216,10 @@ class InventoryForm(PageWidget):
 
     def _idle_mark(self) -> str:
         return "✓  " if self.idle_shown() else "    "
+
+    def _delete_unused(self) -> None:
+        if delete_unused_items(self.s, self):
+            self.refresh()
 
     def _toggle_idle(self) -> None:
         prefs().set_idle_items_shown(not self.idle_shown())

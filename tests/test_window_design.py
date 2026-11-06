@@ -59,6 +59,7 @@ OTHER_DIALOGS = {
     "InvoicePicker",
     "ItemDialog",
     "MonthRangeDialog",
+    "NewItemsDialog",
     "NewNamesDialog",
     "PeriodDialog",
     "PickerDialog",
@@ -66,6 +67,7 @@ OTHER_DIALOGS = {
     "ReasonDialog",
     "SplitLineDialog",
     "TagsDialog",
+    "UnusedItemsDialog",
     "ValueDialog",
 }
 # forms checked live by the general rules (test_the_form_is_as_designed below)

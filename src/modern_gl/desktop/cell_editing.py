@@ -91,18 +91,24 @@ def names_it(label: str, text: str) -> bool:
     return fold(label.split("  ·  ", 1)[0]) == fold(text)
 
 
+def exact_choice(choices: list[tuple[int, str]], text: str) -> int | None:
+    """The item a text names in full: its label, name or code. No guessing by a fragment:
+    a name pasted from a declaration must not land on another item."""
+    needle = fold(text)
+    for choice_id, label in choices:
+        if needle in {fold(label), fold(label.split("  ", 1)[-1]), fold(label.split("  ", 1)[0])}:
+            return choice_id
+    return None
+
+
 def resolve_choice(choices: list[tuple[int, str]], text: str) -> int | None:
     """The item a typed text names in a list of (id, label), labels as «code  name»: the
     exact label, name or code, else the one fragment (or the one it starts); None if
     nothing matches, LookupError if several do."""
+    exact = exact_choice(choices, text)
+    if exact is not None:
+        return exact
     needle = fold(text)
-    exact = [
-        choice_id
-        for choice_id, label in choices
-        if needle in {fold(label), fold(label.split("  ", 1)[-1]), fold(label.split("  ", 1)[0])}
-    ]
-    if exact:
-        return exact[0]
     partial = [(choice_id, label) for choice_id, label in choices if needle in fold(label)]
     if len(partial) > 1:
         starts = [choice for choice in partial if fold(choice[1]).startswith(needle)]

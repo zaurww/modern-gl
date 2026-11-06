@@ -23,6 +23,7 @@ from modern_gl.application.default_accounts import (
 from modern_gl.application.inventory import (
     INCOMING_TYPES,
     Inventory,
+    NewItem,
 )
 from modern_gl.desktop.cell_editing import resolve_choice
 from modern_gl.desktop.inventory_document_page.columns import (
@@ -124,6 +125,9 @@ class InventoryLinesBase(QAbstractTableModel):
         self.vat_rate = vat_rate if doc_type in VAT_DOCUMENTS else None
         self.rate: Fraction | None = None  # a receipt in a currency: manat per unit
         self.currency_code = ""
+        # names pasted that the directory lacks, by stand-in id: made when saved (D209)
+        self.new_items: dict[int, NewItem] = {}
+        self.new_choices: dict[int, ItemChoice] = {}
         self.items = self._items()
         self.warehouses = self._warehouses()
         self.has_currency = False
@@ -180,7 +184,7 @@ class InventoryLinesBase(QAbstractTableModel):
             ]
 
     def _items(self) -> dict[int, ItemChoice]:
-        return {c.id: c for c in item_choices(self.s.conn, self.s.company_id)}
+        return {c.id: c for c in item_choices(self.s.conn, self.s.company_id)} | self.new_choices
 
     def _warehouses(self) -> dict[int, Choice]:
         return {c.id: c for c in warehouse_choices(self.s.conn, self.s.company_id)}

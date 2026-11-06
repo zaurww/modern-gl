@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.desktop.icons import icon
+from modern_gl.desktop.inventory_page.unused_items import delete_unused_items
 from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.reports_page import Column, ReportModel
@@ -136,7 +137,13 @@ class DirectoriesForm(PageWidget):
                     lambda: self.set_per_line(kind_id, not per_line),
                 ),
             ]
+            if self.s.catalog.kind_codes.get(kind_id) == "item":
+                items.append((tr("Удалить неиспользованные товары…"), self._delete_unused))
         return items
+
+    def _delete_unused(self) -> None:
+        if delete_unused_items(self.s, self):
+            self.refresh()
 
     def refresh(self, select_kind: int | None = None, keep_value: bool = False) -> None:
         cat = self.s.catalog

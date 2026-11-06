@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, tzinfo
 
@@ -159,11 +159,16 @@ USAGE_TEXTS: dict[str, str] = {
 }
 
 
-def where_used(conn: Connection, company_id: int, table: str, row_id: int) -> str | None:
+def where_used(
+    conn: Connection, company_id: int, table: str, row_id: int, ignore: Collection[str] = ()
+) -> str | None:
     """Why the row cannot be deleted: the first place that refers to it (postings first),
     or None when nothing does. The places are read from the foreign keys, so a new
-    table that refers to accounts or directory elements is checked without changes here."""
+    table that refers to accounts or directory elements is checked without changes here.
+    `ignore`: tables not to count (an item's own row refers to its directory element)."""
     for ref in _references(conn, table):
+        if ref.table in ignore:
+            continue
         where = " OR ".join(f'"{column}" = ?' for column in ref.columns)
         params: list[object] = [row_id] * len(ref.columns)
         if ref.by_company:

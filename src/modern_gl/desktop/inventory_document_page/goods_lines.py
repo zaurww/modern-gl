@@ -24,7 +24,12 @@ class GoodsLinesPart(InventoryDocumentForm):
 
     def _set_stock_account(self, item_id: int, account_id: int) -> None:
         """Another stock account picked on a goods line: it is the item's, so every
-        document of the item is posted again on it (D202)."""
+        document of the item is posted again on it (D202). A new name has no documents."""
+        if item_id < 0:
+            self.model.set_new_item_account(item_id, account_id)
+            self.model.rows_changed()
+            self.postings.changed()
+            return
         try:
             self.inventory.set_item_account(self.s.company_id, item_id, account_id)
         except LedgerError as exc:

@@ -100,6 +100,27 @@ def test_lines_without_header_go_in_keyboard_order(page):
     assert len(m.rows) == 2
 
 
+def test_a_column_of_amounts_fills_the_same_lines(page):
+    """Accounts first, then the amounts: 400.00 and 12.50 on those lines, no new ones; an
+    empty cell keeps its line."""
+    m = page.model
+    page.paste("26\t60\n50\t60\n26\t60\n")
+    page.table.setCurrentIndex(m.index(0, AMOUNT))
+    page.paste("400\n\n12,50\n")
+    assert [row.amount for row in m.rows[:3]] == [40_000, None, 1_250]
+    assert sum(1 for row in m.rows if not row.is_empty()) == 3
+
+
+def test_accounts_pasted_on_lines_with_accounts_come_as_new_lines(page):
+    m = page.model
+    cat = page.s.catalog
+    page.paste("26\t60\n")
+    page.table.setCurrentIndex(m.index(0, DT))
+    page.paste("50\t60\n50\t60\n")
+    debits = [row.debit for row in m.rows if not row.is_empty()]
+    assert debits == [cat.by_code["50"].id, cat.by_code["50"].id, cat.by_code["26"].id]
+
+
 def test_header_columns_in_any_order(page):
     page.paste("Сумма\tКредит\tДебет\tСодержание\n100\t50\t71\tПод отчёт\n")
     r = page.model.rows[0]
