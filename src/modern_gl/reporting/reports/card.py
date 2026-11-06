@@ -11,6 +11,7 @@ from modern_gl.application.quantities import counted_accounts
 from modern_gl.infrastructure.db import Connection, Row
 from modern_gl.reporting.report_common import (
     _DOCS_CTE,
+    LINE_MEMO,
     AccountCard,
     CardLine,
     CorrRow,
@@ -76,7 +77,7 @@ def _card_rows(
         f"""
         WITH {_DOCS_CTE},
         lines AS (
-            SELECT docs.doc_date, docs.number, docs.id AS document_id, docs.memo,
+            SELECT docs.doc_date, docs.number, docs.id AS document_id, {LINE_MEMO},
                    p.line_no, 0 AS side, p.credit_account_id AS corr_id, p.amount AS dt, 0 AS ct,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END AS currency_id,
                    COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0) AS cur_dt,
@@ -88,7 +89,7 @@ def _card_rows(
               AND p.debit_account_id IN (SELECT value FROM json_each(:accounts))
               {_same_subconto("dt", subconto)}{one_invoice}
             UNION ALL
-            SELECT docs.doc_date, docs.number, docs.id, docs.memo,
+            SELECT docs.doc_date, docs.number, docs.id, {LINE_MEMO},
                    p.line_no, 1, p.debit_account_id, 0, p.amount,
                    CASE WHEN own.currency <> 0 THEN p.currency_id END,
                    0, COALESCE(CASE WHEN own.currency <> 0 THEN p.currency_amount END, 0),

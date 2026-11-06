@@ -1,9 +1,12 @@
+from dataclasses import replace
+
 from modern_gl.reporting.reports import (
     IFRS,
     TAX,
     account_analysis,
     account_card,
     subconto_balance,
+    subconto_card,
     trial_balance,
 )
 
@@ -96,3 +99,23 @@ def test_books_combine_layers_without_copying_common(demo, conn):
     assert expense(IFRS) == 35000
     assert expense(TAX) == 38000
     assert conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 8
+
+
+def test_cards_show_the_posting_memo_and_the_document_memo_without_one(demo, conn):
+    """A document of several lines (a batch's expenses): each line says what it is; a line
+    without a memo of its own shows the document's."""
+    led, cid = demo.ledger, demo.company_id
+    duty = replace(demo.p("222", "531", "10", ct_sc=[demo.supplier_b]), memo="Пошлина")
+    freight = demo.p("222", "531", "20", ct_sc=[demo.supplier_b])
+    led.post_new(cid, "2026-03-05", [duty, freight], "Расходы партии")
+    march = ("2026-03-01", "2026-03-31")
+    card = account_card(conn, cid, "222", *march)
+    assert [(ln.memo, ln.debit) for ln in card.lines] == [
+        ("Пошлина", 1000),
+        ("Расходы партии", 2000),
+    ]
+    by_supplier = subconto_card(conn, cid, demo.supplier_b, *march)
+    assert [(ln.memo, ln.credit) for ln in by_supplier.lines] == [
+        ("Пошлина", 1000),
+        ("Расходы партии", 2000),
+    ]
