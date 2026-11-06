@@ -4,8 +4,8 @@ stock, warehouse documents, where costs came from."""
 from modern_gl.reporting.inventory.choices import (
     Choice,
     ItemChoice,
+    ReceiptDocumentChoice,
     ReceiptLineChoice,
-    SaleAccountsRow,
     code_label,
     has_units,
     hidden_item_names,
@@ -13,8 +13,8 @@ from modern_gl.reporting.inventory.choices import (
     item_name,
     landed_cost_type_choices,
     last_stock_account,
+    receipt_documents,
     receipt_line_choices,
-    sale_account_rows,
     stock_account_choices,
     unit_choices,
     unit_codes,
@@ -45,6 +45,7 @@ from modern_gl.reporting.inventory.item_card import (
     gross_profit,
     item_card,
 )
+from modern_gl.reporting.inventory.sale_accounts import SaleAccountsRow, sale_account_rows
 from modern_gl.reporting.inventory.shortages import Shortage, document_shortages
 from modern_gl.reporting.inventory.statement import (
     BY_ITEM,
@@ -88,6 +89,7 @@ __all__ = [
     "LandedLine",
     "MovementSource",
     "ProfitRow",
+    "ReceiptDocumentChoice",
     "ReceiptLineChoice",
     "SaleAccountsRow",
     "Shortage",
@@ -116,6 +118,7 @@ __all__ = [
     "last_stock_account",
     "list_inventory_documents",
     "percent_added",
+    "receipt_documents",
     "receipt_line_choices",
     "sale_account_rows",
     "stock_account_choices",

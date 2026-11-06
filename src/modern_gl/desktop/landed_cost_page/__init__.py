@@ -20,9 +20,9 @@ from modern_gl.desktop.landed_cost_page.page import LandedCostPage
 from modern_gl.desktop.landed_cost_page.pickers import (
     BatchCostDialog,
     cost_source_picker,
-    receipt_picker,
     source_label,
 )
+from modern_gl.desktop.landed_cost_page.receipt_picker import receipt_picker
 
 __all__ = [
     "ACCOUNT",

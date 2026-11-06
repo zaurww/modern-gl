@@ -43,6 +43,27 @@ class ReceiptLineChoice:
     warehouse_name: str = ""
     memo: str = ""  # of the receipt document
     unit: str = ""
+    invoice: str | None = None  # the number of its e-qaimə or customs declaration
+    invoice_kind: str | None = None
+    party: str | None = None  # its supplier
+
+
+@dataclass(frozen=True)
+class ReceiptDocumentChoice:
+    """A posted purchase whole: a declaration is taken into a batch with all its lines."""
+
+    document_id: int
+    doc_date: str
+    number: int
+    invoice: str | None
+    invoice_kind: str | None
+    party: str | None
+    memo: str
+    lines: tuple[ReceiptLineChoice, ...]
+
+    @property
+    def amount(self) -> int:
+        return sum(line.amount for line in self.lines)
 
 
 def item_name(conn: Connection, company_id: int, item_id: int) -> str:
@@ -187,7 +208,10 @@ def receipt_line_choices(conn: Connection, company_id: int) -> list[ReceiptLineC
         f"""
         SELECT l.id, d.doc_date, d.number, v.name AS item_name, l.quantity, l.amount,
                u.precision, d.id AS document_id, wv.name AS warehouse_name, d.memo,
-               u.code AS unit
+               u.code AS unit, d.invoice, d.invoice_kind,
+               (SELECT c.name FROM inventory_line_counterparties c
+                WHERE c.company_id = l.company_id AND c.line_id = l.id
+                ORDER BY c.counterparty_id LIMIT 1) AS party
         FROM inventory_lines l
         JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
         JOIN inventory_items i ON i.company_id = l.company_id AND i.id = l.item_id
@@ -204,34 +228,22 @@ def receipt_line_choices(conn: Connection, company_id: int) -> list[ReceiptLineC
     return [ReceiptLineChoice(**dict(r)) for r in rows]
 
 
-@dataclass(frozen=True)
-class SaleAccountsRow:
-    """A stock account in the settings' table of sale accounts and the accounts chosen
-    for the sales of its goods (role -> account); a role it lacks takes the company's."""
-
-    stock_account: Choice
-    own: dict[str, int]
-
-
-def sale_account_rows(conn: Connection, company_id: int) -> list[SaleAccountsRow]:
-    """The stock accounts the table shows: those goods are on and those with sale accounts
-    of their own — every stock account while the company has neither."""
-    own: dict[int, dict[str, int]] = {}
-    for row in conn.execute(
-        "SELECT stock_account_id, role, account_id FROM inventory_sale_accounts "
-        "WHERE company_id = ?",
-        (company_id,),
-    ):
-        own.setdefault(row["stock_account_id"], {})[row["role"]] = row["account_id"]
-    shown = set(own) | {
-        row["inventory_account_id"]
-        for row in conn.execute(
-            "SELECT DISTINCT inventory_account_id FROM inventory_items WHERE company_id = ?",
-            (company_id,),
-        )
-    }
+def receipt_documents(lines: list[ReceiptLineChoice]) -> list[ReceiptDocumentChoice]:
+    """The lines by their purchase, in their order: newest first."""
+    by_document: dict[int, list[ReceiptLineChoice]] = {}
+    for line in lines:
+        by_document.setdefault(line.document_id, []).append(line)
     return [
-        SaleAccountsRow(account, own.get(account.id, {}))
-        for account in stock_account_choices(conn, company_id)
-        if not shown or account.id in shown
+        ReceiptDocumentChoice(
+            document_id,
+            first.doc_date,
+            first.number,
+            first.invoice,
+            first.invoice_kind,
+            next((line.party for line in group if line.party), None),
+            first.memo,
+            tuple(group),
+        )
+        for document_id, group in by_document.items()
+        for first in group[:1]
     ]

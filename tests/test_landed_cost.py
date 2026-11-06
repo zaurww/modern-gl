@@ -639,6 +639,45 @@ def test_the_pickers_show_the_period_of_the_reports_and_it_can_be_changed(batch,
     assert [row.doc_date for row in remembered.model.rows] == ["2025-12-20"]
 
 
+def test_a_declaration_is_found_by_its_number_and_taken_whole(batch, conn, qtbot):
+    """A purchase is one row: «YGB 0126…», typed with or without the space, finds it; OK
+    brings all its lines into the batch."""
+    b = batch
+    b.inventory.post_receipt(
+        b.company_id,
+        "2026-03-05",
+        [ReceiptLine(b.item_a, b.main, "1", "5"), ReceiptLine(b.item_a, b.main, "2", "9")],
+        b.payable,
+        [b.supplier],
+        invoice="01261000379327",
+        invoice_kind="customs",
+    )
+    page = lc_page(b, conn, qtbot)
+    picker = receipt_picker(page.s, page)
+    qtbot.addWidget(picker)
+    for typed in ("YGB01261000379327", "ГТД 01261000379327", "01261000379327"):
+        picker.search.setText(typed)
+        assert [row.number for row in picker.model.rows] == [picker.model.rows[0].number]
+        assert picker.model.rows[0].amount == 1_400  # 5.00 + 9.00
+    assert [line.amount for line in picker.chosen()] == [500, 900]
+    picker.search.setText("01261000000000")
+    assert picker.model.rows == []
+    picker.search.setText("")
+    picker.show_all.setChecked(True)  # a part of a purchase: its lines one by one
+    assert len(picker.model.rows) == sum(len(d.lines) for d in picker.documents)
+
+
+def test_a_purchase_is_found_by_an_item_on_its_lines(batch, conn, qtbot):
+    b = batch
+    page = lc_page(b, conn, qtbot)
+    picker = receipt_picker(page.s, page)
+    qtbot.addWidget(picker)
+    name = picker.documents[0].lines[0].item_name
+    picker.search.setText(name)
+    assert len(picker.model.rows) == 1
+    assert len(picker.chosen()) == len(picker.documents[0].lines)
+
+
 def test_a_purchase_without_a_memo_says_the_item_in_its_posting(batch, conn):
     """Only when nothing was typed: the line's words first, then the document's."""
     b = batch
