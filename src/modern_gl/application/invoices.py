@@ -191,7 +191,7 @@ def open_invoices(
     number are taken off. The counterparty is known by its VÖEN as well: a second element
     of the directory with the same VÖEN is the same firm."""
     params = book_params(conn, company_id, on_date, on_date, layers)
-    parties, tin = _same_firm(conn, company_id, counterparty_id)
+    parties, tin = same_firm(conn, company_id, counterparty_id)
 
     def accrued(row: InvoiceRow) -> int:  # what the e-qaimə itself made owed
         return row.credit if payable else row.debit
@@ -245,7 +245,7 @@ def _other_way(conn: Connection, company_id: int, payable: bool) -> set[str]:
     return {r[0] for r in rows}
 
 
-def _same_firm(conn: Connection, company_id: int, counterparty_id: int) -> tuple[set[int], str]:
+def same_firm(conn: Connection, company_id: int, counterparty_id: int) -> tuple[set[int], str]:
     """The counterparty and the elements of its directory with its VÖEN; the VÖEN."""
     row = conn.execute(
         "SELECT kind_id, COALESCE(tax_id, '') AS tin FROM subconto_values "

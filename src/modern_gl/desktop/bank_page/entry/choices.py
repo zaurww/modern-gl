@@ -15,7 +15,7 @@ from modern_gl.application.bank import (
     transfer_targets,
 )
 from modern_gl.application.catalog import AccountInfo
-from modern_gl.application.invoices import open_invoices
+from modern_gl.application.free_money import unpaid_invoices
 from modern_gl.desktop.bank_operation_page.common import (
     SEVERAL,
     counterparty_kind,
@@ -162,7 +162,7 @@ class EntryChoices(EntryFields):
         """The unpaid e-qaimə of the counterparty on the day: owed to it, or by it."""
         if self.invoices_apply():
             assert self.counterparty is not None
-            self.invoices = open_invoices(
+            self.invoices = unpaid_invoices(
                 self.s.conn,
                 self.s.company_id,
                 self.counterparty,

@@ -13,7 +13,7 @@ from modern_gl.application.bank import (
 )
 from modern_gl.application.bank.parties import statement_party
 from modern_gl.application.counterparties import short_name
-from modern_gl.application.invoices import open_invoices
+from modern_gl.application.free_money import unpaid_invoices
 from modern_gl.desktop.bank_operation_page.common import (
     WITH_COUNTERPARTY,
     counterparty_kind,
@@ -164,12 +164,13 @@ class CounterpartyPart(BankOperationForm):
         if self.counterparty is None:
             self.open_invoices = []
         else:
-            self.open_invoices = open_invoices(
+            self.open_invoices = unpaid_invoices(
                 self.s.conn,
                 self.s.company_id,
                 self.counterparty,
                 payable=self.direction_value == OUT,
                 on_date=edited_date(self.date),
+                without=self.doc.document_id if self.doc else None,
             )
         offer_invoices(self.invoice, self.open_invoices)
         for row in self.line_rows:
