@@ -83,6 +83,10 @@ class BankOperationInput:
     counterparty_id: int | None = None  # fills the counterparty of every line
     memo: str = ""  # the purpose of payment
     reference: str = ""  # reference of the bank statement line
+    # the other side as the bank's statement names it: a hint to find the counterparty by,
+    # never its name (the import of a file keeps them; a form that leaves them empty too)
+    party_tin: str = ""
+    party_name: str = ""
 
     @property
     def total(self) -> int:
@@ -167,6 +171,8 @@ def _load_part(conn: Connection, company_id: int, ids: Sequence[int]) -> dict[in
             counterparty_id=r["counterparty_id"],
             memo=r["memo"],
             reference=r["reference"],
+            party_tin=r["party_tin"],
+            party_name=r["party_name"],
             id=r["id"],
             document_id=r["document_id"],
             number=r["number"],

@@ -38,7 +38,6 @@ AZ: dict[str, str] = {
     "вторая сторона — в выписке другого счёта": "ikinci tərəf — digər hesabın çıxarışındadır",
     "конвертация: {name}": "konvertasiya: {name}",
     "комиссия конвертации": "konvertasiya komissiyası",
-    "новый контрагент — проверьте": "yeni kontragent — yoxlayın",
     "в назначении нет e-qaimə и долга нет — аванс?": (
         "təyinatda e-qaimə yoxdur və borc yoxdur — avans?"
     ),

@@ -8,14 +8,15 @@ anyone else — a supplier (money out) or a customer (money in).
 
 Posted unseen is only what is sure: a fee, a transfer, a payment whose e-qaimə the
 counterparty has unpaid and which it does not exceed. Anything else is a draft and says
-why — no number, a number not found, more than owed, a new counterparty (the user
-agreed: "в любом случае нужен review")."""
+why — no number, a number not found, more than owed, a sender the directory lacks (the
+user agreed: "в любом случае нужен review"). The file adds no counterparty (`parties`)."""
 
 from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from typing import Protocol
 
 from modern_gl.application.bank.deposit_import import invoices_in
 from modern_gl.application.bank.files import BankFile, FileLine
@@ -97,6 +98,28 @@ class FileOperation:
     @property
     def invoices(self) -> tuple[tuple[str, int | None], ...]:
         return tuple((number, None) for number in invoices_in(self.line.memo))
+
+
+class Payment(Protocol):
+    """What a payment's check and its lines read of a statement's line."""
+
+    @property
+    def day(self) -> str: ...
+
+    @property
+    def direction(self) -> str: ...
+
+    @property
+    def amount(self) -> int: ...
+
+    @property
+    def kind(self) -> str: ...
+
+    @property
+    def pays_vat(self) -> bool: ...
+
+    @property
+    def invoices(self) -> tuple[tuple[str, int | None], ...]: ...
 
 
 def iban_places(conn: Connection, company_id: int) -> dict[str, BankPlace]:
@@ -195,13 +218,14 @@ def known_references(conn: Connection, company_id: int) -> set[str]:
 
 
 def payment_check(
-    conn: Connection, company_id: int, op: FileOperation, counterparty: int | None, new: bool
+    conn: Connection, company_id: int, op: Payment, counterparty: int | None, waits: str = ""
 ) -> tuple[tuple[tuple[str, int | None], ...], str]:
     """The e-qaimə a supplier's (customer's) payment pays, with what each still owes —
     for `payment_lines` — and why it is not posted unseen ("" — it is): the numbers the
     purpose names, all unpaid and not exceeded; no number — the unpaid ones, oldest first,
-    as a suggestion. The ƏDV to a deposit is checked against the ƏDV still owed."""
-    why = tr("новый контрагент — проверьте") if new or counterparty is None else ""
+    as a suggestion. The ƏDV to a deposit is checked against the ƏDV still owed. `waits` —
+    why it waits whatever it pays (its sender is not in the directory)."""
+    why = waits
     unpaid = (
         open_invoices(conn, company_id, counterparty, op.direction == OUT, op.day)
         if counterparty is not None

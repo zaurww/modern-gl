@@ -16,9 +16,9 @@ from __future__ import annotations
 from collections.abc import Collection, Sequence
 
 from modern_gl.application.bank.file_import import CONVERSION, FileOperation
-from modern_gl.application.bank.import_commands import BankImportCommands
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
 from modern_gl.application.bank.operations import FEE, IN, OUT
+from modern_gl.application.bank.party_commands import BankPartyCommands
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.conversion.calc import (
     ConversionFee,
@@ -31,7 +31,7 @@ from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import transaction
 
 
-class FileConversionCommands(BankImportCommands):
+class FileConversionCommands(BankPartyCommands):
     def _redo_conversion_lines(
         self, company_id: int, ops: Sequence[FileOperation]
     ) -> tuple[dict[str, int], dict[str, list[int]]]:

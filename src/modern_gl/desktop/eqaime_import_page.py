@@ -452,6 +452,7 @@ class EqaimeImportDialog(EqaimeImportForm):
             return
         self.s.catalog.reload()
         self.s.notify(tr("Добавлено контрагентов: {n}", n=len(ids)))
+        self._bank_finds_parties()
         checked = {plan.invoice.portal_id for plan in self._checked()}
         self.show_invoices(self.invoices)
         for index in range(self.tree.topLevelItemCount()):  # keep what was ticked
@@ -477,4 +478,15 @@ class EqaimeImportDialog(EqaimeImportForm):
             return
         self.attached = [p.attach_to.document_id for p in chosen if p.attach_to is not None]
         self.s.catalog.reload()  # new counterparties
+        self._bank_finds_parties()
         self.accept()
+
+    def _bank_finds_parties(self) -> None:
+        """The lines of bank statements that waited for these counterparties get them."""
+        try:
+            found = self.s.ledger.bank.adopt_parties(self.s.company_id)
+        except LedgerError as exc:
+            self.s.notify(str(exc))
+            return
+        if found:
+            self.s.notify(tr("Банк: черновики получили контрагента — {n}", n=found))

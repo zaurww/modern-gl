@@ -212,3 +212,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D200 | Акт сверки с контрагентом (üzləşmə aktı) | принято | [D200-reconciliation-act.md](D200-reconciliation-act.md) |
 | D201 | «Вести количество» в карточке счёта | принято (уточняет D199, D194) | [D201-account-quantity.md](D201-account-quantity.md) |
 | D202 | Счёт запасов товара: виден в покупке и меняется после документов | принято (уточняет D60, опирается на D101) | [D202-item-stock-account.md](D202-item-stock-account.md) |
+| D-new | Файл банка не создаёт контрагентов: имя — с портала, строка ждёт с VÖEN и именем | принято (уточняет D146, D184) | [D-new-bank-parties.md](D-new-bank-parties.md) |

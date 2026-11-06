@@ -356,6 +356,12 @@ class BankCommands(ModuleBase):
                 operation_id,
             ),
         )
+        if data.party_tin or data.party_name:  # the statement's facts: kept when not given
+            self.conn.execute(
+                "UPDATE bank_operations SET party_tin = ?, party_name = ? "
+                "WHERE company_id = ? AND id = ?",
+                (data.party_tin.strip(), data.party_name.strip(), company_id, operation_id),
+            )
         self.conn.execute(
             "DELETE FROM bank_operation_lines WHERE company_id = ? AND operation_id = ?",
             (company_id, operation_id),

@@ -195,9 +195,11 @@ def new_value(
     typed: str = "",
     owner_id: int | None = None,
     currency_id: int | None = None,
+    tax_id: str = "",
 ) -> int | None:
     """A new element in the window of its directory, also right where it is needed (D49):
-    what was typed is its name — or its VÖEN, if it is digits. The new id, or None."""
+    what was typed is its name — or its VÖEN, if it is digits; `tax_id` — a VÖEN known
+    with the name (a bank statement names both). The new id, or None."""
     cat = session.catalog
     kind = cat.kinds[kind_id]
     dlg = ValueDialog(
@@ -213,6 +215,8 @@ def new_value(
         dlg.tax_id.setText(digits)
     else:
         dlg.name.setText(typed.strip())
+        if dlg.tax_id is not None and tax_id:
+            dlg.tax_id.setText(tax_id)
     if dlg.exec() != QDialog.DialogCode.Accepted or not dlg.name.text().strip():
         return None
     name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()

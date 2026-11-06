@@ -81,6 +81,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         )
         self.counterparty_edit.unknown.connect(self._add_counterparty)
         self.counterparty_edit.added.connect(lambda text: self._add_counterparty(text, True))
+        self.btn_party.clicked.connect(self._take_party)
         self.invoice.activated.connect(self._invoice_chosen)
         self.invoice.textEdited.connect(self._invoice_typed)
         self.amount.textEdited.connect(self._amount_typed)
@@ -214,6 +215,7 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         if ro:
             self.currency.setEnabled(False)
         self.counterparty_edit.setEnabled(not ro)
+        self.btn_party.setVisible(not ro)
         for edit in (self.memo, self.reference, self.invoice, self.amount):
             edit.setReadOnly(ro)
         for row in self.line_rows:

@@ -235,8 +235,8 @@ def preview_summary(seen: FileImported) -> str:
     )
     if seen.known:
         text += tr(", уже есть {n}", n=seen.known)
-    if seen.counterparties:
-        text += tr(", новых контрагентов {n}", n=seen.counterparties)
+    if seen.unknown_parties:
+        text += tr(", контрагентов нет в справочнике: {n}", n=seen.unknown_parties)
     return text + ". " + tr("Снимите галочку с того, что загружать не нужно.")
 
 
@@ -248,8 +248,8 @@ def summary(done: FileImported) -> str:
     )
     if done.linked:
         text += tr(", введённых вручную связано {n}", n=done.linked)
-    if done.counterparties:
-        text += tr(", новых контрагентов {n}", n=done.counterparties)
+    if done.unknown_parties:
+        text += tr(", контрагентов нет в справочнике: {n}", n=done.unknown_parties)
     if not (done.posted or done.drafts or done.linked):
         text += tr(" — новых строк нет")
     return text

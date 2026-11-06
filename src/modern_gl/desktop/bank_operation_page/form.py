@@ -65,6 +65,7 @@ class BankOperationForm(PageWidget):
         self._loading = False
         self._lines_edited = False  # by hand: a counterparty no longer suggests them
         self.counterparty: int | None = None
+        self._party_found: int | None = None  # of a file's line that waits for it
         self.open_invoices: list[OpenInvoice] = []  # of the counterparty, for the lines
 
         root = QVBoxLayout(self)
@@ -74,6 +75,7 @@ class BankOperationForm(PageWidget):
         self._build_bar(root)
         self._build_held()
         self._build_rate_note(root)
+        self._build_party_note(root)
         rule = QFrame()
         rule.setObjectName("rule")
         rule.setFixedHeight(1)
@@ -171,6 +173,21 @@ class BankOperationForm(PageWidget):
         """No rate of the date: load the Central Bank's rates right from here."""
         self.rate_note, self.rate_text, self.btn_rates = rate_note(tr("Курсы с cbar.az на дату"))
         root.addWidget(self.rate_note)
+
+    def _build_party_note(self, root: QVBoxLayout) -> None:
+        """A line of a bank's file whose sender the directory lacks: whom the bank names
+        and the button that adds it (or takes the one found meanwhile)."""
+        self.party_note = QFrame()
+        self.party_note.setObjectName("note")
+        row = QHBoxLayout(self.party_note)
+        row.setContentsMargins(14, 8, 8, 8)
+        self.party_text = QLabel()
+        self.party_text.setWordWrap(True)
+        row.addWidget(self.party_text, 1)
+        self.btn_party = button(tr("Добавить в справочник…"), "flat")
+        row.addWidget(self.btn_party)
+        self.party_note.hide()
+        root.addWidget(self.party_note)
 
     def _build_path(self, root: QVBoxLayout) -> None:
         """The cursor's path: who, the e-qaimə, how much — and post."""
@@ -423,6 +440,9 @@ class BankOperationForm(PageWidget):
         raise NotImplementedError
 
     def _suggest(self) -> None:  # LinesPart
+        raise NotImplementedError
+
+    def load(self, operation_id: int) -> None:  # the page
         raise NotImplementedError
 
     def _default_lines(self) -> None:  # LinesPart

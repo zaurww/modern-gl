@@ -1,4 +1,5 @@
-"""The kind of operation and its counterparty: who, the VÖEN, the unpaid e-qaimə."""
+"""The kind of operation and its counterparty: who, the VÖEN, the unpaid e-qaimə; a
+line of a bank's file whose sender the directory lacks — whom the bank names."""
 
 from __future__ import annotations
 
@@ -10,6 +11,8 @@ from modern_gl.application.bank import (
     VAT_DEPOSIT_KINDS,
     default_memo,
 )
+from modern_gl.application.bank.parties import statement_party
+from modern_gl.application.counterparties import short_name
 from modern_gl.application.invoices import open_invoices
 from modern_gl.desktop.bank_operation_page.common import (
     WITH_COUNTERPARTY,
@@ -18,9 +21,12 @@ from modern_gl.desktop.bank_operation_page.common import (
     select_data,
 )
 from modern_gl.desktop.bank_operation_page.form import BankOperationForm
+from modern_gl.desktop.directories_page import new_value
 from modern_gl.desktop.widgets import (
     edited_date,
 )
+from modern_gl.domain.errors import LedgerError
+from modern_gl.i18n import tr
 
 
 class CounterpartyPart(BankOperationForm):
@@ -36,6 +42,65 @@ class CounterpartyPart(BankOperationForm):
             allowed = not deposit or self.kind.itemData(i) in VAT_DEPOSIT_KINDS
             self.kind.setItemHidden(i, not allowed)
         self.memo.setPlaceholderText(self._default_memo())
+        self._show_party_note()
+
+    def _show_party_note(self) -> None:
+        """A draft from a bank's file without a counterparty: whom the bank names — and
+        whether the directory has it by now."""
+        d = self.doc
+        waits = (
+            d is not None
+            and d.status == "draft"
+            and self.counterparty is None
+            and bool(d.party_tin or d.party_name)
+            and not self.counterparty_edit.isHidden()
+        )
+        self.party_note.setVisible(waits)
+        if d is None or not waits:
+            return
+        who = (
+            tr("{name}, VÖEN {tin}", name=d.party_name, tin=d.party_tin)
+            if d.party_tin
+            else d.party_name
+        )
+        found = statement_party(self.s.conn, self.s.company_id, d.party_tin, d.party_name)
+        info = self.s.catalog.value(found) if found is not None else None
+        self._party_found = found if info is not None else None
+        if info is None:
+            self.party_text.setText(tr("В выписке: {who} — в справочнике нет", who=who))
+            self.btn_party.setText(tr("Добавить в справочник…"))
+        else:
+            self.party_text.setText(
+                tr("В выписке: {who} — в справочнике это «{name}»", who=who, name=info.name)
+            )
+            self.btn_party.setText(tr("Подставить"))
+        self.btn_party.setVisible(not self.read_only)
+
+    def _take_party(self) -> None:
+        """The sender the bank names becomes the counterparty: the one found, else a new
+        one — in the directory's window, the bank's name and VÖEN to check. Its other
+        waiting lines get it too, spread over its unpaid e-qaimə as the import does."""
+        d = self.doc
+        if d is None or self.read_only:
+            return
+        value = self._party_found
+        if value is None:
+            kind = counterparty_kind(self.s)
+            if kind is None:
+                return
+            value = new_value(self.s, self, kind, short_name(d.party_name), tax_id=d.party_tin)
+            if value is None:
+                return
+        self._fill_counterparties()
+        if not self.dirty:  # nothing typed yet: as the import would have made it
+            try:
+                self.s.ledger.bank.adopt_parties(self.s.company_id)
+            except LedgerError as e:
+                self.show_error(str(e))
+                return
+            self.load(d.id)
+        if self.counterparty is None:  # typed over, or named another way: this line alone
+            self._choose_counterparty(value)
 
     def _kind_changed(self, *_) -> None:
         kind = self.kind.currentData()

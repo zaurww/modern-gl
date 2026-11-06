@@ -5,7 +5,7 @@ Two files of one company (VÖEN 1400000001), as the internet bank gives them. Ha
 AZN account (51, Kapital AZN), 01.08–05.08.2026, opening 5 000.00:
   03.08  −1 000.00  Alfa, «MT2608 00000001» (unpaid 1 180.00)   → posted: 60.1 1 000.00
   03.08      −1.00  the bank's fee                               → posted: 91.2
-  03.08    −300.00  Beta, a new counterparty, no e-qaimə         → draft
+  03.08    −300.00  Beta, not in the directory, no e-qaimə       → draft, nobody added
   03.08    −100.00  Alfa, «MT260899999999» — not unpaid          → draft
   04.08     −52.00  DSMF (Treasury), budget code 4121211         → draft: no tax account yet
   04.08  +1 925.00  from the EUR account                         → conversion, posted
@@ -15,7 +15,7 @@ AZN account (51, Kapital AZN), 01.08–05.08.2026, opening 5 000.00:
 EUR account (52, Kapital EUR), opening 2 000.00 EUR:
   04.08  −1 000.00  to the AZN account (the same reference)      → the conversion's source
   04.08      −6.00  «Konvertasiya üzrə xidmət haqqı»             → the conversion's fee
-  05.08    +500.00  VIAL-CAS-BEL abroad, no VÖEN                 → draft: a new counterparty
+  05.08    +500.00  VIAL-CAS-BEL abroad, no VÖEN                 → draft: not in the directory
   balances: 04.08 994.00, 05.08 1 494.00
 
 The conversion: 1 000.00 EUR (at 2.0000 — 2 000.00 ₼) → 1 925.00 ₼, fee 6.00 EUR.
@@ -24,7 +24,7 @@ The conversion: 1 000.00 EUR (at 2.0000 — 2 000.00 ₼) → 1 925.00 ₼, fee 
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 
 import pytest
@@ -59,63 +59,19 @@ from modern_gl.domain.accounts import BANK_FEE
 from modern_gl.domain.currency import parse_rate
 from modern_gl.i18n import tr
 from tests.helpers.excel import active_sheet
+from tests.helpers.kapital import (
+    AZN_IBAN,
+    EUR_IBAN,
+    OWN_NAME,
+    OWN_TIN,
+    VIAL,
+    kapital_file,
+)
 from tests.helpers.qt import tree_item
 
-OWN_TIN = "1400000001"
 PERIOD = "01/08/2026 - 05/08/2026"
-VIAL = "LLC 'VIAL-CAS-BEL' / NOVODVORSKIJ S"
-AZN_IBAN = "AZ11AIIB40040000000000000001"
-EUR_IBAN = "AZ22AIIB40140000000000000002"
-OWN_NAME = "″ALFA-BETA TEST″ MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ"
 BANK = "KAPITAL / 9900003611"
-HEADERS = [
-    "№",
-    "Tarix",
-    "Sənədin nömrəsi",
-    "Əks hesabın nömrəsi, adı və vöen-i",
-    "Məbləğ",
-    "Valyuta",
-    "AZN dəyəri",
-    "Balans",
-    "Təyinat",
-]
-
-
-def kapital_file(path, iban, currency, opening, lines, tin=OWN_TIN):
-    """A statement in Kapital Bank's form: `lines` — (day, number, other side, amount,
-    base amount, purpose); the balances are counted as the bank shows them."""
-    book = Workbook()
-    sheet = active_sheet(book)
-    sheet.title = "Hesabdan Çıxarış"
-    sheet["A1"] = "Hesabdan çıxarış / Account statement"
-    closing = Decimal(opening) + sum(Decimal(x[3]) for x in lines)
-    header = [
-        ("Müştərinin Adı / Client's name", OWN_NAME, "Çıxarışın tarixi / Statement date", "x"),
-        ("Hesab nömrəsi / Account number", iban, "Hesabın valyutası / Account currency", currency),
-        (
-            "Hesabın tipi / Account type",
-            "Cari hesab",
-            "Dövr üçün / For period",
-            "01/08/2026 - 05/08/2026",
-        ),
-        ("VÖEN / Tax id", tin, "Filial adı / Branch name", "Port Baku (290)"),
-        ("Cəmi dövriyyələr kredit", "0 AZN", "Cəmi dövriyyələr debit", "0 AZN"),
-        ("İlkin qalıq", f"{opening} {currency} (0 AZN)", "Son qalıq", f"{closing} {currency}"),
-    ]
-    for n, row in enumerate(header, 4):
-        for column, value in zip("ABCD", row, strict=True):
-            sheet[f"{column}{n}"] = value
-    for column, value in zip("ABCDEFGHI", HEADERS, strict=True):
-        sheet[f"{column}13"] = value
-    balance = Decimal(opening)
-    for n, (day, number, other, amount, base, memo) in enumerate(lines, 1):
-        balance += Decimal(amount)
-        values = [n, datetime.fromisoformat(day), number, other, Decimal(amount), currency]
-        values += [Decimal(base), balance, memo]
-        for column, value in zip("ABCDEFGHI", values, strict=True):
-            sheet[f"{column}{13 + n}"] = value
-    book.save(path)
-    return path
+BETA_WAITS = "контрагента нет в справочнике: BETA MMC, VÖEN 2200000002"
 
 
 AZN_LINES = [
@@ -438,13 +394,13 @@ def test_the_import_posts_what_is_sure_and_drafts_the_rest(ledger, firm, files):
         ("1006", "out"): POSTED,
         ("2003", "in"): DRAFT,
     }
-    assert states[("1003", "out")][1] == "новый контрагент — проверьте"
+    assert states[("1003", "out")][1] == BETA_WAITS
     assert (
         states[("1004", "out")][1] == "e-qaimə MT260899999999 нет среди неоплаченных у контрагента"
     )
     assert states[("1005", "out")][1] == "налог: проверьте счёт (код бюджета 4121211)"
-    assert states[("2003", "in")][1] == "новый контрагент — проверьте"
-    assert (done.posted, done.drafts, done.known, done.counterparties) == (6, 4, 0, 2)
+    assert states[("2003", "in")][1] == f"контрагента нет в справочнике: {VIAL}"
+    assert (done.posted, done.drafts, done.known, done.unknown_parties) == (6, 4, 0, 2)
 
     ids = by_reference(ledger, cid)
     alfa, alfa_lines = lines(ledger, cid, ids["1001"])
@@ -487,7 +443,7 @@ def test_loading_again_adds_nothing(ledger, firm, files):
     count = ledger.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
     again = ledger.bank.import_bank_files(cid, files, firm["places"])
     assert {row.state for row in again.rows} == {KNOWN}
-    assert (again.posted, again.drafts, again.counterparties) == (0, 0, 0)
+    assert (again.posted, again.drafts, again.unknown_parties) == (0, 0, 0)
     assert ledger.conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == count
 
 
@@ -504,7 +460,7 @@ def test_the_preview_writes_nothing(ledger, firm, files):
 def test_only_the_lines_taken_are_loaded(ledger, firm, files):
     cid = firm["cid"]
     done = ledger.bank.import_bank_files(cid, files, firm["places"], take={"1001", "2001"})
-    assert done.counterparties == 0  # Beta and VIAL-CAS-BEL were left out: not added
+    assert done.unknown_parties == 0  # Beta and VIAL-CAS-BEL were left out
     assert sorted((row.op.reference, row.state) for row in done.rows) == [
         ("1001", POSTED),
         ("2001", POSTED),
@@ -627,7 +583,7 @@ def test_a_side_posted_in_a_closed_period_keeps_the_conversion_out(ledger, firm,
 
 def test_the_statement_says_why_a_line_waits(ledger, firm, files):
     """The import's reason outlives its window: the draft of 03.08 (Beta, a new
-    counterparty) carries «новый контрагент — проверьте» in the statement; a person who
+    sender the directory lacks) carries why in the statement; a person who
     saves the line has seen it — the note goes. The statements' journal names the drafts
     next to the difference: 03.08 by the bank 3 599.00, entered 3 999.00 — −400.00 and
     two drafts (Beta −300.00, Alfa −100.00)."""
@@ -644,7 +600,7 @@ def test_the_statement_says_why_a_line_waits(ledger, firm, files):
     ids = by_reference(ledger, cid)
     beta = load_bank_operation(ledger.conn, cid, ids["1003"])
     alfa = load_bank_operation(ledger.conn, cid, ids["1001"])
-    assert notes[beta.number] == ("draft", tr("новый контрагент — проверьте"))
+    assert notes[beta.number] == ("draft", BETA_WAITS)
     assert notes[alfa.number] == ("posted", "")
 
     [third] = [s for s in bank_statements(ledger.conn, cid, place) if s.date_from == "2026-08-03"]
@@ -653,6 +609,8 @@ def test_the_statement_says_why_a_line_waits(ledger, firm, files):
         "расхождение {amount} · черновиков {n}", amount=format_minor(-40000), n=2
     )
 
+    who = ledger.add_subconto_value(cid, ledger.subconto_kind_id(cid, "counterparty"), "Бета")
+    beta = replace(beta, counterparty_id=who)  # a person says who it is, then posts
     ledger.bank.save_bank_operation(cid, beta, beta.id, post=True, checked=True)
     day = statement(ledger.conn, cid, place, "2026-08-03", "2026-08-03")
     [seen] = [line for line in day.lines if line.number == beta.number]
