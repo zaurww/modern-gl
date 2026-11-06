@@ -69,6 +69,7 @@ OTHER_DIALOGS = {
     "SplitLineDialog",
     "TagsDialog",
     "UnusedItemsDialog",
+    "WaitingExpensesDialog",
     "ValueDialog",
 }
 # forms checked live by the general rules (test_the_form_is_as_designed below)

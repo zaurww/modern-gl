@@ -263,6 +263,8 @@ class LandedCostCharge:
     currency_id: int | None = None
     currency_rate: str | int | Decimal | None = None
     currency_amount: str | int | Decimal | None = None
+    # a purchase's service line it takes: the broker's e-qaimə that waits on 15 (D211)
+    source_line_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -280,6 +282,7 @@ class LandedCostChargeData:
     currency_id: int | None = None
     currency_rate: int | None = None  # millionths of a manat per unit
     currency_amount: int | None = None
+    source_line_id: int | None = None
 
 
 @dataclass(frozen=True)

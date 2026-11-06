@@ -158,7 +158,10 @@ class InventoryBase(ModuleBase):
 
     def _charges(self, document_id: int) -> list[Row]:
         return self.conn.execute(
-            "SELECT * FROM landed_cost_charges WHERE document_id = ? ORDER BY line_no",
+            "SELECT c.*, k.source_line_id FROM landed_cost_charges c "
+            "LEFT JOIN landed_cost_charge_lines k "
+            "ON k.company_id = c.company_id AND k.charge_id = c.id "
+            "WHERE c.document_id = ? ORDER BY c.line_no",
             (document_id,),
         ).fetchall()
 

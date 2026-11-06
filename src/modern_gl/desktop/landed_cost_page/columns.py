@@ -76,6 +76,12 @@ class ChargeRow:
     currency_amount: int | None = None
     rate: Fraction | None = None
     rate_typed: bool = False  # a new date of the document no longer changes it
+    source_line: int | None = None  # a purchase's service line it takes (D211)
+
+    @property
+    def taken(self) -> bool:
+        """It came from the books: its account is not for typing."""
+        return self.source is not None or self.source_line is not None
 
     def recalculate(self) -> None:
         if self.currency_id is not None:
@@ -89,7 +95,7 @@ class ChargeRow:
             self.cost_type_id is None
             and self.amount is None
             and self.currency_amount is None
-            and self.source is None
+            and not self.taken
             and not self.memo.strip()
         )
 

@@ -119,7 +119,7 @@ class LandedCostForm(PageWidget):
         charges_title.setFont(fonts().heading)
         charges_bar.addWidget(charges_title, 1)
         self.btn_add_charge = button(tr("+ Расход"), "flat", "Ins")
-        self.btn_from_gl = button(tr("+ Из проводки…"), "flat")
+        self.btn_from_gl = button(tr("+ Ждущие расходы…"), "flat")
         charges_bar.addWidget(self.btn_add_charge)
         charges_bar.addWidget(self.btn_from_gl)
         root.addLayout(charges_bar)

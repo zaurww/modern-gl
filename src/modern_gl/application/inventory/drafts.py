@@ -122,6 +122,7 @@ class DraftCommands(InventoryBase):
                     row["currency_id"],
                     row["currency_rate"],
                     row["currency_amount"],
+                    row["source_line_id"],
                 )
                 for row in self._charges(document_id)
             ),
@@ -336,12 +337,40 @@ class DraftCommands(InventoryBase):
                 )
             )
 
+    def _require_lines_not_charged(
+        self, company_id: int, document_id: int, keep: set[int] | tuple[()]
+    ) -> None:
+        """A service line a batch took as its expense stays until it is out of the batch."""
+        for row in self.conn.execute(
+            """
+            SELECT own.id, own.line_no, d.number
+            FROM inventory_lines own
+            JOIN landed_cost_charge_lines k
+              ON k.company_id = own.company_id AND k.source_line_id = own.id
+            JOIN landed_cost_charges c ON c.company_id = k.company_id AND c.id = k.charge_id
+            JOIN inventory_documents d ON d.company_id = c.company_id AND d.id = c.document_id
+            WHERE own.company_id = ? AND own.document_id = ?
+            ORDER BY own.line_no
+            """,
+            (company_id, document_id),
+        ):
+            if row["id"] not in keep:
+                raise ValidationError(
+                    tr(
+                        "строка {line}: она взята расходом партии (документ №{n}) — "
+                        "сначала уберите её оттуда",
+                        line=abs(row["line_no"]),
+                        n=row["number"],
+                    )
+                )
+
     def _require_lines_unreferenced(
         self, company_id: int, document_id: int, keep: set[int] | tuple[()]
     ) -> None:
         """A receipt line that landed cost was allocated to, a purchase (sale) line a
         return names, cannot disappear."""
         self._require_lines_not_returned(company_id, document_id, keep)
+        self._require_lines_not_charged(company_id, document_id, keep)
         used = [
             row
             for row in self.conn.execute(

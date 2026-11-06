@@ -12,6 +12,7 @@ ORDER = [
     "bank_attention",
     "items_below_minimum",
     "negative_stock",
+    "expenses_waiting_a_batch",
     "unpaid_invoices",
     "awaiting_invoices",
 ]

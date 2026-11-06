@@ -24,8 +24,11 @@ from modern_gl.reporting.inventory.costs import (
     BatchCharge,
     BatchCostLine,
     CostSource,
+    WaitingExpense,
     batch_cost,
     cost_sources,
+    waiting_expenses,
+    waiting_lines,
 )
 from modern_gl.reporting.inventory.declarations import (
     Declaration,
@@ -96,6 +99,7 @@ __all__ = [
     "StockCardLine",
     "StockSource",
     "StockStatement",
+    "WaitingExpense",
     "batch_cost",
     "below_minimum",
     "code_label",
@@ -125,5 +129,7 @@ __all__ = [
     "stock_statement",
     "unit_choices",
     "unit_codes",
+    "waiting_expenses",
+    "waiting_lines",
     "warehouse_choices",
 ]

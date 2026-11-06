@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import date
 from fractions import Fraction
 from functools import partial
@@ -38,10 +39,16 @@ from modern_gl.desktop.landed_cost_page.form import LandedCostForm
 from modern_gl.desktop.landed_cost_page.models import ChargesModel, TargetsModel
 from modern_gl.desktop.landed_cost_page.pickers import (
     BatchCostDialog,
-    cost_source_picker,
     source_label,
 )
 from modern_gl.desktop.landed_cost_page.receipt_picker import receipt_picker
+from modern_gl.desktop.landed_cost_page.waiting_expenses import (
+    WaitingExpensesDialog,
+    ask_twin,
+    charge_of,
+    label_of,
+    twin_of,
+)
 from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.session import Session
@@ -56,8 +63,11 @@ from modern_gl.domain.currency import unit_rate
 from modern_gl.domain.errors import LedgerError, ValidationError
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import (
+    WaitingExpense,
     cost_sources,
     receipt_line_choices,
+    waiting_expenses,
+    waiting_lines,
 )
 
 
@@ -85,7 +95,7 @@ class LandedCostPage(LandedCostForm):
         self.btn_gl.clicked.connect(self._open_gl)
         self.btn_report.clicked.connect(self.show_report)
         self.btn_add_charge.clicked.connect(self.add_charge)
-        self.btn_from_gl.clicked.connect(self.add_from_gl)
+        self.btn_from_gl.clicked.connect(lambda _checked: self.add_waiting(()))
         self.btn_add_receipts.clicked.connect(self.add_receipts)
         self.memo.textEdited.connect(self._changed)
         self.date.dateChanged.connect(self._date_changed)
@@ -206,32 +216,36 @@ class LandedCostPage(LandedCostForm):
         self.charges_table.setFocus()
         self.charges_table.setCurrentIndex(self.charges.index(row, 0))
 
-    def add_from_gl(self) -> None:
+    def add_waiting(self, numbers: Collection[str] = ()) -> None:
+        """What the books hold for a batch, ticked where it names one of `numbers` (the
+        declarations just chosen): one window instead of looking for accounts."""
         if self.charges.read_only:
             return
-        dialog = cost_source_picker(self.s, self.document_id, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
+        rows = self._waiting()
+        if not rows:
+            self.s.notify(tr("Расходов, ждущих партии, нет"))
             return
-        taken = {charge.source for charge in self.charges.rows}
-        for source in dialog.chosen():
-            if (source.document_id, source.line_no) in taken:
-                continue
-            self.charges.insert_row(
-                ChargeRow(
-                    account_id=source.debit_account_id,
-                    subconto=list(source.debit_subconto),
-                    amount=source.left,
-                    source=(source.document_id, source.line_no),
-                    source_label=source_label(source),
-                )
-            )
+        dialog = WaitingExpensesDialog(rows, numbers, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            for row in dialog.chosen():
+                self.charges.insert_row(charge_of(row))
+
+    def _waiting(self) -> list[WaitingExpense]:
+        """What can be taken, without what this batch has already."""
+        taken = {(charge.source_line, charge.source) for charge in self.charges.rows}
+        rows = waiting_expenses(self.s.conn, self.s.company_id, self.document_id)
+        return [row for row in rows if row.key not in taken]
 
     def add_receipts(self) -> None:
         if self.targets.read_only:
             return
         dialog = receipt_picker(self.s, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.targets.add(dialog.chosen())
+            chosen = dialog.chosen()
+            self.targets.add(chosen)
+            numbers = {line.invoice for line in chosen if line.invoice}
+            if self.btn_from_gl.isVisibleTo(self) and any(r.waits for r in self._waiting()):
+                self.add_waiting(numbers)
 
     def _remove_row(self) -> None:
         self._finish_editing()
@@ -262,6 +276,10 @@ class LandedCostPage(LandedCostForm):
             (c.document_id, c.line_no): c
             for c in cost_sources(self.s.conn, self.s.company_id, self.doc.id, only_left=False)
         }
+        lines = {
+            row.line_id: row
+            for row in waiting_lines(self.s.conn, self.s.company_id, self.doc.id, only_left=False)
+        }
         charges = [
             ChargeRow(
                 charge.cost_type_id,
@@ -272,7 +290,9 @@ class LandedCostPage(LandedCostForm):
                 None
                 if charge.source_document_id is None
                 else (charge.source_document_id, charge.source_line_no or 0),
-                self._source_label(charge.source_document_id, charge.source_line_no, sources),
+                label_of(lines[charge.source_line_id])
+                if charge.source_line_id in lines
+                else self._source_label(charge.source_document_id, charge.source_line_no, sources),
                 charge.memo,
                 charge.currency_id,
                 next(
@@ -286,6 +306,7 @@ class LandedCostPage(LandedCostForm):
                 charge.currency_amount,
                 None if charge.currency_rate is None else unit_rate(charge.currency_rate),
                 rate_typed=True,  # the saved rate stays as it was
+                source_line=charge.source_line_id,
             )
             for charge in self.doc.charges
         ]
@@ -338,6 +359,8 @@ class LandedCostPage(LandedCostForm):
             return False
         self._finish_editing()
         self.error.hide()
+        if post and not self._twins_settled():
+            return False
         try:
             post = post or (self.doc is not None and self.doc.status == "posted")
             document_id = self._write(post)
@@ -354,6 +377,22 @@ class LandedCostPage(LandedCostForm):
             )
         )
         self.saved.emit(document_id)
+        return True
+
+    def _twins_settled(self) -> bool:
+        """An expense typed with the sum of one that waits in the books is most likely that
+        one: typed, it would be owed twice. False — the accountant went back to look."""
+        rows = self._waiting()
+        for at, charge in enumerate(self.charges.rows):
+            twin = twin_of(charge, rows)
+            if twin is None:
+                continue
+            answer = ask_twin(self, twin)
+            if answer == QMessageBox.StandardButton.Cancel:
+                return False
+            if answer == QMessageBox.StandardButton.Yes:
+                self.charges.take_from(at, charge_of(twin))
+                rows.remove(twin)
         return True
 
     def _write(self, post: bool) -> int:

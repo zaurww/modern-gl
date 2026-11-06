@@ -219,3 +219,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D207 | Отчёты в браузере: локально и только чтение | принято (опирается на D24, D77, D80, D83, D90, D111, D122, D179) | [D207-web-reports.md](D207-web-reports.md) |
 | D208 | «E-qaimələr» показывает оплаченное без номера; «Bu gün» считает настоящий остаток | принято (уточняет D206, D120) | [D208-invoices-free-column.md](D208-invoices-free-column.md) |
 | D209 | Новые товары из вставки создаются при сохранении документа | принято (уточняет D121) | [D209-new-items-on-save.md](D209-new-items-on-save.md) |
+| D211 | Расходы партии берутся галочкой из того, что ждёт в книгах | принято (развивает D85) | [D211-expenses-waiting-a-batch.md](D211-expenses-waiting-a-batch.md) |

@@ -1011,7 +1011,6 @@ AZ: dict[str, str] = {
     "Распределено": "Bölüşdürülüb",
     "Цена с расходами": "Xərclərlə qiymət",
     "+ Расход": "+ Xərc",
-    "+ Из проводки…": "+ Yazılışdan…",
     "+ Поступления…": "+ Daxilolmalar…",
     "Партия: название или номер инвойса": "Partiya: adı və ya invoys nömrəsi",
     "Партия: поступления": "Partiya: daxilolmalar",

@@ -143,7 +143,7 @@ class ChargesModel(QAbstractTableModel):
         if self.read_only:
             return False
         charge = self.rows[row]
-        if charge.source is not None:  # the account comes from the GL posting
+        if charge.taken:  # the account comes from the books
             return key in {COST_TYPE, AMOUNT, MEMO}
         if key == RATE:
             return charge.currency_id is not None
@@ -189,10 +189,10 @@ class ChargesModel(QAbstractTableModel):
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         if role == Qt.ItemDataRole.ForegroundRole:
             empty_sc = key in {SC1, SC2, SC3} and charge.subconto[int(key[-1]) - 1] is None
-            from_gl = charge.source is not None and key in {ACCOUNT, SC1, SC2, SC3}
-            if empty_sc or from_gl or (key == MEMO and not charge.memo and charge.source):
+            from_gl = charge.taken and key in {ACCOUNT, SC1, SC2, SC3}
+            if empty_sc or from_gl or (key == MEMO and not charge.memo and charge.taken):
                 return QColor(P.tertiary)
-        if role == Qt.ItemDataRole.ToolTipRole and charge.source is not None:
+        if role == Qt.ItemDataRole.ToolTipRole and charge.taken:
             return tr("Проводка: {label}", label=charge.source_label)
         return None
 
@@ -219,7 +219,7 @@ class ChargesModel(QAbstractTableModel):
             return "" if charge.rate is None else format_unit_rate(charge.rate)
         if key == VAT:
             return "" if charge.vat_amount is None else money(charge.vat_amount, blank_zero=False)
-        return charge.memo or (charge.source_label if charge.source else "")
+        return charge.memo or (charge.source_label if charge.taken else "")
 
     def parse(self, row: int, key: str, text: str):
         """The value typed in a cell (None for an empty cell)."""
@@ -267,7 +267,7 @@ class ChargesModel(QAbstractTableModel):
             text = " ".join(words[:-1])
         elif key == CURRENCY_AMOUNT:
             currency_id = self.rows[row].currency_id
-        if currency_id is not None and self.rows[row].source is not None:
+        if currency_id is not None and self.rows[row].taken:
             raise ValueError(tr("проводка-источник уже в манатах"))
         value = to_minor(plain_number(text))
         if value <= 0:
@@ -360,6 +360,15 @@ class ChargesModel(QAbstractTableModel):
             self.insert_row()
         self.changed.emit()
 
+    def take_from(self, row: int, charge: ChargeRow) -> None:
+        """A typed expense turned out to be one in the books: it takes that one's place and
+        keeps its cost item."""
+        charge.cost_type_id = self.rows[row].cost_type_id
+        charge.memo = self.rows[row].memo
+        self.rows[row] = charge
+        self.dataChanged.emit(self.index(row, 0), self.index(row, self.columnCount() - 1))
+        self.changed.emit()
+
     def total(self) -> int:
         return sum(charge.amount or 0 for charge in self.rows)
 
@@ -380,6 +389,7 @@ class ChargesModel(QAbstractTableModel):
                 charge.currency_id,
                 None if charge.rate is None else format_unit_rate(charge.rate),
                 None if charge.currency_amount is None else from_minor(charge.currency_amount),
+                charge.source_line,
             )
             for charge in self.rows
             if not charge.is_empty()

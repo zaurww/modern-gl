@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from modern_gl.application.inventory.landed_cost import allocated_sql
+from modern_gl.application import attention
+from modern_gl.application.attention import Attention, attention_source
+from modern_gl.application.inventory.landed_cost_charges import allocated_sql, taken_of_line_sql
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 
 
@@ -30,6 +33,120 @@ class CostSource:
     @property
     def left(self) -> int:
         return self.amount - self.used
+
+
+@dataclass(frozen=True)
+class WaitingExpense:
+    """An expense a batch can take: a purchase's service line (`line_id`) or a GL posting
+    (`source`). `waits` — it sits on an account of procurement: it is there for a batch."""
+
+    doc_date: str
+    party: str
+    memo: str
+    invoice: str
+    account_id: int
+    subconto: tuple[int | None, int | None, int | None]
+    amount: int
+    used: int
+    waits: bool
+    line_id: int | None = None
+    source: tuple[int, int] | None = None
+
+    @property
+    def left(self) -> int:
+        return self.amount - self.used
+
+    @property
+    def key(self) -> tuple:
+        return (self.line_id, self.source)
+
+
+def _waiting_accounts(conn: Connection, company_id: int) -> set[int]:
+    """The accounts of procurement (15): the inventory type, no directories of their own.
+    By the type, not the code; goods accounts have directories, production has cost items."""
+    rows = conn.execute(
+        "SELECT id FROM accounts WHERE company_id = ? AND account_type = 'inventory' "
+        "AND sc1_kind_id IS NULL AND sc2_kind_id IS NULL AND sc3_kind_id IS NULL",
+        (company_id,),
+    )
+    return {row["id"] for row in rows}
+
+
+def waiting_lines(
+    conn: Connection,
+    company_id: int,
+    exclude_document_id: int | None = None,
+    *,
+    only_left: bool = True,
+) -> list[WaitingExpense]:
+    """Service lines of posted purchases with something a batch has not taken yet, newest
+    first; the amount is without ƏDV. `only_left=False`: those taken in full too."""
+    waiting = _waiting_accounts(conn, company_id)
+    rows = conn.execute(
+        f"""
+        SELECT l.id, d.doc_date, l.memo, l.amount, l.cost_account_id,
+               l.cost_sc1, l.cost_sc2, l.cost_sc3, d.invoice,
+               (SELECT c.name FROM inventory_line_counterparties c
+                WHERE c.company_id = l.company_id AND c.line_id = l.id
+                ORDER BY c.counterparty_id LIMIT 1) AS party,
+               {taken_of_line_sql("l.company_id", "l.id")} AS used
+        FROM inventory_lines l
+        JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
+        WHERE l.company_id = ? AND d.status = 'posted' AND d.doc_type = 'receipt'
+          AND l.item_id IS NULL AND l.cost_account_id IS NOT NULL AND l.amount > 0
+        ORDER BY d.doc_date DESC, d.id DESC, l.line_no
+        """,
+        (exclude_document_id, company_id),
+    ).fetchall()
+    found = [
+        WaitingExpense(
+            r["doc_date"],
+            r["party"] or "",
+            r["memo"],
+            r["invoice"] or "",
+            r["cost_account_id"],
+            (r["cost_sc1"], r["cost_sc2"], r["cost_sc3"]),
+            r["amount"],
+            r["used"],
+            r["cost_account_id"] in waiting,
+            line_id=r["id"],
+        )
+        for r in rows
+    ]
+    return [row for row in found if row.left > 0 or not only_left]
+
+
+def waiting_expenses(
+    conn: Connection, company_id: int, exclude_document_id: int | None = None
+) -> list[WaitingExpense]:
+    """All a batch can take: purchases' services, then postings typed in the journal."""
+    waiting = _waiting_accounts(conn, company_id)
+    return waiting_lines(conn, company_id, exclude_document_id) + [
+        WaitingExpense(
+            source.doc_date,
+            source.subconto,
+            source.memo,
+            "",
+            source.debit_account_id,
+            source.debit_subconto,
+            source.amount,
+            source.used,
+            source.debit_account_id in waiting,
+            source=(source.document_id, source.line_no),
+        )
+        for source in cost_sources(conn, company_id, exclude_document_id)
+    ]
+
+
+@attention_source(attention.WAITING_EXPENSES)
+def expenses_waiting_a_batch(conn: Connection, company_id: int, day: str) -> list[Attention]:
+    """«Bu gün»: services of purchases that wait on 15 for a batch: until then they are in
+    no item's cost."""
+    rows = [row for row in waiting_lines(conn, company_id) if row.waits and row.doc_date <= day]
+    if not rows:
+        return []
+    amount = sum(row.left for row in rows)
+    return [Attention(tr("Услуги ждут партии"), len(rows), ("inventory",), amount)]
 
 
 def cost_sources(
