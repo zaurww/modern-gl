@@ -1,4 +1,4 @@
--- One document in the user's eyes (D-new-one-document): a GL document a module made is
+-- One document in the user's eyes (D213): a GL document a module made is
 -- named by the module's document — «Alış №6», not «Sənəd №13». The view says what kind
 -- of document it is; the core still reads only the view, never the modules' tables.
 --   owner_kind: the inventory document's doc_type (an accrual — its purchase's or sale's),

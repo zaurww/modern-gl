@@ -58,7 +58,7 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 
-# the kind and the number the user knows (D-new-one-document): «Alış 6», not the GL number
+# the kind and the number the user knows (D213): «Alış 6», not the GL number
 COLUMNS = [
     N_("Дата"),
     N_("Вид"),

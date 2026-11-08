@@ -1,4 +1,4 @@
-"""One document in the user's eyes (D-new-one-document): every document is named by
+"""One document in the user's eyes (D213): every document is named by
 its kind and the number the user knows — «Alış №6», «Bank məxarici №13», «Əməliyyat №14».
 
 A GL document a module made is named by the module's document (`document_owners`,

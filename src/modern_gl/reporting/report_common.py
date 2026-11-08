@@ -141,7 +141,7 @@ class CurrencyRow(Turnovers):
 
 @dataclass(kw_only=True)
 class Named:
-    """A line of a report that names its document as the user knows it (D-new-one-document):
+    """A line of a report that names its document as the user knows it (D213):
     «Покупка №1», not the GL number; `number` stays the GL key (AI, the journal's order)."""
 
     kind: str = JOURNAL

@@ -92,7 +92,7 @@ def invoice_text(line: reports.CardLine) -> str:
 
 
 def document_text(line: object) -> str:
-    """«Покупка №1» — the document as the user knows it (D-new-one-document); an edge
+    """«Покупка №1» — the document as the user knows it (D213); an edge
     row (opening, closing) has none."""
     return line.document_title if isinstance(line, Named) else ""
 

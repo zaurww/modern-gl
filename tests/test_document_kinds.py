@@ -1,4 +1,4 @@
-"""One document in the user's eyes (D-new-one-document): a document is named by its kind
+"""One document in the user's eyes (D213): a document is named by its kind
 and the number the user knows. The demo company (`demo_data`), by hand:
 GL №2 is the warehouse's purchase №1, GL №9 — write-off №3, GL №10 — sale №4; GL №1 and
 №13 were entered in the journal. The bank pays ALFA 1 180.00 on 05.03 (`test_bank`)."""
