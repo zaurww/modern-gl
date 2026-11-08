@@ -223,4 +223,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D211 | Расходы партии берутся галочкой из того, что ждёт в книгах | принято (развивает D85) | [D211-expenses-waiting-a-batch.md](D211-expenses-waiting-a-batch.md) |
 | D212 | Таможенный платёж: один платёж, строки по смыслу | принято (развивает D211, D85) | [D212-customs-payment.md](D212-customs-payment.md) |
 | D213 | Один документ в глазах пользователя: вид и свой номер | принято (уточняет D75, D123) | [D213-one-document.md](D213-one-document.md) |
-| D-new | Доп. расходы без знания счетов | принято (уточняет D212, развивает D211, D85) | [D-new-landed-for-newcomers.md](D-new-landed-for-newcomers.md) |
+| D214 | Доп. расходы без знания счетов | принято (уточняет D212, развивает D211, D85) | [D214-landed-for-newcomers.md](D214-landed-for-newcomers.md) |

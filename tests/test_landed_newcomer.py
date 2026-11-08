@@ -1,4 +1,4 @@
-"""D-new: a new company enters a batch's expenses without knowing the accounts; the amounts
+"""D214: a new company enters a batch's expenses without knowing the accounts; the amounts
 are counted by hand."""
 
 from __future__ import annotations

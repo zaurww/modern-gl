@@ -51,7 +51,7 @@ UNTYPED_CODES = {
     VAT_DEPOSIT_ACCOUNT: ("54",),
     EXCHANGE_GAIN: ("80",),
     EXCHANGE_LOSS: ("80",),
-    LANDED_COST: ("15",),  # a company made before the charts named it (D-new)
+    LANDED_COST: ("15",),  # a company made before the charts named it (D214)
 }
 
 
