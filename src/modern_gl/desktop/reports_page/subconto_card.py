@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from modern_gl.application.posting_preview import PreviewPosting, gl_postings
-from modern_gl.desktop.reports_page.account import invoice_text
+from modern_gl.desktop.reports_page.account import document_text, invoice_text
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import balance_text, ru_date
@@ -74,7 +74,7 @@ class SubcontoCardPage(ReportPage):
         one_year = self.params.date_from.year == self.params.date_to.year
         columns = [
             Column(tr("Дата"), lambda ln: self._date(ln.doc_date, one_year), width=1),
-            Column("№", lambda ln: ln.number or "", width=1),
+            Column(tr("Документ"), document_text, width=1),
             Column(tr("Содержание"), lambda ln: ln.memo),
             Column(tr("Дт"), lambda ln: ln.debit_code, width=1, group=tr("Счета")),
             Column(tr("Кт"), lambda ln: ln.credit_code, width=1, group=tr("Счета")),

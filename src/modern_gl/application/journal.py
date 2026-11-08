@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from modern_gl.application.authorship import AUTHORED
+from modern_gl.application.document_kinds import KIND_SQL, NAME_JOINS, kinds_named
 from modern_gl.application.queries import DocumentSummary
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import fold, tr
@@ -98,14 +99,16 @@ def _rows(
         )
         SELECT d.id, d.number, d.doc_date, d.memo, l.code AS layer, d.status,
                o.number AS reversal_of_number, r.number AS reversed_by_number,
-               COALESCE(SUM(ABS(p.amount)), 0) AS total, COUNT(p.id) AS lines
+               COALESCE(SUM(ABS(p.amount)), 0) AS total, COUNT(p.id) AS lines,
+               {KIND_SQL} AS kind, own.owner_number AS own_number
         FROM page
         JOIN documents d ON d.id = page.id
         JOIN layers l ON l.id = d.layer_id
         LEFT JOIN documents o ON o.id = d.reversal_of
         LEFT JOIN documents r ON r.reversal_of = d.id
-        LEFT JOIN postings p ON p.document_id = d.id
-        GROUP BY d.id, d.number, d.doc_date, d.memo, l.code, d.status, o.number, r.number
+        LEFT JOIN postings p ON p.document_id = d.id {NAME_JOINS}
+        GROUP BY d.id, d.number, d.doc_date, d.memo, l.code, d.status, o.number, r.number,
+                 own.owner_kind, own.owner_number, ob.document_id
         ORDER BY d.doc_date {direction}, d.number {direction}
         """,
         params,
@@ -139,6 +142,10 @@ _STATUS = {
 }
 
 
+# NAME_JOINS over another alias: the search names the documents of the outer query `d`
+_KIND_JOINS = NAME_JOINS.replace("d.company_id", "k.company_id").replace("d.id", "k.id")
+
+
 def _status_names() -> dict[str, str]:
     return {
         "draft": tr("Черновик"),
@@ -165,6 +172,13 @@ def _search(f: JournalFilter, text: str, params: dict[str, object]) -> str:
         found.append(
             "OR d.layer_id IN (SELECT id FROM layers WHERE company_id = :company_id"
             f" AND code IN ({', '.join(names)}))"
+        )
+    if kinds := kinds_named(text):
+        names = [f":kind{n}" for n in range(len(kinds))]
+        params |= dict(zip((n[1:] for n in names), kinds, strict=True))
+        found.append(
+            f"OR (SELECT {KIND_SQL} FROM documents k {_KIND_JOINS} WHERE k.id = d.id)"
+            f" IN ({', '.join(names)})"
         )
     found += [f"OR {_STATUS[kind]}" for kind, name in _status_names().items() if text in fold(name)]
     return "(" + "\n".join(found) + ")"

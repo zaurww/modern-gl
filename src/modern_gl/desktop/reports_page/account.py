@@ -30,7 +30,7 @@ from modern_gl.domain.invoice import CUSTOMS
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection
 from modern_gl.reporting import reports
-from modern_gl.reporting.report_common import CardLine, QuantityMoves
+from modern_gl.reporting.report_common import CardLine, Named, QuantityMoves
 from modern_gl.reporting.reports import SubcontoRow, Turnovers
 
 # ОСВ по субконто: how deep (an index of «Детализация»; -1: the deepest the account has)
@@ -91,6 +91,12 @@ def invoice_text(line: reports.CardLine) -> str:
     return line.invoice
 
 
+def document_text(line: object) -> str:
+    """«Покупка №1» — the document as the user knows it (D-new-one-document); an edge
+    row (opening, closing) has none."""
+    return line.document_title if isinstance(line, Named) else ""
+
+
 @dataclass
 class CardEdge:
     """The first and last rows of a card: the balances, and the turnovers at the end."""
@@ -135,7 +141,7 @@ class CardPage(AccountReportPage):
         one_year = self.params.date_from.year == self.params.date_to.year
         columns = [
             Column(tr("Дата"), lambda ln: self._date(ln.doc_date, one_year), width=1),
-            Column("№", lambda ln: ln.number or "", width=1),
+            Column(tr("Документ"), document_text, width=1),
             Column(tr("Содержание"), lambda ln: ln.memo),
             Column(tr("Корр. счёт"), lambda ln: ln.corr_code, width=1),
             Column(tr("Дт"), lambda ln: ln.debit, money=True, group=tr("Обороты")),

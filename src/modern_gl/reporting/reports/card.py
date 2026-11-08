@@ -18,6 +18,7 @@ from modern_gl.reporting.report_common import (
     _accounts,
     _find_account,
     _subtree,
+    name_documents,
 )
 
 
@@ -61,6 +62,7 @@ def account_card(
             continue
         card.lines.append(_card_line(r))
     card.opening = opening
+    name_documents(conn, company_id, card.lines)
     return card
 
 

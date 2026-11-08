@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.desktop.pick import PickBox
 from modern_gl.desktop.preferences import RECONCILIATION_PARTNER, prefs
+from modern_gl.desktop.reports_page.account import document_text
 from modern_gl.desktop.reports_page.export import file_name
 from modern_gl.desktop.reports_page.subconto_card import Edge
 from modern_gl.desktop.reports_page.view import Column, ReportPage, ReportParams
@@ -113,7 +114,7 @@ class ReconciliationActPage(ReportPage):
         one_year = self.params.date_from.year == self.params.date_to.year
         columns = [
             Column(tr("Дата"), lambda ln: self._date(ln.doc_date, one_year), width=1),
-            Column("№", lambda ln: ln.number or "", width=1),
+            Column(tr("Документ"), document_text, width=1),
             Column(tr("Содержание"), lambda ln: ln.memo),
             Column(tr("Дт"), lambda ln: ln.debit, money=True, group=tr("По нашим данным")),
             Column(tr("Кт"), lambda ln: ln.credit, money=True, group=tr("По нашим данным")),

@@ -201,7 +201,7 @@ def test_post_from_form_updates_journal_and_reports(window):
     assert page.status.text() == "Проведён"
     assert not page.model.read_only  # edited in place, as in 1C
     assert page.btn_save.isHidden()  # no "draft" for a posted document
-    assert window.sidebar.item_for(("doc", page.doc_id)).text() == "Документ №14"
+    assert window.sidebar.item_for(("doc", page.doc_id)).text() == "Операция №14"
 
     journal = window.pages[("journal",)]
     assert journal.model.docs[-1].memo == "Пополнение кассы"

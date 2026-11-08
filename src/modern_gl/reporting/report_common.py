@@ -4,11 +4,12 @@ the chart. The books and the documents a report reads — `application/books.py`
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from modern_gl.application.books import docs_cte
+from modern_gl.application.document_kinds import JOURNAL, document_names, document_title
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
@@ -138,8 +139,36 @@ class CurrencyRow(Turnovers):
     code: str = ""
 
 
+@dataclass(kw_only=True)
+class Named:
+    """A line of a report that names its document as the user knows it (D-new-one-document):
+    «Покупка №1», not the GL number; `number` stays the GL key (AI, the journal's order)."""
+
+    kind: str = JOURNAL
+    own_number: int = 0
+
+    @property
+    def document_title(self) -> str:
+        return document_title(self.kind, self.own_number)
+
+
+class _Naming(Protocol):
+    document_id: int
+    number: int
+    kind: str
+    own_number: int
+
+
+def name_documents(conn: Connection, company_id: int, lines: Sequence[_Naming]) -> None:
+    """Give each line its document's kind and number, read at once."""
+    names = document_names(conn, company_id, (ln.document_id for ln in lines))
+    for ln in lines:
+        name = names.get(ln.document_id)
+        ln.kind, ln.own_number = (name.kind, name.number) if name else (JOURNAL, ln.number)
+
+
 @dataclass
-class CardLine:
+class CardLine(Named):
     doc_date: str
     number: int
     document_id: int
@@ -183,7 +212,7 @@ class AccountCard:
 
 
 @dataclass
-class SubcontoCardLine:
+class SubcontoCardLine(Named):
     """A posting carrying one element (D126): on its debit side, its credit side or both."""
 
     doc_date: str

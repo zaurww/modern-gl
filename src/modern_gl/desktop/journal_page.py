@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from modern_gl.application.document_kinds import kind_name
 from modern_gl.application.journal import (
     JournalFilter,
     Key,
@@ -57,8 +58,18 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
 
-COLUMNS = [N_("Дата"), N_("№"), N_("Содержание"), N_("Книга"), N_("Автор"), N_("Сумма"), ""]
-DATE, NUMBER, MEMO, BOOK, AUTHOR, TOTAL, STATUS = range(7)
+# the kind and the number the user knows (D-new-one-document): «Alış 6», not the GL number
+COLUMNS = [
+    N_("Дата"),
+    N_("Вид"),
+    N_("№"),
+    N_("Содержание"),
+    N_("Книга"),
+    N_("Автор"),
+    N_("Сумма"),
+    "",
+]
+DATE, KIND, NUMBER, MEMO, BOOK, AUTHOR, TOTAL, STATUS = range(8)
 RIGHT = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
 LEFT = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
 
@@ -170,7 +181,8 @@ class JournalModel(QAbstractTableModel):
         if role == Qt.ItemDataRole.DisplayRole:
             return {
                 DATE: ru_date(d.doc_date),
-                NUMBER: str(d.number),
+                KIND: kind_name(d.kind),
+                NUMBER: str(d.shown_number),
                 MEMO: d.memo or "—",
                 BOOK: "" if d.layer == "common" else self.layer_names.get(d.layer, d.layer),
                 AUTHOR: self.authors.get(d.id, ""),
@@ -192,7 +204,7 @@ class JournalModel(QAbstractTableModel):
                 return QColor(P.tertiary)
             if col == TOTAL and d.reversal_of_number:
                 return QColor(P.red)
-            if col in (DATE, NUMBER, BOOK, AUTHOR):
+            if col in (DATE, KIND, NUMBER, BOOK, AUTHOR):
                 return QColor(P.secondary)
             # done is quieter, a draft — still to do — in the full text color (D86)
             if col in (MEMO, TOTAL) and d.status != "draft":

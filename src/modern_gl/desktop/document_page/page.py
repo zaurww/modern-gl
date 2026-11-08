@@ -10,6 +10,7 @@ from PySide6.QtCore import QTimer
 from shiboken6 import isValid
 
 from modern_gl.application.authorship import authors_text, document_authors
+from modern_gl.application.document_kinds import JOURNAL, document_title
 from modern_gl.application.history import document_history
 from modern_gl.application.queries import (
     DocumentData,
@@ -99,7 +100,7 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
         return ("doc", self.doc_id) if self.doc else ("new", id(self))
 
     def title(self) -> str:
-        name = tr("Документ №{n}", n=self.doc.number) if self.doc else tr("Новый документ")
+        name = document_title(JOURNAL, self.doc.number) if self.doc else tr("Новый документ")
         return name + (" •" if self.dirty else "")
 
     def is_dirty(self) -> bool:
@@ -211,7 +212,7 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
     def show_history(self) -> None:
         if self.doc is not None:
             events = document_history(self.s.conn, self.s.company_id, self.doc.id)
-            HistoryDialog(tr("Документ №{n}", n=self.doc.number), events, self).exec()
+            HistoryDialog(document_title(JOURNAL, self.doc.number), events, self).exec()
 
     def _open_source(self) -> None:
         if self.doc is not None and self.doc.inventory_document_id is not None:

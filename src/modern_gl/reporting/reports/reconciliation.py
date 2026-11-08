@@ -16,7 +16,7 @@ from modern_gl.domain.accounts import SETTLEMENT_TYPES
 from modern_gl.domain.errors import NotFoundError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
-from modern_gl.reporting.report_common import _DOCS_CTE
+from modern_gl.reporting.report_common import _DOCS_CTE, Named, name_documents
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ class Party:
 
 
 @dataclass
-class ActLine:
+class ActLine(Named):
     """One document: what it did to the debt (Dt — they owe us more, Kt — we owe more)."""
 
     doc_date: str
@@ -129,6 +129,7 @@ def reconciliation_act(
                 r["balance"],
             )
         )
+    name_documents(conn, company_id, act.lines)
     return act
 
 

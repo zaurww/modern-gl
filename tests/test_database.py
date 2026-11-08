@@ -88,6 +88,7 @@ FROZEN = {
     "0065_bank_party.sql": "e3d9c55fa898e725",
     "0066_inventory_sale_accounts.sql": "887ecf356eec0ddb",
     "0067_charge_from_purchase_line.sql": "78c114f622b05d2c",
+    "0068_document_kinds.sql": "681f34a39e428bd6",
 }
 
 # Tables of schema 0031; a table added later must index every reference (debt 5).

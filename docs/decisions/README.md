@@ -222,3 +222,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D210 | Счета продажи — по счёту запасов товара: своя таблица склада | принято (уточняет D34; D202 и D90 не меняет) | [D210-stock-sale-accounts.md](D210-stock-sale-accounts.md) |
 | D211 | Расходы партии берутся галочкой из того, что ждёт в книгах | принято (развивает D85) | [D211-expenses-waiting-a-batch.md](D211-expenses-waiting-a-batch.md) |
 | D212 | Таможенный платёж: один платёж, строки по смыслу | принято (развивает D211, D85) | [D212-customs-payment.md](D212-customs-payment.md) |
+| D-new | Один документ в глазах пользователя: вид и свой номер | принято (уточняет D75, D123) | [D-new-one-document.md](D-new-one-document.md) |

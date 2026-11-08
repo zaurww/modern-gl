@@ -192,7 +192,7 @@ def test_the_page_chooses_the_partner_drills_and_saves(
     qtbot.addWidget(page)
     assert page.title() == "Акт сверки · Firma MMC"
     assert [c.title for c in page.model.columns] == [
-        "Дата", "№", "Содержание", "E-qaimə", "Дт", "Кт", "Сальдо"
+        "Дата", "Документ", "Содержание", "E-qaimə", "Дт", "Кт", "Сальдо"
     ]  # fmt: skip
     assert [r.balance for r in page.model.rows] == [0, -50000, 45000, 50000, 62000, 65000, 65000]
     assert page.model.rows[-1].debit == 115000 and page.model.rows[-1].credit == 50000

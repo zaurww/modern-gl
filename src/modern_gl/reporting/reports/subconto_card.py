@@ -20,6 +20,7 @@ from modern_gl.reporting.report_common import (
     _accounts,
     _find_account,
     _subtree,
+    name_documents,
 )
 
 
@@ -56,6 +57,7 @@ def subconto_card(
             card.opening = r["balance"]
             continue
         card.lines.append(_line(r))
+    name_documents(conn, company_id, card.lines)
     return card
 
 

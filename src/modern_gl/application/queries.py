@@ -27,6 +27,12 @@ class DocumentSummary:
     reversed_by_number: int | None
     total: int
     lines: int
+    kind: str = "journal"  # what the user calls it (`document_kinds`)
+    own_number: int | None = None  # the number the user knows; None — the GL number
+
+    @property
+    def shown_number(self) -> int:
+        return self.number if self.own_number is None else self.own_number
 
     @property
     def status_text(self) -> str:

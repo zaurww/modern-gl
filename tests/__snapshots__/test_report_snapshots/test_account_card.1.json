@@ -15,8 +15,10 @@
       "document_id": 4,
       "invoice": "",
       "invoice_kind": "",
+      "kind": "journal",
       "memo": "",
       "number": 4,
+      "own_number": 4,
       "quantity_balance": 0,
       "quantity_credit": 0,
       "quantity_debit": 0

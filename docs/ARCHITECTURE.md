@@ -45,7 +45,7 @@ i18n                       тексты: tr(), переводы
 
 | Точка | Что даёт | Где |
 |---|---|---|
-| `document_owners` (представление) | Чей GL-документ: модуль создал (`made`) или взял (`uses`), его документ (`owner_id`) | миграции 0032, 0044, 0050 + миграция модуля, `explain_owner`; читать — `queries.document_owner` |
+| `document_owners` (представление) | Чей GL-документ: модуль создал (`made`) или взял (`uses`), его документ (`owner_id`), вид (`owner_kind`) — название документа одно, `document_kinds` | миграции 0032, 0044, 0050 + миграция модуля, `explain_owner`; читать — `queries.document_owner` |
 | `rebuild_postings(company_id, since)` | Модуль строит свои проводки заново с даты | `application/rebuild.py`, `tests/test_rebuild.py` |
 | `attention_source` | Строки «Diqqət tələb edir» на «Bu gün» | `application/attention.py` |
 | Команды и места Ctrl+K | Что предлагает палитра | `desktop/main_window/commands.py` |
