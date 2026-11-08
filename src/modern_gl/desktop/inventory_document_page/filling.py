@@ -4,11 +4,13 @@ in the header), a purchase of what is under its minimum stock (at the last price
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 
-from modern_gl.application.inventory import line_amount
+from modern_gl.application.inventory import InventoryDocumentData, line_amount, vat_of
 from modern_gl.desktop.inventory_document_page.columns import InventoryGridRow
 from modern_gl.desktop.inventory_document_page.form import InventoryDocumentForm
+from modern_gl.desktop.inventory_document_page.lines_model import by_sale_kinds, sale_kinds
 from modern_gl.desktop.widgets import to_qdate
 from modern_gl.domain.money import round_ratio
 from modern_gl.i18n import tr
@@ -97,12 +99,59 @@ class FillingPart(InventoryDocumentForm):
         self._changed()
         return True
 
+    def fill_copy_of(self, document_id: int) -> None:
+        """A new document like this one (a monthly rent, a regular supply): its lines, ƏDV,
+        party and memo; the date is today's work, the e-qaimə and returns belong to it."""
+        source = self.inventory.load_document(self.s.company_id, document_id)
+        self._show_vat_rate(source.vat_rate)
+        vat_rate = self._chosen_vat_rate()
+        rows = [
+            replace(row, line_id=None, returned_line_id=None)
+            for row in self._rows_of(source, vat_rate)
+        ]
+        self.memo.setText(source.memo)
+        self._use_lines(rows, False, vat_rate, self.model.doc_date)
+        self._show_currency(source.currency_id, None)
+        self._show_party()
+        self._changed()
+
+    def _rows_of(self, doc: InventoryDocumentData, vat_rate: int | None) -> list[InventoryGridRow]:
+        """The document's lines as the table shows them."""
+        kinds = sale_kinds(self.s) if self.doc_type == "sale" else []
+        return [
+            InventoryGridRow(
+                line.item_id,
+                line.warehouse_id,
+                line.to_warehouse_id,
+                line.quantity or None,
+                line.amount or None,
+                line.offset_account_id,
+                list(line.offset_subconto),
+                line.memo,
+                line.id,
+                vat_amount=line.vat_amount if vat_rate is not None or line.vat_amount else None,
+                vat_typed=line.vat_amount != vat_of(line.amount, vat_rate),
+                currency_amount=line.currency_amount,
+                expense_account_id=line.cost_account_id if self.doc_type == "receipt" else None,
+                expense_subconto=(
+                    list(line.cost_subconto) if self.doc_type == "receipt" else [None, None, None]
+                ),
+                sale_subconto=by_sale_kinds(self.s.catalog, kinds, line.cost_subconto),
+                expense_date=line.expense_date if self.doc_type == "receipt" else None,
+                returned_line_id=line.returned_line_id,
+            )
+            for line in doc.lines
+        ] or [InventoryGridRow()]
+
     # ---- made by the page ------------------------------------------------------------
 
     def _use_lines(self, rows, read_only: bool, vat_rate: int | None, doc_date) -> None:
         raise NotImplementedError
 
     def _show_party(self) -> None:
+        raise NotImplementedError
+
+    def _show_currency(self, currency_id: int | None, rate: int | None) -> None:
         raise NotImplementedError
 
     def _show_basis(self, kind: str, number: str, awaits: bool = False) -> None:

@@ -37,6 +37,7 @@ class ConversionForm(DocumentShell, PageWidget):
     title_changed = Signal()
     open_gl_document = Signal(int)
     copy_requested = Signal(object)  # ConversionInput
+    new_requested = Signal()  # posted with Ctrl+Shift+Enter: the next one, please
 
     def __init__(self, session: Session) -> None:
         super().__init__()

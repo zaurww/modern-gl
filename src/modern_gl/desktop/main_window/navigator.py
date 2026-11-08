@@ -26,6 +26,7 @@ from modern_gl.desktop.document_page import DocumentPage
 from modern_gl.desktop.home_page import HomePage
 from modern_gl.desktop.import_page import ImportPage
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
+from modern_gl.desktop.inventory_document_page.page import COPIED
 from modern_gl.desktop.inventory_page import InventoryPage
 from modern_gl.desktop.invoices_page import InvoicesPage
 from modern_gl.desktop.journal_page import JournalPage
@@ -199,6 +200,11 @@ class Navigator(QObject):
             data = load_conversion(s.conn, s.company_id, owner.id)
             self.new_conversion(ConversionPage.copy_of(data))
             return
+        if owner is not None and owner.module == "inventory":
+            doc = Inventory(s.conn).load_document(s.company_id, owner.id)
+            if doc.doc_type in COPIED:
+                self.copy_inventory_document(doc.doc_type, owner.id)
+                return
         if owner is not None and owner.module == "bank":
             operation = load_bank_operation(s.conn, s.company_id, owner.id)
             self.new_bank_operation(BankOperationPage.copy_of(operation))
@@ -256,6 +262,7 @@ class Navigator(QObject):
         page.saved.connect(lambda doc_id, p=page: self._conversion_saved(p, doc_id))
         page.open_gl_document.connect(self.show_document)
         page.copy_requested.connect(self.new_conversion)
+        page.new_requested.connect(self.new_conversion)
         page.close_requested.connect(
             lambda p=page: self.page_stack.close_page(self.page_stack.key_of(p), ask=False)
         )
@@ -356,11 +363,21 @@ class Navigator(QObject):
         if isinstance(page, InventoryDocumentPage):  # a purchase or a sale, not landed costs
             page.make_return.connect(self.new_return)
             page.buy_shortage.connect(self.buy_shortage)
+            page.copy_requested.connect(self.copy_inventory_document)
+            page.new_requested.connect(lambda p=page: self.new_inventory_document(p.doc_type))
 
     def _open_new_inventory_document(self, page: InventoryDocumentPage) -> None:
         self._wire_inventory_document(page)
         self.page_stack.add(page.key, page, open_item=True)
         self.page_stack.activate(page.key)
+
+    def copy_inventory_document(self, doc_type: str, document_id: int) -> None:
+        """A new purchase (sale…) like this one, its lines filled (D213)."""
+        if self.company.viewing():
+            return
+        page = InventoryDocumentPage(self.company.open_session, doc_type=doc_type)
+        page.fill_copy_of(document_id)
+        self._open_new_inventory_document(page)
 
     def buy_missing(self, missing) -> None:
         """A purchase of what is under its minimum stock, filled; the supplier to choose."""

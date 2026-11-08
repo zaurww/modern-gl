@@ -118,6 +118,7 @@ HINT = (  # the keys of the page (desktop/shortcuts.py), under its table
     "paste_rows",
     "save",
     "post",
+    "post_and_new",
 )
 
 

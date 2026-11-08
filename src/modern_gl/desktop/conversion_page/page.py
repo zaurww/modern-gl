@@ -76,6 +76,7 @@ class ConversionPage(ConversionForm):
         self.btn_gl.clicked.connect(self._open_gl)
         bind(self, "save", lambda: self.save(post=self.posted))
         bind(self, "post", lambda: self.save(post=True))
+        bind(self, "post_and_new", self.post_and_new)
         bind(self, "insert", lambda: self.add_fee(focus=True))
         bind(self, "remove_line", self._remove_current_fee)
         self.postings.bind_key(self)
@@ -363,6 +364,11 @@ class ConversionPage(ConversionForm):
         saved = [self.doc.id] if self.doc is not None else []
         write = None if self.posted and not self.dirty else lambda: [self._write(post=True)]
         return document_postings(self.s, "conversion", saved, write)
+
+    def post_and_new(self) -> None:
+        """Ctrl+Shift+Enter, as in the journal (D213): post, then a new one of the kind."""
+        if self.save(post=True):
+            self.new_requested.emit()
 
     def save(self, post: bool) -> bool:
         if self.read_only:

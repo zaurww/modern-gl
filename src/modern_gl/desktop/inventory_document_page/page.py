@@ -15,7 +15,6 @@ from modern_gl.application.inventory import (
     INCOMING_TYPES,
     RETURN_TYPES,
     StockShortageError,
-    vat_of,
 )
 from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.inventory_document_page.clipboard import ClipboardPart
@@ -29,8 +28,6 @@ from modern_gl.desktop.inventory_document_page.header import HeaderPart
 from modern_gl.desktop.inventory_document_page.line_objects import LineObjectsPart
 from modern_gl.desktop.inventory_document_page.lines_model import (
     InventoryLinesModel,
-    by_sale_kinds,
-    sale_kinds,
 )
 from modern_gl.desktop.inventory_document_page.lines_table import (
     InventoryLinesDelegate,
@@ -59,6 +56,10 @@ PARTY_MISSING = {
     "purchase_return": N_("Укажите поставщика"),
     "sale_return": N_("Укажите покупателя"),
 }
+
+
+# what a copy is made of (D213): a return is made from its document, an opening once
+COPIED = ("receipt", "sale", "incoming", "issue", "transfer")
 
 
 class InventoryDocumentPage(
@@ -110,6 +111,7 @@ class InventoryDocumentPage(
         self.date.dateChanged.connect(self._date_changed)
         bind(self, "save", lambda: self.save(post=False))
         bind(self, "post", lambda: self.save(post=True))
+        bind(self, "post_and_new", self.post_and_new)
         bind(self.table, "insert", self._insert_row)
         bind(self.table, "duplicate_row", self._duplicate_row)
         bind(self.table, "split_row", self._split_row)
@@ -128,9 +130,15 @@ class InventoryDocumentPage(
 
     def menu_items(self) -> list[MenuItem]:
         """«⋯»: the story of the document's postings (D213)."""
-        if self.doc is None or self.doc.gl_document_id is None:
+        doc = self.doc
+        if doc is None:
             return []
-        return [self.history_item(self.s, self.doc.gl_document_id, self.title())]
+        items: list[MenuItem] = []
+        if not self.s.read_only and doc.doc_type in COPIED:
+            items.append((tr("Копировать"), lambda: self.copy_requested.emit(doc.doc_type, doc.id)))
+        if doc.gl_document_id is not None:
+            items.append(self.history_item(self.s, doc.gl_document_id, self.title()))
+        return items
 
     def title(self) -> str:
         operation = kind_name(self.doc_type)
@@ -173,31 +181,7 @@ class InventoryDocumentPage(
         self._show_vat_rate(self.doc.vat_rate)
         self._show_reason(self.doc.incoming_reason)
         vat_rate = self._chosen_vat_rate()
-        kinds = sale_kinds(self.s) if self.doc_type == "sale" else []
-        rows = [
-            InventoryGridRow(
-                line.item_id,
-                line.warehouse_id,
-                line.to_warehouse_id,
-                line.quantity or None,
-                line.amount or None,
-                line.offset_account_id,
-                list(line.offset_subconto),
-                line.memo,
-                line.id,
-                vat_amount=line.vat_amount if vat_rate is not None or line.vat_amount else None,
-                vat_typed=line.vat_amount != vat_of(line.amount, vat_rate),
-                currency_amount=line.currency_amount,
-                expense_account_id=line.cost_account_id if self.doc_type == "receipt" else None,
-                expense_subconto=(
-                    list(line.cost_subconto) if self.doc_type == "receipt" else [None, None, None]
-                ),
-                sale_subconto=by_sale_kinds(self.s.catalog, kinds, line.cost_subconto),
-                expense_date=line.expense_date if self.doc_type == "receipt" else None,
-                returned_line_id=line.returned_line_id,
-            )
-            for line in self.doc.lines
-        ] or [InventoryGridRow()]
+        rows = self._rows_of(self.doc, vat_rate)
         # a posted document is edited in place, as in 1C; not while viewing (D80)
         read_only = not self.doc.editable or self.s.read_only
         self._use_lines(rows, read_only, vat_rate, self.doc.doc_date)
@@ -290,6 +274,11 @@ class InventoryDocumentPage(
             self.title_changed.emit()
 
     # ---- saving --------------------------------------------------------------------
+
+    def post_and_new(self) -> None:
+        """Ctrl+Shift+Enter, as in the journal (D213): post, then a new one of the kind."""
+        if self.save(post=True):
+            self.new_requested.emit()
 
     def save(self, post: bool) -> bool:
         if self.model.read_only or self.doc_type == "landed_cost":

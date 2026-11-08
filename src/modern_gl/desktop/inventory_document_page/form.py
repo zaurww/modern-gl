@@ -69,6 +69,8 @@ class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
     title_changed = Signal()
     open_gl_document = Signal(int)
     make_return = Signal(str, int)  # the return's type, the purchase (sale) it returns
+    copy_requested = Signal(str, int)  # a new document like this one: its type, its id
+    new_requested = Signal()  # posted with Ctrl+Shift+Enter: the next one, please
     buy_shortage = Signal(int)  # a draft short of goods: a purchase «ждёт e-qaimə» of them
 
     DUPLICATE_COLUMN = 0  # the copy of a line: on its item
