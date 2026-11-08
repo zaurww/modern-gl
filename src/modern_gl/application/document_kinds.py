@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Protocol
 
 from modern_gl.application.common import batches
 from modern_gl.i18n import N_, fold, tr
@@ -78,6 +79,20 @@ class DocumentName:
     @property
     def title(self) -> str:
         return document_title(self.kind, self.number)
+
+
+class _Titled(Protocol):
+    documents: list[tuple[int, int]]  # (GL id, GL number)
+    titles: dict[int, str]
+
+
+def name_rows(conn: Connection, company_id: int, rows: Iterable[_Titled]) -> None:
+    """Each row's documents named as the user knows them (`titles`, by GL id), read at
+    once — for a page that shows them, not for the reckoning that gathers them."""
+    rows = list(rows)
+    names = document_names(conn, company_id, (i for r in rows for i, _ in r.documents))
+    for r in rows:
+        r.titles = {i: names[i].title for i, _ in r.documents if i in names}
 
 
 def document_names(

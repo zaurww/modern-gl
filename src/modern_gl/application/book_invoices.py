@@ -29,6 +29,7 @@ class BookInvoice:
     parties: list[int] = field(default_factory=list)
     tax_ids: list[str] = field(default_factory=list)
     documents: list[tuple[int, int]] = field(default_factory=list)  # (id, number)
+    titles: dict[int, str] = field(default_factory=dict)  # «Покупка №1» by id, when shown
 
     @property
     def amount(self) -> int:

@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from modern_gl.application.document_kinds import document_title, kind_name
 from modern_gl.application.eqaime import (
     AwaitingPurchase,
     EInvoice,
@@ -45,14 +46,6 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
 from modern_gl.reporting.inventory import item_name
-
-# what an e-qaimə becomes (a return e-qaimə — a return, D153)
-KIND_NAMES = {
-    "receipt": "Покупка",
-    "sale": "Продажа",
-    "purchase_return": "Возврат поставщику",
-    "sale_return": "Возврат от покупателя",
-}
 
 
 class EqaimeImportDialog(EqaimeImportForm):
@@ -166,7 +159,7 @@ class EqaimeImportDialog(EqaimeImportForm):
 
     def _invoice_item(self, plan: InvoicePlan) -> QTreeWidgetItem:
         invoice = plan.invoice
-        kind = tr(KIND_NAMES[plan.document_type])
+        kind = kind_name(plan.document_type)
         item = QTreeWidgetItem(
             [
                 ru_date(invoice.doc_date),
@@ -247,7 +240,7 @@ class EqaimeImportDialog(EqaimeImportForm):
 
     def _invoice_state(self, plan: InvoicePlan) -> str:
         if plan.existing is not None:
-            return tr("уже есть: документ №{n}", n=plan.existing)
+            return tr("уже есть: {title}", title=document_title(plan.document_type, plan.existing))
         if plan.skip_reason:
             return plan.skip_reason
         return self._new_state(plan)

@@ -12,10 +12,16 @@ from modern_gl.application.bank import (
     BankOperationInput,
     load_bank_operation,
 )
-from modern_gl.application.document_kinds import DocumentName, document_names, document_title
+from modern_gl.application.document_kinds import (
+    DocumentName,
+    document_names,
+    document_title,
+    name_rows,
+)
 from modern_gl.application.journal import JournalFilter, documents_before
 from modern_gl.application.queries import document_by_number
 from modern_gl.infrastructure.db import connect
+from modern_gl.reporting.invoices import invoice_report
 
 
 def _names(conn, cid, numbers):
@@ -70,3 +76,13 @@ def test_a_bank_operation_is_named_by_its_direction(ledger, bank_firm):
     name = document_names(ledger.conn, f["cid"], [op.document_id])[op.document_id]
     assert name == DocumentName("bank_out", op.number)
     assert name.title == f"Банк, расход №{op.number}"
+
+
+def test_the_documents_of_an_e_qaime_are_named_for_the_page(make_demo, tmp_path):
+    conn = connect(make_demo(tmp_path / "demo.gl"))
+    cid = conn.execute("SELECT id FROM companies").fetchone()[0]
+    rows = invoice_report(conn, cid, "2026-01-01", "2026-12-31")
+    name_rows(conn, cid, rows)
+    bought = next(r for r in rows if r.invoice == "MT2601001842")
+    assert bought.titles[bought.documents[0][0]] == "Покупка №1"
+    conn.close()

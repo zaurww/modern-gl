@@ -108,18 +108,6 @@ PARTY_HEADERS = {
     "sale_return": "Покупатель",
 }
 
-DOCUMENT_TYPES = {
-    "opening": "Начальные остатки",
-    "receipt": "Покупка",
-    "incoming": "Оприходование",
-    "issue": "Списание",
-    "sale": "Продажа",
-    "transfer": "Перемещение",
-    "landed_cost": "Дополнительные расходы",
-    "purchase_return": "Возврат поставщику",
-    "sale_return": "Возврат от покупателя",
-}
-
 HINT = (  # the keys of the page (desktop/shortcuts.py), under its table
     "next_field",
     "previous_field",

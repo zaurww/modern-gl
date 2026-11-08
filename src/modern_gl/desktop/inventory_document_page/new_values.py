@@ -14,9 +14,9 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
+from modern_gl.application.document_kinds import kind_name
 from modern_gl.desktop.cell_editing import edit_again, edit_next
 from modern_gl.desktop.inventory_document_page.columns import (
-    DOCUMENT_TYPES,
     EXPENSE,
     ITEM,
     MEMO,
@@ -98,7 +98,7 @@ class NewValuesPart(InventoryDocumentForm):
         """A name the item list does not have: a service (fixed asset), or a new item?"""
         sale = self.doc_type == "sale"
         box = QMessageBox(self)
-        box.setWindowTitle(tr(DOCUMENT_TYPES[self.doc_type]))
+        box.setWindowTitle(kind_name(self.doc_type))
         box.setText(
             tr("«{text}» нет среди товаров. Это услуга или новый товар?", text=text)
             if sale

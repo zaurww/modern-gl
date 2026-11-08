@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application import quick_entry
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.currencies import rate_on
+from modern_gl.application.document_kinds import JOURNAL, document_title
 from modern_gl.application.queries import (
     DocumentData,
     PastPosting,
@@ -272,10 +273,10 @@ class QuickEntryBar(QWidget):
             self.s.catalog.reload()
         number = load_document(self.s.conn, cid, doc_id).number
         if post:  # «Undo»: back to a draft
-            message = tr("Документ №{n} проведён", n=number)
+            message = tr("Проведено: {title}", title=document_title(JOURNAL, number))
             self.s.notify_undoable(message, lambda: led.unpost(cid, doc_id))
         else:
-            self.s.notify(tr("Документ №{n} сохранён", n=number))
+            self.s.notify(tr("Сохранено: {title}", title=document_title(JOURNAL, number)))
         self.history.append(text)
         self._back = 0
         self._past = None

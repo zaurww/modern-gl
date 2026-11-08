@@ -223,7 +223,7 @@ def test_posting_says_so_in_a_toast_and_undo_makes_a_draft_again(window):
         )
     ]
     assert page.save(post=True)
-    assert window.toast.message() == "Документ №14 проведён"
+    assert window.toast.message() == "Проведено: Операция №14"
     assert window.toast.undo_button.isVisibleTo(window.toast)
     assert window.statusBar().currentMessage() == ""
     doc_id = page.doc_id

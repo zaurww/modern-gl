@@ -330,7 +330,7 @@ class EqaimeReconciliationDialog(ImportWindow):
                 1,
                 tr(
                     "Документы: {numbers}",
-                    numbers=", ".join(f"№{number}" for _, number in book.documents),
+                    numbers=", ".join(book.titles.get(i, f"№{n}") for i, n in book.documents),
                 ),
             )
         return item

@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from modern_gl.application.document_kinds import kind_name
+from modern_gl.application.document_kinds import document_title, kind_name
 from modern_gl.application.journal import (
     JournalFilter,
     Key,
@@ -418,6 +418,6 @@ class JournalPage(PageWidget):
         except LedgerError as e:
             QMessageBox.warning(self, tr("Удалить"), str(e))
             return
-        self.s.notify(tr("Документ №{n} удалён", n=doc.number))
+        self.s.notify(tr("Удалено: {title}", title=document_title(doc.kind, doc.shown_number)))
         self.deleted.emit(doc.id)
         self.refresh()

@@ -33,6 +33,7 @@ class InvoiceRow:
     vat: int = 0
     deposit: int = 0  # paid from or to the ƏDV deposit account (D41)
     documents: list[tuple[int, int]] = field(default_factory=list)  # (id, number)
+    titles: dict[int, str] = field(default_factory=dict)  # «Покупка №1» by id, when shown
     in_period: bool = False
     free: int = 0  # of the balance, paid without a number (`free_money.mark_free_money`)
 

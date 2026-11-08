@@ -5,6 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox, QTableView
 
+from modern_gl.application.document_kinds import kind_name
 from modern_gl.application.posting_preview import PreviewPosting, owned_postings
 from modern_gl.desktop.inventory_page.form import InventoryForm
 from modern_gl.desktop.list_table import ListTable
@@ -54,7 +55,7 @@ class DocumentsPart(InventoryForm):
                 Column(tr("№"), lambda row: row.number, width=65),
                 Column(
                     tr("Операция"),
-                    lambda row: self._document_type(row.doc_type),
+                    lambda row: kind_name(row.doc_type),
                     width=170,
                 ),
                 Column(
@@ -68,20 +69,6 @@ class DocumentsPart(InventoryForm):
             ],
             documents,
         )
-
-    @staticmethod
-    def _document_type(doc_type: str) -> str:
-        return {
-            "opening": tr("Начальные остатки"),
-            "receipt": tr("Покупка"),
-            "incoming": tr("Оприходование"),
-            "issue": tr("Списание"),
-            "sale": tr("Продажа"),
-            "transfer": tr("Перемещение"),
-            "landed_cost": tr("Дополнительные расходы"),
-            "purchase_return": tr("Возврат поставщику"),
-            "sale_return": tr("Возврат от покупателя"),
-        }.get(doc_type, doc_type)
 
     def _selected_document(self) -> InventoryDocumentSummary | None:
         index = self.documents.currentIndex()

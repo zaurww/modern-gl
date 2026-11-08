@@ -13,6 +13,7 @@ from collections.abc import Callable
 
 from PySide6.QtWidgets import QCheckBox, QLineEdit
 
+from modern_gl.application.document_kinds import name_rows
 from modern_gl.application.invoices import InvoiceRow
 from modern_gl.desktop.reports_page import Column, MenuAction, ReportPage, ReportParams
 from modern_gl.desktop.session import Session
@@ -64,7 +65,9 @@ class InvoicesPage(ReportPage):
         return lambda conn: invoice_report(conn, cid, p.date_from, p.date_to, p.layers, open_only)
 
     def fetch(self, conn: Connection) -> list[InvoiceRow]:
-        return self.job()(conn)
+        rows = self.job()(conn)
+        name_rows(conn, self.s.company_id, rows)
+        return rows
 
     def present(self, data: list[InvoiceRow]) -> None:
         rows = data
@@ -143,7 +146,7 @@ class InvoicesPage(ReportPage):
             return []
         return [
             (
-                tr("Открыть документ №{n}", n=number),
+                tr("Открыть: {title}", title=row.titles.get(doc_id, f"№{number}")),
                 lambda doc_id=doc_id: self.open_document.emit(doc_id),
             )
             for doc_id, number in row.documents

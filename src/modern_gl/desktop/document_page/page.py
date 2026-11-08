@@ -257,7 +257,8 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
         assert self.doc is not None  # load() has just read it
         # just posted: «Undo» takes it back to a draft (corrected in place: nothing to undo)
         message = tr(
-            "Документ №{n} проведён" if post else "Документ №{n} сохранён", n=self.doc.number
+            "Проведено: {title}" if post else "Сохранено: {title}",
+            title=document_title(JOURNAL, self.doc.number),
         )
         if post and not was_posted:
             self.s.notify_undoable(message, lambda: self._undo_post(doc_id))
@@ -290,7 +291,7 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
         except LedgerError as e:
             self.show_error(str(e))
             return
-        self.s.notify(tr("Документ №{n} удалён", n=n))
+        self.s.notify(tr("Удалено: {title}", title=document_title(JOURNAL, n)))
         self.dirty = False
         self.saved.emit(reversed_id or self.doc.id)  # a deleted storno revives the original
         self.close_requested.emit()

@@ -4,4 +4,9 @@ AZ = {
     "Банк, приход": "Bank mədaxili",
     "Банк, расход": "Bank məxarici",
     "{kind} №{n}": "{kind} №{n}",
+    "Проведено: {title}": "Keçirildi: {title}",
+    "Сохранено: {title}": "Saxlanıldı: {title}",
+    "Удалено: {title}": "Silindi: {title}",
+    "Открыть: {title}": "Aç: {title}",
+    "уже есть: {title}": "artıq var: {title}",
 }

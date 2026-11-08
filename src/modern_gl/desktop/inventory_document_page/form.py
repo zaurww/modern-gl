@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from modern_gl.application.document_kinds import kind_name
 from modern_gl.application.inventory import (
     INCOMING_REASONS,
     Inventory,
@@ -28,7 +29,6 @@ from modern_gl.application.inventory import (
 from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.inventory_document_page.columns import (
-    DOCUMENT_TYPES,
     HINT,
     VAT_DOCUMENTS,
     VAT_RATES,
@@ -145,7 +145,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         meta.addWidget(self.date)
         meta.addSpacing(GAP)
         # what the document is, in a word: «Покупка» needs no caption
-        self.type_label = QLabel(tr(DOCUMENT_TYPES.get(self.doc_type, self.doc_type)))
+        self.type_label = QLabel(kind_name(self.doc_type))
         self.type_label.setFont(fonts().heading)
         meta.addWidget(self.type_label)
         meta.addSpacing(GAP)

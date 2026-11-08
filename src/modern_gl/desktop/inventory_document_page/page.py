@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
 )
 
+from modern_gl.application.document_kinds import kind_name
 from modern_gl.application.inventory import (
     INCOMING_TYPES,
     RETURN_TYPES,
@@ -19,7 +20,6 @@ from modern_gl.application.inventory import (
 from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.desktop.inventory_document_page.clipboard import ClipboardPart
 from modern_gl.desktop.inventory_document_page.columns import (
-    DOCUMENT_TYPES,
     VAT_DOCUMENTS,
     InventoryGridRow,
 )
@@ -126,7 +126,7 @@ class InventoryDocumentPage(
         return ("inventory_doc", self.document_id) if self.doc else ("new_inventory", id(self))
 
     def title(self) -> str:
-        operation = tr(DOCUMENT_TYPES.get(self.doc_type, self.doc_type))
+        operation = kind_name(self.doc_type)
         title = (
             f"{operation} №{self.doc.number}" if self.doc else tr("Новое: {type}", type=operation)
         )
@@ -162,7 +162,7 @@ class InventoryDocumentPage(
         self.number.setText(f"№{self.doc.number}")
         self.memo.setText(self.doc.memo)
         self.date.setDate(to_qdate(date.fromisoformat(self.doc.doc_date)))
-        self.type_label.setText(tr(DOCUMENT_TYPES.get(self.doc_type, self.doc_type)))
+        self.type_label.setText(kind_name(self.doc_type))
         self._show_vat_rate(self.doc.vat_rate)
         self._show_reason(self.doc.incoming_reason)
         vat_rate = self._chosen_vat_rate()

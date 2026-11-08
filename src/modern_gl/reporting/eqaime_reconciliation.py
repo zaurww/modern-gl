@@ -13,6 +13,7 @@ from datetime import date
 
 from modern_gl.application.book_invoices import BookInvoice, book_invoices, digest
 from modern_gl.application.books import COMMON
+from modern_gl.application.document_kinds import name_rows
 from modern_gl.domain.dates import iso_date, next_day
 from modern_gl.domain.eqaime import ON_APPROVAL, TURNOVER, PortalInvoice, status_group
 from modern_gl.infrastructure.db import Connection, Row
@@ -184,6 +185,7 @@ def reconcile(
         return start <= day <= end
 
     books = book_invoices(conn, company_id, outgoing, layers)
+    name_rows(conn, company_id, books.values())
     listed = {p.number: p for p in portal if p.outgoing == outgoing}
     known = known_on_portal(conn, company_id, outgoing)
     changes = portal_changes(conn, company_id, outgoing)
