@@ -16,7 +16,11 @@ from modern_gl.desktop.table_sort import sortable
 from modern_gl.desktop.widgets import ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
-from modern_gl.reporting.inventory import InventoryDocumentSummary, list_inventory_documents
+from modern_gl.reporting.inventory import (
+    InventoryDocumentSummary,
+    inventory_document_kinds,
+    list_inventory_documents,
+)
 
 
 class DocumentsPart(InventoryForm):
@@ -38,9 +42,15 @@ class DocumentsPart(InventoryForm):
         return owned_postings(self.s.conn, self.s.company_id, "inventory", [row.id])
 
     def _show_documents(self) -> None:
-        """The warehouse documents; the drafts are counted on the switch, not to be lost."""
-        documents = list_inventory_documents(self.s.conn, self.s.company_id)
-        drafts = sum(d.status != "posted" for d in documents)
+        """The latest warehouse documents, or all of the chosen kind; the drafts of the
+        latest are counted on the switch, not to be lost."""
+        conn, company_id = self.s.conn, self.s.company_id
+        kind = self._fill_document_kinds()
+        latest = list_inventory_documents(conn, company_id)
+        documents = (
+            latest if kind is None else list_inventory_documents(conn, company_id, None, kind)
+        )
+        drafts = sum(d.status != "posted" for d in latest)
         self.documents_button.setText(
             tr("Документы · черновиков: {n}", n=drafts) if drafts else tr("Документы")
         )
@@ -69,6 +79,20 @@ class DocumentsPart(InventoryForm):
             ],
             documents,
         )
+
+    def _fill_document_kinds(self) -> str | None:
+        """The kinds that exist, the choice kept; the chosen kind (None: all of them)."""
+        box = self.document_kind
+        chosen = box.currentData()
+        kinds = inventory_document_kinds(self.s.conn, self.s.company_id)
+        box.blockSignals(True)
+        box.clear()
+        box.addItem(tr("Все операции"), None)
+        for kind in sorted(kinds, key=kind_name):
+            box.addItem(kind_name(kind), kind)
+        box.setCurrentIndex(max(box.findData(chosen), 0))
+        box.blockSignals(False)
+        return box.currentData()
 
     def _selected_document(self) -> InventoryDocumentSummary | None:
         index = self.documents.currentIndex()

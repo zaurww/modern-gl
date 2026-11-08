@@ -8,6 +8,7 @@ from __future__ import annotations
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -104,7 +105,7 @@ class InventoryForm(PageWidget):
             lambda: [
                 (tr("Ведомость по складу"), lambda: self.open_report.emit("stock_statement")),
                 (tr("Валовая прибыль по товарам"), lambda: self.open_report.emit("gross_profit")),
-                (tr("Дополнительные расходы по декларациям"), self.open_landed_report.emit),
+                (tr("Дополнительные расходы"), self.open_landed_report.emit),
             ],
         )
         self.header.add_action(reports)
@@ -156,6 +157,11 @@ class InventoryForm(PageWidget):
             hide_when_viewing(self.s.read_only, control)
             self.operation_buttons[operation] = control
         operations.addStretch(1)
+        self.landed_report_button = button(  # reading only: shown when viewing too
+            tr("Все доп. расходы"), "flat", tr("Поступления с расходами: что и на сколько добавили")
+        )
+        self.landed_report_button.clicked.connect(lambda _=False: self.open_landed_report.emit())
+        operations.addWidget(self.landed_report_button)
         root.addLayout(operations)
 
     def _build_below(self, root: QVBoxLayout) -> None:
@@ -172,6 +178,9 @@ class InventoryForm(PageWidget):
             bar.addWidget(view)
         self.movements_button.setChecked(True)
         bar.addSpacing(12)
+        self.document_kind = QComboBox()  # with «Документы»; filled by `_show_documents`
+        self.document_kind.currentIndexChanged.connect(lambda _index: self._show_documents())
+        bar.addWidget(self.document_kind)
         self.below_title = QLabel()  # «Printer kartrici 85A · Mərkəzi anbar»
         self.below_title.setFont(fonts().heading)
         keep_room = self.below_title.sizePolicy()
@@ -195,6 +204,7 @@ class InventoryForm(PageWidget):
         self.below.setCurrentWidget(self.documents_page if documents else self.movements_page)
         self.remove.setVisible(documents and not self.s.read_only)
         self.below_title.setVisible(not documents)
+        self.document_kind.setVisible(documents)
 
     def title(self) -> str:
         return tr("Склад")

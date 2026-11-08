@@ -24,7 +24,11 @@ from modern_gl.desktop.main_window import MainWindow
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import connect
-from modern_gl.reporting.inventory import landed_cost_report
+from modern_gl.reporting.inventory import (
+    inventory_document_kinds,
+    landed_cost_report,
+    list_inventory_documents,
+)
 from tests.helpers.qt import running_app
 
 
@@ -206,11 +210,13 @@ def test_the_warehouse_opens_the_report_and_a_row_opens_its_receipt(year_window,
         [
             tr("Ведомость по складу"),
             tr("Валовая прибыль по товарам"),
-            tr("Дополнительные расходы по декларациям"),
+            tr("Дополнительные расходы"),
         ]
     ]
     page = win.stack.currentWidget()
     assert isinstance(page, LandedCostReportPage)
+    assert all(r.added for r in page.model.rows if r.is_header)  # by default, only with costs
+    page.only_with_costs.setChecked(False)  # the declarations without them too
     rows = page.model.rows
     headers = [r for r in rows if r.is_header]
     assert len(headers) == 7 and rows[-1].is_total
@@ -230,6 +236,42 @@ def test_the_warehouse_opens_the_report_and_a_row_opens_its_receipt(year_window,
     assert isinstance(opened, InventoryDocumentPage)
     assert opened.doc is not None and opened.doc.invoice.startswith("AZ2604")
     assert "\t".join([tr("Декларация / товар"), tr("Количество")]) in page.text()
+
+
+def test_the_warehouse_button_opens_the_report(year_window):
+    win = year_window
+    win.show_place(("inventory",))
+    win.stack.currentWidget().landed_report_button.click()
+    assert isinstance(win.stack.currentWidget(), LandedCostReportPage)
+
+
+def test_documents_of_one_kind_are_all_listed_drafts_too(declaration):
+    conn, cid, (customs_doc, freight_doc) = declaration
+    assert inventory_document_kinds(conn, cid) == ["landed_cost", "receipt"]
+    Inventory(conn, actor="test").unpost_document(cid, customs_doc)
+    listed = list_inventory_documents(conn, cid, None, "landed_cost")
+    assert [(d.id, d.status) for d in listed] == [(customs_doc, "draft"), (freight_doc, "posted")]
+    assert len(list_inventory_documents(conn, cid, None)) == 5  # 3 receipts + 2 expenses
+    assert [d.id for d in list_inventory_documents(conn, cid, 1, "landed_cost")] == [freight_doc]
+
+
+def test_the_documents_filter_shows_one_kind_and_keeps_the_choice(year_window):
+    win = year_window
+    win.show_place(("inventory",))
+    inventory = win.stack.currentWidget()
+    assert not inventory.document_kind.isVisible()
+    inventory.documents_button.click()
+    assert inventory.document_kind.isVisible()
+    box = inventory.document_kind
+    assert (
+        box.currentData() is None and len({r.doc_type for r in inventory.documents_model.rows}) > 1
+    )
+    box.setCurrentIndex(box.findData("landed_cost"))
+    rows = inventory.documents_model.rows
+    assert rows and {r.doc_type for r in rows} == {"landed_cost"}
+    inventory.refresh()
+    assert box.currentData() == "landed_cost"
+    assert len(inventory.documents_model.rows) == len(rows)
 
 
 def test_the_supplier_is_the_counterparty_not_the_first_subconto(ledger: Ledger, conn):

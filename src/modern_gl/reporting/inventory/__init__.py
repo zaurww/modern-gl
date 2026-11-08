@@ -40,6 +40,7 @@ from modern_gl.reporting.inventory.declarations import (
 )
 from modern_gl.reporting.inventory.documents import (
     InventoryDocumentSummary,
+    inventory_document_kinds,
     list_inventory_documents,
 )
 from modern_gl.reporting.inventory.item_card import (
@@ -115,6 +116,7 @@ __all__ = [
     "has_units",
     "hidden_item_names",
     "idle_items",
+    "inventory_document_kinds",
     "item_card",
     "item_choices",
     "item_details",

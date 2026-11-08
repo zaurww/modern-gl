@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QApplication, QLineEdit
+from PySide6.QtWidgets import QApplication, QCheckBox, QLineEdit
 
 from modern_gl.application.inventory import format_quantity, unit_price
 from modern_gl.desktop.reports_page import Column, MenuAction, ReportPage, ReportParams
@@ -138,7 +138,9 @@ class LandedCostReportPage(ReportPage):
     def __init__(self, session: Session) -> None:
         year = session.working_date.year
         super().__init__(
-            session, tr("Əlavə xərclər"), ReportParams(date(year, 1, 1), date(year, 12, 31))
+            session,
+            tr("Дополнительные расходы"),
+            ReportParams(date(year, 1, 1), date(year, 12, 31)),
         )
         self.search = QLineEdit()
         self.search.setObjectName("search")
@@ -146,13 +148,18 @@ class LandedCostReportPage(ReportPage):
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda _text: self.refresh())
         self.header.add_action(self.search)
+        self.only_with_costs = QCheckBox(tr("Только с расходами"))
+        self.only_with_costs.setToolTip(tr("Снимите, чтобы видеть и декларации без расходов"))
+        self.only_with_costs.setChecked(True)
+        self.only_with_costs.toggled.connect(lambda _on: self.refresh())
+        self.header.add_action(self.only_with_costs)
         copy = button(tr("Копировать для Excel"), "flat")
         copy.clicked.connect(lambda: QApplication.clipboard().setText(self.text()))
         self.header.add_action(copy)
         self.stack.removeWidget(self.empty)
         self.empty = EmptyState(
             "○",
-            tr("Нет деклараций"),
+            tr("Нет дополнительных расходов"),
             tr(
                 "Здесь видны поступления по таможенной декларации и с дополнительными "
                 "расходами: сколько стоил товар, что добавили расходы и на сколько процентов."
@@ -162,7 +169,7 @@ class LandedCostReportPage(ReportPage):
         self.refresh()
 
     def title(self) -> str:
-        return tr("Əlavə xərclər")
+        return tr("Дополнительные расходы")
 
     def build(self) -> None:
         kinds, declarations = landed_cost_report(
@@ -171,6 +178,8 @@ class LandedCostReportPage(ReportPage):
             self.params.date_from.isoformat(),
             self.params.date_to.isoformat(),
         )
+        if self.only_with_costs.isChecked():
+            declarations = [d for d in declarations if d.added]
         needle = fold(self.search.text().strip())
         if needle:
             declarations = [d for d in declarations if needle in fold(_searched(d))]
