@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QVBoxLayout,
 )
 
@@ -18,22 +17,21 @@ from modern_gl.desktop import icons
 from modern_gl.desktop.conversion_page.common import BASE
 from modern_gl.desktop.conversion_page.fee_row import FeeRow
 from modern_gl.desktop.conversion_page.side_panel import SidePanel, Stat
+from modern_gl.desktop.document_shell import DocumentShell
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.posting_preview import PostingsPanel
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
-from modern_gl.desktop.theme import P, fonts
+from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
-    Chip,
     MenuItem,
     button,
     caption,
-    more_button,
 )
 from modern_gl.i18n import tr
 
 
-class ConversionForm(PageWidget):
+class ConversionForm(DocumentShell, PageWidget):
     saved = Signal(int)  # the GL document
     close_requested = Signal()
     title_changed = Signal()
@@ -75,20 +73,7 @@ class ConversionForm(PageWidget):
     # ---- the fields ------------------------------------------------------------------
 
     def _build_head(self, root: QVBoxLayout) -> None:
-        top = QHBoxLayout()
-        self.number = QLabel()
-        self.number.setObjectName("tertiary")
-        self.number.setFont(fonts().heading)
-        top.addWidget(self.number)
-        self.memo = QLineEdit()
-        self.memo.setObjectName("titleEdit")
-        self.memo.setFont(fonts().title)
-        self.memo.setPlaceholderText(tr("Конвертация валюты"))
-        top.addWidget(self.memo, 1)
-        self.status = Chip()
-        top.addWidget(self.status, 0, Qt.AlignmentFlag.AlignVCenter)
-        top.addWidget(more_button(self.menu_items))
-        root.addLayout(top)
+        self.build_head(root, tr("Конвертация валюты"), self.menu_items)
 
     def _build_rate_note(self, root: QVBoxLayout) -> None:
         """No rate of the date: load the Central Bank's rates right from here."""
@@ -139,20 +124,10 @@ class ConversionForm(PageWidget):
         root.addWidget(summary)
 
     def _build_actions(self, root: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
         self.btn_delete = button(tr("Удалить"), "danger")
         self.btn_unpost = button(tr("Отменить проведение"), "flat")
         self.btn_gl = button(tr("Открыть проводки"), "flat")
-        actions.addWidget(self.btn_delete)
-        actions.addWidget(self.btn_unpost)
-        actions.addWidget(self.btn_gl)
-        actions.addStretch(1)
-        self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
-        self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
-        self.btn_post.setMinimumWidth(130)
-        actions.addWidget(self.btn_save)
-        actions.addWidget(self.btn_post)
-        root.addLayout(actions)
+        self.build_actions(root, [self.btn_delete, self.btn_unpost, self.btn_gl])
 
     # ---- what the page asks of the fields ----------------------------------------------
 

@@ -27,6 +27,7 @@ from modern_gl.application.inventory import (
     default_vat_rate,
 )
 from modern_gl.application.posting_preview import PostingPreview
+from modern_gl.desktop.document_shell import DocumentShell
 from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.inventory_document_page.columns import (
     HINT,
@@ -62,7 +63,7 @@ AWAITING = "awaiting"  # the basis box: a purchase waiting for its e-qaimə (D11
 GAP = 16  # between the groups of the header: a document fits a 1366 px screen
 
 
-class InventoryDocumentForm(GridEditing, PageWidget):
+class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
     saved = Signal(int)
     close_requested = Signal()
     title_changed = Signal()
@@ -121,19 +122,7 @@ class InventoryDocumentForm(GridEditing, PageWidget):
     # ---- the fields ------------------------------------------------------------------
 
     def _build_head(self, root: QVBoxLayout) -> None:
-        top = QHBoxLayout()
-        self.number = QLabel()
-        self.number.setObjectName("tertiary")
-        self.number.setFont(fonts().heading)
-        top.addWidget(self.number)
-        self.memo = QLineEdit()
-        self.memo.setObjectName("titleEdit")
-        self.memo.setFont(fonts().title)
-        self.memo.setPlaceholderText(tr("Комментарий складского документа"))
-        top.addWidget(self.memo, 1)
-        self.status = Chip()
-        top.addWidget(self.status, 0, Qt.AlignmentFlag.AlignVCenter)
-        root.addLayout(top)
+        self.build_head(root, tr("Комментарий складского документа"))
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
@@ -222,34 +211,16 @@ class InventoryDocumentForm(GridEditing, PageWidget):
         self.rate_typed = False  # typed by hand: a new date no longer changes it
 
     def _build_summary(self, root: QVBoxLayout) -> None:
-        summary = QHBoxLayout()
-        self.hint = QLabel(legend(*HINT))
-        self.hint.setObjectName("tertiary")
-        self.hint.setFont(fonts().small)
-        self.hint.setWordWrap(True)  # never widens the window
-        summary.addWidget(self.hint, 1)
+        summary = self.build_summary(root, legend(*HINT))
         summary.addSpacing(24)
         self.currency_total = caption()
         summary.addWidget(self.currency_total)
         summary.addSpacing(16)
-        self.vat_total_caption = caption(tr("НДС"))
-        summary.addWidget(self.vat_total_caption)
-        self.vat_total = QLabel()
-        self.vat_total.setMinimumWidth(90)
-        self.vat_total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        summary.addWidget(self.vat_total)
+        self.vat_total_caption, self.vat_total = self.add_figure(summary, tr("НДС"))
         summary.addSpacing(16)
-        total_caption = caption(tr("Итого"))
-        summary.addWidget(total_caption)
-        self.total = QLabel()
-        self.total.setMinimumWidth(130)
-        self.total.setFont(fonts().total)
-        self.total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        summary.addWidget(self.total)
-        root.addLayout(summary)
+        _, self.total = self.add_figure(summary, tr("Итого"), main=True)
 
     def _build_actions(self, root: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
         self.btn_delete = button(tr("Удалить"), "danger")
         self.btn_unpost = button(tr("Отменить проведение"), "flat")
         self.btn_gl = button(tr("Открыть проводки"), "flat")
@@ -259,21 +230,15 @@ class InventoryDocumentForm(GridEditing, PageWidget):
             if self.doc_type == "sale"
             else tr("Проводки начисления расхода в месяце услуги")
         )
-        actions.addWidget(self.btn_delete)
-        actions.addWidget(self.btn_unpost)
-        actions.addWidget(self.btn_gl)
-        actions.addWidget(self.btn_accrual)
         self.btn_objects = button(tr("Объекты по названиям строк"), "flat")
         self.btn_objects.setToolTip(
             tr("Каждая отмеченная строка получит своё основное средство — по своему названию")
         )
         self.btn_objects.hide()
-        actions.addWidget(self.btn_objects)
         self.btn_return = button(tr("Оформить возврат"), "flat")
         self.btn_return.setToolTip(
             tr("Товар вернули: возврат по этому документу — его цены и ƏDV, без лишнего ввода")
         )
-        actions.addWidget(self.btn_return)
         self.btn_shortage = button(tr("Оприходовать недостающее…"), "flat")
         self.btn_shortage.setToolTip(
             tr(
@@ -282,14 +247,18 @@ class InventoryDocumentForm(GridEditing, PageWidget):
             )
         )
         self.btn_shortage.hide()
-        actions.addWidget(self.btn_shortage)
-        actions.addStretch(1)
-        self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
-        self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
-        self.btn_post.setMinimumWidth(130)
-        actions.addWidget(self.btn_save)
-        actions.addWidget(self.btn_post)
-        root.addLayout(actions)
+        self.build_actions(
+            root,
+            [
+                self.btn_delete,
+                self.btn_unpost,
+                self.btn_gl,
+                self.btn_accrual,
+                self.btn_objects,
+                self.btn_return,
+                self.btn_shortage,
+            ],
+        )
 
     # ---- what the parts ask of the fields --------------------------------------------
 

@@ -23,6 +23,7 @@ from modern_gl.application.queries import (
     list_templates,
     recent_subconto,
 )
+from modern_gl.desktop.document_shell import DocumentShell
 from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.postings import (
@@ -37,7 +38,6 @@ from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import legend
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import (
-    Chip,
     MenuItem,
     button,
     caption,
@@ -62,7 +62,7 @@ HINT = (  # the keys of the page, under its table
 )
 
 
-class DocumentForm(GridEditing, PageWidget):
+class DocumentForm(GridEditing, DocumentShell, PageWidget):
     saved = Signal(int)  # document id
     open_document = Signal(int)
     copy_requested = Signal(object)  # DocumentData to prefill a new document
@@ -108,16 +108,7 @@ class DocumentForm(GridEditing, PageWidget):
 
     def _build_head(self, root: QVBoxLayout) -> None:
         """Title row: the memo is the document's title, like a task name in Things."""
-        top = QHBoxLayout()
-        self.number = QLabel()
-        self.number.setObjectName("tertiary")
-        self.number.setFont(fonts().heading)
-        top.addWidget(self.number)
-        self.memo = self._title_edit()
-        top.addWidget(self.memo, 1)
-        self.status = Chip()
-        top.addWidget(self.status, 0, Qt.AlignmentFlag.AlignVCenter)
-        root.addLayout(top)
+        self.build_head(root, tr("Содержание операции"))
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
@@ -183,54 +174,23 @@ class DocumentForm(GridEditing, PageWidget):
         root.addWidget(self.rate_note)
 
     def _build_total(self, root: QVBoxLayout) -> None:
-        bottom = QHBoxLayout()
-        self.hint = QLabel(legend(*HINT))
-        self.hint.setObjectName("tertiary")
-        self.hint.setFont(fonts().small)
-        self.hint.setWordWrap(True)  # never widens the window
-        keep = self.hint.sizePolicy()
-        keep.setRetainSizeWhenHidden(True)  # a posted document: "Итого" stays by the total
-        self.hint.setSizePolicy(keep)
-        bottom.addWidget(self.hint, 1)
-        total_caption = caption(tr("Итого"))
-        bottom.addWidget(total_caption)
-        self.total = QLabel()
-        self.total.setFont(fonts().total)
-        self.total.setMinimumWidth(130)
-        self.total.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        bottom.addWidget(self.total)
-        root.addLayout(bottom)
+        # a posted document: "Итого" stays by the total
+        summary = self.build_summary(root, legend(*HINT), keep_hint_place=True)
+        _, self.total = self.add_figure(summary, tr("Итого"), main=True)
 
     def _build_actions(self, root: QVBoxLayout) -> None:
-        actions = QHBoxLayout()
-        actions.setSpacing(8)
         # The rest of what can be done with the document waits in "⋯" (see menu_items).
         self.btn_more = more_button(self.menu_items, tr("Действия с документом"))
-        actions.addWidget(self.btn_more)
         # Postings made by a warehouse document are corrected there: one click away.
         self.btn_source = button("", "flat", tr("Проводки сформированы складским документом"))
         self.btn_source.hide()
-        actions.addWidget(self.btn_source)
-        actions.addStretch(1)
-        self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
-        self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
-        self.btn_post.setMinimumWidth(130)
-        actions.addWidget(self.btn_save)
-        actions.addWidget(self.btn_post)
-        root.addLayout(actions)
+        self.build_actions(root, [self.btn_more, self.btn_source])
 
     # ---- what the parts ask of the fields --------------------------------------------
 
     @property
     def doc_id(self) -> int | None:
         return self.doc.id if self.doc else None
-
-    def _title_edit(self) -> QLineEdit:
-        edit = QLineEdit()
-        edit.setObjectName("titleEdit")
-        edit.setFont(fonts().title)
-        edit.setPlaceholderText(tr("Содержание операции"))
-        return edit
 
     def _rate_for(self, currency_id: int) -> Fraction | None:
         """Manat per unit of a currency on the document date (the latest one before it)."""

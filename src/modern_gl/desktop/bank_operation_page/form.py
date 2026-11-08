@@ -36,17 +36,18 @@ from modern_gl.desktop.bank_operation_page.common import (
 )
 from modern_gl.desktop.bank_operation_page.line_row import LineRow
 from modern_gl.desktop.directories_page import added_value, new_value
+from modern_gl.desktop.document_shell import DocumentShell
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.pick import PickBox, SuggestBox
 from modern_gl.desktop.posting_preview import PostingsPanel
 from modern_gl.desktop.rate_note import rate_note
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
-from modern_gl.desktop.widgets import Chip, MenuItem, button, date_edit, more_button
+from modern_gl.desktop.widgets import MenuItem, button, date_edit
 from modern_gl.i18n import tr
 
 
-class BankOperationForm(PageWidget):
+class BankOperationForm(DocumentShell, PageWidget):
     saved = Signal(int)  # the GL document
     close_requested = Signal()
     title_changed = Signal()
@@ -96,19 +97,7 @@ class BankOperationForm(PageWidget):
     # ---- the fields ------------------------------------------------------------------
 
     def _build_head(self, root: QVBoxLayout) -> None:
-        top = QHBoxLayout()
-        self.number = QLabel()
-        self.number.setObjectName("tertiary")
-        self.number.setFont(fonts().heading)
-        top.addWidget(self.number)
-        self.memo = QLineEdit()
-        self.memo.setObjectName("titleEdit")
-        self.memo.setFont(fonts().title)
-        top.addWidget(self.memo, 1)
-        self.status = Chip()
-        top.addWidget(self.status, 0, Qt.AlignmentFlag.AlignVCenter)
-        top.addWidget(more_button(self.menu_items))
-        root.addLayout(top)
+        self.build_head(root, "", self.menu_items)
 
     def _build_bar(self, root: QVBoxLayout) -> None:
         """Set before typing, the cursor does not go through them (Shift+Tab does): which
@@ -322,24 +311,13 @@ class BankOperationForm(PageWidget):
         extra.addStretch(1)
         root.addLayout(extra)
 
-        actions = QHBoxLayout()
         self.keys_hint = caption(
             tr("Enter — дальше  ·  Ctrl+Enter — провести  ·  F6 — комиссия"), "tertiary"
         )
-        actions.addWidget(self.keys_hint)
         self.btn_delete = button(tr("Удалить"), "danger")
         self.btn_unpost = button(tr("Отменить проведение"), "flat")
         self.btn_gl = button(tr("Открыть проводки"), "flat")
-        actions.addWidget(self.btn_delete)
-        actions.addWidget(self.btn_unpost)
-        actions.addWidget(self.btn_gl)
-        actions.addStretch(1)
-        self.btn_save = button(tr("Сохранить черновик"), tooltip="Ctrl+S")
-        self.btn_post = button(tr("Провести"), "primary", "Ctrl+Enter")
-        self.btn_post.setMinimumWidth(130)
-        actions.addWidget(self.btn_save)
-        actions.addWidget(self.btn_post)
-        root.addLayout(actions)
+        self.build_actions(root, [self.keys_hint, self.btn_delete, self.btn_unpost, self.btn_gl])
 
     # ---- what the parts ask of the fields --------------------------------------------
 
