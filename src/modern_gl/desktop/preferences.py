@@ -44,6 +44,7 @@ STOCK_STATEMENT_VIEW = "reports/stock_statement_view"
 GROSS_PROFIT_VIEW = "reports/gross_profit_view"
 # ---- modules -------------------------------------------------------------------------
 BANK_AMOUNTS = "bank/amounts"  # one column of amounts or two
+LANDED_ACCOUNTS = "inventory/landed_accounts"  # the account column of typed batch expenses
 INVENTORY_IDLE = "inventory/idle_items"  # items with nothing in stock listed too (D106)
 STOCK_COUNT_WAREHOUSE = "stock_count/warehouse"  # the warehouse counted last
 
@@ -183,6 +184,12 @@ class Preferences:
 
     def set_idle_items_shown(self, on: bool) -> None:
         self.set(INVENTORY_IDLE, on)
+
+    def landed_accounts_shown(self) -> bool:
+        return self.flag(LANDED_ACCOUNTS, False)
+
+    def set_landed_accounts_shown(self, on: bool) -> None:
+        self.set(LANDED_ACCOUNTS, on)
 
 
 def prefs() -> Preferences:

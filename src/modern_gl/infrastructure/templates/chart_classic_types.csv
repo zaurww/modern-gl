@@ -6,6 +6,7 @@ code;type
 08;fixed_asset
 09;deferred_tax_asset
 10;inventory
+15;inventory
 19;input_vat
 20;inventory
 26;operating_expense

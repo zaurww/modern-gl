@@ -13,7 +13,7 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor
 
-from modern_gl.application.default_accounts import LANDED_COST, SUPPLIER, default_account
+from modern_gl.application.default_accounts import SUPPLIER, default_account
 from modern_gl.application.inventory import (
     LandedCostCharge,
     LandedCostTarget,
@@ -41,6 +41,7 @@ from modern_gl.desktop.landed_cost_page.columns import (
     SC2,
     SC3,
     SHARE,
+    SOURCE,
     TARGET_HEADERS,
     UNIT_COST,
     VAT,
@@ -48,6 +49,7 @@ from modern_gl.desktop.landed_cost_page.columns import (
     ChargeRow,
     TargetRow,
 )
+from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import P, fonts
 from modern_gl.desktop.widgets import (
@@ -81,8 +83,7 @@ class ChargesModel(QAbstractTableModel):
         self.cost_types: dict[int, str] = {}
         self.load_cost_types()
         self.rows = rows or [self.default_row()]
-        # a warehouse only (D90): the supplier's account is put in by itself, unseen
-        self.accounts_hidden = session.stock_only and self.default_row().account_id is not None
+        self.accounts_hidden = self._accounts_hidden()
         self.columns = [
             COST_TYPE,
             ACCOUNT,
@@ -93,8 +94,20 @@ class ChargesModel(QAbstractTableModel):
             RATE,
             AMOUNT,
             VAT,
+            SOURCE,
             MEMO,
         ]
+
+    def _accounts_hidden(self) -> bool:
+        """A typed expense is a debt to its supplier: the account puts itself in and is not
+        shown (D90 for a warehouse only). A line on another account keeps the column."""
+        supplier = self.default_row().account_id
+        if supplier is None:
+            return False
+        if self.s.stock_only:
+            return True
+        typed_on = {row.account_id for row in self.rows if not row.taken}
+        return not prefs().landed_accounts_shown() and typed_on <= {supplier}
 
     def load_cost_types(self) -> None:
         self.cost_types = {
@@ -102,11 +115,7 @@ class ChargesModel(QAbstractTableModel):
         }
 
     def default_row(self) -> ChargeRow:
-        ledger, company_id = self.s.ledger, self.s.company_id
-        return ChargeRow(
-            account_id=default_account(ledger, company_id, LANDED_COST)
-            or default_account(ledger, company_id, SUPPLIER)
-        )
+        return ChargeRow(account_id=default_account(self.s.ledger, self.s.company_id, SUPPLIER))
 
     def rowCount(self, parent: QModelIndex | QPersistentModelIndex | None = None) -> int:
         return 0 if parent is not None and parent.isValid() else len(self.rows)
@@ -123,12 +132,18 @@ class ChargesModel(QAbstractTableModel):
         key = self.columns[section]
         if role == Qt.ItemDataRole.DisplayRole:
             if key == SC1 and self.accounts_hidden:
-                return tr("Поставщик")
+                return tr("Поставщик") if self.s.stock_only else self._party_header()
             return tr(CHARGE_HEADERS[key]) if CHARGE_HEADERS[key] else ""
         if role == Qt.ItemDataRole.TextAlignmentRole:
             side = Qt.AlignmentFlag.AlignRight if key in NUMBER_KEYS else Qt.AlignmentFlag.AlignLeft
             return side | Qt.AlignmentFlag.AlignVCenter
         return None
+
+    def _party_header(self) -> str:
+        """The name of what the supplier's account asks first («Контрагенты», «Договоры»)."""
+        account_id = self.default_row().account_id
+        kind = self.s.catalog.accounts[account_id].sc_kinds[0] if account_id else None
+        return self.s.catalog.kinds[kind] if kind else tr(CHARGE_HEADERS[SC1])
 
     def kind_at(self, row: int, key: str) -> int | None:
         account_id = self.rows[row].account_id
@@ -144,7 +159,7 @@ class ChargesModel(QAbstractTableModel):
         return self.s.catalog.owner_in(account, charge.subconto, int(key[-1]) - 1)
 
     def editable(self, row: int, key: str) -> bool:
-        if self.read_only:
+        if self.read_only or key == SOURCE:
             return False
         charge = self.rows[row]
         if charge.taken:  # the account comes from the books
@@ -207,7 +222,11 @@ class ChargesModel(QAbstractTableModel):
         if key == ACCOUNT:
             account = self.s.catalog.accounts.get(charge.account_id) if charge.account_id else None
             return account.label if account else ""
+        if key == SOURCE:
+            return tr(charge.origin)
         if key in {SC1, SC2, SC3}:
+            if self.accounts_hidden and charge.taken:  # its directory is not the column's
+                return ""
             value_id = charge.subconto[int(key[-1]) - 1]
             if value_id is not None:
                 return self.s.catalog.value(value_id).name

@@ -18,9 +18,6 @@ AZ = {
     "ƏDV декларации": "Bəyannamənin ƏDV-si",
     "В плане счетов нет счёта поставщиков": "Hesablar planında malsatan hesabı yoxdur",
     "укажите сумму платежа": "ödənişin məbləğini göstərin",
-    "укажите счёт дополнительных расходов в настройках склада": (
-        "anbar parametrlərində əlavə xərclər hesabını göstərin"
-    ),
     "укажите номер декларации: ƏDV идёт в зачёт по нему": (
         "bəyannamənin nömrəsini göstərin: ƏDV onunla əvəzləşdirilir"
     ),

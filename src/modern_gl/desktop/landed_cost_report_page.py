@@ -148,11 +148,9 @@ class LandedCostReportPage(ReportPage):
         self.search.setClearButtonEnabled(True)
         self.search.textChanged.connect(lambda _text: self.refresh())
         self.header.add_action(self.search)
-        self.only_with_costs = QCheckBox(tr("Только с расходами"))
-        self.only_with_costs.setToolTip(tr("Снимите, чтобы видеть и декларации без расходов"))
-        self.only_with_costs.setChecked(True)
-        self.only_with_costs.toggled.connect(lambda _on: self.refresh())
-        self.header.add_action(self.only_with_costs)
+        self.without_costs = QCheckBox()  # shown only when there is something to show
+        self.without_costs.toggled.connect(lambda _on: self.refresh())
+        self.header.add_action(self.without_costs)
         copy = button(tr("Копировать для Excel"), "flat")
         copy.clicked.connect(lambda: QApplication.clipboard().setText(self.text()))
         self.header.add_action(copy)
@@ -178,11 +176,14 @@ class LandedCostReportPage(ReportPage):
             self.params.date_from.isoformat(),
             self.params.date_to.isoformat(),
         )
-        if self.only_with_costs.isChecked():
-            declarations = [d for d in declarations if d.added]
         needle = fold(self.search.text().strip())
         if needle:
             declarations = [d for d in declarations if needle in fold(_searched(d))]
+        without = sum(not d.added for d in declarations)
+        self.without_costs.setText(tr("Показать без расходов: {n}", n=without))
+        self.without_costs.setVisible(bool(without))
+        if not self.without_costs.isChecked():
+            declarations = [d for d in declarations if d.added]
         group = tr("Дополнительные расходы")
         columns = [
             Column(tr("Декларация / товар"), lambda r: r.label, width=1),  # never cut

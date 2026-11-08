@@ -8,6 +8,7 @@ from datetime import date
 import pytest
 from PySide6.QtWidgets import QMenu, QMessageBox, QPushButton
 
+from modern_gl.application.catalog import Catalog
 from modern_gl.application.inventory import (
     Inventory,
     LandedCostCharge,
@@ -21,6 +22,8 @@ from modern_gl.desktop import theme, widgets
 from modern_gl.desktop.inventory_document_page import InventoryDocumentPage
 from modern_gl.desktop.landed_cost_report_page import LandedCostReportPage
 from modern_gl.desktop.main_window import MainWindow
+from modern_gl.desktop.reports_page import ReportParams
+from modern_gl.desktop.session import Session
 from modern_gl.domain.currency import CURRENCY_OPTIONAL
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import connect
@@ -215,8 +218,6 @@ def test_the_warehouse_opens_the_report_and_a_row_opens_its_receipt(year_window,
     ]
     page = win.stack.currentWidget()
     assert isinstance(page, LandedCostReportPage)
-    assert all(r.added for r in page.model.rows if r.is_header)  # by default, only with costs
-    page.only_with_costs.setChecked(False)  # the declarations without them too
     rows = page.model.rows
     headers = [r for r in rows if r.is_header]
     assert len(headers) == 7 and rows[-1].is_total
@@ -236,6 +237,36 @@ def test_the_warehouse_opens_the_report_and_a_row_opens_its_receipt(year_window,
     assert isinstance(opened, InventoryDocumentPage)
     assert opened.doc is not None and opened.doc.invoice.startswith("AZ2604")
     assert "\t".join([tr("Декларация / товар"), tr("Количество")]) in page.text()
+
+
+def test_the_tick_shows_declarations_without_costs_and_only_when_there_are_some(declaration, qtbot):
+    """April: AZ1 with costs. May: AZ2 without. Over the two months the tick decides on AZ2;
+    in April alone there is nothing to show, so no tick."""
+    conn, cid, _documents = declaration
+    theme.apply(running_app())
+    session = Session(
+        conn, Ledger(conn, actor="test"), cid, "Импорт", Catalog(conn, cid), date(2026, 4, 1)
+    )
+    page = LandedCostReportPage(session)
+    qtbot.addWidget(page)
+    page.show()
+
+    def shown() -> list[str]:
+        return [r.declaration.invoice for r in page.model.rows if r.is_header]
+
+    page.params = ReportParams(date(2026, 4, 1), date(2026, 5, 31))
+    page.has_period = False  # the period set above, not the year of the working date
+    page.refresh()
+    assert shown() == ["AZ1"]
+    assert page.without_costs.isVisible()
+    assert page.without_costs.text() == tr("Показать без расходов: {n}", n=1)
+    page.without_costs.setChecked(True)
+    assert shown() == ["AZ1", "AZ2"]
+    page.without_costs.setChecked(False)
+    assert shown() == ["AZ1"]
+    page.params = ReportParams(date(2026, 4, 1), date(2026, 4, 30))
+    page.refresh()
+    assert not page.without_costs.isVisible()
 
 
 def test_the_warehouse_button_opens_the_report(year_window):

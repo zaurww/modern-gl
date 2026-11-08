@@ -119,11 +119,22 @@ def waiting_lines(
 
 
 def waiting_expenses(
-    conn: Connection, company_id: int, exclude_document_id: int | None = None
+    conn: Connection,
+    company_id: int,
+    exclude_document_id: int | None = None,
+    *,
+    only_waiting: bool = False,
 ) -> list[WaitingExpense]:
-    """All a batch can take: purchases' services, then postings typed in the journal."""
+    """All a batch can take: purchases' services, then postings typed in the journal or
+    made by the bank. `only_waiting`: only what sits on an account of procurement."""
     waiting = _waiting_accounts(conn, company_id)
-    return waiting_lines(conn, company_id, exclude_document_id) + [
+    lines = waiting_lines(conn, company_id, exclude_document_id)
+    if only_waiting:
+        lines = [row for row in lines if row.waits]
+    sources = cost_sources(
+        conn, company_id, exclude_document_id, debit_accounts=waiting if only_waiting else None
+    )
+    return lines + [
         WaitingExpense(
             source.doc_date,
             source.subconto,
@@ -136,19 +147,21 @@ def waiting_expenses(
             source.debit_account_id in waiting,
             source=(source.document_id, source.line_no),
         )
-        for source in cost_sources(conn, company_id, exclude_document_id)
+        for source in sources
     ]
 
 
 @attention_source(attention.WAITING_EXPENSES)
 def expenses_waiting_a_batch(conn: Connection, company_id: int, day: str) -> list[Attention]:
-    """«Bu gün»: services of purchases that wait on 15 for a batch: until then they are in
-    no item's cost."""
-    rows = [row for row in waiting_lines(conn, company_id) if row.waits and row.doc_date <= day]
+    """«Bu gün»: what waits on 15 for a batch, from a purchase or the bank: until then it is
+    in no item's cost."""
+    rows = [
+        row for row in waiting_expenses(conn, company_id, only_waiting=True) if row.doc_date <= day
+    ]
     if not rows:
         return []
     amount = sum(row.left for row in rows)
-    return [Attention(tr("Услуги ждут партии"), len(rows), ("inventory",), amount)]
+    return [Attention(tr("Расходы ждут партии"), len(rows), ("inventory",), amount)]
 
 
 def cost_sources(
@@ -157,11 +170,19 @@ def cost_sources(
     exclude_document_id: int | None = None,
     *,
     only_left: bool = True,
+    debit_accounts: set[int] | None = None,
 ) -> list[CostSource]:
     """Posted GL postings of the common book, not made by the warehouse, with something
     left to allocate (posted landed cost documents other than `exclude_document_id` count,
     as when posting),
-    newest first. `only_left=False`: also those allocated in full."""
+    newest first. `only_left=False`: also those allocated in full. `debit_accounts`: only
+    what is debited to them."""
+    if debit_accounts is not None and not debit_accounts:
+        return []
+    accounts = sorted(debit_accounts or ())
+    on_accounts = (
+        f"AND p.debit_account_id IN ({', '.join('?' * len(accounts))})" if accounts else ""
+    )
     rows = conn.execute(
         f"""
         SELECT p.document_id, p.line_no, d.doc_date, d.number, p.amount,
@@ -179,12 +200,13 @@ def cost_sources(
         JOIN accounts da ON da.id = p.debit_account_id
         JOIN accounts ca ON ca.id = p.credit_account_id
         WHERE p.company_id = ? AND d.status = 'posted' AND l.code = 'common' AND p.amount > 0
+          {on_accounts}
           AND NOT EXISTS (SELECT 1 FROM document_owners o
                           WHERE o.company_id = d.company_id AND o.document_id = d.id
                             AND o.module = 'inventory' AND o.role = 'made')
         ORDER BY d.doc_date DESC, d.number DESC, p.line_no
         """,
-        (exclude_document_id, company_id),
+        (exclude_document_id, company_id, *accounts),
     )
     return [
         CostSource(

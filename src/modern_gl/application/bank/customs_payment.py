@@ -18,6 +18,7 @@ from modern_gl.application.bank.operations import (
     load_bank_operation,
 )
 from modern_gl.application.common import Subconto, fill_subconto
+from modern_gl.application.default_accounts import LANDED_COST, default_account
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import BATCH_EXPENSES_ACCOUNT, INPUT_VAT
 from modern_gl.domain.errors import ValidationError
@@ -121,12 +122,7 @@ class CustomsPaymentCommands(VatDepositCommands):
     def _customs_lines(self, company_id: int, payment: CustomsPayment) -> list[BankLine]:
         lines = []
         if payment.fees:
-            account = self.ledger.account_role(company_id, BATCH_EXPENSES_ACCOUNT)
-            if account is None:
-                raise ValidationError(
-                    tr("укажите счёт дополнительных расходов в настройках склада")
-                )
-            lines.append(BankLine(account, payment.fees))
+            lines.append(BankLine(self._waiting_account(company_id), payment.fees))
         if payment.terminal:
             sc = self._party_side(company_id, payment.terminal_party, payment)
             lines.append(BankLine(payment.settlement_account_id, payment.terminal, sc))
@@ -138,6 +134,25 @@ class CustomsPaymentCommands(VatDepositCommands):
                 BankLine(payment.settlement_account_id, payment.vat, sc, payment.declaration)
             )
         return lines
+
+    def _waiting_account(self, company_id: int) -> int:
+        """Where a batch's expenses wait: the settings' account or 15; a company without
+        either gets 15 (without a code when 15 is something else) and keeps it in the settings."""
+        found = default_account(self.ledger, company_id, LANDED_COST)
+        if found is not None:
+            return found
+        taken = self.conn.execute(
+            "SELECT 1 FROM accounts WHERE company_id = ? AND code = '15'", (company_id,)
+        ).fetchone()
+        made = self.ledger.add_account(
+            company_id,
+            None if taken else "15",
+            trd("Заготовление материальных ценностей"),
+            account_class="asset",
+            account_type="inventory",
+        )
+        self.ledger.set_account_role(company_id, BATCH_EXPENSES_ACCOUNT, made)
+        return made
 
     def _party_side(self, company_id: int, party: int | None, payment: CustomsPayment) -> Subconto:
         if party is None:

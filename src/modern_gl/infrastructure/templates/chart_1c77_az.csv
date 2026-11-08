@@ -13,7 +13,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 10.5;Ehtiyat hissələri;10;;asset;;;item,warehouse;
 10.9;İnventar və təsərrüfat ləvazimatı;10;;asset;;;item,warehouse;
 14;Maddi sərvətlərin dəyərinin azalmasına görə ehtiyatlar;;;asset;1;;;
-15;Maddi sərvətlərin tədarükü və əldə edilməsi;;;asset;;;;
+15;Maddi sərvətlərin tədarükü və əldə edilməsi;;;asset;;;;;batch_expenses_account
 16;Maddi sərvətlərin dəyərində kənarlaşmalar;;;asset;;1;;
 19;Alınmış sərvətlər üzrə ƏDV;;1;asset;;;;
 19.1;Əsas vəsaitlərin alınması üzrə ƏDV;19;;asset;;;counterparty;

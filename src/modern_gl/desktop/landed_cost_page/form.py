@@ -85,36 +85,15 @@ class LandedCostForm(DocumentShell, PageWidget):
         meta = QHBoxLayout()
         self.date = date_edit(self.s.working_date)
         self.date.setFixedWidth(130)
-        self.method = PickBox()
-        self.method.setFixedWidth(170)
-        for method, title in METHODS:
-            self.method.addItem(tr(title), method)
-        self.method.setCurrentIndex(0)
-        for text, widget in ((tr("Дата"), self.date), (tr("Распределение"), self.method)):
-            label = caption(text)
-            meta.addWidget(label)
-            meta.addWidget(widget)
-            meta.addSpacing(12)
+        meta.addWidget(caption(tr("Дата")))
+        meta.addWidget(self.date)
         meta.addStretch(1)
         root.addLayout(meta)
 
     def _build_tables(self, root: QVBoxLayout) -> None:
-        """The costs of the batch and the receipts they are spread over."""
-        charges_bar = QHBoxLayout()
-        charges_title = QLabel(tr("Расходы"))
-        charges_title.setFont(fonts().heading)
-        charges_bar.addWidget(charges_title, 1)
-        self.btn_add_charge = button(tr("+ Расход"), "flat", "Ins")
-        self.btn_from_gl = button(tr("+ Ждущие расходы…"), "flat")
-        charges_bar.addWidget(self.btn_add_charge)
-        charges_bar.addWidget(self.btn_from_gl)
-        root.addLayout(charges_bar)
-        self.charges = ChargesModel(self.s, [], read_only=False)
-        self.charges_table = LinesTable(self.charges, self.delegate)
-        root.addWidget(self.charges_table, 1)
-
+        """In the order one thinks: the goods, what fell on them, how it is spread."""
         batch_bar = QHBoxLayout()
-        batch_title = QLabel(tr("Партия"))
+        batch_title = QLabel(tr("1. Какой товар"))
         batch_title.setFont(fonts().heading)
         batch_bar.addWidget(batch_title, 1)
         self.btn_add_receipts = button(tr("+ Поступления…"), "flat")
@@ -123,6 +102,41 @@ class LandedCostForm(DocumentShell, PageWidget):
         self.targets = TargetsModel([], read_only=False)
         self.targets_table = LinesTable(self.targets, self.delegate)
         root.addWidget(self.targets_table, 1)
+
+        charges_bar = QHBoxLayout()
+        charges_title = QLabel(tr("2. Какие расходы"))
+        charges_title.setFont(fonts().heading)
+        charges_bar.addWidget(charges_title, 1)
+        self.btn_from_gl = button(
+            tr("+ Ждущие расходы…"),
+            "flat",
+            tr("Расходы, которые уже введены в покупках или банке"),
+        )
+        self.btn_add_charge = button(
+            tr("+ Расход вручную"),
+            "flat",
+            tr("Этого расхода ещё нет в книгах: ни в покупках, ни в банке"),
+        )
+        charges_bar.addWidget(self.btn_from_gl)
+        charges_bar.addWidget(self.btn_add_charge)
+        root.addLayout(charges_bar)
+        self.charges = ChargesModel(self.s, [], read_only=False)
+        self.charges_table = LinesTable(self.charges, self.delegate)
+        root.addWidget(self.charges_table, 1)
+
+        method_bar = QHBoxLayout()
+        method_title = QLabel(tr("3. Как распределить"))
+        method_title.setFont(fonts().heading)
+        method_bar.addWidget(method_title)
+        method_bar.addSpacing(12)
+        self.method = PickBox()
+        self.method.setFixedWidth(170)
+        for method, title in METHODS:
+            self.method.addItem(tr(title), method)
+        self.method.setCurrentIndex(0)
+        method_bar.addWidget(self.method)
+        method_bar.addStretch(1)
+        root.addLayout(method_bar)
 
     def _build_summary(self, root: QVBoxLayout) -> None:
         hint = SEPARATOR.join([legend(*HINT), *(tr(t) for t in HINT_TYPED), legend("post")])

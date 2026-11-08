@@ -16,12 +16,14 @@ from modern_gl.application.inventory import (
     LandedCostTarget,
     ReceiptLine,
 )
-from modern_gl.application.ledger import Ledger
+from modern_gl.application.ledger import Ledger, PostingInput
 from modern_gl.desktop.landed_cost_page import ChargeRow, LandedCostPage
 from modern_gl.desktop.landed_cost_page import page as page_module
 from modern_gl.desktop.landed_cost_page.waiting_expenses import WaitingExpensesDialog
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.widgets import money
 from modern_gl.domain.errors import ValidationError
+from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, connect
 from modern_gl.reporting.inventory import waiting_expenses, waiting_lines
 from modern_gl.reporting.inventory.costs import expenses_waiting_a_batch
@@ -305,6 +307,23 @@ def test_bu_gun_tells_what_waits(shop):
     (row,) = expenses_waiting_a_batch(shop.conn, shop.cid, "2026-10-01")
     assert (row.count, row.amount) == (2, 67_000)
     assert expenses_waiting_a_batch(shop.conn, shop.cid, "2026-09-01") == []
+
+
+def test_bu_gun_and_the_button_count_what_came_outside_a_purchase(shop, qtbot):
+    """Purchases wait with 640.00 + 30.00; a posting on 15 adds 200.00: 3 rows, 870.00."""
+    shop.ledger.post_new(
+        shop.cid,
+        "2026-09-29",
+        [PostingInput(shop.procurement, shop.payable, "200", (), [shop.customs])],
+        "Gömrük yığımı",
+    )
+    (row,) = expenses_waiting_a_batch(shop.conn, shop.cid, "2026-10-01")
+    assert (row.count, row.amount) == (3, 87_000)
+    page = LandedCostPage(session_of(shop))
+    qtbot.addWidget(page)
+    assert page.btn_from_gl.text() == tr(
+        "+ Ждущие расходы · {n} · {amount}", n=3, amount=money(87_000, blank_zero=False)
+    )
 
 
 def session_of(shop: Shop) -> Session:

@@ -18,6 +18,7 @@ AMOUNT = "amount"
 CURRENCY_AMOUNT = "currency_amount"
 RATE = "rate"
 VAT = "vat"
+SOURCE = "source"
 MEMO = "memo"
 CHARGE_HEADERS = {
     COST_TYPE: "Статья",
@@ -29,6 +30,7 @@ CHARGE_HEADERS = {
     RATE: "Курс",
     AMOUNT: "Сумма",
     VAT: "НДС",
+    SOURCE: N_("Откуда"),
     MEMO: "Комментарий",
 }
 
@@ -82,6 +84,13 @@ class ChargeRow:
     def taken(self) -> bool:
         """It came from the books: its account is not for typing."""
         return self.source is not None or self.source_line is not None
+
+    @property
+    def origin(self) -> str:
+        """Where it came from, for the column «Откуда»."""
+        if self.source_line is not None:
+            return N_("Покупка")
+        return N_("Проводка") if self.source is not None else N_("Вручную")
 
     def recalculate(self) -> None:
         if self.currency_id is not None:

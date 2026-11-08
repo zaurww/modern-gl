@@ -29,6 +29,7 @@ from modern_gl.desktop.landed_cost_page.columns import (
     SC2,
     SC3,
     SHARE,
+    SOURCE,
     UNIT_COST,
     VAT,
     WAREHOUSE,
@@ -51,6 +52,7 @@ from modern_gl.desktop.landed_cost_page.waiting_expenses import (
 )
 from modern_gl.desktop.new_cell_value import add_typed_value
 from modern_gl.desktop.posting_preview import document_postings
+from modern_gl.desktop.preferences import prefs
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
@@ -119,10 +121,19 @@ class LandedCostPage(LandedCostForm):
         return ("inventory_doc", self.document_id) if self.doc else ("new_inventory", id(self))
 
     def menu_items(self) -> list[MenuItem]:
-        """«⋯»: the story of the document's postings (D213)."""
-        if self.doc is None or self.doc.gl_document_id is None:
-            return []
-        return [self.history_item(self.s, self.doc.gl_document_id, self.title())]
+        """«⋯»: the accounts of typed expenses, the story of the document's postings (D213)."""
+        items: list[MenuItem] = []
+        if not self.s.stock_only:
+            mark = "✓  " if prefs().landed_accounts_shown() else "    "
+            items.append((mark + tr("Показывать счета"), self._toggle_accounts))
+        if self.doc is not None and self.doc.gl_document_id is not None:
+            items.append(self.history_item(self.s, self.doc.gl_document_id, self.title()))
+        return items
+
+    def _toggle_accounts(self) -> None:
+        self._finish_editing()
+        prefs().set_landed_accounts_shown(not prefs().landed_accounts_shown())
+        self._set_models(self.charges.rows, self.targets.rows, self.charges.read_only)
 
     def title(self) -> str:
         operation = tr("Дополнительные расходы")
@@ -157,6 +168,7 @@ class LandedCostPage(LandedCostForm):
                 RATE: 80,
                 AMOUNT: 100,
                 VAT: 90,
+                SOURCE: 90,
             },
             MEMO,
         )
@@ -174,6 +186,22 @@ class LandedCostPage(LandedCostForm):
         self.targets.changed.connect(self._changed)
         self._show_currency_columns()
         self._recalculate()
+        self._count_waiting()
+
+    def _count_waiting(self) -> None:
+        """The button says how much already waits: the first thing to take."""
+        if self.s.stock_only:  # no books to take from (D90)
+            return
+        rows = [row for row in self._waiting() if row.waits]
+        self.btn_from_gl.setText(
+            tr(
+                "+ Ждущие расходы · {n} · {amount}",
+                n=len(rows),
+                amount=money(sum(row.left for row in rows), blank_zero=False),
+            )
+            if rows
+            else tr("+ Ждущие расходы…")
+        )
 
     def _recalculate(self) -> None:
         method = str(self.method.currentData())
@@ -236,6 +264,7 @@ class LandedCostPage(LandedCostForm):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             for row in dialog.chosen():
                 self.charges.insert_row(charge_of(row))
+            self._count_waiting()
 
     def _waiting(self) -> list[WaitingExpense]:
         """What can be taken, without what this batch has already."""
@@ -260,6 +289,7 @@ class LandedCostPage(LandedCostForm):
             current = self.charges_table.currentIndex()
             if current.isValid() and not self.charges.read_only:
                 self.charges.remove_row(current.row())
+                self._count_waiting()
         elif self.targets_table.hasFocus():
             current = self.targets_table.currentIndex()
             if current.isValid() and not self.targets.read_only:
