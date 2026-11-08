@@ -168,12 +168,17 @@ class ConversionPage(ConversionForm):
         self.btn_post.setVisible(not ro)
 
     def menu_items(self) -> list[MenuItem]:
+        history = (
+            [self.history_item(self.s, self.doc.document_id, self.title())]
+            if self.doc is not None
+            else []
+        )
         if self.s.read_only:  # viewing (D80)
-            return []
+            return history
         items: list[MenuItem] = [(tr("Счета конвертации…"), self.edit_accounts)]
         if self.doc is not None:
             items.append((tr("Копировать"), self._copy))
-        return items
+        return items + history
 
     def edit_accounts(self, missing: str | None = None) -> bool:
         dialog = ConversionAccountsDialog(self.s, self, missing)

@@ -27,6 +27,7 @@ from modern_gl.application.bank import (
     next_to_check,
 )
 from modern_gl.application.currencies import missing_rates_text
+from modern_gl.application.document_kinds import document_title
 from modern_gl.application.posting_preview import PostingPreview
 from modern_gl.application.queries import load_document
 from modern_gl.desktop.bank_operation_page.bank import BankAccountPart
@@ -125,10 +126,8 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
     def title(self) -> str:
         if self.doc is None:
             title = tr("Новый приход") if self.direction_value == IN else tr("Новый расход")
-        elif self.doc.direction == IN:
-            title = tr("Приход №{n}", n=self.doc.number)
         else:
-            title = tr("Расход №{n}", n=self.doc.number)
+            title = self._document_title()
         return title + (" •" if self.dirty else "")
 
     def is_dirty(self) -> bool:
@@ -229,12 +228,19 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         self.btn_save.setVisible(not ro and not self.posted)  # Ctrl+S reposts it
         self.btn_post.setVisible(not ro)
 
+    def _document_title(self) -> str:
+        """«Bank məxarici №13» — as the journal and the reports call it (D213)."""
+        assert self.doc is not None
+        return document_title(f"bank_{self.doc.direction}", self.doc.number)
+
     def menu_items(self) -> list[MenuItem]:
         items: list[MenuItem] = []
         if not self.read_only:  # a fee taken with the payment: rare, so here and F6
             items.append((tr("Добавить комиссию банка") + "  (F6)", self.add_fee))
         if self.doc is not None and not self.s.read_only:
             items.append((tr("Копировать"), self._copy))
+        if self.doc is not None:
+            items.append(self.history_item(self.s, self.doc.document_id, self._document_title()))
         return items
 
     def _copy(self) -> None:

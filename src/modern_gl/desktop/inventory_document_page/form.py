@@ -122,7 +122,7 @@ class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
     # ---- the fields ------------------------------------------------------------------
 
     def _build_head(self, root: QVBoxLayout) -> None:
-        self.build_head(root, tr("Комментарий складского документа"))
+        self.build_head(root, tr("Комментарий складского документа"), self.menu_items)
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()

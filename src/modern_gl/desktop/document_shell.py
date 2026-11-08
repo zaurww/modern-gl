@@ -15,6 +15,9 @@ from collections.abc import Callable, Sequence
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
 
+from modern_gl.application.history import document_history
+from modern_gl.desktop.history_dialog import HistoryDialog
+from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import Chip, MenuItem, button, caption, more_button
 from modern_gl.i18n import tr
@@ -33,6 +36,20 @@ class DocumentShell:
     total: QLabel
     btn_save: QPushButton
     btn_post: QPushButton
+
+    def menu_items(self) -> list[MenuItem]:
+        """What «⋯» offers for the document as it is now (the page answers)."""
+        return []
+
+    def history_item(self, session: Session, gl_document_id: int | None, title: str) -> MenuItem:
+        """«История изменений» of the document's postings — every document has one."""
+
+        def show() -> None:
+            if gl_document_id is not None:
+                events = document_history(session.conn, session.company_id, gl_document_id)
+                HistoryDialog(title, events, self if isinstance(self, QWidget) else None).exec()
+
+        return (tr("История изменений"), show)
 
     def build_head(
         self,
@@ -56,6 +73,8 @@ class DocumentShell:
         top.addWidget(self.status, 0, Qt.AlignmentFlag.AlignVCenter)
         if menu is not None:
             self.btn_more = more_button(menu, tr("Действия с документом"))
+            # off the Tab path: Enter and Tab go from field to field (D106)
+            self.btn_more.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             top.addWidget(self.btn_more)
         root.addLayout(top)
         return top

@@ -79,7 +79,7 @@ class LandedCostForm(DocumentShell, PageWidget):
         raise NotImplementedError
 
     def _build_head(self, root: QVBoxLayout) -> None:
-        self.build_head(root, tr("Партия: название или номер инвойса"))
+        self.build_head(root, tr("Партия: название или номер инвойса"), self.menu_items)
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()

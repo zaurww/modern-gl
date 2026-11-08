@@ -44,7 +44,6 @@ from modern_gl.desktop.widgets import (
     date_edit,
     edited_date,
     money,
-    more_button,
 )
 from modern_gl.i18n import tr
 
@@ -108,7 +107,7 @@ class DocumentForm(GridEditing, DocumentShell, PageWidget):
 
     def _build_head(self, root: QVBoxLayout) -> None:
         """Title row: the memo is the document's title, like a task name in Things."""
-        self.build_head(root, tr("Содержание операции"))
+        self.build_head(root, tr("Содержание операции"), self.menu_items)
 
     def _build_meta(self, root: QVBoxLayout) -> None:
         meta = QHBoxLayout()
@@ -179,12 +178,13 @@ class DocumentForm(GridEditing, DocumentShell, PageWidget):
         _, self.total = self.add_figure(summary, tr("Итого"), main=True)
 
     def _build_actions(self, root: QVBoxLayout) -> None:
-        # The rest of what can be done with the document waits in "⋯" (see menu_items).
-        self.btn_more = more_button(self.menu_items, tr("Действия с документом"))
+        # as in every document form (D213): the rest waits in «⋯» in the head
+        self.btn_delete = button(tr("Удалить"), "danger")
+        self.btn_unpost = button(tr("Отменить проведение"), "flat")
         # Postings made by a warehouse document are corrected there: one click away.
         self.btn_source = button("", "flat", tr("Проводки сформированы складским документом"))
         self.btn_source.hide()
-        self.build_actions(root, [self.btn_more, self.btn_source])
+        self.build_actions(root, [self.btn_delete, self.btn_unpost, self.btn_source])
 
     # ---- what the parts ask of the fields --------------------------------------------
 

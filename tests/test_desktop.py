@@ -670,8 +670,8 @@ def test_delete_mistaken_storno_from_its_page(window, monkeypatch):
     )
     current_page(window).reverse()
     storno_page = current_page(window)
-    actions = [item[0] for item in storno_page.menu_items() if item]
-    assert "Удалить" in actions and "Отменить проведение" not in actions
+    # a storno is deleted, not unposted: the buttons under the form say so (D213)
+    assert not storno_page.btn_delete.isHidden() and storno_page.btn_unpost.isHidden()
     monkeypatch.setattr(
         QMessageBox, "question", staticmethod(lambda *a, **k: QMessageBox.StandardButton.Yes)
     )

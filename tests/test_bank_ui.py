@@ -71,7 +71,7 @@ def test_payment_to_a_supplier_found_by_voen(qtbot, session):
 
     assert page.save(post=True)
     assert page.doc is not None and page.doc.status == "posted"
-    assert page.title() == f"Расход №{page.doc.number}"
+    assert page.title() == f"Банк, расход №{page.doc.number}"
     [p] = load_document(session.conn, session.company_id, page.doc.document_id).postings
     assert (p.debit_account_id, p.credit_account_id, p.amount, p.invoice) == (
         acc(session, "60.1"),

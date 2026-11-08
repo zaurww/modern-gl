@@ -42,6 +42,7 @@ from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.shortcuts import bind
 from modern_gl.desktop.widgets import (
+    MenuItem,
     edited_date,
     enter_goes_on,
     money,
@@ -124,6 +125,12 @@ class InventoryDocumentPage(
     @property
     def key(self):
         return ("inventory_doc", self.document_id) if self.doc else ("new_inventory", id(self))
+
+    def menu_items(self) -> list[MenuItem]:
+        """«⋯»: the story of the document's postings (D213)."""
+        if self.doc is None or self.doc.gl_document_id is None:
+            return []
+        return [self.history_item(self.s, self.doc.gl_document_id, self.title())]
 
     def title(self) -> str:
         operation = kind_name(self.doc_type)
@@ -230,6 +237,7 @@ class InventoryDocumentPage(
         self._connect_goods()
 
     def _apply_mode(self, read_only: bool) -> None:
+        self.btn_more.setVisible(bool(self.menu_items()))  # a new one: nothing yet
         self.memo.setReadOnly(read_only)
         self.memo.setEnabled(not read_only)
         self.date.setEnabled(not read_only)

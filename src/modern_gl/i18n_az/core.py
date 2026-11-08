@@ -1248,8 +1248,6 @@ AZ: dict[str, str] = {
     "Деньги ушли со счёта": "Pul hesabdan çıxıb",
     "Новый приход": "Yeni mədaxil",
     "Новый расход": "Yeni məxaric",
-    "Приход №{n}": "Daxilolma №{n}",
-    "Расход №{n}": "Məxaric №{n}",
     "Удалить операцию №{n}?": "Əməliyyat №{n} silinsin?",
     "Операция №{n} проведена": "Əməliyyat №{n} keçirildi",
     "Счёт…": "Hesab…",

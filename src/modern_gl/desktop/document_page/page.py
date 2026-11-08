@@ -63,6 +63,8 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
     def _connect(self) -> None:
         self.btn_rates.clicked.connect(self.load_rates)
         self.btn_source.clicked.connect(self._open_source)
+        self.btn_delete.clicked.connect(self.delete)
+        self.btn_unpost.clicked.connect(self.unpost)
         self.btn_save.clicked.connect(lambda: self.save(post=False))
         self.btn_post.clicked.connect(lambda: self.save(post=True))
         self.amount.textEdited.connect(self._amount_edited)
@@ -170,6 +172,9 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
         self.btn_save.setVisible(not read_only and not posted)  # Ctrl+S reposts it
         self.btn_post.setVisible(not read_only)
         self.btn_more.setVisible(bool(self.menu_items()))  # viewing: often nothing to do
+        own = self._own_posted_state()
+        self.btn_delete.setVisible(own is not None)
+        self.btn_unpost.setVisible(own is True)
         source = self.doc.inventory_number if self.doc else None
         self.btn_source.setVisible(source is not None)
         if source is not None:
@@ -178,6 +183,17 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
             self.amount.setEnabled(False)
         self.hint.setVisible(not read_only)
         self._update_total()
+
+    def _own_posted_state(self) -> bool | None:
+        """None — nothing to delete here (new, viewing, a module's document); else whether
+        it can be unposted (posted, not a storno)."""
+        doc = self.doc
+        if doc is None or self.s.read_only:
+            return None
+        made = (doc.inventory_number, doc.conversion_id, doc.bank_operation_id)
+        if any(owner is not None for owner in made):  # corrected in the module
+            return None
+        return doc.status == "posted" and doc.reversal_of is None
 
     def menu_items(self) -> list[MenuItem]:
         """What "⋯" offers for the document as it is now."""
@@ -201,13 +217,11 @@ class DocumentPage(RatesPart, TemplatesPart, ClipboardPart, FillPart):
             ]
         posted = doc.status == "posted"
         items: list[MenuItem] = [] if self.model.read_only else [fill]
-        if posted and doc.reversal_of is None:
-            items.append((tr("Отменить проведение"), self.unpost))
         items.append(copy)
         items.append((tr("Сделать шаблоном"), self.save_as_template))
         if posted and doc.reversal_of is None and doc.reversed_by is None:
             items += [None, (tr("Сторно…"), self.reverse)]
-        return [*items, history, None, (tr("Удалить"), self.delete)]
+        return [*items, history]
 
     def show_history(self) -> None:
         if self.doc is not None:
