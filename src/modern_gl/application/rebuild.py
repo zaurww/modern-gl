@@ -11,6 +11,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol
 
+from modern_gl.application.accountable import AccountableModule
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.ledger import Ledger
 from modern_gl.infrastructure.db import transaction
@@ -26,6 +27,7 @@ def module_rebuilders(ledger: Ledger) -> dict[str, Rebuilder]:
         "bank": ledger.bank,
         "conversion": ledger.conversion,
         "inventory": Inventory(ledger.conn, ledger.actor, ledger=ledger),
+        "accountable": AccountableModule(ledger.conn, ledger.actor, ledger=ledger),
     }
 
 

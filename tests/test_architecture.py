@@ -42,11 +42,12 @@ CORE = [
 MODULE_TABLE = re.compile(
     r"\b(inventory_\w+|landed_cost_\w+|stock_\w+|warehouses|bank_operation\w*|bank_statements|"
     r"bank_account_details|"
-    r"currency_conversions|conversion_fees|eqaime_\w+)\b"
+    r"currency_conversions|conversion_fees|eqaime_\w+|advance_report\w*)\b"
 )
 MODULE_CODE = (
     "modern_gl.application.inventory",
     "modern_gl.application.bank",
+    "modern_gl.application.accountable",
     "modern_gl.application.conversion",
     "modern_gl.application.eqaime",
     "modern_gl.application.eqaime.portal",

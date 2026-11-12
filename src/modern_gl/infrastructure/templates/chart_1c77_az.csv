@@ -57,7 +57,7 @@ code;name;parent;group;class;contra;two_sided;subconto;currency;role
 68.8;Digər vergi və rüsumlar;68;;liability;;1;;
 69;Sosial sığorta və təminat üzrə hesablaşmalar;;;liability;;1;;
 70;Əməyin ödənişi üzrə heyətlə hesablaşmalar;;;liability;;1;employee?;
-71;Təhtəlhesab şəxslərlə hesablaşmalar;;;asset;;1;employee;
+71;Təhtəlhesab şəxslərlə hesablaşmalar;;;asset;;1;employee;;accountable
 73;Digər əməliyyatlar üzrə heyətlə hesablaşmalar;;;asset;;1;employee;
 75;Təsisçilərlə hesablaşmalar;;1;liability;;1;;
 75.1;Nizamnamə kapitalına qoyuluşlar üzrə hesablaşmalar;75;;asset;;1;counterparty;

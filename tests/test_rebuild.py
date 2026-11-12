@@ -50,7 +50,7 @@ def test_every_module_that_makes_gl_documents_can_rebuild_them(ledger):
         if "VIEW document_owners" in p.read_text(encoding="utf-8")
     ][-1]
     makers = set(re.findall(r"'(\w+)'(?: AS module)?, 'made'", view))
-    assert makers == {"bank", "conversion", "inventory"}
+    assert makers == {"accountable", "bank", "conversion", "inventory"}
     assert set(module_rebuilders(ledger)) == makers
 
 

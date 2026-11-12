@@ -36,6 +36,7 @@ KIND_NAMES = {
     "bank_out": N_("Банк, расход"),
     "cash_in": N_("Приходный кассовый ордер"),
     "cash_out": N_("Расходный кассовый ордер"),
+    "advance_report": N_("Авансовый отчёт"),
 }
 
 # what a query joins to name its documents `d` (the aliases `own` and `ob` are taken)

@@ -41,6 +41,9 @@ BATCH_EXPENSES_ACCOUNT = "batch_expenses_account"
 # the program cannot tell is posted here, so the bank's balance meets the books; it is moved
 # to its account later. A company without one gets it on first need (76.9).
 UNIDENTIFIED = "unidentified"
+# Money given to an employee to spend for the company (71): issued from the cash desk,
+# accounted for by an advance report (D-new-advance-reports)
+ACCOUNTABLE = "accountable"
 ACCOUNT_ROLES = (
     INPUT_VAT,
     OPENING_BALANCE,
@@ -62,6 +65,7 @@ ACCOUNT_ROLES = (
     INCOMING_GIFT,
     BATCH_EXPENSES_ACCOUNT,
     UNIDENTIFIED,
+    ACCOUNTABLE,
 )
 # Without an account chosen for a role, the only account of this type plays it (D35).
 ROLE_TYPES = {
