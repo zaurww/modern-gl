@@ -231,11 +231,12 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
     def _document_title(self) -> str:
         """«Bank məxarici №13» — as the journal and the reports call it (D213)."""
         assert self.doc is not None
-        return document_title(f"bank_{self.doc.direction}", self.doc.number)
+        place = "cash" if self.is_cash else "bank"
+        return document_title(f"{place}_{self.doc.direction}", self.doc.number)
 
     def menu_items(self) -> list[MenuItem]:
         items: list[MenuItem] = []
-        if not self.read_only:  # a fee taken with the payment: rare, so here and F6
+        if not self.read_only and not self.is_cash:  # a fee with the payment: rare, here and F6
             items.append((tr("Добавить комиссию банка") + "  (F6)", self.add_fee))
         if self.doc is not None and not self.s.read_only:
             items.append((tr("Копировать"), self._copy))

@@ -49,7 +49,19 @@ class BankAccountPart(BankOperationForm):
         self._fit_currency()
         self._show_bank()
         self._kind_visibility()
+        self._show_cash()
         self._changed()
+
+    def _show_cash(self) -> None:
+        """A cash desk: no bank — no statement reference, no bank fee (F6)."""
+        cash = self.is_cash
+        self.bank_caption.setText(tr("Касса") if cash else tr("Банк"))
+        self.reference.setVisible(not cash)
+        self.keys_hint.setText(
+            tr("Enter — дальше  ·  Ctrl+Enter — провести")
+            if cash
+            else tr("Enter — дальше  ·  Ctrl+Enter — провести  ·  F6 — комиссия")
+        )
 
     def _bank_subconto_changed(self, *_) -> None:
         self._fit_currency()

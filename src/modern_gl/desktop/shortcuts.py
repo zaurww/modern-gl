@@ -68,7 +68,7 @@ KEYS: dict[str, Key] = {
         _k("go_opening", "Ctrl+9", Scope.WINDOW, N_("Начальные остатки")),
         _k("go_purchases", "Ctrl+0", Scope.WINDOW, N_("Покупки")),
         _k("go_sales", "Ctrl+-", Scope.WINDOW, N_("Продажи")),
-        _k("go_bank", "Ctrl+B", Scope.WINDOW, N_("Банк")),
+        _k("go_bank", "Ctrl+B", Scope.WINDOW, N_("Банк и касса")),
         # ---- a page and everything in it ------------------------------------------------
         _k("save", "Ctrl+S", Scope.PAGE, N_("сохранить")),
         _k("post", CTRL_ENTER, Scope.PAGE, N_("провести")),
