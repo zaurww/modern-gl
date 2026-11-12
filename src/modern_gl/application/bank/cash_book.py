@@ -1,4 +1,4 @@
-"""The papers of a cash desk (D-new-cash): a cash order for a document that moved the
+"""The papers of a cash desk (D216): a cash order for a document that moved the
 cash — «Kassa mədaxil / məxaric orderi» — and the cash book, a sheet per day with its
 opening, lines, totals and closing. Read from the statement of the cash desk, so a
 journal entry on 50 gets its order as a cash operation does; drafts are not on paper."""

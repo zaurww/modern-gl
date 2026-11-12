@@ -1,4 +1,4 @@
-"""«Подотчётные лица» and the advance report form (D-new-advance-reports). Kapital AZN has
+"""«Подотчётные лица» and the advance report form (D218). Kapital AZN has
 10 000.00 from 01.03; 02.03 Rəşad is given 500.00 from it (Dt 71 [Rəşad] / Kt 51). His
 report of 05.03: 26 «Yanacaq» 320.00 — 180.00 is left to return."""
 

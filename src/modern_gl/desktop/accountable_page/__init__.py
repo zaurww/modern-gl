@@ -1,4 +1,4 @@
-"""«Подотчётные лица» and the advance report form (D-new-advance-reports)."""
+"""«Подотчётные лица» and the advance report form (D218)."""
 
 from __future__ import annotations
 

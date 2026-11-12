@@ -1,4 +1,4 @@
-"""The papers of a cash desk from the page (D-new-cash): «⋯ → Кассовая книга в Excel» for
+"""The papers of a cash desk from the page (D216): «⋯ → Кассовая книга в Excel» for
 the days shown, «⋯ → Кассовый ордер в Excel» for a line. Reading only: a company open for
 viewing prints them too."""
 

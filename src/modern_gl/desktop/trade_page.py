@@ -283,7 +283,7 @@ class TradePage(ReportPage):
 
     @staticmethod
     def _invoice(r: TradeDocument) -> str:
-        return tr("ждёт e-qaimə") if r.awaits_invoice else r.invoice
+        return tr("ждёт e-qaimə") if r.awaits_invoice else r.invoice or r.basis_note
 
     @staticmethod
     def _status(r: TradeDocument) -> str:

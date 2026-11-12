@@ -24,7 +24,7 @@ from modern_gl.application.inventory.model import (
 )
 from modern_gl.domain.dates import iso_date
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.invoice import EQAIME, KINDS, normalize_invoice
+from modern_gl.domain.invoice import EQAIME, KINDS, basis_note, normalize_invoice
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import insert
 
@@ -130,6 +130,7 @@ class DraftCommands(InventoryBase):
             currency_rate=doc["currency_rate"],
             invoice=doc["invoice"] or "",
             invoice_kind=doc["invoice_kind"] or "",
+            basis_note=doc["basis_note"] or "",
             accruals=self._accruals(company_id, document_id),
             incoming_reason=doc["incoming_reason"],
             awaits_invoice=doc["awaits_invoice"] == 1,
@@ -221,23 +222,45 @@ class DraftCommands(InventoryBase):
         invoice: str,
         kind: str = EQAIME,
         awaits: bool = False,
+        note: str = "",
     ) -> None:
         """The receipt's e-qaimə, or the customs declaration of imported goods. `awaits`:
-        a purchase without a number waits for its e-qaimə (D119); a number ends the wait."""
+        a purchase without a number waits for its e-qaimə (D119); a number ends the wait.
+        `note`: the basis «Digər» — an act, a receipt… named in free text, kept on the
+        document only (D217)."""
         if kind not in KINDS:
             raise ValidationError(tr("неизвестный вид документа: {kind}", kind=kind))
         number = normalize_invoice(invoice)
+        basis = basis_note(note)
+        if basis is not None and (number is not None or awaits):
+            raise ValidationError(tr("у документа одно основание: e-qaimə или «Digər»"))
         self.conn.execute(
-            "UPDATE inventory_documents SET invoice = ?, invoice_kind = ?, awaits_invoice = ? "
-            "WHERE company_id = ? AND id = ?",
+            "UPDATE inventory_documents SET invoice = ?, invoice_kind = ?, awaits_invoice = ?, "
+            "basis_note = ? WHERE company_id = ? AND id = ?",
             (
                 number,
                 (kind or None) if number else None,
                 1 if awaits and number is None else 0,
+                basis,
                 company_id,
                 document_id,
             ),
         )
+
+    def _check_basis_vat(self, company_id: int, document_id: int) -> None:
+        """A purchase on «Digər» has no ƏDV to take: without an e-qaimə it is part of the
+        cost (D217)."""
+        row = self.conn.execute(
+            "SELECT d.basis_note, COALESCE(SUM(ABS(l.vat_amount)), 0) AS vat "
+            "FROM inventory_documents d LEFT JOIN inventory_lines l "
+            "ON l.company_id = d.company_id AND l.document_id = d.id "
+            "WHERE d.company_id = ? AND d.id = ? GROUP BY d.id, d.basis_note",
+            (company_id, document_id),
+        ).fetchone()
+        if row["basis_note"] is not None and row["vat"]:
+            raise ValidationError(
+                tr("покупка по «Digər» — без ƏDV: зачесть его можно только по e-qaimə")
+            )
 
     def _draft_warehouse(self, company_id: int, warehouse_id: int | None) -> int | None:
         return None if warehouse_id is None else self._warehouse(company_id, warehouse_id)["id"]

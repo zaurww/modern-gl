@@ -1,4 +1,4 @@
-"""Accountable persons and advance reports (D-new-advance-reports): money given to an
+"""Accountable persons and advance reports (D218): money given to an
 employee to spend for the company (71) and his report of what it went on. Reading —
 `people` (who owes what, one person's movements) and `model` (a report); writing —
 `AccountableModule`, built over a ledger as the warehouse is (`AccountableModule(conn,

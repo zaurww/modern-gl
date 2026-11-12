@@ -1,4 +1,4 @@
-"""The form of an advance report (D-new-advance-reports): who, the day, the lines — what
+"""The form of an advance report (D218): who, the day, the lines — what
 the money went on, as a postings table — and what it comes to: given before the report,
 spent, and what is left (returned to the cash desk) or overspent (paid out to him)."""
 

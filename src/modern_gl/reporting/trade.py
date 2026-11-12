@@ -29,6 +29,7 @@ class TradeDocument:
     amount: int  # without VAT; a return's is negative
     vat: int
     awaits_invoice: int = 0  # 1: a purchase whose e-qaimə comes later (D119)
+    basis_note: str = ""  # the basis «Digər»: an act, a receipt… (D217)
 
     @property
     def is_return(self) -> bool:
@@ -59,6 +60,7 @@ def trade_documents(
         f"""
         SELECT d.id, d.doc_type, d.number, d.doc_date, d.status, d.memo,
                COALESCE(d.invoice, '') AS invoice, d.awaits_invoice,
+               COALESCE(d.basis_note, '') AS basis_note,
                COALESCE((
                    SELECT string_agg(name, ', ') FROM (
                        SELECT DISTINCT c.name FROM inventory_line_counterparties c

@@ -1,4 +1,4 @@
-"""The papers of a cash desk as .xlsx to print and sign (D-new-cash): a cash order —
+"""The papers of a cash desk as .xlsx to print and sign (D216): a cash order —
 the order, and under a cut line the receipt for money taken in — and the cash book, a
 sheet per day. Forms like the act (`act_file`): merged title cells, thin borders, one
 page wide; the words in the company's language of documents (`trd`). The totals of a

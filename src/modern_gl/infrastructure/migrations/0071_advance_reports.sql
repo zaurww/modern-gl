@@ -1,4 +1,4 @@
--- Advance reports (D-new-advance-reports): an employee accounts for the money given to
+-- Advance reports (D218): an employee accounts for the money given to
 -- spend for the company (71). A document that builds its own GL postings, like a bank
 -- operation: the GL document carries the number, date, memo and status; these rows keep
 -- what was entered. Each line: Dt its account (an expense, a supplier paid…) / Kt the

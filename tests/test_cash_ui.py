@@ -1,4 +1,4 @@
-"""The cash desk on the page «Банк и касса» (D-new-cash): a cash desk once money moved on it,
+"""The cash desk on the page «Банк и касса» (D216): a cash desk once money moved on it,
 its days without a bank to reconcile with, the form without a deposit or a bank fee, the
 papers in Excel. 02.03: 500.00 from the founder to the cash desk (Dt 50 / Ct 80)."""
 

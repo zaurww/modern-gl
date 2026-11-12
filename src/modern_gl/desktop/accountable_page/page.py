@@ -1,4 +1,4 @@
-"""«Подотчётные лица» (D-new-advance-reports): every employee money moved for on the
+"""«Подотчётные лица» (D218): every employee money moved for on the
 accountable account (71), who owes what; a click — what moved for him in the period:
 issued, spent by advance reports, returned. «+ Авансовый отчёт» — the one blue button;
 money to and from him goes through «Банк и касса» (`cash`)."""

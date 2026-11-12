@@ -12,6 +12,20 @@ EQAIME, CUSTOMS = "", "customs"
 KINDS = (EQAIME, CUSTOMS)
 
 
+NOTE_LENGTH = 80
+
+
+def basis_note(text: str | None) -> str | None:
+    """The basis «Digər» as typed («Akt №5, 03.11»): free text, spaces trimmed; None for
+    an empty text."""
+    note = " ".join((text or "").split())
+    if not note:
+        return None
+    if len(note) > NOTE_LENGTH:
+        raise ValidationError(tr("основание длиннее {n} знаков: {text}", n=NOTE_LENGTH, text=note))
+    return note
+
+
 def normalize_invoice(text: str | None) -> str | None:
     """The number as the portal writes it: no spaces, upper case ("mt 2410 123" ->
     "MT2410123"); None for an empty text. A leading "№" is dropped."""

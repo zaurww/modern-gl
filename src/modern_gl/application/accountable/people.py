@@ -1,4 +1,4 @@
-"""The accountable persons (D-new-advance-reports): the account money given to employees
+"""The accountable persons (D218): the account money given to employees
 is kept on (71), who owes what on it, and what moved for one of them — issued from the
 cash desk or the bank, spent by an advance report, returned. Read from the postings, so
 an issue entered in the journal counts as one from the cash desk."""

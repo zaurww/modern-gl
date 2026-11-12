@@ -1,4 +1,4 @@
-"""Accountable persons and advance reports (D-new-advance-reports). Hand-calculated, March
+"""Accountable persons and advance reports (D218). Hand-calculated, March
 2026, the 1C 7.7 chart (71 «Расчёты с подотчётными лицами», subconto — the employee):
 
 01.03  journal: Dt 50 / Ct 80 [Учредитель]                       1 000.00

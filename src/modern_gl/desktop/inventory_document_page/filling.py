@@ -154,5 +154,5 @@ class FillingPart(InventoryDocumentForm):
     def _show_currency(self, currency_id: int | None, rate: int | None) -> None:
         raise NotImplementedError
 
-    def _show_basis(self, kind: str, number: str, awaits: bool = False) -> None:
+    def _show_basis(self, kind: str, number: str, awaits: bool = False, note: str = "") -> None:
         raise NotImplementedError

@@ -54,6 +54,7 @@ class ReceiptDraftCommands(StockCommands):
         invoice: str = "",
         invoice_kind: str = "",
         awaits_invoice: bool = False,
+        basis_note: str = "",
     ) -> int:
         """Save an editable receipt/opening document — or, with `incoming_reason`, a mədaxil
         without a purchase (D91) — without affecting stock or GL (`ReceiptHeader`)."""
@@ -70,6 +71,7 @@ class ReceiptDraftCommands(StockCommands):
             invoice,
             invoice_kind,
             awaits_invoice,
+            basis_note,
         )
         return self.save_receipt_draft(company_id, header, lines)
 
@@ -98,10 +100,12 @@ class ReceiptDraftCommands(StockCommands):
                 header.invoice if purchase else "",
                 header.invoice_kind,
                 awaits=purchase and header.awaits_invoice,
+                note=header.basis_note if purchase else "",
             )
             self._write_receipt_draft(
                 company_id, document_id, lines, header.credit_account_id, header.credit_subconto
             )
+            self._check_basis_vat(company_id, document_id)
             self._audit(
                 company_id,
                 "inventory_document",
@@ -128,6 +132,7 @@ class ReceiptDraftCommands(StockCommands):
         invoice: str = "",
         invoice_kind: str = "",
         awaits_invoice: bool = False,
+        basis_note: str = "",
     ) -> None:
         header = ReceiptHeader(
             doc_date,
@@ -141,6 +146,7 @@ class ReceiptDraftCommands(StockCommands):
             invoice=invoice,
             invoice_kind=invoice_kind,
             awaits_invoice=awaits_invoice,
+            basis_note=basis_note,
         )
         self.change_receipt_draft(company_id, document_id, header, lines)
 
@@ -172,11 +178,13 @@ class ReceiptDraftCommands(StockCommands):
                 header.invoice if receipt else "",
                 header.invoice_kind,
                 awaits=receipt and header.awaits_invoice,
+                note=header.basis_note if receipt else "",
             )
             self._release_lines(company_id, document_id, lines)
             self._write_receipt_draft(
                 company_id, document_id, lines, header.credit_account_id, header.credit_subconto
             )
+            self._check_basis_vat(company_id, document_id)
             self._audit(company_id, "inventory_document", document_id, "update_draft", {})
 
     def fill_expense_account(

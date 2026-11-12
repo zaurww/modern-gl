@@ -42,7 +42,7 @@ BATCH_EXPENSES_ACCOUNT = "batch_expenses_account"
 # to its account later. A company without one gets it on first need (76.9).
 UNIDENTIFIED = "unidentified"
 # Money given to an employee to spend for the company (71): issued from the cash desk,
-# accounted for by an advance report (D-new-advance-reports)
+# accounted for by an advance report (D218)
 ACCOUNTABLE = "accountable"
 ACCOUNT_ROLES = (
     INPUT_VAT,

@@ -1,4 +1,4 @@
-"""The cash desk in the bank module (D-new-cash). Hand-calculated, March 2026, the 1C 7.7
+"""The cash desk in the bank module (D216). Hand-calculated, March 2026, the 1C 7.7
 chart (50 «Касса», no subconto):
 
 10.03  in, from BETA: Dt 50 / Ct 62.1 [BETA]              300.00

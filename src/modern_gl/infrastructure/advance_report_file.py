@@ -1,4 +1,4 @@
-"""An advance report as an .xlsx to print and sign (D-new-advance-reports): who reports,
+"""An advance report as an .xlsx to print and sign (D218): who reports,
 a line per receipt with its accounts and amount, the total; what was given before the
 report, spent, and what is left or overspent — formulas over the table (D215); the
 signatures. A form like the cash papers (`paper_form`), in the language of documents."""

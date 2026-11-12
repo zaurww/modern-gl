@@ -1,4 +1,4 @@
-"""What an advance report is (D-new-advance-reports): the employee, the day and the
+"""What an advance report is (D218): the employee, the day and the
 lines — what the money went on, with the receipt — and loading what was entered."""
 
 from __future__ import annotations

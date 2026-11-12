@@ -1,4 +1,4 @@
-"""The writes of advance reports (D-new-advance-reports): save (and post), unpost, delete,
+"""The writes of advance reports (D218): save (and post), unpost, delete,
 rebuild. Each line posts Dt its account / Kt the accountable account with the employee:
 the money he was given is spent on it. A draft keeps only what was entered."""
 

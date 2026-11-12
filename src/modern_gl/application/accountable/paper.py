@@ -1,4 +1,4 @@
-"""An advance report as the paper to sign (D-new-advance-reports): its lines with the
+"""An advance report as the paper to sign (D218): its lines with the
 accounts as the accountant reads them («26 · Yanacaq»), and what the employee had before
 it — the same figure the form shows."""
 
