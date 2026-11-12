@@ -16,6 +16,7 @@ from modern_gl.application.queries import (
     load_document,
     load_template,
 )
+from modern_gl.desktop.accountable_page import AccountablePage, AdvanceReportPage
 from modern_gl.desktop.backups_dialog import BackupsDialog
 from modern_gl.desktop.bank_operation_page import BankOperationPage
 from modern_gl.desktop.bank_page import BankPage
@@ -95,12 +96,9 @@ class Navigator(QObject):
             page.prefill_document.connect(self.new_document)
             page.import_requested.connect(self.show_import)
             return page
-        if key == ("bank",):
-            page = BankPage(s)
-            page.open_document.connect(self.open_document)
-            page.new_bank_operation.connect(self.new_bank_operation)
-            page.new_conversion.connect(self.new_conversion)
-            return page
+        money_places = {("bank",): self._bank_page, ("accountable",): self._accountable_page}
+        if key in money_places:
+            return money_places[key](s)
         if key == ("directories",):
             return DirectoriesPage(s)
         if key == ("opening",):
@@ -141,6 +139,20 @@ class Navigator(QObject):
             return page
         return self.reports.place(key)
 
+    def _bank_page(self, s) -> PageWidget:
+        page = BankPage(s)
+        page.open_document.connect(self.open_document)
+        page.new_bank_operation.connect(self.new_bank_operation)
+        page.new_conversion.connect(self.new_conversion)
+        return page
+
+    def _accountable_page(self, s) -> PageWidget:
+        page = AccountablePage(s)
+        page.open_document.connect(self.open_document)
+        page.new_report.connect(self.new_advance_report)
+        page.new_cash.connect(self.new_bank_operation)
+        return page
+
     def show_import(self) -> None:
         if self.company.viewing():
             return
@@ -179,6 +191,7 @@ class Navigator(QObject):
             "inventory": self.open_inventory_document,
             "conversion": self.open_conversion,
             "bank": self.open_bank_operation,
+            "accountable": self.open_advance_report,
         }
         if owner is not None and owner.module in opens:
             opens[owner.module](owner.id)
@@ -268,7 +281,9 @@ class Navigator(QObject):
         )
         page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
 
-    def _conversion_saved(self, page: ConversionPage | BankOperationPage, doc_id: int) -> None:
+    def _conversion_saved(
+        self, page: ConversionPage | BankOperationPage | AdvanceReportPage, doc_id: int
+    ) -> None:
         self.page_stack.rekey(page)
         self.page_stack.retitle(page)
         self.page_stack.postings_changed(doc_id)
@@ -280,6 +295,30 @@ class Navigator(QObject):
             self._wire_bank_operation(page)
             self.page_stack.add(key, page, open_item=True)
         self.page_stack.activate(key)
+
+    def open_advance_report(self, report_id: int) -> None:
+        key = ("advance_report", report_id)
+        if key not in self.page_stack.pages:
+            page = AdvanceReportPage(self.company.open_session, report_id)
+            self._wire_advance_report(page)
+            self.page_stack.add(key, page, open_item=True)
+        self.page_stack.activate(key)
+
+    def new_advance_report(self, employee_id: int | None = None) -> None:
+        if self.company.viewing():
+            return
+        page = AdvanceReportPage(self.company.open_session, employee_id=employee_id)
+        self._wire_advance_report(page)
+        self.page_stack.add(page.key, page, open_item=True)
+        self.page_stack.activate(page.key)
+
+    def _wire_advance_report(self, page: AdvanceReportPage) -> None:
+        page.saved.connect(lambda doc_id, p=page: self._conversion_saved(p, doc_id))
+        page.new_cash.connect(self.new_bank_operation)
+        page.close_requested.connect(
+            lambda p=page: self.page_stack.close_page(self.page_stack.key_of(p), ask=False)
+        )
+        page.title_changed.connect(lambda p=page: self.page_stack.retitle(p))
 
     def new_bank_operation(self, prefill=None) -> None:
         if self.company.viewing():

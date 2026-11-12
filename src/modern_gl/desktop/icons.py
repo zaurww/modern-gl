@@ -25,6 +25,7 @@ GLYPHS: dict[str, str] = {
     "purchases": "log-in",
     "sales": "log-out",
     "bank": "landmark",
+    "accountable": "users",
     "directories": "book",
     "folder": "folder",
     "templates": "copy",

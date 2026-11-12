@@ -61,6 +61,7 @@ MODULES = [
     (("purchases",), "Покупки"),
     (("sales",), "Продажи"),
     (("bank",), "Банк и касса"),
+    (("accountable",), "Подотчётные лица"),
     (("inventory",), "Склад"),
 ]
 # section heading (None: no heading) and its places, top to bottom
@@ -111,6 +112,7 @@ OPEN_ICONS |= {"inventory_doc": "inventory", "new_inventory": "inventory"}
 OPEN_ICONS |= {"conversion": "currencies", "new_conversion": "currencies"}
 OPEN_ICONS |= {"books": "books"}  # «Сравнение книг» (D98)
 OPEN_ICONS |= {"bank_op": "bank", "new_bank_op": "bank"}
+OPEN_ICONS |= {"advance_report": "accountable", "new_advance_report": "accountable"}
 
 
 def open_icon(key) -> QIcon:
