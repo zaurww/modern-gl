@@ -13,13 +13,11 @@ from typing import TYPE_CHECKING
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.money_words import amount_in_words
 from modern_gl.i18n import document_language, trd
+from modern_gl.infrastructure import paper_form as form
 from modern_gl.infrastructure.report_file import MONEY_FORMAT, amount, sheet_name
 
 if TYPE_CHECKING:
     from openpyxl.worksheet.worksheet import Worksheet
-
-WIDTHS = (12, 34, 14, 16, 16)  # № · who · corr · in · out (the order uses them too)
-LAST = "E"
 
 
 @dataclass(frozen=True)
@@ -105,14 +103,14 @@ def write_cash_order_xlsx(order: CashOrder, path: str | Path) -> None:
     sheet = book.worksheets[0]
     title = trd("Приходный кассовый ордер") if order.incoming else trd("Расходный кассовый ордер")
     sheet.title = sheet_name(f"{title} {order.number}")
-    _widths(sheet)
+    form.widths(sheet)
     _order(sheet, order, title)
     if order.incoming:  # the receipt the payer takes away
         sheet.append([])
         sheet.append(["- " * 40])
         sheet.append([])
         _receipt(sheet, order)
-    _page(sheet)
+    form.page(sheet)
     book.save(str(path))
 
 
@@ -124,13 +122,13 @@ def write_cash_book_xlsx(cash: CashBook, path: str | Path) -> None:
     book = Workbook()
     sheet = book.worksheets[0]
     sheet.title = sheet_name(trd("Кассовая книга"))
-    _widths(sheet)
+    form.widths(sheet)
     for i, day in enumerate(cash.days):
         if i:
             breaks = sheet.row_breaks  # a sheet per day; openpyxl leaves `append` untyped
             breaks.append(Break(id=sheet.max_row))  # pyright: ignore[reportUnknownMemberType]
         _book_day(sheet, cash.desk, day, i + 1)
-    _page(sheet)
+    form.page(sheet)
     book.calculation.fullCalcOnLoad = True  # the day's totals are formulas
     book.save(str(path))
 
@@ -140,21 +138,21 @@ def write_cash_book_xlsx(cash: CashBook, path: str | Path) -> None:
 
 def _order(sheet: Worksheet, order: CashOrder, title: str) -> None:
     desk = order.desk
-    _line(sheet, _company(desk))
-    _line(sheet, f"{_upper(title)} № {order.number}", bold=True, size=13)
-    _line(sheet, trd("от {day}", day=ru_date(order.doc_date)))
+    form.line(sheet, form.company_line(desk.company, desk.tax_id))
+    form.line(sheet, f"{form.upper(title)} № {order.number}", bold=True, size=13)
+    form.line(sheet, trd("от {day}", day=ru_date(order.doc_date)))
     sheet.append([])
     debit, credit = (desk.account, order.corr) if order.incoming else (order.corr, desk.account)
     top = sheet.max_row + 1
     sheet.append([trd("Дебет"), trd("Кредит"), trd("Сумма")])
     sheet.append([debit, credit, amount(order.amount)])
-    _boxed(sheet, top, sheet.max_row, 3)
+    form.boxed(sheet, top, sheet.max_row, 3)
     sheet.cell(sheet.max_row, 3).number_format = MONEY_FORMAT
     sheet.append([])
     who = trd("Принято от") if order.incoming else trd("Выдать")
-    _field(sheet, who, order.party)
-    _field(sheet, trd("Основание"), order.basis)
-    _field(sheet, trd("Сумма прописью"), words(order))
+    form.field(sheet, who, order.party)
+    form.field(sheet, trd("Основание"), order.basis)
+    form.field(sheet, trd("Сумма прописью"), words(order))
     sheet.append([])
     signers = (
         [trd("Главный бухгалтер"), trd("Кассир")]
@@ -162,18 +160,19 @@ def _order(sheet: Worksheet, order: CashOrder, title: str) -> None:
         else [trd("Руководитель"), trd("Главный бухгалтер"), trd("Получил"), trd("Кассир")]
     )
     for who in signers:
-        _field(sheet, who, "_" * 30)
+        form.field(sheet, who, "_" * 30)
 
 
 def _receipt(sheet: Worksheet, order: CashOrder) -> None:
-    _line(sheet, _company(order.desk))
-    _line(sheet, trd("Квитанция к приходному кассовому ордеру № {n}", n=order.number), bold=True)
-    _line(sheet, trd("от {day}", day=ru_date(order.doc_date)))
-    _field(sheet, trd("Принято от"), order.party)
-    _field(sheet, trd("Основание"), order.basis)
-    _field(sheet, trd("Сумма прописью"), words(order))
-    _field(sheet, trd("Главный бухгалтер"), "_" * 30)
-    _field(sheet, trd("Кассир"), "_" * 30)
+    form.line(sheet, form.company_line(order.desk.company, order.desk.tax_id))
+    title = trd("Квитанция к приходному кассовому ордеру № {n}", n=order.number)
+    form.line(sheet, title, bold=True)
+    form.line(sheet, trd("от {day}", day=ru_date(order.doc_date)))
+    form.field(sheet, trd("Принято от"), order.party)
+    form.field(sheet, trd("Основание"), order.basis)
+    form.field(sheet, trd("Сумма прописью"), words(order))
+    form.field(sheet, trd("Главный бухгалтер"), "_" * 30)
+    form.field(sheet, trd("Кассир"), "_" * 30)
 
 
 # ---- the cash book -------------------------------------------------------------------
@@ -182,9 +181,9 @@ def _receipt(sheet: Worksheet, order: CashOrder) -> None:
 def _book_day(sheet: Worksheet, desk: CashDesk, day: CashDay, page: int) -> None:
     from openpyxl.styles import Font
 
-    _line(sheet, _company(desk))
-    _line(sheet, f"{trd('Кассовая книга')} — {ru_date(day.day)}", bold=True, size=13)
-    _line(sheet, trd("Лист {n}", n=page))
+    form.line(sheet, form.company_line(desk.company, desk.tax_id))
+    form.line(sheet, f"{trd('Кассовая книга')} — {ru_date(day.day)}", bold=True, size=13)
+    form.line(sheet, trd("Лист {n}", n=page))
     sheet.append([])
     top = sheet.max_row + 1
     sheet.append(
@@ -222,71 +221,8 @@ def _book_day(sheet: Worksheet, desk: CashDesk, day: CashDay, page: int) -> None
     for row in range(opening, sheet.max_row + 1):
         for col in (4, 5):
             sheet.cell(row, col).number_format = MONEY_FORMAT
-    _boxed(sheet, top, sheet.max_row, 5)
+    form.boxed(sheet, top, sheet.max_row, 5)
     sheet.append([])
-    _field(sheet, trd("Кассир"), "_" * 30)
-    _field(sheet, trd("Проверил бухгалтер"), "_" * 30)
+    form.field(sheet, trd("Кассир"), "_" * 30)
+    form.field(sheet, trd("Проверил бухгалтер"), "_" * 30)
     sheet.append([])
-
-
-# ---- the form's pieces ---------------------------------------------------------------
-
-
-def _upper(text: str) -> str:
-    """Capitals of the language of documents: Azerbaijani i → İ, ı → I."""
-    if document_language() == "az":
-        text = text.replace("i", "İ").replace("ı", "I")
-    return text.upper()
-
-
-def _company(desk: CashDesk) -> str:
-    tin = f"  ·  {trd('VÖEN')} {desk.tax_id}" if desk.tax_id else ""
-    return f"{desk.company}{tin}"
-
-
-def _widths(sheet: Worksheet) -> None:
-    from openpyxl.utils import get_column_letter
-
-    for i, width in enumerate(WIDTHS, start=1):
-        sheet.column_dimensions[get_column_letter(i)].width = width
-
-
-def _line(sheet: Worksheet, text: str, bold: bool = False, size: int = 11) -> None:
-    """A line across the page: merged, so a long one is not cut by the columns."""
-    from openpyxl.styles import Alignment, Font
-
-    sheet.append([text])
-    row = sheet.max_row
-    sheet.merge_cells(f"A{row}:{LAST}{row}")
-    cell = sheet.cell(row, 1)
-    cell.font = Font(bold=bold, size=size)
-    cell.alignment = Alignment(wrap_text=True, vertical="top")
-
-
-def _field(sheet: Worksheet, caption: str, value: str) -> None:
-    """«Основание:  Оплата от BETA» — the caption, the value over the rest of the line."""
-    from openpyxl.styles import Alignment
-
-    sheet.append([f"{caption}:", value])
-    row = sheet.max_row
-    sheet.merge_cells(f"B{row}:{LAST}{row}")
-    sheet.cell(row, 2).alignment = Alignment(wrap_text=True, vertical="top")
-
-
-def _boxed(sheet: Worksheet, top: int, bottom: int, columns: int) -> None:
-    from openpyxl.styles import Border, Side
-
-    thin = Side(style="thin")
-    for row in range(top, bottom + 1):
-        for col in range(1, columns + 1):
-            sheet.cell(row, col).border = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-
-def _page(sheet: Worksheet) -> None:
-    """One page wide, as long as it takes."""
-    from openpyxl.worksheet.properties import PageSetupProperties
-
-    sheet.page_setup.orientation = "portrait"
-    sheet.page_setup.fitToWidth = 1
-    sheet.page_setup.fitToHeight = 0
-    sheet.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
