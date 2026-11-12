@@ -29,7 +29,7 @@ def save_cash_book(
         s.notify(tr("В эти дни касса не двигалась"))
         return
     name = f"{trd('Кассовая книга')} {ru_date(date_from)[:5]}-{ru_date(date_to)}.xlsx"
-    _save(parent, tr("Кассовая книга в Excel"), name, lambda t: write_cash_book_xlsx(book, t))
+    save_paper(parent, tr("Кассовая книга в Excel"), name, lambda t: write_cash_book_xlsx(book, t))
 
 
 def save_cash_order(parent: QWidget, s: Session, place: BankPlace, document_id: int) -> None:
@@ -40,11 +40,13 @@ def save_cash_order(parent: QWidget, s: Session, place: BankPlace, document_id: 
         return
     kind = trd("Приходный кассовый ордер") if order.incoming else trd("Расходный кассовый ордер")
     name = f"{kind} {order.number}.xlsx"
-    _save(parent, tr("Кассовый ордер в Excel"), name, lambda t: write_cash_order_xlsx(order, t))
+    save_paper(
+        parent, tr("Кассовый ордер в Excel"), name, lambda t: write_cash_order_xlsx(order, t)
+    )
 
 
-def _save(parent: QWidget, title: str, name: str, write: Callable[[str], None]) -> None:
-    """Ask where, write, open the file in Excel."""
+def save_paper(parent: QWidget, title: str, name: str, write: Callable[[str], None]) -> None:
+    """Ask where, write, open the file in Excel (an advance report prints the same way)."""
     folder = QStandardPaths.writableLocation(QStandardPaths.StandardLocation.DocumentsLocation)
     target, _ = QFileDialog.getSaveFileName(
         parent, title, str(Path(folder) / file_name(name)), "Excel (*.xlsx)"

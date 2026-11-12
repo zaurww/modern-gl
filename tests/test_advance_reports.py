@@ -187,3 +187,27 @@ def test_a_line_is_not_on_the_accountable_account(ledger, firm, module):
 def test_a_rebuild_of_what_was_posted_changes_nothing(ledger, firm, module):
     module.save_advance_report(firm["cid"], first_report(firm), post=True)
     assert rebuild_postings(ledger, firm["cid"], "2026-01-01") == []
+
+
+def test_the_paper_to_sign(ledger, firm, module, tmp_path):
+    import openpyxl
+
+    from modern_gl.application.accountable import advance_paper
+    from modern_gl.infrastructure.advance_report_file import write_advance_report_xlsx
+
+    cid = firm["cid"]
+    cash(ledger, firm, "2026-03-02", OUT, 50000)
+    report_id = module.save_advance_report(cid, first_report(firm), post=True)
+    paper = advance_paper(ledger.conn, cid, report_id)
+    assert (paper.employee, paper.given) == ("Rəşad", 50000)
+    assert [(x.memo, x.debit, x.credit, x.amount) for x in paper.lines] == [
+        ("Çek 0012", "26 · Yanacaq", "71 · Rəşad", 32000),
+        ("Авансовый отчёт: Rəşad", "60.1 · ALFA MMC · Договор 1", "71 · Rəşad", 10000),
+    ]
+    path = tmp_path / "report.xlsx"
+    write_advance_report_xlsx(paper, path)
+    rows = [list(r) for r in openpyxl.load_workbook(path).worksheets[0].values]
+    by_caption = {r[1]: r[4] for r in rows if isinstance(r[1], str)}
+    assert str(by_caption["Итого"]).startswith("=SUM(")
+    assert by_caption["Выдано до отчёта"] == 500
+    assert str(by_caption["Остаток — вернуть в кассу"]).startswith("=ABS(")

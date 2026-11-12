@@ -15,11 +15,13 @@ from modern_gl.application.accountable import (
     AdvanceReport,
     AdvanceReportInput,
     accountable_account,
+    advance_paper,
     employee_balance,
     load_advance_report,
 )
 from modern_gl.desktop.accountable_page.cash import cash_prefill
 from modern_gl.desktop.accountable_page.lines import COLUMNS, AdvanceLinesModel
+from modern_gl.desktop.bank_page.cash_papers import save_paper
 from modern_gl.desktop.grid_editing import EditableRows, GridEditing
 from modern_gl.desktop.new_cell_value import add_typed_value, offer_new_value
 from modern_gl.desktop.page import PageWidget
@@ -40,7 +42,8 @@ from modern_gl.desktop.widgets import (
     to_qdate,
 )
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import tr
+from modern_gl.i18n import tr, trd
+from modern_gl.infrastructure.advance_report_file import write_advance_report_xlsx
 
 HINT = ("next_field", "insert", "duplicate_row", "delete", "post")
 
@@ -318,9 +321,20 @@ class AdvanceReportPage(GridEditing, PageWidget):
                 )
                 items.append((text, partial(self._cash, abs(left), left < 0)))
             items.append((tr("Отменить проведение"), self.unpost))
+        if doc is not None and not self.dirty:  # printing reads only: for viewing too
+            items.append((tr("Авансовый отчёт в Excel…"), self.print_report))
         if doc is not None and not ro:
             items.append((tr("Удалить"), self.delete))
         return items
+
+    def print_report(self) -> None:
+        if self.doc is None:
+            return
+        paper = advance_paper(self.s.conn, self.s.company_id, self.doc.id)
+        name = f"{trd('Авансовый отчёт')} {paper.number}.xlsx"
+        save_paper(
+            self, tr("Авансовый отчёт в Excel"), name, lambda t: write_advance_report_xlsx(paper, t)
+        )
 
     def _cash(self, amount: int, to_employee: bool) -> None:
         if self.account is None or self.doc is None or self.doc.employee_id is None:

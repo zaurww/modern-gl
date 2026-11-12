@@ -15,6 +15,7 @@ from modern_gl.application.accountable.model import (
     load_advance_reports,
     report_of_document,
 )
+from modern_gl.application.accountable.paper import advance_paper
 from modern_gl.application.accountable.people import (
     AccountableAccount,
     Person,
@@ -43,6 +44,7 @@ __all__ = [
     "PersonStatement",
     "accountable_account",
     "accountable_people",
+    "advance_paper",
     "employee_balance",
     "load_advance_report",
     "load_advance_reports",

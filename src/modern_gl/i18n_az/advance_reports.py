@@ -57,4 +57,9 @@ AZ = {
         "Əvvələ {opening}  ·  verilib {issued}  ·  hesabat verib və qaytarıb {settled}  ·  "
         "sona {closing}"
     ),
+    "Подотчётное лицо": "Təhtəlhesab şəxs",
+    "Бухгалтер": "Mühasib",
+    "Утверждаю: руководитель": "Təsdiq edirəm: rəhbər",
+    "Авансовый отчёт в Excel…": "Avans hesabatı Excel-ə…",
+    "Авансовый отчёт в Excel": "Avans hesabatı Excel-ə",
 }
