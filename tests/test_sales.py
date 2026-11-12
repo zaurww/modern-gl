@@ -345,7 +345,7 @@ def test_sale_page_posts_goods_and_a_service(shop, conn, qtbot):
     model = page.model
     assert page.title() == "Новое: Продажа"
     assert page._chosen_vat_rate() == STANDARD_VAT_RATE
-    assert not page.invoice.isHidden() and page.basis.isHidden()
+    assert not page.invoice.isHidden() and not page.basis.isHidden()  # e-qaimə or «Digər»
     assert model.headerData(model.columns.index(ITEM), Qt.Orientation.Horizontal) == (
         "Товар / услуга"
     )

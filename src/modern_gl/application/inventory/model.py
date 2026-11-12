@@ -77,6 +77,7 @@ class ReceiptHeader:
     invoice: str = ""
     invoice_kind: str = ""
     awaits_invoice: bool = False  # the goods came before their e-qaimə (D119)
+    basis_note: str = ""  # the basis «Digər»: an act, a receipt… in free text
 
     @property
     def doc_type(self) -> str:
@@ -345,6 +346,7 @@ class InventoryDocumentData:
     accruals: tuple[AccrualData, ...] = ()
     incoming_reason: str | None = None  # a mədaxil's reason: a key of INCOMING_REASONS
     awaits_invoice: bool = False  # a purchase whose e-qaimə comes later (D119)
+    basis_note: str = ""  # the basis «Digər» of a purchase or a sale: an act, a receipt…
 
     @property
     def editable(self) -> bool:

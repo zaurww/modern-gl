@@ -40,7 +40,7 @@ def require_sale_line(line: Row) -> None:
 
 
 class SaleCommands(StockCommands):
-    def create_sale_draft(
+    def create_sale_draft(  # noqa: PLR0913 the sale form's header fields, by keyword
         self,
         company_id: int,
         doc_date: date | str,
@@ -51,13 +51,14 @@ class SaleCommands(StockCommands):
         *,
         vat_rate: int | None = None,
         invoice: str = "",
+        basis_note: str = "",
     ) -> int:
         """Save an editable sale without affecting stock or GL. A draft may be unfinished:
         a line needs only an item or, for a service, an amount or a memo."""
         with transaction(self.conn):
             document_id = self._insert_document(company_id, doc_date, "sale", memo)
             self._set_vat_rate(company_id, document_id, vat_rate)
-            self._set_invoice(company_id, document_id, invoice)
+            self._set_invoice(company_id, document_id, invoice, note=basis_note)
             self._write_sale_draft(
                 company_id, document_id, lines, customer_account_id, customer_subconto
             )
@@ -78,6 +79,7 @@ class SaleCommands(StockCommands):
         *,
         vat_rate: int | None = None,
         invoice: str = "",
+        basis_note: str = "",
     ) -> None:
         with transaction(self.conn):
             doc = self._require_inventory_draft(company_id, document_id)
@@ -85,7 +87,7 @@ class SaleCommands(StockCommands):
                 raise ValidationError(tr("тип складского документа нельзя изменить"))
             self._update_draft_header(company_id, document_id, doc_date, memo)
             self._set_vat_rate(company_id, document_id, vat_rate)
-            self._set_invoice(company_id, document_id, invoice)
+            self._set_invoice(company_id, document_id, invoice, note=basis_note)
             self._release_lines(company_id, document_id, lines)
             self._write_sale_draft(
                 company_id, document_id, lines, customer_account_id, customer_subconto

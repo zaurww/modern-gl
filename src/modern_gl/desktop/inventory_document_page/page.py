@@ -191,7 +191,8 @@ class InventoryDocumentPage(
             self.status.set(tr("Черновик"), "amber")
         self._apply_mode(read_only)
         self._show_currency(self.doc.currency_id, self.doc.currency_rate)
-        self._show_basis(self.doc.invoice_kind, self.doc.invoice, self.doc.awaits_invoice)
+        doc = self.doc
+        self._show_basis(doc.invoice_kind, doc.invoice, doc.awaits_invoice, doc.basis_note)
         self._show_party()
         self.dirty = False
         self._show_totals()

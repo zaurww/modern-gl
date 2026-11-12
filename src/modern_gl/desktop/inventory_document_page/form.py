@@ -58,6 +58,7 @@ from modern_gl.domain.invoice import CUSTOMS, EQAIME
 from modern_gl.i18n import tr
 
 AWAITING = "awaiting"  # the basis box: a purchase waiting for its e-qaimə (D119)
+OTHER = "other"  # the basis box: «Digər» — an act, a receipt… in free text
 
 
 GAP = 16  # between the groups of the header: a document fits a 1366 px screen
@@ -155,21 +156,11 @@ class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
         root.addLayout(meta)
 
     def _build_basis(self, meta: QHBoxLayout) -> None:
-        # the basis of a receipt: an e-qaimə, or a customs declaration for imported goods
+        # the basis of a purchase or a sale; its choices follow the document (`_basis_items`)
         self.basis = PickBox()
         self.basis.setFixedWidth(120)
-        self.basis.addItem(tr("E-qaimə"), EQAIME)
-        self.basis.addItem(tr("Декларация"), CUSTOMS)
-        self.basis.addItem(tr("Ждёт e-qaimə"), AWAITING)  # goods came first (D119)
-        self.basis.setCurrentIndex(0)
-        self.basis.setToolTip(
-            tr(
-                "Основание: e-qaimə или таможенная декларация (импорт). «Ждёт e-qaimə» — "
-                "товар пришёл раньше документов: номер и ƏDV допишет загрузка с портала"
-            )
-        )
         meta.addWidget(self.basis)
-        self.invoice_caption = caption(tr("E-qaimə"))  # a sale's basis is always an e-qaimə
+        self.invoice_caption = caption(tr("E-qaimə"))  # a return's basis is always an e-qaimə
         meta.addWidget(self.invoice_caption)
         self.invoice = QLineEdit()
         self.invoice.setFixedWidth(140)  # «MT2601001842» and room to spare
@@ -266,6 +257,27 @@ class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
 
     def _shown(self, column: int) -> bool:
         return not self.table.isColumnHidden(column)
+
+    def _basis_items(self) -> None:
+        """A purchase: an e-qaimə, a customs declaration (import), «Ждёт e-qaimə» (goods came
+        first, D119) or «Digər»; a sale: an e-qaimə or «Digər»."""
+        purchase = self.doc_type == "receipt"
+        self.basis.clear()
+        self.basis.addItem(tr("E-qaimə"), EQAIME)
+        if purchase:
+            self.basis.addItem(tr("Декларация"), CUSTOMS)
+            self.basis.addItem(tr("Ждёт e-qaimə"), AWAITING)
+        self.basis.addItem(tr("Digər"), OTHER)
+        tip = (
+            tr(
+                "Основание: e-qaimə или таможенная декларация (импорт). «Ждёт e-qaimə» — "
+                "товар пришёл раньше документов: номер и ƏDV допишет загрузка с портала. "
+                "«Digər» — акт, чек, договор: впишите какой; без ƏDV к зачёту"
+            )
+            if purchase
+            else tr("Основание: e-qaimə или «Digər» — акт, чек, договор: впишите какой")
+        )
+        self.basis.setToolTip(tip)
 
     def _show_vat_rate(self, rate: int | None) -> None:
         index = self.vat_rate.findData(rate)

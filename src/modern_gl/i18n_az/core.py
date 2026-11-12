@@ -1755,10 +1755,6 @@ AZ: dict[str, str] = {
     "не указан номер e-qaimə": "e-qaimə nömrəsi göstərilməyib",
     "Ждёт e-qaimə": "E-qaimə gözləyir",
     "ждёт e-qaimə": "e-qaimə gözləyir",
-    "Основание: e-qaimə или таможенная декларация (импорт). «Ждёт e-qaimə» — товар пришёл раньше документов: номер и ƏDV допишет загрузка с портала": (
-        "Əsas: e-qaimə və ya gömrük bəyannaməsi (idxal). «E-qaimə gözləyir» — mal "
-        "sənədlərdən əvvəl gəlib: nömrəni və ƏDV-ni portaldan yükləmə əlavə edəcək"
-    ),
     "придёт позже": "sonra gələcək",
     "Новый черновик: {state}": "Yeni qaralama: {state}",
     "В покупку №{n} от {date} ({amount}), ждёт e-qaimə": "Alış №{n} ({date}, {amount}) — e-qaimə gözləyir",

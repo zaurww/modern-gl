@@ -10,7 +10,11 @@ from modern_gl.application.table_text import plain_number
 from modern_gl.desktop.inventory_document_page.columns import (
     VAT_DOCUMENTS,
 )
-from modern_gl.desktop.inventory_document_page.form import AWAITING, InventoryDocumentForm
+from modern_gl.desktop.inventory_document_page.form import (
+    AWAITING,
+    OTHER,
+    InventoryDocumentForm,
+)
 from modern_gl.desktop.widgets import (
     edited_date,
 )
@@ -22,6 +26,7 @@ from modern_gl.reporting.eqaime_reconciliation import portal_status
 
 # the documents with an e-qaimə, and whether the company sends it
 OUTGOING = {"receipt": False, "sale": True, "purchase_return": True, "sale_return": False}
+CHOSEN_BASIS = {"receipt", "sale"}  # the documents whose basis is chosen in a box
 
 
 class HeaderPart(InventoryDocumentForm):
@@ -93,30 +98,40 @@ class HeaderPart(InventoryDocumentForm):
         self.model.set_incoming_account(self._incoming_account())
         self.table.configure_columns()
 
-    def _show_basis(self, kind: str, number: str, awaits: bool = False) -> None:
-        """The e-qaimə / declaration of a receipt, the e-qaimə of a sale; other documents
-        have none. A purchase may wait for its e-qaimə (D119)."""
-        self.basis.setCurrentIndex(max(self.basis.findData(AWAITING if awaits else kind), 0))
-        self.invoice.setText(number)
-        self.basis.setVisible(self.doc_type == "receipt")
-        self.invoice_caption.setVisible(self.doc_type in VAT_DOCUMENTS - {"receipt"})
+    def _show_basis(self, kind: str, number: str, awaits: bool = False, note: str = "") -> None:
+        """The basis of a purchase (e-qaimə, declaration, «Ждёт e-qaimə», «Digər») or a sale
+        (e-qaimə, «Digər»); a return's is its e-qaimə; other documents have none."""
+        self._basis_items()
+        chosen = OTHER if note else AWAITING if awaits else kind
+        self.basis.setCurrentIndex(max(self.basis.findData(chosen), 0))
+        self.invoice.setText(note or number)
+        self.basis.setVisible(self.doc_type in CHOSEN_BASIS)
+        self.invoice_caption.setVisible(self.doc_type in VAT_DOCUMENTS - CHOSEN_BASIS)
         self.invoice.setVisible(self.doc_type in VAT_DOCUMENTS)
-        self._show_awaiting()
-        self._show_portal_status(kind, number)
+        self._show_basis_field()
+        self._show_portal_status(OTHER if note else kind, number)
 
     def _awaits(self) -> bool:
         return self.doc_type == "receipt" and self.basis.currentData() == AWAITING
 
-    def _show_awaiting(self) -> None:
-        """Waiting for the e-qaimə: no number to type (Tab passes the field by)."""
+    def _other_basis(self) -> bool:
+        return self.doc_type in CHOSEN_BASIS and self.basis.currentData() == OTHER
+
+    def _show_basis_field(self) -> None:
+        """Waiting for the e-qaimə: no number to type (Tab passes the field by); «Digər»:
+        the document in words."""
         awaits = self._awaits()
         if awaits:
             self.invoice.clear()
         self.invoice.setEnabled(not awaits)
-        self.invoice.setPlaceholderText(tr("придёт позже") if awaits else tr("номер"))
+        hint = tr("акт №5") if self._other_basis() else tr("номер")
+        self.invoice.setPlaceholderText(tr("придёт позже") if awaits else hint)
 
     def _basis_changed(self, *_args) -> None:
-        self._show_awaiting()
+        if self._other_basis() and self.doc_type == "receipt":  # no ƏDV without an e-qaimə
+            self._show_vat_rate(None)
+            self._vat_rate_changed()
+        self._show_basis_field()
         self._changed()
 
     def _show_portal_status(self, kind: str, number: str) -> None:
@@ -134,10 +149,15 @@ class HeaderPart(InventoryDocumentForm):
         self.portal_status.show()
 
     def _invoice(self) -> dict[str, str]:
-        """The basis for saving: number and kind (an empty number: none)."""
+        """The basis for saving: number and kind (an empty number: none), or «Digər»."""
         number = self.invoice.text().strip()
-        if self.doc_type != "receipt":  # a sale's, a return's: always an e-qaimə
+        if self.doc_type not in CHOSEN_BASIS:  # a return's: always an e-qaimə
             return {"invoice": number}
+        if self._other_basis():
+            return {"invoice": "", "basis_note": number}
+        if self.doc_type == "sale":
+            return {"invoice": number, "basis_note": ""}
         if self._awaits():
-            return {"invoice": "", "invoice_kind": ""}
-        return {"invoice": number, "invoice_kind": self.basis.currentData() if number else ""}
+            return {"invoice": "", "invoice_kind": "", "basis_note": ""}
+        kind = self.basis.currentData() if number else ""
+        return {"invoice": number, "invoice_kind": kind, "basis_note": ""}

@@ -289,6 +289,7 @@ class InventoryBase(ModuleBase):
             "invoice": doc["invoice"],
             "invoice_kind": doc["invoice_kind"],
             "awaits_invoice": doc["awaits_invoice"],
+            "basis_note": doc["basis_note"],
             "accruals": [
                 {"expense_date": a.expense_date, "gl_document_id": a.gl_document_id}
                 for a in self._accruals(doc["company_id"], doc["id"])
