@@ -1,5 +1,5 @@
 """The bank accounts of the company (D47): a GL account and an element of its bank
-account directory."""
+account directory; a cash desk (50) is one too — money the same way, without a bank."""
 
 from __future__ import annotations
 
@@ -23,6 +23,11 @@ class BankPlace:
     currency_id: int | None  # the element's currency; None: manat (or not fixed)
     currency: str  # its code, "" for manat
     account_type: str | None
+
+    @property
+    def is_cash(self) -> bool:
+        """A cash desk (50), not a bank account: no bank's statement to check against."""
+        return self.account_type == "cash"
 
     @property
     def key(self) -> tuple[int, int | None]:
@@ -92,7 +97,8 @@ def transfer_targets(
 
 def _bank_accounts(conn: Connection, company_id: int) -> list[Row]:
     """The GL accounts money is in the bank on, with the position of the bank account
-    directory among their subconto (None: the account has no such directory)."""
+    directory among their subconto (None: the account has no such directory); a cash
+    desk once money moved on it — a company without cash sees no empty «Касса»."""
     return conn.execute(
         """
         SELECT a.id, COALESCE(a.code, a.name) AS code, a.name, a.currency, a.account_type,
@@ -103,12 +109,19 @@ def _bank_accounts(conn: Connection, company_id: int) -> list[Row]:
         LEFT JOIN subconto_kinds k1 ON k1.id = a.sc1_kind_id
         LEFT JOIN subconto_kinds k2 ON k2.id = a.sc2_kind_id
         LEFT JOIN subconto_kinds k3 ON k3.id = a.sc3_kind_id
-        WHERE a.company_id = ? AND a.is_group = 0 AND a.active = 1
+        WHERE a.company_id = :c AND a.is_group = 0 AND a.active = 1
           AND (a.account_type IN ('bank', 'vat_deposit')
+               OR (a.account_type = 'cash' AND (
+                   EXISTS (SELECT 1 FROM postings p WHERE p.company_id = :c
+                           AND p.debit_account_id = a.id)
+                   OR EXISTS (SELECT 1 FROM postings p WHERE p.company_id = :c
+                              AND p.credit_account_id = a.id)
+                   OR EXISTS (SELECT 1 FROM bank_operations o WHERE o.company_id = :c
+                              AND o.account_id = a.id)))
                OR (a.account_type IS NULL AND 'bank_account' IN (k1.code, k2.code, k3.code)))
         ORDER BY a.code IS NULL, a.code, a.name
         """,
-        (company_id,),
+        {"c": company_id},
     ).fetchall()
 
 

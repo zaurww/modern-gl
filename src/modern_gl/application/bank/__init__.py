@@ -30,6 +30,7 @@ from modern_gl.application.bank.customs_payment import CustomsPayment, CustomsPa
 from modern_gl.application.bank.file_commands import BankFileCommands
 from modern_gl.application.bank.operations import (
     BANK_TYPES,
+    CASH_KINDS,
     CUSTOMER,
     FEE,
     IN,
@@ -88,6 +89,7 @@ __all__ = [
     "ACCOUNT_KINDS",
     "BANK_TYPES",
     "CARD",
+    "CASH_KINDS",
     "CURRENCY",
     "CURRENT",
     "CUSTOMER",

@@ -15,6 +15,7 @@ from dataclasses import fields, replace
 from datetime import date
 
 from modern_gl.application.bank.operations import (
+    CASH_KINDS,
     FEE,
     IN,
     KIND_NAMES,
@@ -406,6 +407,8 @@ class BankCommands(ModuleBase):
                     "в бюджет или перевод между своими счетами"
                 )
             )
+        if bank["account_type"] == "cash" and data.kind not in CASH_KINDS:
+            raise ValidationError(tr("в кассе нет комиссии банка"))
         lines = [line for line in data.lines if line.account_id is not None or line.amount]
         if not lines:
             raise ValidationError(tr("в операции нет строк"))

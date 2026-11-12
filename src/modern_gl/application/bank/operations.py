@@ -44,15 +44,17 @@ KIND_TYPES = {
 }
 # the other way: what an operation is by the type of its line's account (D78: a line typed
 # in the statement says no kind — 60 is a supplier, 70 the payroll, a bank account a transfer)
-TYPE_KINDS = {**{t: k for k, t in KIND_TYPES.items()}, "vat_deposit": TRANSFER}
+TYPE_KINDS = {**{t: k for k, t in KIND_TYPES.items()}, "vat_deposit": TRANSFER, "cash": TRANSFER}
 
 
 def kind_of_account(account_type: str | None) -> str:
     return TYPE_KINDS.get(account_type or "", OTHER)
 
 
-# Bank accounts of the module: money on current accounts, and the ƏDV deposit account
-BANK_TYPES = ("bank", "vat_deposit")
+# Money places of the module: current accounts, the ƏDV deposit account and the cash desk
+BANK_TYPES = ("bank", "vat_deposit", "cash")
+# a cash desk has no bank to charge a fee
+CASH_KINDS = tuple(k for k, _ in KINDS if k != FEE)
 # The ƏDV deposit account pays and receives only ƏDV (D41): to a supplier's deposit
 # account, from a customer, to the budget, or between deposit accounts.
 VAT_DEPOSIT_KINDS = (SUPPLIER, CUSTOMER, TAX, TRANSFER)
@@ -270,7 +272,7 @@ def last_lines(
         FROM postings p
         JOIN documents d ON d.id = p.document_id AND d.status = 'posted'
         JOIN accounts b ON b.id = p.{bank_col}
-        WHERE p.company_id = :c AND b.account_type IN ('bank', 'vat_deposit')
+        WHERE p.company_id = :c AND b.account_type IN ('bank', 'vat_deposit', 'cash')
           AND :v IN (p.{other}_sc1, p.{other}_sc2, p.{other}_sc3)
         ORDER BY d.doc_date DESC, d.number DESC, p.line_no LIMIT 1
         """,
