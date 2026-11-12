@@ -16,10 +16,12 @@ from modern_gl.application.bank import (
     BankOperationInput,
     BankPlace,
     BankStatement,
+    StatementLine,
     transfer_targets,
 )
 from modern_gl.application.bank.operations import load_bank_operation
 from modern_gl.application.queries import document_owner
+from modern_gl.desktop.bank_page.cash_papers import save_cash_book, save_cash_order
 from modern_gl.desktop.bank_page.change_account import ChangeAccountDialog
 from modern_gl.desktop.bank_page.customs_payment import CustomsPaymentDialog
 from modern_gl.desktop.bank_page.deposit_reconcile import DepositReconcileDialog
@@ -77,9 +79,38 @@ class BankActions(ReportPage):
     def more_items(self) -> list[MenuItem]:
         """The one «⋯» of the page (D86): the bank's actions, then the report's (to Excel);
         a company open for viewing gets only the report's."""
+        papers = self._cash_items()  # reading only: for viewing too
         if self.s.read_only:
-            return super().more_items()
-        return [*self._bank_items(), None, *super().more_items()]
+            return [*papers, *super().more_items()]
+        return [*papers, *self._bank_items(), None, *super().more_items()]
+
+    def _cash_items(self) -> list[MenuItem]:
+        """A cash desk's papers: the cash book of the days shown, the order of a line."""
+        place = self.place
+        if self.level == ACCOUNTS or place is None or not place.is_cash:
+            return []
+        if self.level == STATEMENT and self.current is not None:
+            first, last = self.current.date_from, self.current.date_to
+        else:
+            first, last = self.period_dates()
+        items: list[MenuItem] = [
+            (
+                tr("Кассовая книга в Excel…"),
+                lambda: save_cash_book(self, self.s, place, first, last),
+            )
+        ]
+        row = self.current_row()
+        if isinstance(row, StatementLine) and row.status == "posted":
+            items.append(
+                (
+                    tr("Кассовый ордер в Excel…"),
+                    lambda: save_cash_order(self, self.s, place, row.document_id),
+                )
+            )
+        return [*items, None]
+
+    def period_dates(self) -> tuple[str, str]:  # BankPage
+        raise NotImplementedError
 
     def _bank_items(self) -> list[MenuItem]:
         items: list[MenuItem] = []
@@ -98,14 +129,16 @@ class BankActions(ReportPage):
                 )
             )
         place = self.place  # at the list of accounts: the one under the cursor
-        if place is not None and place.account_type == "vat_deposit":
+        if place is not None and place.is_cash:
+            pass  # no bank: no statement files, no customs, no bank's details
+        elif place is not None and place.account_type == "vat_deposit":
             items.append((tr("Загрузить с портала…"), self.load_from_portal))
             items.append((tr("Сверить с порталом…"), self.reconcile_with_portal))
         else:
             if self.level != ACCOUNTS and place is not None and place.currency_id is None:
                 items.append((tr("Таможенный платёж…"), self.customs_payment))
             items.append((tr("Загрузить выписку из файла…"), self.load_bank_files))
-        if self.level != ACCOUNTS:
+        if self.level != ACCOUNTS and not (place is not None and place.is_cash):
             items.append((tr("Реквизиты счёта…"), self.edit_account))
         else:
             items.append((tr("Новый счёт или карта…"), self.new_account))

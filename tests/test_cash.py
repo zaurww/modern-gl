@@ -126,3 +126,77 @@ def test_a_cash_desk_has_no_bank_fee(ledger, firm):
     op = cash_op(firm, "2026-03-10", OUT, FEE, BankLine(firm["acc"]["91.2"], 200))
     with pytest.raises(ValidationError, match="комиссии банка"):
         ledger.bank.save_bank_operation(firm["cid"], op, post=True)
+
+
+# ---- the papers: cash orders and the cash book --------------------------------------
+
+
+def test_a_cash_order_of_money_taken_in(ledger, firm):
+    from modern_gl.application.bank.cash_book import cash_order
+
+    came, paid, _ = cash_month(ledger, firm)
+    cash = cash_place(ledger, firm)
+    order = cash_order(ledger.conn, firm["cid"], cash, came_doc(ledger, firm, came))
+    assert (order.incoming, order.doc_date, order.corr, order.party, order.amount) == (
+        True,
+        "2026-03-10",
+        "62.1",
+        "BETA MMC",
+        30000,
+    )
+    out = cash_order(ledger.conn, firm["cid"], cash, came_doc(ledger, firm, paid))
+    assert (out.incoming, out.corr, out.amount) == (False, "60.1", 12000)
+
+
+def came_doc(ledger, firm, operation_id) -> int:
+    from modern_gl.application.bank import load_bank_operation
+
+    return load_bank_operation(ledger.conn, firm["cid"], operation_id).document_id
+
+
+def test_the_cash_book_is_a_sheet_per_day(ledger, firm):
+    from modern_gl.application.bank.cash_book import cash_book
+
+    cash_month(ledger, firm)
+    book = cash_book(ledger.conn, firm["cid"], cash_place(ledger, firm), "2026-03-11", "2026-03-31")
+    # 10.03 is before the period: the first sheet opens with its 300.00
+    assert [(d.day, d.opening, d.money_in, d.money_out, d.closing) for d in book.days] == [
+        ("2026-03-11", 30000, 0, 12000, 18000),
+        ("2026-03-12", 18000, 0, 10000, 8000),
+    ]
+    assert book.desk.account == "50"
+
+
+def test_the_papers_in_excel(ledger, firm, tmp_path):
+    import openpyxl
+
+    from modern_gl.application.bank.cash_book import cash_book, cash_order
+    from modern_gl.i18n import set_language
+    from modern_gl.infrastructure.cash_file import write_cash_book_xlsx, write_cash_order_xlsx
+
+    came, _, _ = cash_month(ledger, firm)
+    cash = cash_place(ledger, firm)
+    set_language("az")
+    try:
+        path = tmp_path / "order.xlsx"
+        write_cash_order_xlsx(
+            cash_order(ledger.conn, firm["cid"], cash, came_doc(ledger, firm, came)), path
+        )
+        texts = [c for row in openpyxl.load_workbook(path).worksheets[0].values for c in row]
+        assert any(isinstance(t, str) and t.startswith("KASSA MƏDAXİL ORDERİ") for t in texts)
+        assert "Üç yüz manat 00 qəpik" in texts  # in the order and in its receipt
+        assert texts.count("Üç yüz manat 00 qəpik") == 2
+        path = tmp_path / "book.xlsx"
+        write_cash_book_xlsx(
+            cash_book(ledger.conn, firm["cid"], cash, "2026-03-01", "2026-03-31"), path
+        )
+        sheet = openpyxl.load_workbook(path).worksheets[0]
+        rows = [list(r) for r in sheet.values]
+        totals = [r for r in rows if r[1] == "Gün ərzində cəmi"]
+        closing = [r for r in rows if r[1] == "Günün sonuna qalıq"]
+        assert len(totals) == len(closing) == 3  # 10, 11 and 12 March
+        assert all(str(r[3]).startswith("=SUM(") for r in totals)
+        assert all(str(r[3]).startswith("=D") for r in closing)
+        assert len(sheet.row_breaks.brk) == 2
+    finally:
+        set_language("ru")

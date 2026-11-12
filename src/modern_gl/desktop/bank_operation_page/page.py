@@ -23,6 +23,7 @@ from modern_gl.application.bank import (
     OUT,
     SUPPLIER,
     BankOperationInput,
+    BankPlace,
     load_bank_operation,
     next_to_check,
 )
@@ -38,6 +39,7 @@ from modern_gl.desktop.bank_operation_page.common import (
 from modern_gl.desktop.bank_operation_page.counterparty import CounterpartyPart
 from modern_gl.desktop.bank_operation_page.folded import FoldedPart
 from modern_gl.desktop.bank_operation_page.lines import LinesPart
+from modern_gl.desktop.bank_page.cash_papers import save_cash_order
 from modern_gl.desktop.posting_preview import document_postings
 from modern_gl.desktop.rate_note import load_day_rates
 from modern_gl.desktop.session import Session
@@ -238,6 +240,15 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         items: list[MenuItem] = []
         if not self.read_only and not self.is_cash:  # a fee with the payment: rare, here and F6
             items.append((tr("Добавить комиссию банка") + "  (F6)", self.add_fee))
+        place = self.bank.currentData()
+        if self.posted and self.is_cash and isinstance(place, BankPlace) and self.doc:
+            document_id = self.doc.document_id
+            items.append(
+                (
+                    tr("Кассовый ордер в Excel…"),
+                    lambda: save_cash_order(self, self.s, place, document_id),
+                )
+            )
         if self.doc is not None and not self.s.read_only:
             items.append((tr("Копировать"), self._copy))
         if self.doc is not None:
