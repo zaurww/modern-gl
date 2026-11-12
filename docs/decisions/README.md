@@ -224,3 +224,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D212 | Таможенный платёж: один платёж, строки по смыслу | принято (развивает D211, D85) | [D212-customs-payment.md](D212-customs-payment.md) |
 | D213 | Один документ в глазах пользователя: вид и свой номер | принято (уточняет D75, D123) | [D213-one-document.md](D213-one-document.md) |
 | D214 | Доп. расходы без знания счетов | принято (уточняет D212, развивает D211, D85) | [D214-landed-for-newcomers.md](D214-landed-for-newcomers.md) |
+| D215 | Excel с формулами | принято (развивает D104) | [D215-excel-formulas.md](D215-excel-formulas.md) |

@@ -1,4 +1,4 @@
-"""Formulas in a report file (Excel with formulas): a total is `SUBTOTAL` of its lines, a
+"""Formulas in a report file (Excel with formulas, D215): a total is `SUBTOTAL` of its lines, a
 closing balance is the opening plus the turnovers — so a figure changed in Excel moves
 what it makes. A formula is written only where it gives exactly the figure the report
 shows; elsewhere (a total that is not a sum, a balance of an account on both sides) the
