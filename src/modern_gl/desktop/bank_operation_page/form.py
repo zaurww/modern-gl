@@ -113,7 +113,8 @@ class BankOperationForm(DocumentShell, PageWidget):
             self.direction.addButton(b)
             bar.addWidget(b)
         bar.addSpacing(20)
-        bar.addWidget(caption(tr("Банк")))
+        self.bank_caption = caption(tr("Банк"))  # «Касса» for a cash desk
+        bar.addWidget(self.bank_caption)
         self.places: list[BankPlace] = []  # _fill_banks
         self.bank = PickBox(NONE)  # the account, its bank and currency in one field
         self.bank.setFixedWidth(300)
@@ -374,7 +375,13 @@ class BankOperationForm(DocumentShell, PageWidget):
             and (bool(self.deposits) or self._pays_supplier())
             and self.kind.currentData() in (SUPPLIER, CUSTOMER)
             and not self._on_deposit()
+            and not self.is_cash  # cash is not paid to a deposit account
         )
+
+    @property
+    def is_cash(self) -> bool:
+        """The money is in a cash desk (50), not in a bank."""
+        return self.bank_info is not None and self.bank_info.account_type == "cash"
 
     def _pays_supplier(self) -> bool:
         """A payment to a supplier: its ƏDV may go from this account to their deposit."""

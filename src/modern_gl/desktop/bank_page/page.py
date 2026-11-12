@@ -84,7 +84,7 @@ class BankPage(BankActions):
     has_period = False
 
     def __init__(self, session: Session) -> None:
-        super().__init__(session, tr("Банк"))
+        super().__init__(session, tr("Банк и касса"))
         self.level = ACCOUNTS
         self.account_key: tuple[int, int | None] | None = None
         self.period: tuple[str, str] | None = None
@@ -200,7 +200,7 @@ class BankPage(BankActions):
             widget = item.widget() if item is not None else None
             if widget is not None:
                 widget.deleteLater()
-        steps = [(tr("Банк"), ACCOUNTS)]
+        steps = [(tr("Банк и касса"), ACCOUNTS)]
         if self.level != ACCOUNTS and self.account:
             steps.append((self.account.title, JOURNAL))
         if self.level == STATEMENT and self.current:
@@ -289,7 +289,7 @@ class BankPage(BankActions):
     # ---- the table ----------------------------------------------------------------------
 
     def title(self) -> str:
-        return tr("Банк")
+        return tr("Банк и касса")
 
     def _bind_open(self) -> None:
         """Enter opens a row of the table only: in the entry line it goes on through it."""
@@ -357,9 +357,12 @@ class BankPage(BankActions):
             section=lambda r: isinstance(r, GroupRow),
             muted=lambda r: isinstance(r, GroupRow) or (isinstance(r, BankAccount) and r.closed),
         )
-        self.header.title.setText(tr("Банк"))
+        self.header.title.setText(tr("Банк и касса"))
         self.header.subtitle.setText(
-            tr("Счета и карты · остаток на {day}", day=ru_date(self.s.working_date.isoformat()))
+            tr(
+                "Счета, карты и касса · остаток на {day}",
+                day=ru_date(self.s.working_date.isoformat()),
+            )
         )
         self.footer.setText(
             tr("Щёлкните счёт — откроются его выписки по дням.") if self.accounts else ""
@@ -376,13 +379,15 @@ class BankPage(BankActions):
         else:
             first, last = self.period_dates()
             shown = [s for s in self.statements if s.date_from <= last and s.date_to >= first]
-            self.model.set(statement_columns(), shown)
+            self.model.set(statement_columns(account.place.is_cash), shown)
         kind = dict(ACCOUNT_KINDS)[account.kind]
         self.header.title.setText(account.title)
         self.header.subtitle.setText(f"{where(account)}  ·  {tr(kind)}")
         hint = (
             tr("Двойной щелчок — документ, F7 или правый щелчок — его проводки.")
             if self.view == LINES
+            else tr("Щёлкните день — его строки.")
+            if account.place.is_cash
             else tr("Щёлкните выписку — её строки; внизу выписки впишите остаток из банка.")
         )
         self.footer.setText(f"{period_summary(lines)}\n{hint}")
@@ -402,13 +407,14 @@ class BankPage(BankActions):
         if waiting:  # a statement checked line by line: what is left
             about += "  ·  " + tr("не проверено: {n}", n=waiting)
         self.header.subtitle.setText(about)
-        self.reconcile.show_statement(s)
+        self.reconcile.show_statement(s, account.place.is_cash)
         self.entry.show_for(account.place, s.date_from, s.date_to, self.amount_mode())
 
     def _show_level(self) -> None:
         level, writes = self.level, not self.s.read_only  # viewing only (D80): nothing new
+        bank = self.place is None or not self.place.is_cash  # a cash desk: no bank's balance
         self.new_account_button.setVisible(writes and level == ACCOUNTS)
-        self.new_statement_button.setVisible(writes and level == JOURNAL)
+        self.new_statement_button.setVisible(writes and level == JOURNAL and bank)
         self.money_in.setVisible(writes and level != ACCOUNTS)
         self.money_out.setVisible(writes and level != ACCOUNTS)
         self.previous.setVisible(level == STATEMENT)

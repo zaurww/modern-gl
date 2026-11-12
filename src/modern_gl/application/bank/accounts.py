@@ -1,5 +1,5 @@
 """The bank accounts of the module as the list shows them (D78): grouped by kind —
-current, currency, the ƏDV deposit, business cards — with the balance and how many
+the cash desk, current, currency, the ƏDV deposit, business cards — with the balance and how many
 statements are not checked against the bank yet."""
 
 from __future__ import annotations
@@ -13,8 +13,10 @@ from modern_gl.i18n import N_
 from modern_gl.infrastructure.db import Connection
 
 CURRENT, CURRENCY, VAT_DEPOSIT, CARD = "current", "currency", "vat_deposit", "card"
+CASH = "cash"  # by its GL account (type «Касса»), never chosen
 # the groups of the list, in order (Russian name — a translation key)
 ACCOUNT_KINDS = (
+    (CASH, N_("Касса")),
     (CURRENT, N_("Расчётные счета")),
     (CURRENCY, N_("Валютные счета")),
     (VAT_DEPOSIT, N_("Депозит ƏDV")),
@@ -43,6 +45,8 @@ class BankAccount:
 
 def default_kind(place: BankPlace) -> str:
     """The kind of an account nobody set: by its GL account and currency."""
+    if place.is_cash:
+        return CASH
     if place.account_type == "vat_deposit":
         return VAT_DEPOSIT
     return CURRENCY if place.currency else CURRENT
@@ -67,15 +71,15 @@ def bank_accounts(conn: Connection, company_id: int, day: str) -> list[BankAccou
         result.append(
             BankAccount(
                 place,
-                d["kind"] if d else default_kind(place),
+                d["kind"] if d and not place.is_cash else default_kind(place),
                 d["card_digits"] if d else "",
                 (d["holder"] or "") if d else "",
                 d["iban"] if d else "",
                 bool(d["closed"]) if d else False,
                 place_balance(conn, company_id, place, day),
                 statements[-1].date_to if statements else None,
-                sum(1 for s in statements if s.status == OPEN),
-                sum(1 for s in statements if s.status == DIFF),
+                0 if place.is_cash else sum(1 for s in statements if s.status == OPEN),
+                0 if place.is_cash else sum(1 for s in statements if s.status == DIFF),
             )
         )
     result.sort(key=lambda a: order[a.kind])  # stable: the places' order within a kind

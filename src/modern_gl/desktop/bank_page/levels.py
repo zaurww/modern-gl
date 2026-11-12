@@ -83,7 +83,9 @@ def account_rows(accounts: list[BankAccount]) -> list[GroupRow | BankAccount]:
 
 
 def checks_text(a: BankAccount) -> str:
-    """What is left to check against the bank."""
+    """What is left to check against the bank; a cash desk has no bank."""
+    if a.place.is_cash:
+        return ""
     parts = []
     if a.differences:
         parts.append(tr("расхождение: {n}", n=a.differences))
@@ -95,6 +97,8 @@ def checks_text(a: BankAccount) -> str:
 
 
 def checks_tone(a: BankAccount) -> str | None:
+    if a.place.is_cash:
+        return None
     if a.differences:
         return "red"
     if a.unchecked:
@@ -151,9 +155,11 @@ def status_tone(s: BankStatement) -> str:
     return {OK: "green", DIFF: "red"}.get(s.status, "amber")
 
 
-def statement_columns() -> list[Column]:
-    return [
-        Column(tr("Выписка"), lambda s: period_text(s, weekday=False), width=150),
+def statement_columns(cash: bool = False) -> list[Column]:
+    """A bank's statements; a cash desk's days (a sheet of the cash book) — no bank."""
+    first = tr("День") if cash else tr("Выписка")
+    columns = [
+        Column(first, lambda s: period_text(s, weekday=False), width=150),
         Column(tr("На начало"), lambda s: s.opening, money=True, width=120),
         Column(tr("Приход"), lambda s: s.money_in, money=True, width=120),
         Column(tr("Расход"), lambda s: s.money_out, money=True, width=120),
@@ -162,6 +168,7 @@ def statement_columns() -> list[Column]:
         Column(tr("С банком"), status_text, tone=status_tone, width=170),
         opens(),
     ]
+    return [c for c in columns if not (cash and c.title == tr("С банком"))]
 
 
 # ---- the lines of a statement ---------------------------------------------------------

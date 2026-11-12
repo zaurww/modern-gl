@@ -29,7 +29,7 @@ class TradeDocument:
     amount: int  # without VAT; a return's is negative
     vat: int
     awaits_invoice: int = 0  # 1: a purchase whose e-qaimə comes later (D119)
-    basis_note: str = ""  # the basis «Digər»: an act, a receipt… (D216)
+    basis_note: str = ""  # the basis «Digər»: an act, a receipt… (D217)
 
     @property
     def is_return(self) -> bool:

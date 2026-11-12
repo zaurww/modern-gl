@@ -94,7 +94,6 @@ AZ: dict[str, str] = {
     "Банковский счёт или карта": "Bank hesabı və ya kart",
     "Выписка на следующий рабочий день": "Növbəti iş günü üçün çıxarış",
     "Оплата поставщику, налоги…": "Malsatana ödəniş, vergilər…",
-    "Счета и карты · остаток на {day}": "Hesablar və kartlar · {day} tarixinə qalıq",
     "«+ Новый счёт» — расчётный, валютный счёт или бизнес-карта.": (
         "«+ Yeni hesab» — hesablaşma, valyuta hesabı və ya biznes kart."
     ),

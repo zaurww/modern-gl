@@ -1,5 +1,6 @@
 """Under a statement: its balances, and the balance by the bank's own statement typed in —
-equal, the statement is reconciled; not, the difference says which way to look (D78)."""
+equal, the statement is reconciled; not, the difference says which way to look (D78).
+A day of a cash desk has only its balances: there is no bank to type a balance from."""
 
 from __future__ import annotations
 
@@ -36,6 +37,7 @@ class ReconcileBar(QWidget):
         grid.setHorizontalSpacing(32)
         grid.setVerticalSpacing(2)
         self.figures: dict[str, QLabel] = {}
+        self.captions: dict[str, QLabel] = {}
         captions = (
             ("opening", tr("На начало")),
             ("in", tr("Приход")),
@@ -51,7 +53,9 @@ class ReconcileBar(QWidget):
             grid.addWidget(label, 0, column)
             grid.addWidget(figure, 1, column)
             self.figures[key] = figure
+            self.captions[key] = label
         caption = QLabel(tr("На конец · выписка банка"))  # the one to type: plain text
+        self.bank_caption = caption
         caption.setFont(fonts().small)
         self.bank = QLineEdit()
         self.bank.setPlaceholderText(tr("из выписки банка"))
@@ -69,7 +73,10 @@ class ReconcileBar(QWidget):
         root.addLayout(row)
         self._shown: int | None = None
 
-    def show_statement(self, s: BankStatement) -> None:
+    def show_statement(self, s: BankStatement, cash: bool = False) -> None:
+        for w in (self.bank_caption, self.bank, self.verdict):
+            w.setVisible(not cash)
+        self.captions["closing"].setText(tr("На конец") if cash else tr("На конец · программа"))
         for key, value in (
             ("opening", s.opening),
             ("in", s.money_in),

@@ -60,7 +60,7 @@ LISTS = [
 MODULES = [
     (("purchases",), "Покупки"),
     (("sales",), "Продажи"),
-    (("bank",), "Банк"),
+    (("bank",), "Банк и касса"),
     (("inventory",), "Склад"),
 ]
 # section heading (None: no heading) and its places, top to bottom

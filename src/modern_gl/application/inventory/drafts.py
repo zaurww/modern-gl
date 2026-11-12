@@ -227,7 +227,7 @@ class DraftCommands(InventoryBase):
         """The receipt's e-qaimə, or the customs declaration of imported goods. `awaits`:
         a purchase without a number waits for its e-qaimə (D119); a number ends the wait.
         `note`: the basis «Digər» — an act, a receipt… named in free text, kept on the
-        document only (D216)."""
+        document only (D217)."""
         if kind not in KINDS:
             raise ValidationError(tr("неизвестный вид документа: {kind}", kind=kind))
         number = normalize_invoice(invoice)
@@ -249,7 +249,7 @@ class DraftCommands(InventoryBase):
 
     def _check_basis_vat(self, company_id: int, document_id: int) -> None:
         """A purchase on «Digər» has no ƏDV to take: without an e-qaimə it is part of the
-        cost (D216)."""
+        cost (D217)."""
         row = self.conn.execute(
             "SELECT d.basis_note, COALESCE(SUM(ABS(l.vat_amount)), 0) AS vat "
             "FROM inventory_documents d LEFT JOIN inventory_lines l "

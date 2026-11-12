@@ -225,4 +225,5 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D213 | Один документ в глазах пользователя: вид и свой номер | принято (уточняет D75, D123) | [D213-one-document.md](D213-one-document.md) |
 | D214 | Доп. расходы без знания счетов | принято (уточняет D212, развивает D211, D85) | [D214-landed-for-newcomers.md](D214-landed-for-newcomers.md) |
 | D215 | Excel с формулами | принято (развивает D104) | [D215-excel-formulas.md](D215-excel-formulas.md) |
-| D216 | Основание «Digər» у покупки и продажи | принято | [D216-basis-other.md](D216-basis-other.md) |
+| D216 | Касса в разделе «Банк и касса» | принято (развивает D47, D78) | [D216-cash.md](D216-cash.md) |
+| D217 | Основание «Digər» у покупки и продажи | принято | [D217-basis-other.md](D217-basis-other.md) |

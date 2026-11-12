@@ -216,5 +216,5 @@ class LinesPart(BankOperationForm):
         self._changed()
 
     def _fee_key(self) -> None:
-        if not self.read_only:
+        if not self.read_only and not self.is_cash:
             self.add_fee()

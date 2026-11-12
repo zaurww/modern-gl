@@ -4,6 +4,7 @@ line of a bank's file whose sender the directory lacks — whom the bank names."
 from __future__ import annotations
 
 from modern_gl.application.bank import (
+    CASH_KINDS,
     CUSTOMER,
     OTHER,
     OUT,
@@ -32,14 +33,17 @@ from modern_gl.i18n import tr
 class CounterpartyPart(BankOperationForm):
     def _kind_visibility(self) -> None:
         """A counterparty for payments to and from partners; the ƏDV deposit account
-        offers only what it may pay (D41)."""
+        offers only what it may pay (D41), a cash desk no bank fee."""
         kind = self.kind.currentData()
         shown = kind in WITH_COUNTERPARTY
         for w in (self.counterparty_caption, self.counterparty_edit, self.tax_id):
             w.setVisible(shown)
         deposit = self.bank_info is not None and self.bank_info.account_type == "vat_deposit"
         for i in range(self.kind.count()):
-            allowed = not deposit or self.kind.itemData(i) in VAT_DEPOSIT_KINDS
+            kind = self.kind.itemData(i)
+            allowed = (not deposit or kind in VAT_DEPOSIT_KINDS) and (
+                not self.is_cash or kind in CASH_KINDS  # no bank to charge a fee
+            )
             self.kind.setItemHidden(i, not allowed)
         self.memo.setPlaceholderText(self._default_memo())
         self._show_party_note()
