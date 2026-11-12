@@ -105,6 +105,7 @@ def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:
             money=True,
             warn=warns.get(a.split("_")[0]),
             group=tr(group),
+            role=a,
         )
         for group, side, a in TURNOVER_COLUMNS
     ]

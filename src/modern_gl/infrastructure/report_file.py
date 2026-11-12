@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from modern_gl.i18n import tr
+from modern_gl.infrastructure.report_formulas import formulas
 
 MONEY_FORMAT = "#,##0.00;[Red]-#,##0.00"
 DATE_FORMAT = "DD.MM.YYYY"
@@ -34,6 +35,9 @@ class ReportColumn:
     group: str = ""  # «Начальное сальдо» over its Dt and Kt: «Начальное сальдо · Дт»
     date: bool = False  # cells are ISO dates ("2026-03-01") or None
     number: bool = False  # cells are plain integers or None
+    # what a money column is in a trial balance («opening», «turnover_dt», «closing_ct»…):
+    # its closing balance is then a formula of the others (report_formulas)
+    role: str = ""
 
     @property
     def caption(self) -> str:
@@ -66,6 +70,7 @@ class ReportRow:
     cells: list[object]  # text, or minor units in a money column
     level: int = 0
     bold: bool = False  # a subtotal or a total
+    total: bool = False  # a total of the lines above it (a rule over it in the report)
 
 
 @dataclass
@@ -78,6 +83,7 @@ class ReportTable:
     # («Период», «01.10 — …»)
     about: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
     as_table: bool = False  # an Excel table (ListObject): a pivot's source that grows
+    with_formulas: bool = True  # totals and closing balances as formulas (report_formulas)
 
     @property
     def leveled(self) -> bool:
@@ -106,6 +112,7 @@ def write_xlsx(table: ReportTable, path: str | Path, more: Sequence[ReportTable]
     about.column_dimensions["A"].width = 18
     about.column_dimensions["B"].width = 60
     book.properties.title = table.title
+    book.calculation.fullCalcOnLoad = True  # formulas are written without their values
     book.save(str(path))
 
 
@@ -121,8 +128,21 @@ def _write_sheet(sheet: Any, table: ReportTable) -> None:
     sheet.append(headers)
     for cell in sheet[1]:
         cell.font = Font(bold=True)
-    for r in table.rows:
-        values = [c.cell(v) for c, v in zip(table.columns, r.cells, strict=True)]
+    found = (
+        formulas(
+            [c.role for c in table.columns],
+            [c.money for c in table.columns],
+            table.rows,
+            lambda j: get_column_letter(j + 1),
+        )
+        if table.with_formulas
+        else {}
+    )
+    for k, r in enumerate(table.rows):
+        values = [
+            found.get((k, j)) or c.cell(v)
+            for j, (c, v) in enumerate(zip(table.columns, r.cells, strict=True))
+        ]
         sheet.append(values + ([r.level] if level_column else []))
         row = sheet.max_row
         if r.level:
