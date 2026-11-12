@@ -1,4 +1,4 @@
--- The basis «Digər» (D-new-basis-other): a purchase or a sale made on a document that is
+-- The basis «Digər» (D216): a purchase or a sale made on a document that is
 -- neither an e-qaimə nor a customs declaration — an act, a receipt, a contract. Its name
 -- and number are free text, kept on the document only: no number goes onto the postings,
 -- so it stays out of the portal reconciliation, the ƏDV and the unpaid e-qaimə.

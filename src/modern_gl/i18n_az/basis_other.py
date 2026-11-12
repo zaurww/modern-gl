@@ -1,4 +1,4 @@
-"""The basis «Digər» of a purchase or a sale (D-new-basis-other)."""
+"""The basis «Digər» of a purchase or a sale (D216)."""
 
 from __future__ import annotations
 

@@ -32,7 +32,8 @@ STEP = len(INDENT)  # spaces of one level of a name in a report
 
 def report_table(model: ReportModel, title: str, about: list[tuple[str, str]]) -> ReportTable:
     columns = [
-        ReportColumn(c.title, c.money or c.value is not None, c.group) for c in model.columns
+        ReportColumn(c.title, c.money or c.value is not None, c.group, role=c.role)
+        for c in model.columns
     ]
     rows = []
     for i, r in enumerate(model.rows):
@@ -47,7 +48,8 @@ def report_table(model: ReportModel, title: str, about: list[tuple[str, str]]) -
             if j == 0:  # the first column: its indent is the depth
                 level = (len(text) - len(text.lstrip(" "))) // STEP
             cells.append(text.strip())
-        rows.append(ReportRow(cells, level, model.emphasis(r) or model.total(r)))
+        total = model.total(r)
+        rows.append(ReportRow(cells, level, model.emphasis(r) or total, total))
     return ReportTable(title, columns, rows, about)
 
 

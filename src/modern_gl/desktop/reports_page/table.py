@@ -78,6 +78,9 @@ class Column:
     # what a list sorted by this column orders by (a date: the ISO date, not its text);
     # by default the amount (`value`), else what the cell shows
     sort: Callable[[Any], Any] | None = None
+    # a balance column of a trial balance («opening», «turnover_dt»…): in Excel its
+    # closing is a formula of the others (report_formulas)
+    role: str = ""
 
 
 def sort_value(col: Column, row: Any) -> Any:

@@ -1,4 +1,4 @@
-"""The basis «Digər» (D-new-basis-other): a purchase or a sale on an act, a receipt… named in
+"""The basis «Digər» (D216): a purchase or a sale on an act, a receipt… named in
 free text. The text stays on the document: no number on the postings, so the portal
 reconciliation, the ƏDV and «Ждёт e-qaimə» do not see it. Numbers by hand in docstrings."""
 

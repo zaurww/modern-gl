@@ -6,7 +6,7 @@
 один вид «Digər», в покупке и продаже, простой вариант (без номера в проводках). Вопросы
 по AONE сняты: пользователь начнёт её заново.
 
-- D-new-basis-other: миграция 0069 — `inventory_documents.basis_note` (+ триггер
+- D216: миграция 0069 — `inventory_documents.basis_note` (+ триггер
   неизменности проведённого); `domain.invoice.basis_note`; `_set_invoice(note=…)`,
   `_check_basis_vat` — покупка по «Digər» без ƏDV.
 - Форма: выбор основания у продажи (e-qaimə / «Digər»), у покупки — четвёртый пункт; выбор

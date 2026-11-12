@@ -78,15 +78,21 @@ def net_columns(warn_opening, warn_closing) -> list[Column]:
             money=True,
             warn=warn_opening,
             key="opening",
+            role="opening",
         ),
-        Column(tr("Дт"), lambda r: r.turnover_dt, money=True, group=tr("Обороты")),
-        Column(tr("Кт"), lambda r: r.turnover_ct, money=True, group=tr("Обороты")),
+        Column(
+            tr("Дт"), lambda r: r.turnover_dt, money=True, group=tr("Обороты"), role="turnover_dt"
+        ),
+        Column(
+            tr("Кт"), lambda r: r.turnover_ct, money=True, group=tr("Обороты"), role="turnover_ct"
+        ),
         Column(
             tr("Сальдо на конец"),
             lambda r: r.closing_dt - r.closing_ct,
             money=True,
             warn=warn_closing,
             key="closing",
+            role="closing",
         ),
     ]
 
