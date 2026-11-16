@@ -36,6 +36,9 @@ class Session:
     notify: Callable[[str], None] = print
     # the window's toast with «Undo»; without it the message alone is told (tests)
     notify_undo: Callable[[str, Callable[[], None]], None] | None = None
+    # a long job's progress in the window: (text, steps done, steps in all); total 0 —
+    # the job ended
+    progress: Callable[[str, int, int], None] = lambda text, done, total: None
     # the company's file and its size: a large one is read in the background (debt 6)
     path: Path | None = None
     large: bool = False

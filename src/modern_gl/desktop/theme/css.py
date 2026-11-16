@@ -272,6 +272,10 @@ QPushButton#toastAction {{
     padding: 2px 6px;
 }}
 QPushButton#toastAction:hover {{ text-decoration: underline; }}
+QProgressBar#toastBar {{
+    background: {P.toast_track}; border: none; border-radius: 1px;
+}}
+QProgressBar#toastBar::chunk {{ background: {P.toast_action}; border-radius: 1px; }}
 QMenu {{
     background: {P.surface}; border: 1px solid {P.hairline}; border-radius: 10px; padding: 6px;
 }}

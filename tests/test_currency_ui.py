@@ -272,3 +272,39 @@ def test_keyboard_entry_goes_through_currency_cells(session, qtbot):
     type_into_cell(qtbot, page, 0, RATE, "1,75")
     assert table.currentIndex().column() == AMOUNT
     assert m.rows[0].amount == 175_000
+
+
+def test_loading_rates_of_a_period_says_how_far_it_is(session, qtbot):
+    """A year of rates takes minutes: every day asked is told to the window («Курсы ЦБА:
+    2 из 3», 1 of 3 days done), and the end takes the line away — before the toast."""
+    page = CurrenciesPage(session)
+    qtbot.addWidget(page)
+    told: list[tuple[str, int, int]] = []
+    session.progress = lambda text, done, total: told.append((text, done, total))
+    session.fetch_rates = lambda day: {"USD": (parse_rate("1.70"), 1)}
+    assert page.load_rates(date(2026, 3, 1), date(2026, 3, 3)) is not None
+    qtbot.waitUntil(lambda: page.loading is None, timeout=5000)
+    assert told == [
+        (tr("Курсы ЦБА: {n} из {total}", n=1, total=3), 0, 3),
+        (tr("Курсы ЦБА: {n} из {total}", n=2, total=3), 1, 3),
+        (tr("Курсы ЦБА: {n} из {total}", n=3, total=3), 2, 3),
+        ("", 0, 0),
+    ]
+
+
+def test_no_connection_takes_the_progress_away(session, qtbot, monkeypatch):
+    from modern_gl.infrastructure.cbar import RatesUnavailableError
+
+    page = CurrenciesPage(session)
+    qtbot.addWidget(page)
+    told: list[tuple[str, int, int]] = []
+    session.progress = lambda text, done, total: told.append((text, done, total))
+
+    def offline(day):
+        raise RatesUnavailableError("Не удалось связаться с сайтом ЦБА (cbar.az): offline")
+
+    session.fetch_rates = offline
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: None)
+    page.load_rates(date(2026, 3, 1), date(2026, 3, 10))
+    qtbot.waitUntil(lambda: page.loading is None, timeout=5000)
+    assert told[-1] == ("", 0, 0) and len(told) == 2

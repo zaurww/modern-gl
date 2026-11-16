@@ -48,6 +48,7 @@ class Palette:
     tooltip: str = "#1D2025"
     tooltip_text: str = "#FFFFFF"
     toast_action: str = "#8AB4F8"  # «Undo» on the dark toast (it has tooltip colors)
+    toast_track: str = "#5A5F6B"  # what is left of a long job, under the bar
 
 
 # name -> (title in the menu, the colors that differ from Palette)

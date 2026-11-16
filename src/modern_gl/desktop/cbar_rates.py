@@ -1,6 +1,7 @@
 """The Central Bank's rates for many days off the window's thread: a request a day (a
-year — a few minutes), the window stays alive and says how far it is. Days the company
-has every rate of are not asked again. Used by «Валюты» and the bank's file window."""
+year — a few minutes), the window stays alive and says how far it is (`session.progress`
+— a line with a bar at the window's bottom, seen from any page). Days the company has
+every rate of are not asked again. Used by «Валюты», «Банк» and the bank's file window."""
 
 from __future__ import annotations
 
@@ -44,6 +45,17 @@ def load_rates(
     """Fetch the days in the background, write them here: `done` gets how many days were
     set; no connection — `failed` (said once, not for every day)."""
     fetch = session.fetch_rates
+    asked = 0  # days asked so far: the one being fetched is not behind yet
+
+    def told(text: str) -> None:
+        nonlocal asked
+        progress(text)
+        session.progress(text, asked, len(days))
+        asked += 1
+
+    def broke(message: str) -> None:
+        session.progress("", 0, 0)
+        failed(message)
 
     def job(say: Callable[[str], None]) -> dict[str, Rates]:
         got: dict[str, Rates] = {}
@@ -58,6 +70,7 @@ def load_rates(
 
     def fetched(got: object) -> None:
         assert isinstance(got, dict)
+        session.progress("", 0, 0)
         loaded = 0
         try:
             for day, rates in sorted(got.items()):
@@ -68,4 +81,4 @@ def load_rates(
             return
         done(loaded)
 
-    return run_on_portal(parent, job, progress, fetched, failed)
+    return run_on_portal(parent, job, told, fetched, broke)

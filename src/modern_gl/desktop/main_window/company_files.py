@@ -94,6 +94,9 @@ class CompanySession(QObject):
     closing = Signal()  # the file is closed right after: its pages go first
     none_left = Signal()  # no company to open, none created
 
+    def _tell_progress(self, text: str, done: int, total: int) -> None:
+        self.progress(text, done, total)
+
     def __init__(
         self,
         workspace: Workspace,
@@ -106,6 +109,8 @@ class CompanySession(QObject):
         self.owner = owner  # the window: dialogs are shown over it
         self.confirm_close = confirm_close
         self.notify = notify
+        # a long job's progress (the window's toast); nothing shown without a window
+        self.progress: Callable[[str, int, int], None] = lambda text, done, total: None
         self.workspace = workspace
         self.settings = settings  # None: nothing is remembered (tests)
         self.prefs = Preferences(settings) if settings is not None else None
@@ -251,6 +256,7 @@ class CompanySession(QObject):
             Catalog(conn, company_id),
             notify=self.notify,
             notify_undo=self.notify,
+            progress=self._tell_progress,  # the window sets `progress` after this object
         )
         self.session.read_only = read_only
         self.session.path = path

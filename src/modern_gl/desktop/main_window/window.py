@@ -63,6 +63,7 @@ class MainWindow(QMainWindow):
         self.company = CompanySession(
             workspace, settings, self, self.page_stack.confirm_close_all, self.notify
         )
+        self.company.progress = self.progress
         self.nav = Navigator(self.company, self.page_stack, self)
         self.reports = self.nav.reports
         self._connect()
@@ -305,6 +306,13 @@ class MainWindow(QMainWindow):
 
     def notify(self, message: str, undo: Callable[[], None] | None = None) -> None:
         self.toast.show_message(message, None if undo is None else lambda: self._undo(undo))
+
+    def progress(self, text: str, done: int, total: int) -> None:
+        """A long job's progress at the bottom of the window; `total` 0 — it ended."""
+        if total:
+            self.toast.show_progress(text, done, total)
+        else:
+            self.toast.end_progress()
 
     def _undo(self, undo: Callable[[], None]) -> None:
         """«Undo» on the toast: done, then the page shown reads it again."""

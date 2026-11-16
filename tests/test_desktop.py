@@ -238,6 +238,28 @@ def test_posting_says_so_in_a_toast_and_undo_makes_a_draft_again(window):
     assert not window.toast.undo_button.isVisibleTo(window.toast)
 
 
+def test_a_long_job_keeps_its_progress_in_the_toast(window):
+    """Loading a year of rates: «Курсы ЦБА: 3 из 10» with a bar stays at the bottom of the
+    window until the job ends — it does not go away by itself as a message does."""
+    toast = window.toast
+    window.session.progress("Курсы ЦБА: 3 из 10", 2, 10)
+    assert toast.message() == "Курсы ЦБА: 3 из 10"
+    assert toast.bar.isVisibleTo(toast) and (toast.bar.value(), toast.bar.maximum()) == (2, 10)
+    assert not toast.undo_button.isVisibleTo(toast)
+    assert not toast._timer.isActive()  # stays
+    window.session.progress("Курсы ЦБА: 4 из 10", 3, 10)
+    assert toast.message() == "Курсы ЦБА: 4 из 10" and toast.bar.value() == 3
+    window.session.progress("", 0, 0)
+    assert not toast.message()
+    # a message is a message again: no bar, goes away by itself
+    window.session.progress("Курсы ЦБА: 1 из 2", 0, 2)
+    window.notify("Загружены курсы ЦБА за 2 дн.")
+    assert toast.message() == "Загружены курсы ЦБА за 2 дн."
+    assert not toast.bar.isVisibleTo(toast) and toast._timer.isActive()
+    window.session.progress("", 0, 0)  # the job's end does not take a message away
+    assert toast.message() == "Загружены курсы ЦБА за 2 дн."
+
+
 def test_post_errors_are_shown_and_nothing_is_lost(window):
     window.new_document()
     page = current_page(window)
