@@ -140,6 +140,24 @@ def test_bank_fee_line_and_a_receipt(qtbot, session):
     assert page.total.text() == "1 180.00 AZN"
 
 
+def test_a_new_bank_account_is_never_a_cash_desk(qtbot, session):
+    """«Касса» is a group of the list, not a kind to choose: a cash desk is known by its GL
+    account. The window of a new account opens on «Расчётные счета» and saves as it is."""
+    from modern_gl.application.bank import CURRENT, bank_accounts
+    from modern_gl.desktop.bank_page.dialogs import BankAccountDialog
+
+    dialog = BankAccountDialog(session, None)
+    qtbot.addWidget(dialog)
+    kinds = [dialog.kind.itemData(i) for i in range(dialog.kind.count())]
+    assert kinds == ["current", "currency", "vat_deposit", "card"]
+    assert dialog.kind.currentData() == CURRENT
+    dialog.name.setText("Kapital 2")
+    dialog.save()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    rows = bank_accounts(session.conn, session.company_id, "2026-12-31")
+    assert [r.kind for r in rows if r.place.name == "Kapital 2"] == [CURRENT]
+
+
 def test_bank_settings_choose_the_fee_account(qtbot, session):
     """The template puts the fee on 91.2; the user makes 26 the default in «Настройки
     банка», and «+ Комиссия банка» takes 26 from then on."""

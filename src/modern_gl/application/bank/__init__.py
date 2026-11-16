@@ -12,6 +12,7 @@ from __future__ import annotations
 from modern_gl.application.bank.accounts import (
     ACCOUNT_KINDS,
     CARD,
+    CHOSEN_KINDS,
     CURRENCY,
     CURRENT,
     VAT_DEPOSIT,
@@ -90,6 +91,7 @@ __all__ = [
     "BANK_TYPES",
     "CARD",
     "CASH_KINDS",
+    "CHOSEN_KINDS",
     "CURRENCY",
     "CURRENT",
     "CUSTOMER",

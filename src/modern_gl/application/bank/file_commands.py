@@ -184,7 +184,7 @@ class BankFileCommands(FileLinkCommands):
             "AND COALESCE(value_id, 0) = ?",
             (company_id, place.account_id, place.value_id or 0),
         ).fetchone()
-        if row is not None and row["iban"]:
+        if (row is not None and row["iban"]) or place.is_cash:  # a cash desk has no details
             return
         from modern_gl.application.bank.accounts import default_kind
 

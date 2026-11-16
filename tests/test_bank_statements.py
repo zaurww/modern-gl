@@ -131,3 +131,13 @@ def test_a_closed_account_and_wrong_card_digits(ledger, firm):
     ledger.bank.set_bank_account(cid, a55, card, kind=CARD, card_digits="3388", closed=True)
     row = next(r for r in bank_accounts(ledger.conn, cid, "2026-03-31") if r.place.value_id == card)
     assert row.closed
+
+
+def test_a_cash_desk_is_not_a_kind_of_a_bank_account(ledger, firm):
+    """«Касса» is told by the GL account; as a kind it is refused in words, and nothing of
+    the new account is left behind."""
+    cid, a51, _ = firm
+    before = len(bank_accounts(ledger.conn, cid, "2026-03-31"))
+    with pytest.raises(ValidationError, match="неизвестный вид"):
+        ledger.bank.add_bank_account(cid, "Kassa 2", a51, "cash")
+    assert len(bank_accounts(ledger.conn, cid, "2026-03-31")) == before

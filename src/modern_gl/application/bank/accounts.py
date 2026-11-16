@@ -22,6 +22,8 @@ ACCOUNT_KINDS = (
     (VAT_DEPOSIT, N_("Депозит ƏDV")),
     (CARD, N_("Бизнес-карты")),
 )
+# the kinds the form of an account offers and the table keeps: every group but the cash desk
+CHOSEN_KINDS = tuple(pair for pair in ACCOUNT_KINDS if pair[0] != CASH)
 
 
 @dataclass(frozen=True)

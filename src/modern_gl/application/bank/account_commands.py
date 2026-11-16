@@ -4,7 +4,7 @@ end by the bank. Neither changes a posting: lines are read from postings."""
 
 from __future__ import annotations
 
-from modern_gl.application.bank.accounts import ACCOUNT_KINDS
+from modern_gl.application.bank.accounts import CHOSEN_KINDS
 from modern_gl.application.ledger.base import account_label
 from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.dates import iso_date
@@ -12,7 +12,7 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import insert, transaction
 
-KIND_CODES = {kind for kind, _ in ACCOUNT_KINDS}
+KIND_CODES = {kind for kind, _ in CHOSEN_KINDS}
 
 
 class BankStatementCommands(ModuleBase):

@@ -18,9 +18,9 @@ from PySide6.QtWidgets import (
 )
 
 from modern_gl.application.bank import (
-    ACCOUNT_KINDS,
     BANK_TYPES,
     CARD,
+    CHOSEN_KINDS,
     CURRENCY,
     VAT_DEPOSIT,
     BankAccount,
@@ -63,7 +63,7 @@ class BankAccountDialog(QDialog):
         self.name = QLineEdit(account.place.name if account else "")
         self.name.setPlaceholderText(tr("ABB, Kapital Bank USD, ABB Visa…"))
         self.kind = QComboBox()
-        for kind, title in ACCOUNT_KINDS:
+        for kind, title in CHOSEN_KINDS:  # a cash desk is its GL account, not a kind
             self.kind.addItem(tr(title), kind)
         self.ledger_account = QComboBox()
         for a in self._bank_ledger_accounts():
