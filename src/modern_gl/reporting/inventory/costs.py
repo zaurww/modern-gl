@@ -52,6 +52,7 @@ class WaitingExpense:
     waits: bool
     line_id: int | None = None
     source: tuple[int, int] | None = None
+    for_document_id: int | None = None  # the purchase of the goods it was said to be for
 
     @property
     def left(self) -> int:
@@ -88,6 +89,8 @@ def waiting_lines(
         f"""
         SELECT l.id, d.doc_date, l.memo, l.amount, l.cost_account_id,
                l.cost_sc1, l.cost_sc2, l.cost_sc3, d.invoice,
+               (SELECT t.target_document_id FROM inventory_expense_targets t
+                WHERE t.company_id = l.company_id AND t.line_id = l.id) AS for_document_id,
                (SELECT c.name FROM inventory_line_counterparties c
                 WHERE c.company_id = l.company_id AND c.line_id = l.id
                 ORDER BY c.counterparty_id LIMIT 1) AS party,
@@ -112,6 +115,7 @@ def waiting_lines(
             r["used"],
             r["cost_account_id"] in waiting,
             line_id=r["id"],
+            for_document_id=r["for_document_id"],
         )
         for r in rows
     ]

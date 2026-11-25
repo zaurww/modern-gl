@@ -26,6 +26,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
+    FOR,
     HEADERS,
     ITEM,
     KIND,
@@ -160,8 +161,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineKinds):
         if role == Qt.ItemDataRole.EditRole:
             return self._edit_value(index.row(), key)
         if role == Qt.ItemDataRole.DisplayRole:
-            if key == KIND:
-                return self._kind_text(index.row())
+            if key in {KIND, FOR}:
+                return self.kind_cell_text(index.row(), key)
             return self._display_text(index.row(), key)
         if role == Qt.ItemDataRole.TextAlignmentRole and key in NUMBER_KEYS:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
@@ -187,6 +188,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineKinds):
             return self._subconto_of(row, key)[int(key[-1]) - 1]
         if key == EXPENSE_MONTH:
             return None if row.expense_date is None else month_code(row.expense_date)
+        if key == FOR:
+            return row.for_document_id
         if key == QUANTITY:
             return "" if row.quantity is None else format_quantity(row.quantity, 6)
         if key in {PRICE, AMOUNT, VAT, CURRENCY_AMOUNT}:
@@ -267,6 +270,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineKinds):
         elif key == EXPENSE:
             row.expense_account_id = value
             self._drop_foreign(value, row.expense_subconto)
+            if not self.is_landed(index.row()):
+                row.for_document_id = None
             self.spread_expense_account(index.row())
             self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
         elif key in SUBCONTO_KEYS:

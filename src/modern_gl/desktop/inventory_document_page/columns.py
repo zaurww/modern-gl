@@ -39,6 +39,8 @@ SALE1 = "sale1"
 SALE2 = "sale2"
 SALE3 = "sale3"
 MEMO = "memo"
+# an expense of a batch: the purchase of the goods it is for (D220)
+FOR = "for_purchase"
 # a receipt's line is goods (through a warehouse) or a service (to an account): the choice
 KIND = "kind"
 # … or an expense of a batch (a broker, a carrier): it waits on its account for the batch
@@ -60,8 +62,18 @@ STORED_FIELDS = {
     QUANTITY: "quantity",
     AMOUNT: "amount",
     MEMO: "memo",
+    FOR: "for_document_id",
 }
-LIST_KEYS = {ITEM, KIND, WAREHOUSE, TO_WAREHOUSE, ACCOUNT, EXPENSE, EXPENSE_MONTH} | SUBCONTO_KEYS
+LIST_KEYS = {
+    ITEM,
+    KIND,
+    WAREHOUSE,
+    TO_WAREHOUSE,
+    ACCOUNT,
+    EXPENSE,
+    EXPENSE_MONTH,
+    FOR,
+} | SUBCONTO_KEYS
 # the name of a line keeps this much; these columns narrow first, down to NARROW_MIN
 ITEM_MIN = 300
 NARROW_MIN = 84
@@ -95,6 +107,7 @@ HEADERS = {
     SALE2: "",
     SALE3: "",
     MEMO: N_("Комментарий"),
+    FOR: N_("К покупке"),
 }
 # a sale line is goods or a service: a line without an item, its memo says what it is
 SALE_HEADERS = {
@@ -225,6 +238,7 @@ class InventoryGridRow:
     # a receipt's service of an earlier month (D65): the last day of that month
     expense_date: str | None = None
     returned_line_id: int | None = None  # a return's line: the purchase's (sale's) it returns
+    for_document_id: int | None = None  # an expense of a batch: the purchase it is for
 
     def is_empty(self) -> bool:
         """Nothing typed yet: the account and subconto prefilled by default do not count."""
@@ -254,4 +268,5 @@ class InventoryGridRow:
             expense_subconto=list(self.expense_subconto),
             sale_subconto=list(self.sale_subconto),
             expense_date=self.expense_date,
+            for_document_id=self.for_document_id,
         )  # a copy is a new line: no line id

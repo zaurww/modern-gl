@@ -53,6 +53,17 @@ LINE_COLUMNS = (
     "expense_date",
 )
 
+# line -> what it names in a table of links: the line a return returns, the purchase of
+# goods an expense of a batch is for (D220)
+RETURNED_LINES = (
+    "SELECT line_id, returned_line_id FROM inventory_returns "
+    "WHERE company_id = ? AND document_id = ?"
+)
+EXPENSE_TARGETS = (
+    "SELECT line_id, target_document_id FROM inventory_expense_targets "
+    "WHERE company_id = ? AND document_id = ?"
+)
+
 
 class DraftCommands(InventoryBase):
     def load_document(self, company_id: int, document_id: int) -> InventoryDocumentData:
@@ -63,14 +74,8 @@ class DraftCommands(InventoryBase):
             "ORDER BY line_no",
             (company_id, document_id),
         ).fetchall()
-        returned = {
-            r["line_id"]: r["returned_line_id"]
-            for r in self.conn.execute(
-                "SELECT line_id, returned_line_id FROM inventory_returns "
-                "WHERE company_id = ? AND document_id = ?",
-                (company_id, document_id),
-            )
-        }
+        returned = self._line_links(RETURNED_LINES, company_id, document_id)
+        targets = self._line_links(EXPENSE_TARGETS, company_id, document_id)
         return InventoryDocumentData(
             doc["id"],
             doc["number"],
@@ -101,6 +106,7 @@ class DraftCommands(InventoryBase):
                     (row["cost_sc1"], row["cost_sc2"], row["cost_sc3"]),
                     row["expense_date"],
                     returned.get(row["id"]),
+                    targets.get(row["id"]),
                 )
                 for row in rows
             ),
@@ -135,6 +141,11 @@ class DraftCommands(InventoryBase):
             incoming_reason=doc["incoming_reason"],
             awaits_invoice=doc["awaits_invoice"] == 1,
         )
+
+    def _line_links(self, sql: str, company_id: int, document_id: int) -> dict[int, int]:
+        """What the lines of a document name in a table of their links: line -> the other
+        side (the line a return returns, the purchase an expense is for)."""
+        return {row[0]: row[1] for row in self.conn.execute(sql, (company_id, document_id))}
 
     def _insert_document(
         self,

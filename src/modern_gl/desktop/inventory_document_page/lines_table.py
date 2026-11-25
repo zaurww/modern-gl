@@ -49,6 +49,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
+    FOR,
     ITEM,
     ITEM_MIN,
     KIND,
@@ -190,6 +191,8 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         if key == ITEM and text and value is None and service and not editor.property("gl_add"):
             model.setData(model.index(index.row(), model.columns.index(MEMO)), text)
             return UNSET
+        if key == FOR and text and value is None:
+            raise LookupError(tr("покупка не найдена: {text}", text=text))
         if text and value is None:
             editor.setProperty("gl_unknown", True)  # the cell waits for the answer
             where = QPersistentModelIndex(index)
@@ -320,6 +323,7 @@ class InventoryLinesTable(QTableView):
             ACCOUNT: 130,
             EXPENSE: 130,
             EXPENSE_MONTH: 120,
+            FOR: 150,  # a declaration's number whole
             **dict.fromkeys(SALE_KEYS, 130),  # named after its directory: «Satış qrupları»
         }
         used = model.s.catalog.used_positions()
@@ -327,6 +331,9 @@ class InventoryLinesTable(QTableView):
         goods = model.has_goods()
         expense_positions = model.expense_positions()
         in_header = model.party_in_header()  # the supplier (customer) is the header's
+        by_lines = dict.fromkeys((KIND, EXPENSE, EXPENSE_MONTH), expenses) | {
+            FOR: model.has_landed()
+        }
         header = self.horizontalHeader()
         header.setStretchLastSection(False)
         self._widths = {
@@ -339,8 +346,8 @@ class InventoryLinesTable(QTableView):
                 self.setColumnHidden(column, int(key[-1]) not in used or in_header)
             if key in {WAREHOUSE, UNIT}:
                 self.setColumnHidden(column, not goods)
-            if key in {KIND, EXPENSE, EXPENSE_MONTH}:  # a service line is there to change
-                self.setColumnHidden(column, not expenses)
+            if key in by_lines:  # a service line (an expense of a batch) is there to change
+                self.setColumnHidden(column, not by_lines[key])
             if key == EXPENSE and goods and model.shows_stock_accounts():
                 self.setColumnHidden(column, False)  # where the goods go: their stock account
             if key == ACCOUNT:

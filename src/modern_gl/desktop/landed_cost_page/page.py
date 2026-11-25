@@ -251,16 +251,17 @@ class LandedCostPage(LandedCostForm):
         self.charges_table.setFocus()
         self.charges_table.setCurrentIndex(self.charges.index(row, 0))
 
-    def add_waiting(self, numbers: Collection[str] = ()) -> None:
-        """What the books hold for a batch, ticked where it names one of `numbers` (the
-        declarations just chosen): one window instead of looking for accounts."""
+    def add_waiting(self, numbers: Collection[str] = (), documents: Collection[int] = ()) -> None:
+        """What the books hold for a batch, ticked where it was said to be for one of
+        `documents` (the purchases just chosen, D220) or names one of their `numbers`:
+        one window instead of looking for accounts."""
         if self.charges.read_only:
             return
         rows = self._waiting()
         if not rows:
             self.s.notify(tr("Расходов, ждущих партии, нет"))
             return
-        dialog = WaitingExpensesDialog(rows, numbers, self)
+        dialog = WaitingExpensesDialog(rows, numbers, self, documents)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             for row in dialog.chosen():
                 self.charges.insert_row(charge_of(row))
@@ -281,7 +282,7 @@ class LandedCostPage(LandedCostForm):
             self.targets.add(chosen)
             numbers = {line.invoice for line in chosen if line.invoice}
             if self.btn_from_gl.isVisibleTo(self) and any(r.waits for r in self._waiting()):
-                self.add_waiting(numbers)
+                self.add_waiting(numbers, {line.document_id for line in chosen})
 
     def _remove_row(self) -> None:
         self._finish_editing()

@@ -303,15 +303,16 @@ class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
         reason = self._chosen_reason()
         return self.inventory.incoming_account(self.s.company_id, reason) if reason else None
 
-    def _expense_columns(self) -> tuple[bool, set[int], bool, bool]:
+    def _expense_columns(self) -> tuple[bool, set[int], bool, bool, bool]:
         """What decides the columns shown: a service line, its subconto, goods, the
-        supplier (customer) of every line in the header."""
+        supplier (customer) of every line in the header, an expense of a batch."""
         model = self.model
         return (
             model.has_expenses(),
             model.expense_positions(),
             model.has_goods(),
             model.party_in_header(),
+            model.has_landed(),
         )
 
     def show_error(self, message: str) -> None:

@@ -36,6 +36,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
+    FOR,
     ITEM,
     KIND,
     KIND_CHOICES,
@@ -105,6 +106,11 @@ class InventoryLinesBase(QAbstractTableModel):
     # another stock account picked on a goods line (item, account): it is the item's, one
     # for all its documents — the page changes the item (D202)
     stock_account_wanted = Signal(int, int)
+    # the stored document the lines are of (None: a new one), set by the page; the
+    # purchases an expense of a batch may be for are read when first asked for (D220)
+    document_id: int | None = None
+    _purchases: list[tuple[int, str]] | None = None
+    _purchase_names: dict[int, str] = {}  # noqa: RUF012 replaced, never changed in place
 
     def __init__(
         self,
@@ -174,7 +180,7 @@ class InventoryLinesBase(QAbstractTableModel):
                 *([CURRENCY_AMOUNT] if doc_type == "receipt" else []),
                 AMOUNT,
                 *([VAT] if doc_type in VAT_DOCUMENTS else []),
-                *([EXPENSE, ESC1, ESC2, ESC3] if doc_type == "receipt" else []),
+                *([EXPENSE, ESC1, ESC2, ESC3, FOR] if doc_type == "receipt" else []),
                 *([SALE1, SALE2, SALE3] if doc_type == "sale" else []),
                 ACCOUNT,
                 SC1,
@@ -221,6 +227,8 @@ class InventoryLinesBase(QAbstractTableModel):
             ]
         if key == EXPENSE_MONTH:
             return [*self.month_choices(), (SEVERAL_MONTHS, tr("несколько месяцев…"))]
+        if key == FOR:
+            return self.purchase_choices()
         kind_id = self.kind_at(row_index, key)
         owner = self.owner_at(row_index, key)
         return (
@@ -419,6 +427,8 @@ class InventoryLinesBase(QAbstractTableModel):
             return not self.rows[row].is_empty()
         if key in {WAREHOUSE, UNIT} and self.is_service(row):
             return False
+        if key == FOR:
+            return self.is_landed(row)
         if self.is_stock_account_cell(row, key):
             return True
         if key in ESC_KEYS | {EXPENSE, EXPENSE_MONTH} and not self.is_service(row):
@@ -440,6 +450,11 @@ class InventoryLinesBase(QAbstractTableModel):
         bought), from or to no warehouse. An empty new line is not one yet: it starts as goods."""
         row = self.rows[row_index]
         return self.doc_type in {"sale", "receipt"} and row.item_id is None and not row.is_empty()
+
+    def is_landed(self, row_index: int) -> bool:
+        """An expense of a batch: a service line on an account where such expenses wait."""
+        account_id = self.rows[row_index].expense_account_id
+        return self.is_service(row_index) and account_id in self.waiting_accounts
 
     def has_expenses(self) -> bool:
         """A receipt with a line without an item shows the expense account columns; a sale
@@ -492,4 +507,7 @@ class InventoryLinesBase(QAbstractTableModel):
         raise NotImplementedError
 
     def _remember_expense(self, row_index: int) -> None:
+        raise NotImplementedError
+
+    def purchase_choices(self) -> list[tuple[int, str]]:  # the kinds
         raise NotImplementedError

@@ -124,15 +124,24 @@ class _Rows(QAbstractTableModel):
 
 class WaitingExpensesDialog(QDialog):
     def __init__(
-        self, rows: list[WaitingExpense], numbers: Collection[str] = (), parent=None
+        self,
+        rows: list[WaitingExpense],
+        numbers: Collection[str] = (),
+        parent=None,
+        documents: Collection[int] = (),
     ) -> None:
-        """`numbers` — the declarations of the batch: what names one comes ticked."""
+        """`documents` — the purchases of the batch, `numbers` — their declarations:
+        what was said to be for one (D220), or names one, comes ticked."""
         super().__init__(parent)
         self.setWindowTitle(tr("Расходы, ждущие партии"))
         self.resize(860, 480)
         self.rows = rows
         wanted = [number for number in numbers if number]
-        self.ticked = {row.key for row in rows if any(n in row.memo for n in wanted)}
+        self.ticked = {
+            row.key
+            for row in rows
+            if row.for_document_id in documents or any(n in row.memo for n in wanted)
+        }
         root = QVBoxLayout(self)
         hint = caption(
             tr(

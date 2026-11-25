@@ -262,6 +262,11 @@ class PostingCommands(MovementCommands, ReturnCommands, LandedCostCommands, Accr
             if doc["status"] == "posted":
                 self._unpost(company_id, doc)
             self._require_lines_unreferenced(company_id, document_id, keep=())
+            self.conn.execute(  # expenses said to be for it stay, for no purchase (D220)
+                "DELETE FROM inventory_expense_targets "
+                "WHERE company_id = ? AND target_document_id = ?",
+                (company_id, document_id),
+            )
             self.conn.execute(
                 "DELETE FROM inventory_documents WHERE company_id = ? AND id = ?",
                 (

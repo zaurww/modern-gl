@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from modern_gl.application.inventory import format_quantity
 from modern_gl.desktop.landed_cost_page.pickers import PickerDialog
+from modern_gl.desktop.purchase_label import basis
 from modern_gl.desktop.reports_page import Column
 from modern_gl.desktop.session import Session
 from modern_gl.domain.dates import ru_date
@@ -17,12 +18,7 @@ from modern_gl.reporting.inventory import (
 
 
 def _basis(row) -> str:
-    """«İdxal · YGB 0126…», «e-qaimə MT26…», as the warehouse says it."""
-    if not row.invoice:
-        return ""
-    if row.invoice_kind == "customs":
-        return tr("Импорт · ГТД {n}", n=row.invoice)
-    return f"e-qaimə {row.invoice}"
+    return basis(row.invoice, row.invoice_kind)
 
 
 def _letters(text: str) -> str:

@@ -264,6 +264,10 @@ class ReceiptDraftCommands(StockCommands):
             raise ValidationError(tr("складской документ без строк"))
         doc = self._inventory_document(company_id, document_id)
         doc_type = doc["doc_type"]
+        self.conn.execute(
+            "DELETE FROM inventory_expense_targets WHERE company_id = ? AND document_id = ?",
+            (company_id, document_id),
+        )
         for line_no, source in enumerate(lines, 1):
             expense = self._expense_of(company_id, doc_type, source, line_no)
             if source.item_id is None:  # a service, fixed asset or expense: no stock
@@ -291,7 +295,7 @@ class ReceiptDraftCommands(StockCommands):
             line_credit_sc = pad_subconto(source.credit_subconto or credit_subconto)
             stock = source.item_id is not None
             expense_date = line_expense_date(doc_type, source.item_id, source.expense_date, line_no)
-            self._insert_line(
+            line_id = self._insert_line(
                 document_id,
                 company_id,
                 StoredLine(
@@ -313,6 +317,32 @@ class ReceiptDraftCommands(StockCommands):
                     expense_date=expense_date,
                 ),
             )
+            if source.for_document_id is not None:
+                self._set_expense_target(company_id, doc, line_id, source, line_no)
+
+    def _set_expense_target(
+        self, company_id: int, doc: Row, line_id: int, source: ReceiptLine, line_no: int
+    ) -> None:
+        """The purchase of the goods an expense of a batch is for (D220): a purchase, another
+        one than its own, named by a line without an item."""
+        if doc["doc_type"] != "receipt" or source.item_id is not None:
+            raise ValidationError(
+                tr("строка {line}: к покупке относят расход, а не товар", line=line_no)
+            )
+        target = self.conn.execute(
+            "SELECT doc_type FROM inventory_documents WHERE company_id = ? AND id = ?",
+            (company_id, source.for_document_id),
+        ).fetchone()
+        mine = source.for_document_id == doc["id"]
+        if target is None or target["doc_type"] not in INCOMING_TYPES or mine:
+            raise ValidationError(
+                tr("строка {line}: расход относят к другой покупке товара", line=line_no)
+            )
+        self.conn.execute(
+            "INSERT INTO inventory_expense_targets "
+            "(company_id, document_id, line_id, target_document_id) VALUES (?, ?, ?, ?)",
+            (company_id, doc["id"], line_id, source.for_document_id),
+        )
 
     def _expense_of(
         self, company_id: int, doc_type: str, source: ReceiptLine, line_no: int

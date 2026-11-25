@@ -138,6 +138,7 @@ class FillingPart(InventoryDocumentForm):
                 ),
                 sale_subconto=by_sale_kinds(self.s.catalog, kinds, line.cost_subconto),
                 expense_date=line.expense_date if self.doc_type == "receipt" else None,
+                for_document_id=line.for_document_id,
                 returned_line_id=line.returned_line_id,
             )
             for line in doc.lines

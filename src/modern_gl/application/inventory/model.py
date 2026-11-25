@@ -106,6 +106,8 @@ class ReceiptLine:
     # a line without an item whose expense belongs to an earlier month (D65): any day of
     # that month; the receipt accrues it on the month's last day
     expense_date: date | str | None = None
+    # an expense of a batch: the purchase of the goods it is for (D220); None — not said
+    for_document_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -313,6 +315,7 @@ class InventoryLineData:
     # a receipt's (sale's) line without an item accrued in an earlier month: its last day (D65)
     expense_date: str | None = None
     returned_line_id: int | None = None  # a return's line: the line it returns
+    for_document_id: int | None = None  # an expense of a batch: the purchase it is for
 
 
 @dataclass(frozen=True)

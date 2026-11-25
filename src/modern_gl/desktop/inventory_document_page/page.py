@@ -212,6 +212,7 @@ class InventoryDocumentPage(
             incoming_account=self._incoming_account(),
             doc_date=doc_date,
         )
+        self.model.document_id = self.doc.id if self.doc is not None else None
         self.table.setModel(self.model)
         self.table.configure_columns()
         self.expense_columns = self._expense_columns()
