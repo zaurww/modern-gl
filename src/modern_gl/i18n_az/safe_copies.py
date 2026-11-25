@@ -1,5 +1,5 @@
-"""Backups kept by time and made every hour; trial versions (D-new-safe-copies,
-D-new-trial-versions)."""
+"""Backups kept by time and made every hour; trial versions (D222,
+D223)."""
 
 AZ: dict[str, str] = {
     (

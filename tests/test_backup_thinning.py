@@ -1,4 +1,4 @@
-"""Backups thinned by time (D-new-safe-copies): the newest few, then the last copy of each
+"""Backups thinned by time (D222): the newest few, then the last copy of each
 day for a month and of each month for a year — a mistake seen weeks later still has a copy
 from before it; and a copy every hour of work, not only when the company is closed."""
 

@@ -1,4 +1,4 @@
-"""A backup every hour of work (D-new-safe-copies): the copy on closing is not enough for
+"""A backup every hour of work (D222): the copy on closing is not enough for
 a program left open for days. Made in the background by a connection of its own, only when
 the company changed; a failure (a damaged file, the second folder gone) is said once, not
 every hour."""

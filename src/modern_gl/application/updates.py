@@ -19,7 +19,7 @@ class Release:
     setup_url: str
     size: int  # bytes of the installer, 0 when GitHub did not say
     # a trial version (GitHub: «pre-release»): built, not yet tried on real work — only
-    # the computers that asked for trial versions are offered it (D-new-trial-versions)
+    # the computers that asked for trial versions are offered it (D223)
     trial: bool = False
 
 
