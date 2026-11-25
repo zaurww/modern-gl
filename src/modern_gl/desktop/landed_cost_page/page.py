@@ -47,6 +47,8 @@ from modern_gl.desktop.landed_cost_page.waiting_expenses import (
     WaitingExpensesDialog,
     ask_twin,
     charge_of,
+    is_customs_charge,
+    kind_named,
     label_of,
     twin_of,
 )
@@ -264,8 +266,16 @@ class LandedCostPage(LandedCostForm):
         dialog = WaitingExpensesDialog(rows, numbers, self, documents)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             for row in dialog.chosen():
-                self.charges.insert_row(charge_of(row))
+                self.charges.insert_row(charge_of(row, self._kind_of(row)))
             self._count_waiting()
+
+    def _kind_of(self, row: WaitingExpense) -> int | None:
+        """The kind a taken expense's text names; the customs' duty, excise and fees get
+        theirs made when the directory has none yet (D221)."""
+        found = kind_named(row, self.charges.cost_types)
+        if found is None and is_customs_charge(row):
+            found = self._add_cost_type(row.memo.strip())
+        return found
 
     def _waiting(self) -> list[WaitingExpense]:
         """What can be taken, without what this batch has already."""

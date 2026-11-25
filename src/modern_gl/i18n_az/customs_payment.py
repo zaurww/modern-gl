@@ -11,7 +11,9 @@ AZ = {
         "Yalnız ödənişdə olanı doldurun. Qısa bəyannamədə adətən yalnız terminal olur: "
         "onun məbləği ƏDV ilə birlikdə, e-qaiməsində olduğu kimi."
     ),
-    "Пошлины и сборы": "Rüsum və yığımlar",
+    "Таможенная пошлина": "Gömrük rüsumu",
+    "Акциз": "Aksiz",
+    "Таможенные сборы": "Gömrük yığımları",
     "Терминал": "Terminal",
     "Сумма терминалу": "Terminala məbləğ",
     "Таможня": "Gömrük",

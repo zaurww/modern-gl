@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from modern_gl.domain.errors import ValidationError
-from modern_gl.i18n import tr
+from modern_gl.i18n import N_, tr
 
 MAX_LENGTH = 40
 MARK = "№"  # in the quick entry line: «… 1180 №MT2410123456 Оплата»
@@ -37,3 +37,11 @@ def normalize_invoice(text: str | None) -> str | None:
             tr("номер e-qaimə длиннее {n} знаков: {text}", n=MAX_LENGTH, text=number)
         )
     return number
+
+
+# What a payment to the customs pays besides the ƏDV, each a line of its own (D221): the
+# bank writes the word into the line, a batch that takes the line finds its kind by it.
+CUSTOMS_DUTY = N_("Таможенная пошлина")
+CUSTOMS_EXCISE = N_("Акциз")
+CUSTOMS_FEES = N_("Таможенные сборы")
+CUSTOMS_CHARGES = (CUSTOMS_DUTY, CUSTOMS_EXCISE, CUSTOMS_FEES)

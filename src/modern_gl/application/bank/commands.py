@@ -369,7 +369,8 @@ class BankCommands(ModuleBase):
         )
         self.conn.executemany(
             "INSERT INTO bank_operation_lines (company_id, operation_id, line_no, account_id, "
-            "sc1, sc2, sc3, amount, invoice, pays_vat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "sc1, sc2, sc3, amount, invoice, pays_vat, memo) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     company_id,
@@ -380,6 +381,7 @@ class BankCommands(ModuleBase):
                     line.amount,
                     normalize_invoice(line.invoice) or "",
                     int(line.pays_vat),
+                    line.memo.strip(),
                 )
                 for line_no, line in enumerate(data.lines, start=1)
             ],
@@ -451,7 +453,7 @@ class BankCommands(ModuleBase):
                     from_minor(value),
                     dt_sc,
                     ct_sc,
-                    data.memo,
+                    line.memo.strip() or data.memo,
                     data.currency_id,
                     None if data.currency_id is None else from_minor(line.amount),
                     line.invoice,

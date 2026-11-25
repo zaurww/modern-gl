@@ -30,6 +30,9 @@ class CostSource:
     debit_account_id: int = 0
     debit_subconto: tuple[int | None, int | None, int | None] = (None, None, None)
     debit_class: str | None = None  # an expense posting is what a batch usually takes
+    # the document's text and the numbers its postings pay: a line's own text may not
+    # name the declaration (D221)
+    doc_memo: str = ""
 
     @property
     def left(self) -> int:
@@ -53,6 +56,7 @@ class WaitingExpense:
     line_id: int | None = None
     source: tuple[int, int] | None = None
     for_document_id: int | None = None  # the purchase of the goods it was said to be for
+    about: str = ""  # its document's text: where a declaration's number may stand
 
     @property
     def left(self) -> int:
@@ -150,6 +154,7 @@ def waiting_expenses(
             source.used,
             source.debit_account_id in waiting,
             source=(source.document_id, source.line_no),
+            about=source.doc_memo,
         )
         for source in sources
     ]
@@ -192,6 +197,10 @@ def cost_sources(
         SELECT p.document_id, p.line_no, d.doc_date, d.number, p.amount,
                p.debit_account_id, p.dt_sc1, p.dt_sc2, p.dt_sc3, da.account_class,
                COALESCE(NULLIF(p.memo, ''), d.memo) AS memo,
+               d.memo || ' ' || COALESCE(
+                   (SELECT string_agg(x.invoice, ' ') FROM postings x
+                    WHERE x.company_id = p.company_id AND x.document_id = p.document_id
+                      AND x.invoice IS NOT NULL), '') AS doc_memo,
                COALESCE(da.code, da.name) AS debit, COALESCE(ca.code, ca.name) AS credit,
                (SELECT string_agg(v.name, ', ') FROM subconto_values v
                 WHERE v.id IN (p.dt_sc1, p.dt_sc2, p.dt_sc3)) AS dt_names,
@@ -227,6 +236,7 @@ def cost_sources(
             r["debit_account_id"],
             (r["dt_sc1"], r["dt_sc2"], r["dt_sc3"]),
             r["account_class"],
+            r["doc_memo"],
         )
         for r in rows
         if r["amount"] > r["used"] or not only_left

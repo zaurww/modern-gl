@@ -71,6 +71,9 @@ class BankLine:
     invoice: str = ""
     # money from this bank account straight to the supplier's ƏDV deposit: the ƏDV (D145)
     pays_vat: bool = False
+    # what the line pays, when the payment pays several things (D221); empty — the
+    # operation's text
+    memo: str = ""
 
 
 @dataclass(frozen=True)
@@ -159,6 +162,7 @@ def _load_part(conn: Connection, company_id: int, ids: Sequence[int]) -> dict[in
                 (x["sc1"], x["sc2"], x["sc3"]),
                 x["invoice"],
                 bool(x["pays_vat"]),
+                x["memo"],
             )
         )
     return {

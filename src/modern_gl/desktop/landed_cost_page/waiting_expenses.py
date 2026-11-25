@@ -20,7 +20,9 @@ from modern_gl.desktop.landed_cost_page.columns import ChargeRow
 from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.widgets import caption, money
 from modern_gl.domain.dates import ru_date
+from modern_gl.domain.invoice import CUSTOMS_CHARGES
 from modern_gl.i18n import N_, fold, tr
+from modern_gl.i18n_az import AZ
 from modern_gl.reporting.inventory import WaitingExpense
 
 DATE, PARTY, MEMO, AMOUNT = range(4)
@@ -32,9 +34,10 @@ def label_of(row: WaitingExpense) -> str:
     return " · ".join(part for part in (ru_date(row.doc_date), row.party, row.memo) if part)
 
 
-def charge_of(row: WaitingExpense) -> ChargeRow:
-    """A line of the batch that takes what is left of it."""
+def charge_of(row: WaitingExpense, cost_type: int | None = None) -> ChargeRow:
+    """A line of the batch that takes what is left of it, of the kind its text names."""
     return ChargeRow(
+        cost_type_id=cost_type,
         account_id=row.account_id,
         subconto=list(row.subconto),
         amount=row.left,
@@ -42,6 +45,21 @@ def charge_of(row: WaitingExpense) -> ChargeRow:
         source_label=label_of(row),
         source_line=row.line_id,
     )
+
+
+def kind_named(row: WaitingExpense, cost_types: dict[int, str]) -> int | None:
+    """The kind of expenses a waiting expense's text is the name of, if there is one."""
+    wanted = fold(row.memo.strip())
+    return next(
+        (kind for kind, name in cost_types.items() if wanted and fold(name) == wanted), None
+    )
+
+
+def is_customs_charge(row: WaitingExpense) -> bool:
+    """Its text is what a payment to the customs writes — duty, excise, fees — in either
+    language of documents (D221): such an expense has its kind even in a new company."""
+    words = {fold(text) for word in CUSTOMS_CHARGES for text in (word, AZ.get(word, word))}
+    return fold(row.memo.strip()) in words
 
 
 def twin_of(charge: ChargeRow, rows: list[WaitingExpense]) -> WaitingExpense | None:
@@ -137,10 +155,16 @@ class WaitingExpensesDialog(QDialog):
         self.resize(860, 480)
         self.rows = rows
         wanted = [number for number in numbers if number]
+        # only what waits for a batch: the ƏDV of the same payment names the declaration
+        # too, and is no part of the cost
         self.ticked = {
             row.key
             for row in rows
-            if row.for_document_id in documents or any(n in row.memo for n in wanted)
+            if row.waits
+            and (
+                row.for_document_id in documents
+                or any(n in row.memo or n in row.about for n in wanted)
+            )
         }
         root = QVBoxLayout(self)
         hint = caption(
@@ -188,7 +212,7 @@ class WaitingExpensesDialog(QDialog):
                 and (
                     row.key in self.ticked
                     or not needle
-                    or needle in fold(f"{row.party} {row.memo} {row.invoice}")
+                    or needle in fold(f"{row.party} {row.memo} {row.invoice} {row.about}")
                 )
             ]
         )

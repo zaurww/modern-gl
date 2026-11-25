@@ -188,6 +188,8 @@ class LineRow(QWidget):
     def is_empty(self) -> bool:
         return self.account.currentData() is None and not self.amount.text().strip()
 
+    line_memo = ""
+
     def value(self) -> BankLine | None:
         """None for an empty line (just added, not filled in)."""
         if self.is_empty():
@@ -199,9 +201,11 @@ class LineRow(QWidget):
             self.subconto(),
             "" if self.invoice.isHidden() else self.invoice.text().strip(),
             not self.vat.isHidden() and self.vat.isChecked(),
+            self.line_memo,
         )
 
     def set_line(self, line: BankLine, amount: bool = True) -> None:
+        self.line_memo = line.memo  # not shown: what the line pays (D221)
         if line.account_id is not None:
             select_data(
                 self.account, line.account_id, self.s.catalog.accounts[line.account_id].label

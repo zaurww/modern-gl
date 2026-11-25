@@ -22,7 +22,7 @@ from modern_gl.application.default_accounts import landed_cost_account
 from modern_gl.application.ledger import PostingInput
 from modern_gl.domain.accounts import INPUT_VAT
 from modern_gl.domain.errors import ValidationError
-from modern_gl.domain.invoice import CUSTOMS
+from modern_gl.domain.invoice import CUSTOMS, CUSTOMS_DUTY, CUSTOMS_EXCISE, CUSTOMS_FEES
 from modern_gl.domain.money import format_minor, from_minor
 from modern_gl.i18n import tr, trd
 from modern_gl.infrastructure.db import transaction
@@ -31,7 +31,7 @@ from modern_gl.infrastructure.db import transaction
 @dataclass(frozen=True)
 class CustomsPayment:
     """Amounts in kopecks; what was not paid is 0. Without a declaration (a short one that
-    has no purchase yet) only the fees and the terminal can be paid."""
+    has no purchase yet) everything but the ƏDV can be paid."""
 
     doc_date: str
     account_id: int  # the bank account's GL account
@@ -43,6 +43,8 @@ class CustomsPayment:
     terminal_party: int | None = None
     vat: int = 0
     customs_party: int | None = None
+    duty: int = 0  # into the cost of goods, as the fees and the excise
+    excise: int = 0
 
 
 class CustomsPaymentCommands(VatDepositCommands):
@@ -121,8 +123,11 @@ class CustomsPaymentCommands(VatDepositCommands):
 
     def _customs_lines(self, company_id: int, payment: CustomsPayment) -> list[BankLine]:
         lines = []
-        if payment.fees:
-            lines.append(BankLine(landed_cost_account(self.ledger, company_id), payment.fees))
+        charges = ((CUSTOMS_DUTY, payment.duty), (CUSTOMS_EXCISE, payment.excise))
+        for word, amount in (*charges, (CUSTOMS_FEES, payment.fees)):
+            if amount:  # each waits for the batch under its own name (D221)
+                account = landed_cost_account(self.ledger, company_id)
+                lines.append(BankLine(account, amount, memo=trd(word)))
         if payment.terminal:
             sc = self._party_side(company_id, payment.terminal_party, payment)
             lines.append(BankLine(payment.settlement_account_id, payment.terminal, sc))

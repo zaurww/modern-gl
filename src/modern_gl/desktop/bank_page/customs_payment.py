@@ -20,6 +20,7 @@ from modern_gl.application.table_text import plain_number
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import caption, date_edit, edited_date, money
 from modern_gl.domain.errors import LedgerError
+from modern_gl.domain.invoice import CUSTOMS_DUTY, CUSTOMS_EXCISE, CUSTOMS_FEES
 from modern_gl.domain.money import to_minor
 from modern_gl.i18n import tr
 from modern_gl.reporting.inventory import customs_declarations, last_customs_party
@@ -59,8 +60,10 @@ class CustomsPaymentDialog(QDialog):
         self.declaration.addItem("")
         self.declaration.addItems(customs_declarations(session.conn, session.company_id))
         form.addRow(tr("Декларация"), self.declaration)
-        self.fees = self._amount()
-        form.addRow(tr("Пошлины и сборы"), self.fees)
+        self.duty, self.excise, self.fees = self._amount(), self._amount(), self._amount()
+        form.addRow(tr(CUSTOMS_DUTY), self.duty)
+        form.addRow(tr(CUSTOMS_EXCISE), self.excise)
+        form.addRow(tr(CUSTOMS_FEES), self.fees)
         self.terminal_party = self._parties()
         self.terminal = self._amount()
         form.addRow(tr("Терминал"), self.terminal_party)
@@ -109,7 +112,8 @@ class CustomsPaymentDialog(QDialog):
 
     def _count(self) -> None:
         try:
-            total = sum(self._minor(f) for f in (self.fees, self.terminal, self.vat))
+            fields = (self.duty, self.excise, self.fees, self.terminal, self.vat)
+            total = sum(self._minor(f) for f in fields)
         except (ValueError, ArithmeticError):
             self.total.setText("")
             return
@@ -135,6 +139,8 @@ class CustomsPaymentDialog(QDialog):
             self.terminal_party.currentData(),
             self._minor(self.vat),
             self.customs_party.currentData(),
+            self._minor(self.duty),
+            self._minor(self.excise),
         )
 
     def _save(self) -> None:
