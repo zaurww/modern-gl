@@ -453,6 +453,8 @@ class Navigator(QObject):
         if report is not None:
             report.refresh()
         self.refresh_trade()
+        # the reports left open (the trial balance…) show what was posted
+        self.page_stack.postings_changed((page.doc.gl_document_id if page.doc else None) or 0)
 
     def refresh_trade(self) -> None:
         for key in (("purchases",), ("sales",)):
@@ -488,9 +490,8 @@ class Navigator(QObject):
     def _document_saved(self, page: DocumentPage) -> None:
         self.page_stack.rekey(page)
         self.page_stack.retitle(page)
-        journal = self.page_stack.page(("journal",), JournalPage)
-        if journal is not None:
-            journal.refresh(select_id=page.doc_id)
+        if page.doc_id is not None:  # the journal and the reports left open read again
+            self.page_stack.postings_changed(page.doc_id)
 
     def show_backups(self) -> None:
         """«Резервные копии» (D97): when and where, a copy now, the second folder."""
