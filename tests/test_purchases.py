@@ -20,6 +20,7 @@ from modern_gl.desktop.inventory_document_page import (
     WAREHOUSE,
     InventoryDocumentPage,
 )
+from modern_gl.desktop.inventory_document_page.columns import KIND
 from modern_gl.desktop.session import Session
 from modern_gl.domain.errors import ValidationError
 from modern_gl.reporting.inventory import stock_balances
@@ -189,7 +190,7 @@ def test_receipt_page_buys_a_service(shop, conn, qtbot, monkeypatch):
     monkeypatch.setattr(page, "_service_or_item", lambda text: "service")
     page._create_item(QPersistentModelIndex(model.index(0, 0)), "Printerin təmiri")
     assert not page.table.isColumnHidden(expense_column)
-    assert page.table.currentIndex().column() == expense_column
+    assert page.table.currentIndex().column() == model.columns.index(KIND)  # «Куда» first (D219)
     assert model.data(model.index(0, model.columns.index(ITEM))) == "Printerin təmiri"
     assert not model.flags(model.index(0, model.columns.index(WAREHOUSE)))
 

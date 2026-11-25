@@ -265,6 +265,7 @@ class InventoryDocumentPage(
         self.postings.changed()
 
     def _changed(self, *_args) -> None:
+        self.error.hide()  # a value went in: what a cell refused before is answered
         self._show_totals()
         self._show_objects_button()
         if self._expense_columns() != self.expense_columns:  # a service line came or went

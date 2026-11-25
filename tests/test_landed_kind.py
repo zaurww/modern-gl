@@ -12,7 +12,14 @@ from modern_gl.application.catalog import Catalog
 from modern_gl.application.trade_batch import OpenLines
 from modern_gl.desktop.batch_post_dialog import BatchPostDialog
 from modern_gl.desktop.inventory_document_page import AMOUNT, ITEM, WAREHOUSE, InventoryDocumentPage
-from modern_gl.desktop.inventory_document_page.columns import EXPENSE, KIND, LANDED, SERVICE
+from modern_gl.desktop.inventory_document_page.columns import (
+    EXPENSE,
+    KIND,
+    LANDED,
+    PRICE,
+    QUANTITY,
+    SERVICE,
+)
 from modern_gl.desktop.session import Session
 from modern_gl.domain.accounts import BATCH_EXPENSES_ACCOUNT
 from modern_gl.i18n import tr
@@ -140,3 +147,27 @@ def test_drafts_posted_at_once_offer_the_choice_first(shop, conn, qtbot):
     assert dialog.account is not None
     assert dialog.account.itemText(0) == tr("Доп. расход (себестоимость товара)")
     assert dialog.account.itemData(0) == shop.acc["15"]
+
+
+def test_a_new_service_stops_at_where_it_goes_first(shop, conn, qtbot):
+    """After «it is a service» the cursor is in «Куда», not in the account: the choice
+    that needs no account to be known comes first."""
+    page = purchase(shop, conn, qtbot)
+    page.show()
+    qtbot.waitExposed(page)
+    page._make_service(0, "Broker xidməti")
+    assert page.table.currentIndex().column() == page.model.columns.index(KIND)
+
+
+def test_a_cell_error_goes_away_with_the_next_value(shop, conn, qtbot):
+    """A price before the quantity is refused with a message; the quantity typed, the
+    message has nothing more to say (seen in a live test: it stayed on the screen)."""
+    page = purchase(shop, conn, qtbot)
+    page.show()
+    qtbot.waitExposed(page)
+    broker_line(page)
+    page.model.rows[0].amount = None
+    page.delegate.setModelData(QLineEdit("200"), page.model, cell(page, 0, PRICE))
+    assert not page.error.isHidden() and page.error.text() == tr("сначала укажите количество")
+    page.model.setData(cell(page, 0, QUANTITY), 1_000_000)
+    assert page.error.isHidden()

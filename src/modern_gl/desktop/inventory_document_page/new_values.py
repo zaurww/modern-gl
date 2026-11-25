@@ -17,8 +17,8 @@ from PySide6.QtWidgets import (
 from modern_gl.application.document_kinds import kind_name
 from modern_gl.desktop.cell_editing import edit_again, edit_next
 from modern_gl.desktop.inventory_document_page.columns import (
-    EXPENSE,
     ITEM,
+    KIND,
     MEMO,
     QUANTITY,
 )
@@ -84,12 +84,12 @@ class NewValuesPart(InventoryDocumentForm):
         edit_next(self.table, index)
 
     def _make_service(self, row: int, text: str) -> None:
-        """The line becomes a service with this text; a receipt's goes on to the account the
-        service (fixed asset) is charged to."""
+        """The line becomes a service with this text; a receipt's goes on to «Куда» — an
+        account or the cost of goods: the choice that needs no account comes first (D219)."""
         self.model.setData(self.model.index(row, self.model.columns.index(MEMO)), text)
         self.model.setData(self.model.index(row, self.model.columns.index(ITEM)), None)
         self.table.configure_columns()
-        key = EXPENSE if self.doc_type == "receipt" else QUANTITY
+        key = KIND if self.doc_type == "receipt" else QUANTITY
         index = self.model.index(row, self.model.columns.index(key))
         self.table.setCurrentIndex(index)
         self.table.edit(index)
