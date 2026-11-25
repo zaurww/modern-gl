@@ -9,6 +9,7 @@ shared file) — `infrastructure/company_file.py`.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import shutil
 from collections.abc import Iterable
@@ -197,6 +198,7 @@ class Workspace:
         if file_version(path) >= latest_version():  # a newer file: NewerFileError
             return open_company(path)
         made = backup.make_backup_of_file(path, self.backup_folder(path), tr("до обновления"))
+        self._mirror_quietly(made)
         try:
             return open_company(path)
         except DatabaseError as e:  # the update is one transaction: nothing was written
@@ -253,7 +255,26 @@ class Workspace:
     def restore(self, backup_file: Path, company_file: Path) -> Path:
         """Put a backup in place of a closed company file (the current one is kept as a
         backup too). Returns that safety copy."""
-        return backup.restore(backup_file, company_file, self.backup_folder(company_file))
+        kept = backup.restore(backup_file, company_file, self.backup_folder(company_file))
+        self._mirror_quietly(kept)
+        return kept
+
+    def mirror_warning(self, company_file: Path) -> tuple[str, str] | None:
+        """Why a lost disk would take the copies with it — what and a note, for «Bu gün»
+        (D97); None — the newest copy lies in the second folder too."""
+        if self.mirror is None:
+            return tr("Вторая папка для копий не выбрана"), tr("копии лежат только на этом диске")
+        made = self.backups(company_file)
+        if made and not (self.mirror / made[0].path.parent.name / made[0].path.name).exists():
+            return tr("Во второй папке нет последней копии"), tr("папка недоступна?")
+        return None
+
+    def _mirror_quietly(self, made: Path) -> None:
+        """A copy made on the way (before an update, before a restore) goes to the second
+        folder too; that folder being away must not stop the opening — «Bu gün» says it."""
+        if self.mirror is not None:
+            with contextlib.suppress(backup.BackupError):
+                backup.mirror(made, self.mirror)
 
     def delete(self, path: Path) -> Path:
         """Move a company file to the Silinmiş subfolder; returns where it went."""

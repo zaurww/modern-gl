@@ -270,6 +270,7 @@ class CompanySession(QObject):
         self.session.path = path
         self.session.large = posting_count(conn, company_id) >= LARGE
         self.session.last_backup = lambda: self._last_backup(path)
+        self.session.backup_warning = lambda: self.workspace.mirror_warning(path)
         if old_date:
             self.session.working_date = old_date
         self.session.report_period = old_period  # chosen for the program, not a company

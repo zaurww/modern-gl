@@ -69,6 +69,45 @@ def home_backup_line(win) -> tuple[str, str]:
     return line.text.text(), line.figure.text()
 
 
+def home_backup_warning(win) -> str:
+    """The loud second row of «Резервная копия»; "" — there is none."""
+    page = win.pages[("home",)]
+    page.refresh()
+    lines = page.sections[-1].lines
+    assert all(line.text.objectName() == "warning" for line in lines[1:])
+    return lines[1].text.text() if len(lines) > 1 else ""
+
+
+def test_home_warns_while_the_copies_lie_on_one_disk(window, qtbot, tmp_path):
+    """No second folder — said on «Bu gün»; chosen and a copy made — silence; the newest
+    copy gone from it (the drive was out when it was made) — said again."""
+    assert home_backup_warning(window) == "Вторая папка для копий не выбрана"
+    dialog = BackupsDialog(
+        window.workspace, window.conn, window.company_path, window.settings, window
+    )
+    qtbot.addWidget(dialog)
+    dialog.set_mirror(tmp_path / "cloud")
+    assert home_backup_warning(window) == ""  # no copy yet: nothing is missing there
+    dialog.backup_now()
+    assert home_backup_warning(window) == ""
+    made = window.workspace.backups(window.company_path)[0]
+    (tmp_path / "cloud" / window.company_path.stem / made.path.name).unlink()
+    assert home_backup_warning(window) == "Во второй папке нет последней копии"
+    dialog.set_mirror(None)
+
+
+def test_the_copy_before_an_update_goes_to_the_second_folder_too(tmp_path, monkeypatch):
+    from tests.helpers.upgrade import old_file
+
+    ws = Workspace(tmp_path / "data", mirror=tmp_path / "cloud")
+    path = old_file(ws.folder / "Old.gl", 50, monkeypatch)
+    conn, _ = ws.open(path)
+    conn.close()
+    [made] = ws.backups(path)
+    assert (tmp_path / "cloud" / "Old" / made.path.name).exists()
+    assert ws.mirror_warning(path) is None
+
+
 def test_home_shows_the_last_copy_and_the_dialog_makes_one(window, qtbot, tmp_path):
     assert home_backup_line(window)[0] == "Копий ещё нет"
     dialog = BackupsDialog(

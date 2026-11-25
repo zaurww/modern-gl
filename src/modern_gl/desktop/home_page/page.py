@@ -183,6 +183,11 @@ class HomePage(PageWidget):
         else:
             line = Line(tr("Последняя копия"), "", made.strftime("%d.%m.%Y %H:%M"))
         section.add(line).opens(self.open_backups.emit)
+        warning = self.s.backup_warning()
+        if warning is not None:  # loud: a lost disk would take every copy with it
+            second = Line(*warning)
+            second.text.setObjectName("warning")
+            section.add(second).opens(self.open_backups.emit)
         return section
 
     def _rate_line(self, r: DayRate) -> Line:

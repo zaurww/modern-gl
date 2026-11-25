@@ -15,6 +15,7 @@ from pathlib import Path
 
 from modern_gl.domain.errors import LedgerError, ReadOnlyError
 from modern_gl.i18n import fold, tr
+from modern_gl.infrastructure import books_digest
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 # The mark of a company file in the SQLite header ('MGL1', set by migration 0046); 0 is an
@@ -353,12 +354,22 @@ def migrate(conn: sqlite3.Connection) -> None:
     ]
     if not pending:
         return
+    # the books before and after (D-new-upgrade-check): an update that would change a
+    # turnover or a stock balance is undone, unless a migration says it means to
+    compared = current > 0 and not any(
+        books_digest.intended(path.read_text(encoding="utf-8")) for _, path in pending
+    )
     conn.execute("PRAGMA foreign_keys = OFF")  # no effect inside a transaction
     try:
         conn.execute("BEGIN IMMEDIATE")
         try:
+            before = books_digest.books(conn) if compared else {}
             for version, path in pending:
                 _apply(conn, version, path)
+            if compared:
+                changed = books_digest.difference(conn, before, books_digest.books(conn))
+                if changed:
+                    raise sqlite3.IntegrityError(changed)
             conn.execute("COMMIT")
         except BaseException:
             if conn.in_transaction:

@@ -47,6 +47,8 @@ class Session:
     closed: bool = False
     # when the newest backup of the company was made (D97); None — none yet
     last_backup: Callable[[], datetime | None] = lambda: None
+    # what and a note when the copies lie on this disk only (`Workspace.mirror_warning`)
+    backup_warning: Callable[[], tuple[str, str] | None] = lambda: None
     # official rates of a day {code: (rate, nominal)}; tests put a stub here (no network)
     fetch_rates: Callable[[date], dict[str, tuple[int, int]]] = cbar.fetch
 
