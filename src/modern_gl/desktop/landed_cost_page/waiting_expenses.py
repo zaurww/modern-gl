@@ -132,7 +132,9 @@ class WaitingExpensesDialog(QDialog):
         self.resize(860, 480)
         self.rows = rows
         wanted = [number for number in numbers if number]
-        self.ticked = {row.key for row in rows if any(n in row.memo for n in wanted)}
+        # only what waits for a batch: the ƏDV of the same payment names the declaration
+        # too, and is no part of the cost
+        self.ticked = {row.key for row in rows if row.waits and any(n in row.memo for n in wanted)}
         root = QVBoxLayout(self)
         hint = caption(
             tr(

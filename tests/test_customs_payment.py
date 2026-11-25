@@ -185,3 +185,23 @@ def test_the_form_offers_the_declarations_and_the_last_customs(firm):
     assert last_customs_party(firm.conn, firm.cid) is None
     firm.pay(declaration="0126", vat=50_000)
     assert last_customs_party(firm.conn, firm.cid) == firm.customs
+
+
+def test_the_batch_takes_the_fees_and_not_the_vat(firm, qtbot, monkeypatch):
+    """Fees 61.00 and ƏDV 210.60 paid for declaration 0126: the batch takes 61.00 only. The
+    postings of the ƏDV name the declaration too, but do not wait for a batch — they were
+    taken with the fees, unseen, and would have gone into the cost of the goods."""
+    from PySide6.QtWidgets import QDialog
+
+    from modern_gl.application.catalog import Catalog
+    from modern_gl.desktop.landed_cost_page import LandedCostPage
+    from modern_gl.desktop.landed_cost_page.waiting_expenses import WaitingExpensesDialog
+    from modern_gl.desktop.session import Session
+
+    firm.pay(declaration="0126", fees=6_100, vat=21_060)
+    session = Session(firm.conn, firm.ledger, firm.cid, "Firma", Catalog(firm.conn, firm.cid))
+    monkeypatch.setattr(WaitingExpensesDialog, "exec", lambda _self: QDialog.DialogCode.Accepted)
+    page = LandedCostPage(session)
+    qtbot.addWidget(page)
+    page.add_waiting({"0126"})
+    assert [row.amount for row in page.charges.rows if row.taken] == [6_100]
