@@ -229,5 +229,5 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D217 | Основание «Digər» у покупки и продажи | принято | [D217-basis-other.md](D217-basis-other.md) |
 | D218 | Подотчётные лица и авансовый отчёт | принято (развивает D216, D47) | [D218-advance-reports.md](D218-advance-reports.md) |
 | D219 | «Куда → Əlavə xərc»: расход партии в покупке без знания счёта | принято (развивает D211, D214) | [D219-landed-kind.md](D219-landed-kind.md) |
-| D-new | Расход партии называет покупку товара, к которой относится | принято (развивает D211, D219) | [D-new-expense-for-purchase.md](D-new-expense-for-purchase.md) |
-| D-new2 | Таможенный платёж: пошлина, акциз и сборы — своими строками | принято (уточняет D212) | [D-new2-customs-lines.md](D-new2-customs-lines.md) |
+| D220 | Расход партии называет покупку товара, к которой относится | принято (развивает D211, D219) | [D220-expense-for-purchase.md](D220-expense-for-purchase.md) |
+| D221 | Таможенный платёж: пошлина, акциз и сборы — своими строками | принято (уточняет D212) | [D221-customs-lines.md](D221-customs-lines.md) |
