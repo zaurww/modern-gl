@@ -399,3 +399,36 @@ def test_a_failed_update_leaves_the_file_header_as_it_was(tmp_path):
         connect(path)
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
     assert not path.with_name("old.gl-wal").exists()
+
+
+def test_free_money_finds_postings_by_account_whatever_the_statistics(db):
+    """«Bu gün» of a year just loaded (107 000 postings, no statistics yet — they are
+    gathered when the file is closed): the money without a number was read by joining the
+    documents to the postings of the settlement accounts, every posting of the account for
+    each of 13 800 documents — 105 s, and every other page waited behind it. The postings
+    come first now, each asks for its own document (0.03 s)."""
+    import json
+    from itertools import pairwise
+
+    from modern_gl.application import free_money
+
+    params = {
+        "company_id": 1,
+        "date_from": "2026-01-01",
+        "date_to": "2026-12-31",
+        "layers": '["common"]',
+        "sides": json.dumps([1]),
+        "who": json.dumps([1]),
+        "deposits": json.dumps([]),
+        "without": 0,
+    }
+    for sql in (free_money._BY_ACCOUNT_SQL, free_money._FREE_SQL):
+        steps = [r[3] for r in db.execute("EXPLAIN QUERY PLAN " + sql, params)]
+        tables = [s for s in steps if s.startswith(("SEARCH", "SCAN")) and "json_each" not in s]
+        # the outer loop of each half of the query is the postings, never the documents
+        assert tables[0].startswith("SEARCH p USING INDEX postings_by_"), steps
+        assert not any(
+            later.startswith("SEARCH p")
+            for earlier, later in pairwise(tables)
+            if earlier.startswith(("SEARCH d ", "SCAN d "))
+        ), steps

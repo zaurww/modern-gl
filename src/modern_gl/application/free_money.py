@@ -29,7 +29,11 @@ from modern_gl.infrastructure.db import Connection
 
 _SIDES = {True: ("payable", ADVANCE_PAID), False: ("receivable", ADVANCE_RECEIVED)}
 # Dt − Kt without a number on the accounts of the side, of the counterparty; `vat` — the
-# part of it to or from a deposit
+# part of it to or from a deposit.
+# The postings are found by their account and then asked whether their document is in the
+# book (`IN (SELECT id FROM docs)`), not joined to the documents: a file without statistics
+# yet (a year just loaded) had the join read every posting of the account for each document
+# — 105 s on 100 000 postings instead of 0.03.
 _FREE_SQL = f"""
 WITH {docs_cte()},
 sides AS (SELECT value AS id FROM json_each(:sides)),
@@ -39,8 +43,9 @@ moved AS (
     SELECT p.amount AS money,
            CASE WHEN p.pays_vat = 1 OR p.credit_account_id IN (SELECT id FROM deposits)
                 THEN p.amount ELSE 0 END AS vat
-    FROM postings p JOIN docs ON docs.id = p.document_id
-    WHERE p.company_id = :company_id AND p.invoice IS NULL AND p.document_id <> :without
+    FROM postings p
+    WHERE p.company_id = :company_id AND p.document_id IN (SELECT id FROM docs)
+      AND p.invoice IS NULL AND p.document_id <> :without
       AND p.debit_account_id IN (SELECT id FROM sides)
       AND (p.dt_sc1 IN (SELECT id FROM who) OR p.dt_sc2 IN (SELECT id FROM who)
            OR p.dt_sc3 IN (SELECT id FROM who))
@@ -48,8 +53,9 @@ moved AS (
     SELECT -p.amount AS money,
            CASE WHEN p.pays_vat = 1 OR p.debit_account_id IN (SELECT id FROM deposits)
                 THEN -p.amount ELSE 0 END AS vat
-    FROM postings p JOIN docs ON docs.id = p.document_id
-    WHERE p.company_id = :company_id AND p.invoice IS NULL AND p.document_id <> :without
+    FROM postings p
+    WHERE p.company_id = :company_id AND p.document_id IN (SELECT id FROM docs)
+      AND p.invoice IS NULL AND p.document_id <> :without
       AND p.credit_account_id IN (SELECT id FROM sides)
       AND (p.ct_sc1 IN (SELECT id FROM who) OR p.ct_sc2 IN (SELECT id FROM who)
            OR p.ct_sc3 IN (SELECT id FROM who))
@@ -65,14 +71,16 @@ sides AS (SELECT value AS id FROM json_each(:sides)),
 moved AS (
     SELECT p.debit_account_id AS account_id, p.dt_sc1 AS sc1, p.dt_sc2 AS sc2, p.dt_sc3 AS sc3,
            p.amount AS money
-    FROM postings p JOIN docs ON docs.id = p.document_id
-    WHERE p.company_id = :company_id AND p.invoice IS NULL
+    FROM postings p
+    WHERE p.company_id = :company_id AND p.document_id IN (SELECT id FROM docs)
+      AND p.invoice IS NULL
       AND p.debit_account_id IN (SELECT id FROM sides)
     UNION ALL
     SELECT p.credit_account_id AS account_id, p.ct_sc1 AS sc1, p.ct_sc2 AS sc2, p.ct_sc3 AS sc3,
            -p.amount AS money
-    FROM postings p JOIN docs ON docs.id = p.document_id
-    WHERE p.company_id = :company_id AND p.invoice IS NULL
+    FROM postings p
+    WHERE p.company_id = :company_id AND p.document_id IN (SELECT id FROM docs)
+      AND p.invoice IS NULL
       AND p.credit_account_id IN (SELECT id FROM sides)
 )
 SELECT account_id, sc1, sc2, sc3, SUM(money) AS money FROM moved
