@@ -8,6 +8,8 @@ from __future__ import annotations
 from modern_gl.application.ledger import Ledger
 from modern_gl.domain.accounts import BATCH_EXPENSES_ACCOUNT, COST_OF_SALES, FX_GAIN, FX_LOSS
 from modern_gl.domain.currency import NO_CURRENCY
+from modern_gl.i18n import trd
+from modern_gl.infrastructure.db import transaction
 
 SUPPLIER = "supplier"  # a purchase, the opening stock: what the company owes for goods
 CUSTOMER = "customer"  # a sale
@@ -65,6 +67,27 @@ def default_account(ledger: Ledger, company_id: int, purpose: str) -> int | None
     else:
         found = _first_of_type(ledger, company_id, *_BY_TYPE[purpose])
     return found or _leaf_by_code(ledger, company_id, UNTYPED_CODES.get(purpose, ()))
+
+
+def landed_cost_account(ledger: Ledger, company_id: int) -> int:
+    """Where a batch's expenses wait: the settings' account or 15; a company without
+    either gets 15 (without a code when 15 is something else) and keeps it in the settings."""
+    found = default_account(ledger, company_id, LANDED_COST)
+    if found is not None:
+        return found
+    with transaction(ledger.conn):
+        taken = ledger.conn.execute(
+            "SELECT 1 FROM accounts WHERE company_id = ? AND code = '15'", (company_id,)
+        ).fetchone()
+        made = ledger.add_account(
+            company_id,
+            None if taken else "15",
+            trd("Заготовление материальных ценностей"),
+            account_class="asset",
+            account_type="inventory",
+        )
+        ledger.set_account_role(company_id, BATCH_EXPENSES_ACCOUNT, made)
+    return made
 
 
 def _first_of_type(

@@ -482,3 +482,6 @@ class InventoryLinesBase(QAbstractTableModel):
 
     def _display_text(self, row_index: int, key: str) -> str:
         raise NotImplementedError
+
+    def _remember_expense(self, row_index: int) -> None:
+        raise NotImplementedError
