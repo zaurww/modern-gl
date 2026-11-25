@@ -63,6 +63,7 @@ class EqaimeImportForm(ImportWindow):
         self.sign_in = sign_in
         self.token: str | None = None
         self.plans: list[InvoicePlan] = []
+        self.waiting_accounts: set[int] = set()  # where a batch's expenses wait
         self.created: list[int] = []
         self.attached: list[int] = []  # waiting purchases given their e-qaimə (D119)
         self.portal_run: PortalRun | None = None

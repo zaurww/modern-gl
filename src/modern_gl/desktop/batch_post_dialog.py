@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QDialog, QFormLayout, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
 from modern_gl.application.common import pad_subconto
+from modern_gl.application.default_accounts import LANDED_COST, default_account
 from modern_gl.application.trade_batch import Booking, OpenLines
 from modern_gl.desktop.directories_page import added_value, new_value
 from modern_gl.desktop.pick import ENTER, PickBox
@@ -98,6 +99,9 @@ class BatchPostDialog(QDialog):
             catalog = self.s.catalog
             self.account = PickBox(tr("Код или название"))
             self.offset = PickBox(tr("Код или название"))
+            landed = default_account(self.s.ledger, self.s.company_id, LANDED_COST)
+            if landed in catalog.accounts:  # first, by what it is for: no code to know
+                self.account.addItem(tr("Доп. расход (себестоимость товара)"), landed)
             for a in catalog.leaf_accounts:
                 if not catalog.is_stock_account(a.id):
                     self.account.addItem(a.label, a.id)

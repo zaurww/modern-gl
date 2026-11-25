@@ -62,7 +62,7 @@ class WaitingExpense:
         return (self.line_id, self.source)
 
 
-def _waiting_accounts(conn: Connection, company_id: int) -> set[int]:
+def waiting_accounts(conn: Connection, company_id: int) -> set[int]:
     """The accounts of procurement (15): the inventory type, no directories of their own.
     By the type, not the code; goods accounts have directories, production has cost items."""
     rows = conn.execute(
@@ -83,7 +83,7 @@ def waiting_lines(
 ) -> list[WaitingExpense]:
     """Service lines of posted purchases with something a batch has not taken yet, newest
     first; the amount is without ƏDV. `only_left=False`: those taken in full too."""
-    waiting = _waiting_accounts(conn, company_id)
+    waiting = waiting_accounts(conn, company_id)
     rows = conn.execute(
         f"""
         SELECT l.id, d.doc_date, l.memo, l.amount, l.cost_account_id,
@@ -127,7 +127,7 @@ def waiting_expenses(
 ) -> list[WaitingExpense]:
     """All a batch can take: purchases' services, then postings typed in the journal or
     made by the bank. `only_waiting`: only what sits on an account of procurement."""
-    waiting = _waiting_accounts(conn, company_id)
+    waiting = waiting_accounts(conn, company_id)
     lines = waiting_lines(conn, company_id, exclude_document_id)
     if only_waiting:
         lines = [row for row in lines if row.waits]

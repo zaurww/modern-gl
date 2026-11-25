@@ -29,6 +29,7 @@ from modern_gl.reporting.inventory.costs import (
     WaitingExpense,
     batch_cost,
     cost_sources,
+    waiting_accounts,
     waiting_expenses,
     waiting_lines,
 )
@@ -138,6 +139,7 @@ __all__ = [
     "stock_statement",
     "unit_choices",
     "unit_codes",
+    "waiting_accounts",
     "waiting_expenses",
     "waiting_lines",
     "warehouse_choices",

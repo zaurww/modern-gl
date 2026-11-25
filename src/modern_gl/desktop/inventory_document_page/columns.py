@@ -41,9 +41,13 @@ SALE3 = "sale3"
 MEMO = "memo"
 # a receipt's line is goods (through a warehouse) or a service (to an account): the choice
 KIND = "kind"
-GOODS, SERVICE = 1, 0
+# … or an expense of a batch (a broker, a carrier): it waits on its account for the batch
+# that takes it into the cost of goods (D211); the account is the program's to know
+GOODS, SERVICE, LANDED = 1, 0, 2
 # named by where the line goes, not by what it is: a fixed asset may go to a warehouse (07)
-KIND_NAMES = {GOODS: N_("Склад"), SERVICE: N_("Счёт")}
+KIND_NAMES = {GOODS: N_("Склад"), SERVICE: N_("Счёт"), LANDED: N_("Доп. расход")}
+# in the list the last one says what it is for
+KIND_CHOICES = KIND_NAMES | {LANDED: N_("Доп. расход (себестоимость товара)")}
 SC_KEYS = {SC1, SC2, SC3}  # the subconto of the line's offset (supplier, customer) account
 ESC_KEYS = {ESC1, ESC2, ESC3}
 SALE_KEYS = {SALE1, SALE2, SALE3}

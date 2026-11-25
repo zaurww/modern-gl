@@ -1,21 +1,58 @@
-"""«Куда» of a purchase line: to a warehouse (goods, an item) or to an account (a service,
-a fixed asset) — and making one of the other."""
+"""«Куда» of a purchase line: to a warehouse (goods, an item), to an account (a service, a
+fixed asset) or into the cost of goods (an expense of a batch: it waits on its account for
+the batch that takes it, D211) — and making one of another. Which of the last two a line is
+follows from its account: nothing else is kept."""
 
 from __future__ import annotations
 
-from modern_gl.desktop.inventory_document_page.columns import GOODS, KIND_NAMES, SERVICE
-from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
+from PySide6.QtCore import Qt
+
+from modern_gl.application.default_accounts import landed_cost_account
+from modern_gl.desktop.inventory_document_page.columns import GOODS, KIND_NAMES, LANDED, SERVICE
+from modern_gl.desktop.inventory_document_page.lines_spread import LineSpread
 from modern_gl.i18n import tr
 
 
-class LineKinds(InventoryLinesBase):
+class LineKinds(LineSpread):
     def _kind(self, row_index: int) -> int:
-        return SERVICE if self.is_service(row_index) else GOODS
+        if not self.is_service(row_index):
+            return GOODS
+        waits = self.rows[row_index].expense_account_id in self.waiting_accounts
+        return LANDED if waits else SERVICE
 
     def _kind_text(self, row_index: int) -> str:
         if self.rows[row_index].is_empty():
             return ""
         return tr(KIND_NAMES[self._kind(row_index)])
+
+    def set_kind(self, row_index: int, kind: object) -> bool:
+        """Another «Куда» picked. False: the line stays as it is — the same was picked, or
+        goods were: an item is made by the page."""
+        if kind not in KIND_NAMES or kind == self._kind(row_index):
+            return False
+        if kind == GOODS:
+            self.goods_wanted.emit(row_index)
+            return False
+        if not self.is_service(row_index):
+            self.make_service(row_index)
+        row = self.rows[row_index]
+        if kind == LANDED:
+            row.expense_account_id = self._landed_account()
+            row.expense_subconto = [None, None, None]
+            row.expense_date = None  # it is no expense of a month: it waits for its batch
+            self.spread_expense_account(row_index)
+        elif row.expense_account_id in self.waiting_accounts:
+            row.expense_account_id = None  # «Счёт»: another one is to be chosen
+        self.headerDataChanged.emit(Qt.Orientation.Horizontal, 0, len(self.columns) - 1)
+        return True
+
+    def _landed_account(self) -> int:
+        """Where the expenses of a batch wait; a chart without such an account gets one."""
+        account_id = landed_cost_account(self.s.ledger, self.s.company_id)
+        if account_id not in self.s.catalog.accounts:
+            self.s.catalog.reload()
+        self.waiting_accounts.add(account_id)
+        return account_id
 
     def make_service(self, row_index: int) -> None:
         """Goods made a service: the line keeps what it is as its text and goes to an

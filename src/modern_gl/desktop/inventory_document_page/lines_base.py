@@ -38,7 +38,7 @@ from modern_gl.desktop.inventory_document_page.columns import (
     EXPENSE_MONTH,
     ITEM,
     KIND,
-    KIND_NAMES,
+    KIND_CHOICES,
     MEMO,
     PRICE,
     QUANTITY,
@@ -66,6 +66,7 @@ from modern_gl.reporting.inventory import (
     Choice,
     ItemChoice,
     item_choices,
+    waiting_accounts,
     warehouse_choices,
 )
 
@@ -134,6 +135,7 @@ class InventoryLinesBase(QAbstractTableModel):
         # the kinds a sale line is asked for (D61), one column each
         self.sale_kinds = sale_kinds(session) if doc_type == "sale" else []
         self.stock_only = session.stock_only  # a warehouse only (D90)
+        self.waiting_accounts = self._waiting_accounts()
         # a purchase's supplier, a sale's customer, chosen in the header for every line;
         # `by_lines` — the lines have their own and show them
         self.party_account: int | None = None
@@ -183,6 +185,12 @@ class InventoryLinesBase(QAbstractTableModel):
                 *([EXPENSE_MONTH] if doc_type in {"receipt", "sale"} else []),
             ]
 
+    def _waiting_accounts(self) -> set[int]:
+        """Where the expenses of a batch wait: a purchase line on one is such an expense."""
+        if self.doc_type != "receipt":
+            return set()
+        return waiting_accounts(self.s.conn, self.s.company_id)
+
     def _items(self) -> dict[int, ItemChoice]:
         return {c.id: c for c in item_choices(self.s.conn, self.s.company_id)} | self.new_choices
 
@@ -200,7 +208,7 @@ class InventoryLinesBase(QAbstractTableModel):
         if key in {WAREHOUSE, TO_WAREHOUSE}:
             return [(warehouse.id, warehouse.label) for warehouse in self.warehouses.values()]
         if key == KIND:
-            return [(kind, tr(name)) for kind, name in KIND_NAMES.items()]
+            return [(kind, tr(name)) for kind, name in KIND_CHOICES.items()]
         if key == ACCOUNT:
             return [(account.id, account.label) for account in self.s.catalog.leaf_accounts]
         if key == EXPENSE:  # goods come to a stock account through the warehouse only

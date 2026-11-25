@@ -26,7 +26,6 @@ from modern_gl.desktop.inventory_document_page.columns import (
     ESC_KEYS,
     EXPENSE,
     EXPENSE_MONTH,
-    GOODS,
     HEADERS,
     ITEM,
     KIND,
@@ -40,7 +39,6 @@ from modern_gl.desktop.inventory_document_page.columns import (
     SALE_KEYS,
     SC1,
     SC_KEYS,
-    SERVICE,
     STORED_FIELDS,
     SUBCONTO_KEYS,
     TO_WAREHOUSE,
@@ -60,7 +58,6 @@ from modern_gl.desktop.inventory_document_page.lines_clipboard import LinesClipb
 from modern_gl.desktop.inventory_document_page.lines_inputs import LineInputs
 from modern_gl.desktop.inventory_document_page.lines_kind import LineKinds
 from modern_gl.desktop.inventory_document_page.lines_split import LineSplits
-from modern_gl.desktop.inventory_document_page.lines_spread import LineSpread
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import (
     money,
@@ -77,7 +74,7 @@ from modern_gl.reporting.inventory import (
 __all__ = ["InventoryLinesBase", "InventoryLinesModel", "by_sale_kinds", "sale_kinds"]
 
 
-class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineSpread, LineKinds):
+class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineKinds):
     def headerData(self, section, orientation, role: int = Qt.ItemDataRole.DisplayRole):
         if role == Qt.ItemDataRole.DisplayRole:
             if orientation == Qt.Orientation.Horizontal:
@@ -257,12 +254,8 @@ class InventoryLinesModel(LinesClipboard, LineInputs, LineSplits, LineSpread, Li
         row = self.rows[index.row()]
         key = self.key(index)
         if key == KIND:
-            if value == GOODS and self.is_service(index.row()):
-                self.goods_wanted.emit(index.row())  # an item is made by the page
-                return True
-            if value != SERVICE or self.is_service(index.row()):
-                return True  # as it was
-            self.make_service(index.row())
+            if not self.set_kind(index.row(), value):
+                return True  # as it was, or the page makes an item
         elif key in {PRICE, CURRENCY_AMOUNT, AMOUNT, VAT}:
             self._set_money(row, key, value)
         elif key == ACCOUNT:

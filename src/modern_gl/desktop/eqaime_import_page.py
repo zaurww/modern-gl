@@ -45,7 +45,7 @@ from modern_gl.domain.dates import earlier_months, month_name, ru_date
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.etaxes import EtaxesClient
-from modern_gl.reporting.inventory import item_name
+from modern_gl.reporting.inventory import item_name, waiting_accounts
 
 
 class EqaimeImportDialog(EqaimeImportForm):
@@ -139,6 +139,7 @@ class EqaimeImportDialog(EqaimeImportForm):
             widget.setVisible(shown)
         self.invoices = invoices
         self.plans = plan_import(self.s.conn, self.s.company_id, invoices)
+        self.waiting_accounts = waiting_accounts(self.s.conn, self.s.company_id)
         self.new_parties = new_counterparties(self.plans)
         self._show_parties()
         self.renamed = renamed_counterparties(self.s.conn, self.s.company_id, self.plans)
@@ -310,6 +311,8 @@ class EqaimeImportDialog(EqaimeImportForm):
             account = catalog.accounts.get(plan.account_id)
             values = [catalog.value(v).name for v in plan.subconto if v is not None]
             text = " ".join([account.label if account else "", *values]).strip()
+            if plan.account_id in self.waiting_accounts:  # by what it is, not by its code
+                text = tr("Доп. расход")
         elif outgoing and plan.line.service:
             text = tr("услуга")
         else:

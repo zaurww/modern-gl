@@ -185,7 +185,7 @@ class InventoryLinesDelegate(QStyledItemDelegate):
         (UNSET: nothing to set now). A service's corrected name stays its memo."""
         value = resolve_choice(model.choices(index.row(), key), text) if text else None
         if key == KIND and value is None:
-            return UNSET  # neither of the two
+            return UNSET  # none of them
         service = model.is_service(index.row())
         if key == ITEM and text and value is None and service and not editor.property("gl_add"):
             model.setData(model.index(index.row(), model.columns.index(MEMO)), text)
@@ -312,7 +312,7 @@ class InventoryLinesTable(QTableView):
             TO_WAREHOUSE: 110,
             QUANTITY: 100,
             UNIT: 64,
-            KIND: 84,
+            KIND: 104,
             PRICE: 84,
             AMOUNT: 96,
             CURRENCY_AMOUNT: 104,
