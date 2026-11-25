@@ -16,6 +16,7 @@ from modern_gl.application import updates
 from modern_gl.application.updates import Release
 from modern_gl.desktop.preferences import Preferences
 from modern_gl.desktop.updater import Sources, Updater
+from modern_gl.infrastructure import github_releases
 
 SETUP_URL = "https://github.com/zaurww/modern-gl/releases/download/v9.9.9/modern-gl-9.9.9-setup.exe"
 
@@ -68,6 +69,27 @@ def test_nothing_is_offered_without_a_connection_or_a_newer_version():
     assert updates.newer_release("0.1.3", github) == Release("9.9.9", SETUP_URL, 150)
 
 
+def releases(*versions: tuple[str, bool], draft: str = "") -> bytes:
+    """GitHub's list of releases: (version, is it a trial one); `draft` — one not published."""
+    listed = [
+        {**json.loads(github(version)), "prerelease": trial, "draft": version == draft}
+        for version, trial in versions
+    ]
+    return json.dumps(listed).encode()
+
+
+def test_of_all_releases_the_newest_is_taken_trial_or_not():
+    """Asked for all releases, GitHub answers with a list in the order they were made:
+    0.1.10 is newer than 0.1.9 by its number; a draft is nobody's."""
+    body = releases(("0.1.9", False), ("0.1.10", True), ("0.1.8", False))
+    assert updates.parse_release(body) == Release("0.1.10", SETUP_URL, 150, trial=True)
+    assert updates.newer_release("0.1.9", lambda: body) == Release("0.1.10", SETUP_URL, 150, True)
+    assert updates.newer_release("0.1.10", lambda: body) is None
+    drafted = releases(("0.1.9", False), ("0.1.10", True), draft="0.1.10")
+    assert updates.parse_release(drafted) == Release("0.1.9", SETUP_URL, 150)
+    assert updates.parse_release(b"[]") is None
+
+
 def test_the_installer_runs_quietly_and_the_program_comes_back():
     setup, program = Path("C:/Temp/modern-gl-9.9.9-setup.exe"), Path("C:/P/modern-gl.exe")
     command = updates.install_command(setup, program)
@@ -101,6 +123,11 @@ class Fake:
         self.fetches += 1
         return self.fetch_body()
 
+    def fetch_all(self) -> bytes:
+        """Every release: the one for everyone and a trial one after it."""
+        self.fetches += 1
+        return releases((__version__, False), ("9.9.9", True))
+
     def download(self, url: str, target: Path, progress) -> Path:
         if self.fail_download:
             raise OSError("connection lost")
@@ -124,6 +151,7 @@ def make(qtbot, tmp_path: Path, fake: Fake, installed: bool = True) -> tuple[QPu
     prefs = Preferences(QSettings(str(tmp_path / "prefs.ini"), QSettings.Format.IniFormat))
     sources = Sources(
         fetch=fake.fetch,
+        fetch_trial=fake.fetch_all,
         download=fake.download,
         run=fake.run,
         installed=installed,
@@ -157,6 +185,43 @@ def test_the_look_is_at_once_and_then_every_hour(qtbot, tmp_path):
     assert updater.timer.isActive() and updater.timer.interval() == 60 * 60 * 1000
     updater.timer.timeout.emit()
     assert fake.fetches == 2
+
+
+def test_a_trial_version_is_offered_only_where_it_is_asked_for(qtbot, tmp_path):
+    """The colleague's program asks for the latest release — GitHub's «latest» is never a
+    trial one — and is offered nothing; the computer that tries versions first asks for
+    all of them and is offered the trial one, named so; switched back — the offer goes."""
+    fake = Fake(tmp_path, fetch=lambda: github(__version__))
+    line, updater = make(qtbot, tmp_path, fake)
+    updater.start()
+    assert line.isHidden()
+
+    updater.prefs.set_trial_versions(True)
+    updater.recheck()
+    assert line.isVisibleTo(line) and "9.9.9" in line.text()
+    assert "пробная" in line.text() or "Sınaq" in line.text()
+
+    updater.prefs.set_trial_versions(False)
+    updater.recheck()
+    assert line.isHidden() and updater.release is None and updater.timer.isActive()
+
+
+def test_the_menu_switches_trial_versions(demo_window):
+    heard: list[bool] = []
+    demo_window.trial_versions_changed.connect(lambda: heard.append(demo_window.trial_versions()))
+    assert demo_window.trial_versions() is False
+    demo_window.set_trial_versions(True)
+    assert heard == [bool(demo_window.prefs)]
+
+
+def test_a_release_comes_out_as_a_trial_version_first():
+    root = Path(__file__).parent.parent
+    workflow = (root / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    script = (root / "scripts" / "release.py").read_text(encoding="utf-8")
+    assert "prerelease: true" in workflow
+    assert '"--prerelease=false", "--latest"' in script and "--publish" in script
+    assert github_releases.LATEST_URL.endswith("/releases/latest")  # never a trial one
+    assert "/releases?" in github_releases.RELEASES_URL
 
 
 def test_nothing_is_shown_when_run_from_the_source(qtbot, tmp_path):

@@ -238,6 +238,15 @@ class Workspace:
             backup.mirror(made, self.mirror)
         return made
 
+    def timed_backup(self, company_file: Path) -> Path | None:
+        """The backup made every hour while a company stays open, if it changed: by a
+        connection of its own, so it runs off the window's thread. A program never closed
+        for days still has its copies, in the second folder too."""
+        made = backup.backup_if_changed(company_file, self.backup_folder(company_file))
+        if made is not None and self.mirror is not None:
+            backup.mirror(made, self.mirror)
+        return made
+
     def backups(self, company_file: Path) -> list[backup.Backup]:
         return backup.list_backups(self.backup_folder(company_file))
 

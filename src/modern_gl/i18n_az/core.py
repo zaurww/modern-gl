@@ -1538,7 +1538,6 @@ AZ: dict[str, str] = {
     "Вторая папка — флешка или облако": "İkinci qovluq — fləş kart və ya bulud",
     "Выбрать папку…": "Qovluq seç…",
     "Не копировать": "Köçürmə",
-    "Копия делается при закрытии компании, если что-то изменилось; хранятся последние {n}. Папка: {folder}": "Nüsxə şirkət bağlananda, nəsə dəyişibsə, çıxarılır; sonuncu {n} nüsxə saxlanılır. Qovluq: {folder}",
     "Вторая папка для копий": "Nüsxələr üçün ikinci qovluq",
     "Показать папку": "Qovluğu göstər",
     "Сделать копию сейчас": "İndi nüsxə çıxar",

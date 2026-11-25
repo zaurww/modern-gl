@@ -10,6 +10,8 @@ from pathlib import Path
 from typing import Any
 
 LATEST_URL = "https://api.github.com/repos/zaurww/modern-gl/releases/latest"
+# every release, the trial ones (GitHub: «pre-release») among them; the latest skips those
+RELEASES_URL = "https://api.github.com/repos/zaurww/modern-gl/releases?per_page=20"
 TIMEOUT = 8  # seconds: a look for a new version must never hold the program
 CHUNK = 1 << 20
 
@@ -19,6 +21,11 @@ Progress = Callable[[int, int], None]  # bytes received, bytes in all (0: unknow
 def fetch_latest(url: str = LATEST_URL) -> bytes:
     """The JSON of the latest release. OSError when there is no connection or no release."""
     return _open(url, lambda response: response.read())
+
+
+def fetch_releases() -> bytes:
+    """The JSON list of the last releases, trial ones too — for a computer that tries them."""
+    return fetch_latest(RELEASES_URL)
 
 
 def download(url: str, target: Path, progress: Progress | None = None) -> Path:

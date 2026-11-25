@@ -18,16 +18,29 @@ class Release:
     version: str
     setup_url: str
     size: int  # bytes of the installer, 0 when GitHub did not say
+    # a trial version (GitHub: «pre-release»): built, not yet tried on real work — only
+    # the computers that asked for trial versions are offered it (D-new-trial-versions)
+    trial: bool = False
 
 
 def parse_release(body: bytes) -> Release | None:
-    """The release in GitHub's JSON, or None when it carries no installer."""
+    """The release in GitHub's JSON, or None when it carries no installer. GitHub answers
+    with one release (the latest that is not a trial) or, asked for all of them, with a
+    list — then the newest by its number, trial or not."""
     data = json.loads(body)
+    found = [_release(d) for d in (data if isinstance(data, list) else [data])]
+    return max((r for r in found if r), key=lambda r: version_key(r.version), default=None)
+
+
+def _release(data: object) -> Release | None:
+    if not isinstance(data, dict) or data.get("draft"):
+        return None
     version = str(data.get("tag_name", "")).removeprefix("v")
     for asset in data.get("assets") or []:
         url = asset.get("browser_download_url")
         if str(asset.get("name", "")).endswith(SETUP_SUFFIX) and url:
-            return Release(version, str(url), int(asset.get("size") or 0))
+            trial = bool(data.get("prerelease"))
+            return Release(version, str(url), int(asset.get("size") or 0), trial)
     return None
 
 

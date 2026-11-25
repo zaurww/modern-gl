@@ -35,6 +35,7 @@ from modern_gl.desktop.background import LARGE
 from modern_gl.desktop.portal_company import ask_tax_id
 from modern_gl.desktop.preferences import Preferences
 from modern_gl.desktop.session import Session
+from modern_gl.desktop.timed_backup import TimedBackup
 from modern_gl.domain.company import FULL, STOCK_ONLY
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import LANGUAGES, set_document_language, tr
@@ -118,6 +119,13 @@ class CompanySession(QObject):
         self.ledger: Ledger | None = None
         self.company_path: Path | None = None
         self.session: Session | None = None
+        self.timed = TimedBackup(workspace, self._written_file, owner)
+        self.timed.timer.start()
+
+    def _written_file(self) -> Path | None:
+        """The file of the company open for writing: the one the hourly copy is made of."""
+        viewed = self.session is None or self.session.read_only
+        return None if viewed else self.company_path
 
     @property
     def open_session(self) -> Session:
@@ -290,6 +298,7 @@ class CompanySession(QObject):
             # its result may still wait in the event loop: not shown on a closed company
             self.session.closed = True
         self.closing.emit()  # the pages go before the file
+        self.timed.wait()  # an hourly copy still being written ends before the closing one
         if self.conn is not None:
             if self.session is not None and not self.session.read_only:
                 self._log_session("close")  # before the backup: the copy has it too
@@ -305,6 +314,7 @@ class CompanySession(QObject):
         self.conn = self.ledger = self.session = self.company_path = None
 
     def shutdown(self) -> None:
+        self.timed.stop()
         self.close()
 
     def add_company_file(self) -> None:

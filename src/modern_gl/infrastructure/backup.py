@@ -1,10 +1,15 @@
-"""Backups of company files: automatic (on close, before a schema update) and manual.
+"""Backups of company files: automatic (on close, every hour of work, before a schema
+update) and manual.
 
 A backup is a full SQLite copy made with the backup API, so it is consistent even while
 the company is open. Each company keeps its own folder of backups next to the company
-files, the newest KEEP of them:
+files:
 
     Modern GL/Ehtiyat nüsxələri/<Company>/<Company> 2026-10-19 18-05-12.gl
+
+Kept by time, not only by count (`thin`): the newest KEEP, then the last copy of each day
+for DAYS days and of each month for MONTHS months — a mistake noticed weeks later still
+has a copy from before it.
 
 Every backup is checked in full (PRAGMA integrity_check) right after it is written: a
 copy is page by page, so this is a full check of the company itself after each working
@@ -24,7 +29,11 @@ from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
 
 FOLDER = "Ehtiyat nüsxələri"
-KEEP = 30
+KEEP = 10
+# Beyond the newest KEEP: the last copy of each day, of each month — counted back from
+# the newest copy, so a company left alone for a year loses nothing by waiting
+DAYS = 30
+MONTHS = 12
 # Beyond the newest KEEP: the last copy of each of this many older schemas — the copy made
 # before an update, for a mistake of the update that shows only weeks later (D148)
 UPGRADE_KEEP = 3
@@ -113,10 +122,10 @@ def copy_to(conn: sqlite3.Connection, target: Path) -> Path:
 def make_backup(
     conn: sqlite3.Connection, folder: Path, name: str, note: str = "", keep: int = KEEP
 ) -> Path:
-    """A timestamped backup in `folder`; the oldest beyond `keep` are removed."""
+    """A timestamped backup in `folder`; the copies no longer needed are removed (`thin`)."""
     target = _new_name(folder, name, note)
     copy_to(conn, target)
-    _drop_oldest(folder, keep)
+    thin(folder, keep)
     return target
 
 
@@ -131,16 +140,38 @@ def _new_name(folder: Path, name: str, note: str) -> Path:
     return target
 
 
-def _drop_oldest(folder: Path, keep: int) -> None:
+def thin(folder: Path, keep: int = KEEP) -> None:
+    """Remove the copies nothing keeps: not among the newest `keep`, not the last of a day
+    or a month still held (`kept_by_age`), not the copy made before an update (D148)."""
     copies = list_backups(folder)
+    by_age = kept_by_age([c.made_at for c in copies])
     oldest_schema = min((_schema_of(c.path) for c in copies[:keep]), default=0)
     extra = 0
-    for old in copies[keep:]:
+    for i, old in enumerate(copies[keep:], start=keep):
         schema = _schema_of(old.path)
         if schema < oldest_schema and extra < UPGRADE_KEEP:
             oldest_schema, extra = schema, extra + 1  # the newest copy of an older schema
             continue
-        old.path.unlink(missing_ok=True)
+        if i not in by_age:
+            old.path.unlink(missing_ok=True)
+
+
+def kept_by_age(made: list[datetime]) -> set[int]:
+    """Which of the copies (their times, newest first) time keeps: the last copy of each
+    of the DAYS days and of each of the MONTHS months that end with the newest copy."""
+    kept: set[int] = set()
+    days: set[tuple[int, int, int]] = set()
+    months: set[tuple[int, int]] = set()
+    newest = made[0] if made else datetime.min
+    for i, at in enumerate(made):
+        day, month = (at.year, at.month, at.day), (at.year, at.month)
+        if (newest.date() - at.date()).days < DAYS and day not in days:
+            kept.add(i)
+        if (newest.year - at.year) * 12 + newest.month - at.month < MONTHS and month not in months:
+            kept.add(i)
+        days.add(day)
+        months.add(month)
+    return kept
 
 
 def _schema_of(path: Path) -> int:
@@ -155,7 +186,7 @@ def _schema_of(path: Path) -> int:
 
 def mirror(made: Path, root: Path) -> Path:
     """The same backup in a second folder (a flash drive, a synced cloud folder — D97):
-    `<root>/<Company>/<backup name>`, the newest KEEP there too. Raises BackupError when the
+    `<root>/<Company>/<backup name>`, thinned there the same way. Raises BackupError when the
     folder cannot be written (the drive is not plugged in…): the first copy stays."""
     target = Path(root) / Path(made).parent.name / Path(made).name
     try:
@@ -163,7 +194,7 @@ def mirror(made: Path, root: Path) -> Path:
         partial = target.with_name(target.name + ".part")
         shutil.copy2(made, partial)
         partial.replace(target)
-        _drop_oldest(target.parent, KEEP)
+        thin(target.parent)
     except OSError as e:
         raise BackupError(
             tr("копия не записана во вторую папку {folder}: {error}", folder=root, error=e)
@@ -176,6 +207,19 @@ def make_backup_of_file(path: Path, folder: Path, note: str = "") -> Path:
     src = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
     try:
         return make_backup(src, folder, Path(path).stem, note)
+    finally:
+        src.close()
+
+
+def backup_if_changed(path: Path, folder: Path) -> Path | None:
+    """Back up a company file through a connection of its own — what is saved in it by
+    now — unless nothing changed since the newest copy: the copy made while the company
+    stays open, off the thread that works with it."""
+    src = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
+    try:
+        if not changed_since_last(src, folder):
+            return None
+        return make_backup(src, folder, Path(path).stem)
     finally:
         src.close()
 
@@ -205,7 +249,7 @@ def restore(backup: Path, company_file: Path, folder: Path) -> Path:
     Path(folder).mkdir(parents=True, exist_ok=True)
     kept = _new_name(folder, Path(company_file).stem, tr("до восстановления"))
     shutil.copy2(company_file, kept)
-    _drop_oldest(folder, KEEP)
+    thin(folder)
     src = sqlite3.connect(f"file:{Path(backup).as_posix()}?mode=ro", uri=True)
     try:
         partial = Path(company_file).with_name(Path(company_file).name + ".part")

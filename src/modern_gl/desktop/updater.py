@@ -72,6 +72,7 @@ class Sources:
     """Where the updater reaches out: GitHub, the disk, the installer; tests give fakes."""
 
     fetch: Fetch = github_releases.fetch_latest
+    fetch_trial: Fetch = github_releases.fetch_releases  # trial versions among them
     download: Download = github_releases.download
     run: Run = _start
     installed: bool = field(default_factory=updates.installed_build)
@@ -114,8 +115,17 @@ class Updater(QObject):
         self.timer.start()  # before the look: a pool that runs at once may stop it
         self.check()
 
+    def recheck(self) -> None:
+        """«Пробные версии программы» was switched: what was offered may not be any more."""
+        self.release = None
+        self.line.hide()
+        self.start()
+
     def check(self) -> None:
-        fetch = self.sources.fetch
+        """Ask GitHub: the latest version everyone gets or, on a computer that tries them
+        first («Пробные версии»), the newest of all."""
+        trial = self.prefs.trial_versions()
+        fetch = self.sources.fetch_trial if trial else self.sources.fetch
         self.pool.start(_Job(lambda: updates.newer_release(__version__, fetch), self.check_relay))
 
     def install(self) -> None:
@@ -135,7 +145,11 @@ class Updater(QObject):
             return
         self.release = release
         self.timer.stop()  # found: the line stays until the click
-        self.line.setText(tr("Вышла версия {version} — обновить", version=release.version))
+        if release.trial:
+            text = tr("Вышла пробная версия {version} — обновить", version=release.version)
+        else:
+            text = tr("Вышла версия {version} — обновить", version=release.version)
+        self.line.setText(text)
         self.line.setEnabled(True)
         self.line.show()
 

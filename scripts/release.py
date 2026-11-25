@@ -6,6 +6,10 @@ sets the version, checks that `CHANGELOG.md` has its section `## [0.1.1]`, commi
 «Версия 0.1.1» and tags `v0.1.1`. `--push` sends `master` and the tag: the tag starts
 `.github/workflows/release.yml`, which builds the installer and the zip into a GitHub
 Release (about ten minutes). Without `--push` the command to run is printed.
+
+The Release comes out as a trial version (GitHub: «pre-release»): only a computer with
+«Пробные версии программы» switched on is offered it. Tried there on a copy of real work,
+it is given to everyone:  uv run python scripts/release.py 0.1.1 --publish  (needs `gh`).
 """
 
 from __future__ import annotations
@@ -38,11 +42,25 @@ def check_changelog(version: str) -> None:
         sys.exit(f"В CHANGELOG.md нет раздела «## [{version}] — дата» — сначала описать изменения")
 
 
+def publish(version: str) -> None:
+    """The trial version becomes the latest one: every installed program is offered it."""
+    try:
+        run("gh", "release", "edit", f"v{version}", "--prerelease=false", "--latest")
+    except FileNotFoundError:
+        sys.exit("Нет программы gh (GitHub CLI) — снять «pre-release» на странице релиза")
+    except subprocess.CalledProcessError as e:
+        sys.exit(f"Релиз v{version} не выпущен для всех: {e.stderr.strip()}")
+    print(f"v{version} — для всех: программы предложат обновление в течение часа")
+
+
 def main(argv: list[str]) -> None:
     args = [a for a in argv if not a.startswith("--")]
     if len(args) != 1 or not VERSION.match(args[0]):
         sys.exit(__doc__)
     version = args[0]
+    if "--publish" in argv:
+        publish(version)
+        return
     check_tree()
     check_changelog(version)
     if run("git", "tag", "--list", f"v{version}").strip():
@@ -58,6 +76,7 @@ def main(argv: list[str]) -> None:
     if "--push" in argv:
         run("git", "push", "origin", "master", f"v{version}")
         print(f"v{version} отправлен; сборка — https://github.com/zaurww/modern-gl/actions")
+        print(f"Выйдет пробной версией; выпустить для всех: release.py {version} --publish")
     else:
         print(f"Готово: коммит и тег v{version}. Отправить: git push origin master v{version}")
 

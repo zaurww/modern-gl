@@ -101,9 +101,12 @@ class BackupsDialog(QDialog):
             self.last.setText(tr("Копий ещё нет"))
         self.where.setText(
             tr(
-                "Копия делается при закрытии компании, если что-то изменилось; хранятся "
-                "последние {n}. Папка: {folder}",
+                "Копия делается при закрытии компании и каждый час работы, если что-то "
+                "изменилось. Хранятся последние {n}, затем последняя копия каждого дня — "
+                "{days} дней, и каждого месяца — {months} месяцев. Папка: {folder}",
                 n=backup.KEEP,
+                days=backup.DAYS,
+                months=backup.MONTHS,
                 folder=self.workspace.backup_folder(self.company_file),
             )
         )

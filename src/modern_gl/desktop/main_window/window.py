@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, Qt, Signal
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QApplication,
@@ -45,6 +45,8 @@ from modern_gl.infrastructure.db import Connection
 
 class MainWindow(QMainWindow):
     """The parts are fields (`company`, `page_stack`, `nav`, `reports`), wired in `_connect`."""
+
+    trial_versions_changed = Signal()  # the updater asks GitHub again
 
     def __init__(self, workspace: Workspace, settings: QSettings | None = None) -> None:
         super().__init__()
@@ -234,6 +236,16 @@ class MainWindow(QMainWindow):
         if self.prefs:
             self.prefs.set_theme(name)
         self._repaint()
+
+    def trial_versions(self) -> bool:
+        return bool(self.prefs and self.prefs.trial_versions())
+
+    def set_trial_versions(self, on: bool) -> None:
+        """«Пробные версии программы»: this computer is offered a version before it is
+        released to everyone — the place to try it on a copy of real work first."""
+        if self.prefs:
+            self.prefs.set_trial_versions(on)
+        self.trial_versions_changed.emit()
 
     def set_table_look(self, change: Callable[[bool], None], on: bool) -> None:
         """«Полосы в таблицах», «Сетка в отчётах» (D103, D127): the pages built again."""

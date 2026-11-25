@@ -55,6 +55,8 @@ def company_menu(win: MainWindow) -> None:
         act = languages.addAction(mark(code == language()) + title)
         act.triggered.connect(lambda _=False, c=code: win.set_ui_language(c))
     _looks(win, menu.addMenu(tr("Оформление")))
+    trial = menu.addAction(mark(win.trial_versions()) + tr("Пробные версии программы"))
+    trial.triggered.connect(lambda: win.set_trial_versions(not win.trial_versions()))
     btn = win.sidebar.company
     menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
 

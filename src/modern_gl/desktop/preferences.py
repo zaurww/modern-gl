@@ -21,6 +21,7 @@ USER_NAME = "user_name"  # who works (D82)
 LANGUAGE = "language"
 THEME = "theme"
 MIRROR_SETTING = "backup_mirror"  # the second folder for backups (D97)
+TRIAL_VERSIONS = "updates/trial"  # this computer is offered trial versions too
 # ---- the look of tables --------------------------------------------------------------
 ZEBRA = "reports/zebra"  # «Оформление → Полосы в таблицах», off by default (D103)
 GRID = "reports/grid"  # «Оформление → Сетка в отчётах», on by default (D127)
@@ -105,6 +106,12 @@ class Preferences:
 
     def set_backup_mirror(self, folder: str) -> None:
         self.set(MIRROR_SETTING, folder)
+
+    def trial_versions(self) -> bool:
+        return self.flag(TRIAL_VERSIONS, False)
+
+    def set_trial_versions(self, on: bool) -> None:
+        self.set(TRIAL_VERSIONS, on)
 
     # ---- the look of tables ------------------------------------------------------------
 

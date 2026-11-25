@@ -97,7 +97,8 @@ def main() -> int:
         return 0
     window.show()
     updater = Updater(window.sidebar.new_version, remembered, app.quit)
-    updater.start()  # once a day: «Вышла версия …» at the bottom of the sidebar
+    updater.start()  # now and every hour: «Вышла версия …» at the bottom of the sidebar
+    window.trial_versions_changed.connect(updater.recheck)
     code = app.exec()
     window.shutdown()
     return code

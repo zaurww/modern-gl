@@ -59,6 +59,9 @@ jobs:
             dist/modern-gl-*-setup.exe
             dist/modern-gl-*-windows.zip
           generate_release_notes: false
+          # a trial version first: only computers with «Пробные версии программы» are
+          # offered it; `scripts/release.py <version> --publish` gives it to everyone
+          prerelease: true
           body: |
             Windows: `modern-gl-${{ steps.version.outputs.version }}-setup.exe` — установить или обновить (поверх прежней версии; файлы компаний не трогаются).
             Без установки: распаковать zip и запустить `modern-gl.exe`. Что изменилось — `CHANGELOG.md`.
