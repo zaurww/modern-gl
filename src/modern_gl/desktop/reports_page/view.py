@@ -151,9 +151,13 @@ class ReportPage(PageWidget):
         self._build_table()
 
         self.empty = EmptyState("○", tr("Нет данных"), tr("За выбранный период движений не было."))
+        # a large company's report is read in the background, after what was asked before
+        # it: until its figures come the page says so — not that there is nothing
+        self.reading = EmptyState("…", tr("Отчёт читается"), tr("Большая компания: это недолго."))
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
+        self.stack.addWidget(self.reading)
 
         # a report's message (totals, "Dt and Kt agree") is read before its detail
         self.footer = caption()
@@ -324,7 +328,14 @@ class ReportPage(PageWidget):
                 return
             self._shown()
             return
-        self.s.read(self, self.job(), self._show_read, lambda e: self.s.notify(str(e)))
+        waits = self.s.read(self, self.job(), self._show_read, self._not_read)
+        if waits and not self.model.rows:
+            self.stack.setCurrentWidget(self.reading)
+
+    def _not_read(self, error: LedgerError) -> None:
+        self.s.notify(str(error))
+        if self.stack.currentWidget() is self.reading:
+            self._shown()
 
     def _show_read(self, data: Any) -> None:
         try:

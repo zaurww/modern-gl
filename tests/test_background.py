@@ -88,3 +88,20 @@ def test_a_read_queued_before_the_company_closes_is_not_shown(window, qtbot):
     assert shown == []
     assert session.closed
     window.start()  # the fixture closes it again
+
+
+def test_a_report_being_read_says_so_and_not_that_there_is_nothing(window, qtbot):
+    """A large company's report waits its turn behind another read (seen live: the trial
+    balance of 107 000 postings said «Нет данных» for the two minutes «Bu gün» took): it
+    says it is being read; with the figures it shows them, and a report already on the
+    screen keeps its figures while it is read again."""
+    window.session.large = True
+    window.show_place(("osv",))
+    osv = window.stack.currentWidget()
+    assert isinstance(osv, OsvPage)
+    assert osv.stack.currentWidget() is osv.reading  # asked for, not here yet
+    qtbot.waitUntil(lambda: bool(osv.model.rows))
+    assert osv.stack.currentWidget() is osv.table
+    osv.refresh()
+    assert osv.stack.currentWidget() is osv.table  # the old figures stay until the new come
+    window.session.background.wait()
