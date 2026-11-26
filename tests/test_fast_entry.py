@@ -122,6 +122,34 @@ def test_hash_in_dt_cell_inserts_a_template(s, qtbot):
     assert [r.amount for r in m.rows] == [118_000, 18_000]
 
 
+def test_template_of_plain_numbers_brings_them(s, qtbot):
+    """A template typed with amounts, not formulas, came out empty (the user, 2026-11-26):
+    what does not hang on S is there at once — 1 744.19 and its 14% = 244.1866 → 244.19."""
+    from modern_gl.application.ledger import TemplateLine
+
+    a20, a60, a68 = (s.catalog.by_code[c].id for c in ("20", "60", "68"))
+    tid = s.ledger.save_template(
+        s.company_id,
+        "İcarə",
+        [
+            TemplateLine(a20, a60, "1744.19"),
+            TemplateLine(a60, a68, "L1*14/100"),
+            TemplateLine(a20, a60, "S"),
+        ],
+    )
+    page = DocumentPage(s)
+    qtbot.addWidget(page)
+    page.delegate.template_chosen.disconnect()
+    page.insert_template(0, tid)
+    assert [r.amount for r in page.model.rows] == [174_419, 24_419, None]
+    page.amount.setText("50")
+    page.amount.textEdited.emit("50")
+    assert [r.amount for r in page.model.rows] == [174_419, 24_419, 5_000]
+    page.amount.setText("")
+    page.amount.textEdited.emit("")
+    assert [r.amount for r in page.model.rows] == [174_419, 24_419, None]
+
+
 def test_template_after_other_lines_keeps_its_references(s, qtbot):
     page = DocumentPage(s)
     qtbot.addWidget(page)

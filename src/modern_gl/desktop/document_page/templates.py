@@ -48,6 +48,7 @@ class TemplatesPart(DocumentForm):
         asks = formula.uses_amount([ln.formula for ln in entry.lines])
         self.amount_caption.setVisible(asks)
         self.amount.setVisible(asks)
+        self._amount_edited(self.amount.text() if asks else "")  # plain numbers — at once
         self._update_total()
         QTimer.singleShot(0, (self.amount if asks else self.table).setFocus)
         if not asks:
@@ -134,5 +135,5 @@ class TemplatesPart(DocumentForm):
         self.amount.setVisible(asks)
         if asks:
             self.amount.setFocus()
-            self._amount_edited(self.amount.text())
+        self._amount_edited(self.amount.text() if asks else "")
         self.s.notify(tr("Шаблон «{name}» вставлен", name=template.name))

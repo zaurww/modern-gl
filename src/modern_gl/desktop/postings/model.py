@@ -356,7 +356,10 @@ class PostingsModel(PostingsClipboard):
             for r in self.rows
         ]
         try:
-            amounts = formula.compute(sources, total) if total else [None] * len(sources)
+            amounts = formula.compute(sources, total or None)
+            if not total:  # no S yet: only what does not hang on it
+                waits = formula.needs_amount(sources)
+                amounts = [None if w else a for a, w in zip(amounts, waits, strict=True)]
         except ValidationError as e:
             return str(e)
         for r, amount in zip(self.rows, amounts, strict=True):

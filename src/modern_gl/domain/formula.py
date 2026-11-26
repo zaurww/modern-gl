@@ -182,6 +182,18 @@ def uses_amount(formulas: Sequence[str]) -> bool:
     return any(f.strip() and "S" in variables(parse(f)) for f in formulas)
 
 
+def needs_amount(formulas: Sequence[str]) -> list[bool]:
+    """Per line: its formula hangs on S — itself or through the lines it names. A line
+    that does not has its amount before S is typed."""
+    trees = {i + 1: parse(f) for i, f in enumerate(formulas) if f.strip()}
+
+    def hangs(n: int, path: tuple[int, ...]) -> bool:
+        names: set[str] = set(variables(trees[n])) if n in trees and n not in path else set()
+        return "S" in names or any(hangs(int(v[1:]), (*path, n)) for v in names if v != "S")
+
+    return [hangs(i + 1, ()) for i in range(len(formulas))]
+
+
 def compute(formulas: Sequence[str], amount: int | None) -> list[int | None]:
     """Line amounts in kopecks for the operation amount S (kopecks); None where the
     formula is empty (typed by hand). With amount=None only validates (S = 1)."""
