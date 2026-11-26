@@ -13,6 +13,7 @@ ORDER = [
     "items_below_minimum",
     "negative_stock",
     "expenses_waiting_a_batch",
+    "imports_without_costs",
     "unpaid_invoices",
     "awaiting_invoices",
 ]

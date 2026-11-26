@@ -26,7 +26,7 @@ from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, connect
 from modern_gl.reporting.inventory import waiting_expenses, waiting_lines
-from modern_gl.reporting.inventory.costs import expenses_waiting_a_batch
+from modern_gl.reporting.inventory.costs import expenses_waiting_a_batch, imports_without_costs
 from modern_gl.reporting.reports import trial_balance
 
 
@@ -307,6 +307,33 @@ def test_bu_gun_tells_what_waits(shop):
     (row,) = expenses_waiting_a_batch(shop.conn, shop.cid, "2026-10-01")
     assert (row.count, row.amount) == (2, 67_000)
     assert expenses_waiting_a_batch(shop.conn, shop.cid, "2026-09-01") == []
+
+
+def test_bu_gun_names_an_import_no_expense_has_reached(shop):
+    """The declaration of 21.09 has no «Расходы по партии»: «Bu gün» shows 1 import from its
+    day on (the user found a December import by chance: its broker's e-qaimə came in
+    January). A draft of the batch changes nothing; posted with the 640.00 — silence. The
+    broker's own purchase is not an import: never counted."""
+    assert imports_without_costs(shop.conn, shop.cid, "2026-09-20") == []
+    (row,) = imports_without_costs(shop.conn, shop.cid, "2026-09-21")
+    assert (row.count, row.amount, row.place) == (1, None, ("inventory",))
+    doc = batch(shop, "2026-09-28", LandedCostCharge("640", source_line_id=shop.service_line))
+    assert [r.count for r in imports_without_costs(shop.conn, shop.cid, "2026-10-01")] == [1]
+    shop.inventory.post_document(shop.cid, doc)
+    assert imports_without_costs(shop.conn, shop.cid, "2026-10-01") == []
+
+
+def test_a_local_purchase_is_not_an_import(shop):
+    """A second purchase of goods by e-qaimə, no declaration: only the import is counted."""
+    shop.inventory.post_receipt(
+        shop.cid,
+        "2026-09-22",
+        [ReceiptLine(shop.item, shop.main, "1", "100")],
+        shop.payable,
+        [shop.supplier],
+        invoice="MT2609000001",
+    )
+    assert [r.count for r in imports_without_costs(shop.conn, shop.cid, "2026-10-01")] == [1]
 
 
 def test_bu_gun_and_the_button_count_what_came_outside_a_purchase(shop, qtbot):

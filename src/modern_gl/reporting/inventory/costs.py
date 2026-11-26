@@ -173,6 +173,33 @@ def expenses_waiting_a_batch(conn: Connection, company_id: int, day: str) -> lis
     return [Attention(tr("Расходы ждут партии"), len(rows), ("inventory",), amount)]
 
 
+@attention_source(attention.IMPORTS_WITHOUT_COSTS)
+def imports_without_costs(conn: Connection, company_id: int, day: str) -> list[Attention]:
+    """«Bu gün»: purchases by a customs declaration whose goods no posted «Расходы по партии»
+    has reached — the broker's or the terminal's e-qaimə may come a month later, in another
+    year, and nothing else reminds of it."""
+    count = conn.execute(
+        """
+        SELECT COUNT(*) FROM inventory_documents d
+        WHERE d.company_id = ? AND d.doc_type = 'receipt' AND d.status = 'posted'
+          AND d.invoice_kind = 'customs' AND d.doc_date <= ?
+          AND EXISTS (SELECT 1 FROM inventory_lines l
+                      WHERE l.company_id = d.company_id AND l.document_id = d.id
+                        AND l.item_id IS NOT NULL)
+          AND NOT EXISTS (
+              SELECT 1 FROM inventory_lines src
+              JOIN inventory_lines lc ON lc.company_id = src.company_id
+                                     AND lc.source_receipt_line_id = src.id
+              JOIN inventory_documents b ON b.company_id = lc.company_id
+                                        AND b.id = lc.document_id
+              WHERE src.company_id = d.company_id AND src.document_id = d.id
+                AND b.doc_type = 'landed_cost' AND b.status = 'posted')
+        """,
+        (company_id, day),
+    ).fetchone()[0]
+    return [Attention(tr("Импорт без доп. расходов"), count, ("inventory",))] if count else []
+
+
 def cost_sources(
     conn: Connection,
     company_id: int,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 AZ = {
+    "Импорт без доп. расходов": "Əlavə xərcsiz idxal",
     "+ Ждущие расходы…": "+ Gözləyən xərclər…",
     "Расходы, ждущие партии": "Partiya gözləyən xərclər",
     "Расходов, ждущих партии, нет": "Partiya gözləyən xərc yoxdur",
