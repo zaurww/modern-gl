@@ -145,6 +145,19 @@ def test_template_name_and_memo_go_on_into_the_lines(qtbot, bank_session):
     assert page.table.state() == page.table.State.EditingState
 
 
+def test_template_without_a_name_shows_where_to_type_it(qtbot, bank_session):
+    """The name looked like a heading and was not found (the user, 2026-11-26): empty, it
+    is drawn as a field, and a save refused for it leaves the cursor there."""
+    page = shown(qtbot, TemplatePage(bank_session))
+    assert page.name.property("blank") is True
+    page.table.setFocus()
+    assert not page.save()
+    assert focused() is page.name
+    assert page.error.isVisible()
+    type_text(page.name, "İcarə")
+    assert page.name.property("blank") is False
+
+
 @pytest.mark.parametrize("how", ["click", "tab", "code"])
 def test_a_chosen_value_is_selected_whole_on_entering_its_field(qtbot, how):
     """Typing into a field that shows a choice replaces it (D78): "70" typed over

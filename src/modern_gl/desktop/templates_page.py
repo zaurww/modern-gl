@@ -187,6 +187,8 @@ class TemplatePage(GridEditing, PageWidget):
         self.name.setObjectName("titleEdit")
         self.name.setFont(fonts().title)
         self.name.setPlaceholderText(tr("Название шаблона"))
+        self.name.textChanged.connect(self._mark_name)
+        self._mark_name()
         root.addWidget(self.name)
 
         meta = QHBoxLayout()
@@ -293,6 +295,14 @@ class TemplatePage(GridEditing, PageWidget):
         """A name typed with the list closed that its directory lacks: add it?"""
         offer_new_value(self, self.s, self.table, index, kind_id, text, self.model.owner_at)
 
+    def _mark_name(self, *_) -> None:
+        """An empty name is drawn as a field: as a heading it was not seen to be one."""
+        blank = not self.name.text().strip()
+        if self.name.property("blank") != blank:
+            self.name.setProperty("blank", blank)
+            self.name.style().unpolish(self.name)
+            self.name.style().polish(self.name)
+
     def _changed(self, *_) -> None:
         self._update_preview()
         if not self.dirty:
@@ -336,6 +346,8 @@ class TemplatePage(GridEditing, PageWidget):
             )
         except LedgerError as e:
             self.show_error(str(e))
+            if not self.name.text().strip():
+                self.name.setFocus()
             return False
         self.dirty = False
         self.s.notify(tr("Шаблон «{name}» сохранён", name=self.name.text().strip()))

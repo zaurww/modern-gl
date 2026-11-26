@@ -161,6 +161,10 @@ QLineEdit:focus, QDateEdit:focus, QComboBox:focus {{
 QLineEdit#titleEdit {{
     background: transparent; border: none; padding: 0; color: {P.text};
 }}
+QLineEdit#titleEdit[blank="true"] {{
+    background: {P.field}; border: 1px solid {P.sheet_border}; padding: 3px 8px;
+}}
+QLineEdit#titleEdit[blank="true"]:focus {{ background: {P.surface}; border-color: {P.accent}; }}
 QLineEdit#search {{ padding-left: 10px; min-width: 320px; }}
 QLineEdit[invalid="true"] {{ color: {P.red}; border: 1px solid {P.red}; }}
 QComboBox::drop-down, QDateEdit::drop-down {{ border: none; width: 18px; }}
