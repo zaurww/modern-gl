@@ -236,3 +236,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D224 | Обновление схемы не меняет цифры учёта: обороты и склад сверяются до и после | принято (дополняет D148) | [D224-upgrade-check.md](D224-upgrade-check.md) |
 | D225 | Журнал: сменить счёт у отмеченных документов | принято | [D225-journal-account.md](D225-journal-account.md) |
 | D226 | «Bu gün»: импорт, до которого не дошли доп. расходы | принято | [D226-import-without-costs.md](D226-import-without-costs.md) |
+| D227 | Импорт продаж e-qaimə: название товара помнится для всех покупателей | принято | [D227-sale-names.md](D227-sale-names.md) |

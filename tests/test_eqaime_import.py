@@ -242,6 +242,72 @@ def test_import_a_sale_and_skip_a_return(shop, conn):
     shop.inventory.post_document(shop.company_id, draft)
 
 
+def _sold(number: str, tin: str, name: str, product: str) -> EInvoice:
+    row = {
+        "id": number,
+        "serialNumber": number,
+        "createdAt": "2026-03-07T10:00:00",
+        "kind": "defaultInvoice",
+        "receiver": {"tin": tin, "name": name},
+    }
+    items = [{"productName": product, "quantity": "1", "cost": "20", "vat18": "20"}]
+    return parse_invoice(row, {**row, "items": items}, outgoing=True)
+
+
+def test_a_sold_name_is_remembered_for_every_customer(shop, conn):
+    """The names of a sale's e-qaimə are the company's own. «Printer HP 107a» is no item's
+    name; sold to Alfa it became the item «Printer» — so it does for Beta, a customer new
+    to the company. Sold to Beta as «Skaner» later: Beta's own last choice wins, Alfa's
+    stays. A purchase's names are the supplier's: the sales teach them nothing."""
+    company = shop.company_id
+    shop.ledger.set_subconto_value_tax(company, shop.customer, CUSTOMER_TIN)
+    alfa = _sold("MT1", CUSTOMER_TIN, "Alfa", "Printer HP 107a")
+    beta = _sold("MT2", "7777777771", "Beta", "printer hp 107A")
+    (plan,) = plan_import(conn, company, [beta])
+    assert [(p.item_id, p.found) for p in plan.lines] == [(None, "")]  # nobody chose yet
+
+    draft = shop.inventory.create_sale_draft(
+        company,
+        "2026-03-01",
+        [SaleLine(shop.item, shop.main, "1", "20", "3.60", "Printer HP 107a")],
+        shop.acc["62"],
+        [shop.customer, shop.contract],
+    )
+    (plan,) = plan_import(conn, company, [beta])
+    assert plan.counterparty_id is None
+    assert [(p.item_id, p.found) for p in plan.lines] == [(shop.item, "history")]
+    assert plan.unresolved == 0
+
+    unit = conn.execute("SELECT unit_id FROM inventory_items WHERE id = ?", (shop.item,))
+    scanner = shop.inventory.add_item(company, "Skaner", unit.fetchone()[0], shop.acc["41"])
+    (made,) = import_drafts(shop.inventory, company, [plan])
+    doc = shop.inventory.load_document(company, made)
+    shop.inventory.update_sale_draft(
+        company,
+        made,
+        "2026-03-07",
+        [
+            SaleLine(
+                scanner, shop.main, "1", "20", "3.60", "printer hp 107A", line_id=doc.lines[0].id
+            )
+        ],
+        doc.lines[0].offset_account_id,
+        doc.lines[0].offset_subconto,
+        vat_rate=1800,
+        invoice="MT2",
+    )
+    again = plan_import(
+        conn, company, [_sold("MT3", "7777777771", "Beta", "Printer HP 107a"), alfa]
+    )
+    assert [p.item_id for plan in again for p in plan.lines] == [scanner, shop.item]
+    assert draft  # Alfa's draft is what its own e-qaimə is read by
+
+    bought = received("MT9")
+    bought[1]["items"][0]["productName"] = "Printer HP 107a"
+    (purchase,) = plan_import(conn, company, [parse_invoice(*bought, outgoing=False)])
+    assert (purchase.lines[0].item_id, purchase.lines[0].found) == (None, "")
+
+
 def test_client_pages_statuses_and_reads_details():
     rows = [{"id": str(i), "serialNumber": f"MT{i}"} for i in range(60)]
     portal = FakePortal({"approved": rows, "approvedBySystem": [{"id": "x"}]}, {"7": {"id": "7"}})

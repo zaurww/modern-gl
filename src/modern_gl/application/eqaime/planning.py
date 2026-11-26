@@ -1,5 +1,6 @@
-"""What each line of an e-qaimə would become: as last time from this counterparty, an
-item of the same name; a purchased service new to the supplier — the account the same
+"""What each line of an e-qaimə would become: as last time from this counterparty (a sold
+name — as for any customer: the names are the company's own), an item of the same name; a
+purchased service new to the supplier — the account the same
 service had from another supplier, else the supplier's last expense (as the purchase form,
 D76); or nothing yet. The import makes drafts: a suggestion is checked before posting."""
 
@@ -21,7 +22,8 @@ class LinePlan:
     item_id: int | None = None
     account_id: int | None = None  # a purchase line without an item: where it goes
     subconto: tuple[int | None, ...] = ()
-    # how it was found: "history", "name", "other" (the same service from another
+    # how it was found: "history" (a sold name: of any customer), "name", "other" (the
+    # same service from another
     # supplier), "supplier" (this supplier's last expense), "" (the user chooses)
     found: str = ""
 
@@ -114,6 +116,7 @@ def plan_import(
     }
     awaiting = _awaiting(conn, company_id)
     expenses = _expenses(conn, company_id)
+    sold = _sold_names(conn, company_id)
     plans = []
     for invoice in invoices:
         counterparty = known_counterparty(conn, company_id, invoice.party_tin, invoice.party_name)
@@ -134,6 +137,8 @@ def plan_import(
         history = _history(conn, company_id, source, counterparty)
         for line in invoice.lines:
             planned = _line_plan(line, history, items, plan.as_sale)
+            if source == "sale" and planned.found != "history":
+                planned = _as_sold(line, sold) or planned
             if not returned and not plan.as_sale and line.service and not planned.found:
                 planned = _suggested(line, counterparty, expenses)
             plan.lines.append(planned if not returned or planned.item_id else LinePlan(line))
@@ -204,6 +209,32 @@ def _line_plan(
     if not line.service and key in items:
         return LinePlan(line, item_id=items[key], found="name")
     return LinePlan(line)
+
+
+def _sold_names(conn: Connection, company_id: int) -> dict[str, int]:
+    """The item each line name of a sale became the last time, whoever the customer: the
+    names of a sale's e-qaimə are the company's own. One read for the whole import."""
+    result: dict[str, int] = {}
+    for row in conn.execute(
+        """
+        SELECT l.memo, l.item_id
+        FROM inventory_lines l
+        JOIN inventory_documents d ON d.company_id = l.company_id AND d.id = l.document_id
+        WHERE l.company_id = ? AND d.doc_type = 'sale'
+          AND l.item_id IS NOT NULL AND l.memo <> ''
+        ORDER BY d.doc_date, d.id, l.line_no
+        """,
+        (company_id,),
+    ):
+        result[fold(row["memo"])] = row["item_id"]  # the latest wins
+    return result
+
+
+def _as_sold(line: EInvoiceLine, sold: Mapping[str, int]) -> LinePlan | None:
+    """A sold line this customer never had by that name: the item the name became for
+    another customer. The customer's own last choice, a service too, is asked first."""
+    item_id = None if line.service else sold.get(fold(line.name))
+    return None if item_id is None else LinePlan(line, item_id=item_id, found="history")
 
 
 @dataclass
