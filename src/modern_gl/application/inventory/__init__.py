@@ -6,6 +6,7 @@ document creates an ordinary GL document in the same SQLite transaction.
 
 from __future__ import annotations
 
+from modern_gl.application.inventory.account_change import LineAccountCommands
 from modern_gl.application.inventory.amounts import (
     allocate_charges,
     allocate_minor,
@@ -104,6 +105,6 @@ __all__ = [
 ]
 
 
-class Inventory(StockCountCommands, AwaitingCommands, SaleAccountCommands):
+class Inventory(StockCountCommands, AwaitingCommands, SaleAccountCommands, LineAccountCommands):
     """Write-side API for inventory catalogs, movements and landed cost; each group
     lives in its own module."""

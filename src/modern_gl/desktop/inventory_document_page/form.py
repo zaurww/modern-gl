@@ -265,7 +265,9 @@ class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
         self.basis.clear()
         self.basis.addItem(tr("E-qaimə"), EQAIME)
         if purchase:
-            self.basis.addItem(tr("Декларация"), CUSTOMS)
+            # the cargo customs declaration by its own name (the user, 2026-11-26): the
+            # short import declaration is another paper
+            self.basis.addItem(tr("ГТД"), CUSTOMS)
             self.basis.addItem(tr("Ждёт e-qaimə"), AWAITING)
         self.basis.addItem(tr("Digər"), OTHER)
         tip = (

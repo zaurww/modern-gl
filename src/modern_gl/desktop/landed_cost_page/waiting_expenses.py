@@ -21,13 +21,14 @@ from modern_gl.desktop.list_table import ListTable
 from modern_gl.desktop.widgets import caption, money
 from modern_gl.domain.dates import ru_date
 from modern_gl.domain.invoice import CUSTOMS_CHARGES
-from modern_gl.i18n import N_, fold, tr
+from modern_gl.i18n import N_, fold, sort_key, tr
 from modern_gl.i18n_az import AZ
 from modern_gl.reporting.inventory import WaitingExpense
 
-DATE, PARTY, MEMO, AMOUNT = range(4)
-HEADERS = (N_("Дата"), N_("Поставщик"), N_("Содержание"), N_("Сумма"))
+DATE, PARTY, INVOICE, MEMO, AMOUNT = range(5)
+HEADERS = (N_("Дата"), N_("Поставщик"), "E-qaimə", N_("Содержание"), N_("Сумма"))
 _ROOT = QModelIndex()
+PARTY_WIDTH = 300
 
 
 def label_of(row: WaitingExpense) -> str:
@@ -125,7 +126,10 @@ class _Rows(QAbstractTableModel):
         if role == Qt.ItemDataRole.TextAlignmentRole and index.column() == AMOUNT:
             return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         if role == Qt.ItemDataRole.DisplayRole:
-            return (ru_date(row.doc_date), row.party, row.memo, money(row.left))[index.column()]
+            shown = (ru_date(row.doc_date), row.party, row.invoice, row.memo, money(row.left))
+            return shown[index.column()]
+        if role == Qt.ItemDataRole.ToolTipRole and index.column() in (PARTY, MEMO):
+            return row.party if index.column() == PARTY else row.memo  # a long text in full
         return None
 
     def setData(self, index, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
@@ -152,7 +156,7 @@ class WaitingExpensesDialog(QDialog):
         what was said to be for one (D220), or names one, comes ticked."""
         super().__init__(parent)
         self.setWindowTitle(tr("Расходы, ждущие партии"))
-        self.resize(860, 480)
+        self.resize(980, 520)
         self.rows = rows
         wanted = [number for number in numbers if number]
         # only what waits for a batch: the ƏDV of the same payment names the declaration
@@ -183,39 +187,76 @@ class WaitingExpensesDialog(QDialog):
         bar.addWidget(self.show_all)
         root.addLayout(bar)
         self.model = _Rows(self.ticked)
-        self.table = ListTable(self.model, 32, fill=MEMO)
-        self.table.setColumnWidth(DATE, 130)
-        self.table.setColumnWidth(PARTY, 230)
-        self.table.setColumnWidth(AMOUNT, 110)
+        self.table = ListTable(self.model, 32, fill=MEMO, wrap=False)
+        # the text says what the expense is: the supplier's long name does not push it out
+        self.model.modelReset.connect(self._fit_party)
+        self.sorted_by, self.descending = DATE, False  # the oldest first, as they came
+        header = self.table.horizontalHeader()
+        header.setSectionsClickable(True)
+        header.setSortIndicatorShown(True)
+        header.sectionClicked.connect(self._sort)
         root.addWidget(self.table, 1)
+        bottom = QHBoxLayout()
+        self.total = caption()  # what is ticked comes to: seen before it is taken
+        bottom.addWidget(self.total, 1)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.button(QDialogButtonBox.StandardButton.Ok).setText(tr("Взять отмеченные"))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
-        root.addWidget(buttons)
+        bottom.addWidget(buttons)
+        root.addLayout(bottom)
+        self.model.dataChanged.connect(lambda *_: self._show_total())
         self.search.textChanged.connect(lambda _text: self._fill())
         self.show_all.toggled.connect(lambda _on: self._fill())
         self.show_all.setChecked(not any(row.waits for row in rows))
         self._fill()
         self.search.setFocus()
 
+    def _fit_party(self) -> None:
+        if self.table.columnWidth(PARTY) > PARTY_WIDTH:
+            self.table.setColumnWidth(PARTY, PARTY_WIDTH)
+
+    def _sort(self, column: int) -> None:
+        """A click on a caption sorts by it; another click — the other way."""
+        self.descending = column == self.sorted_by and not self.descending
+        self.sorted_by = column
+        self._fill()
+
+    def _show_total(self) -> None:
+        taken = self.chosen()
+        self.total.setText(
+            tr("Отмечено: {n} на {sum}", n=len(taken), sum=money(sum(r.left for r in taken)))
+            if taken
+            else ""
+        )
+
     def _fill(self) -> None:
         """What waits for a batch; ticked, an expense stays whatever the search says."""
         needle = fold(self.search.text().strip())
-        self.model.show(
-            [
-                row
-                for row in self.rows
-                if (row.waits or self.show_all.isChecked())
-                and (
-                    row.key in self.ticked
-                    or not needle
-                    or needle in fold(f"{row.party} {row.memo} {row.invoice} {row.about}")
-                )
-            ]
-        )
+        keys = {
+            DATE: lambda r: r.doc_date,
+            PARTY: lambda r: sort_key(r.party),
+            INVOICE: lambda r: r.invoice,
+            MEMO: lambda r: sort_key(r.memo),
+            AMOUNT: lambda r: r.left,
+        }
+        shown = [
+            row
+            for row in self.rows
+            if (row.waits or self.show_all.isChecked())
+            and (
+                row.key in self.ticked
+                or not needle
+                or needle in fold(f"{row.party} {row.memo} {row.invoice} {row.about}")
+            )
+        ]
+        shown.sort(key=keys[self.sorted_by], reverse=self.descending)  # stable: ties as read
+        self.model.show(shown)
+        order = Qt.SortOrder.DescendingOrder if self.descending else Qt.SortOrder.AscendingOrder
+        self.table.horizontalHeader().setSortIndicator(self.sorted_by, order)
+        self._show_total()
 
     def chosen(self) -> list[WaitingExpense]:
         return [row for row in self.rows if row.key in self.ticked]

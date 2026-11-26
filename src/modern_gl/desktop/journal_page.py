@@ -15,12 +15,14 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QDialog,
     QLineEdit,
     QMessageBox,
     QStackedLayout,
     QVBoxLayout,
 )
 
+from modern_gl.application.account_change import accounts_used, change_account
 from modern_gl.application.document_kinds import document_title, kind_name
 from modern_gl.application.journal import (
     JournalFilter,
@@ -35,7 +37,8 @@ from modern_gl.application.journal import (
 )
 from modern_gl.application.posting_preview import PreviewPosting, gl_postings
 from modern_gl.application.queries import DocumentSummary, document_year, document_years
-from modern_gl.desktop.list_table import ListTable
+from modern_gl.desktop.change_account_dialog import AccountChangeDialog
+from modern_gl.desktop.list_table import ListTable, SelectionMode
 from modern_gl.desktop.page import PageWidget
 from modern_gl.desktop.posting_peek import bind_peek
 from modern_gl.desktop.quick_entry_bar import QuickEntryBar
@@ -273,11 +276,20 @@ class JournalPage(PageWidget):
         self.new_button = self.header.primary(
             tr("+ Новый документ"), self.new_document.emit, "Ins, Ctrl+N"
         )
-        self.more = self.header.more(lambda: [(tr("Импорт из Excel…"), self.import_requested.emit)])
+        self.more = self.header.more(
+            lambda: [
+                (tr("Сменить счёт у отмеченных…"), self.change_account_selected),
+                None,
+                (tr("Импорт из Excel…"), self.import_requested.emit),
+            ]
+        )
         return self.header
 
     def _build_table(self, session: Session) -> None:
-        self.table = ListTable(self.model, 36, fill=MEMO, wrap=False)
+        # rows are marked (Ctrl or Shift + click) to change their account together
+        self.table = ListTable(
+            self.model, 36, fill=MEMO, wrap=False, selection=SelectionMode.ExtendedSelection
+        )
         self.table.setColumnHidden(BOOK, not session.parallel_books)  # one book (D63)
         self.table.doubleClicked.connect(self._open_current)
         bind_peek(self.table, session, self._current_postings)
@@ -404,6 +416,28 @@ class JournalPage(PageWidget):
     def _copy_current(self) -> None:
         if (doc_id := self._current_id()) is not None:
             self.copy_document.emit(doc_id)
+
+    def change_account_selected(self) -> None:
+        """The marked documents' lines on one account go to another (D225)."""
+        rows = {i.row() for i in self.table.selectionModel().selectedRows()}
+        marked = [self.model.docs[r].id for r in sorted(rows)]
+        if len(marked) < 2 or self.s.read_only:  # one row is the cursor: it opens and is edited
+            self.s.notify(tr("Отметьте документы (Ctrl или Shift + щелчок)"))
+            return
+        cid = self.s.company_id
+        dialog = AccountChangeDialog(self.s, accounts_used(self.s.conn, cid, marked), len(marked))
+        if dialog.exec() != QDialog.DialogCode.Accepted or (chosen := dialog.chosen()) is None:
+            return
+        try:
+            done = change_account(self.s.ledger, cid, marked, *chosen)
+        except LedgerError as e:
+            QMessageBox.warning(self, tr("Сменить счёт у отмеченных"), str(e))
+            return
+        text = tr("Счёт сменён в документах: {n}", n=done.changed)
+        if done.left:
+            text += tr("; без изменений: {n}", n=done.left)
+        self.s.notify(text)
+        self.refresh()
 
     def _delete_current(self) -> None:
         doc_id = self._current_id()

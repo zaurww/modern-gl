@@ -75,6 +75,7 @@ OTHER_DIALOGS = {
 }
 # forms checked live by the general rules (test_the_form_is_as_designed below)
 FORMS = {
+    "AccountChangeDialog",
     "ChangeAccountDialog",
     "CrashDialog",
     "FillBalanceDialog",
@@ -307,6 +308,18 @@ def change_account_form() -> QWidget:
     return ChangeAccountDialog(session, [])
 
 
+def journal_account_form() -> QWidget:
+    """«Сменить счёт у отмеченных» of the journal: two accounts of the marked documents."""
+    from modern_gl.desktop.change_account_dialog import AccountChangeDialog
+    from modern_gl.infrastructure.db import connect
+
+    conn = connect(":memory:")
+    shop = make_shop(conn, "classic")
+    cid = shop.company_id
+    session = Session(conn, shop.ledger, cid, "Mağaza", Catalog(conn, cid))
+    return AccountChangeDialog(session, [shop.acc["60"], shop.acc["20"]], 2)
+
+
 def split_account_form() -> QWidget:
     """«Сделать счёт группой» — «Добавить субсчёт…» on an account with postings."""
     from modern_gl.desktop.split_account_dialog import SplitAccountDialog
@@ -334,6 +347,7 @@ def fill_balance_form() -> QWidget:
 
 
 FORM_STEPS = {
+    "AccountChangeDialog": journal_account_form,
     "ChangeAccountDialog": change_account_form,
     "FillBalanceDialog": fill_balance_form,
     "CrashDialog": crash_form,

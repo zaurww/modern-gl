@@ -66,6 +66,17 @@ def fill_subconto(
     return first, second, third
 
 
+def moved_subconto(old: Row, new: Row, subconto: Sequence[int | None]) -> Subconto:
+    """The subconto of a line taken from one account to another: each position of the
+    new account keeps the element of its directory the old account had, else none."""
+    by_kind = {
+        kind: value
+        for kind, value in zip(account_kinds(old), pad_subconto(subconto), strict=True)
+        if kind is not None and value is not None
+    }
+    return fill_subconto(new, by_kind)
+
+
 # ids in one `IN (...)` of a query: well below the engine's limit of parameters
 BATCH = 500
 

@@ -381,3 +381,35 @@ def test_a_typed_twin_of_a_waiting_service_is_caught(shop, qtbot, monkeypatch):
     assert page.save(True), page.error.text()
     assert balance(shop, "60") == (0, 167_000)
     assert balance(shop, "15") == (3_000, 0)
+
+
+def test_the_window_sums_what_is_ticked_and_sorts(qtbot):
+    """Ticked 100.00 + 36.20 = 136.20 is shown before it is taken; the oldest comes first,
+    a click on «Сумма» sorts by it, another click — the other way (the user, 2026-11-26)."""
+    from modern_gl.desktop.landed_cost_page.waiting_expenses import AMOUNT
+    from modern_gl.reporting.inventory import WaitingExpense
+
+    def expense(day: str, memo: str, amount: int, line: int) -> WaitingExpense:
+        return WaitingExpense(
+            day, "SR LOGISTICS", memo, "", 1, (None, None, None), amount, 0, True, line
+        )
+
+    rows = [
+        expense("2025-12-03", "Terminal", 10_000, 1),
+        expense("2025-10-30", "Xidmət haqqı", 3_383, 2),
+        expense("2025-12-03", "Qısa idxal", 3_620, 3),
+    ]
+    dialog = WaitingExpensesDialog(rows)
+    qtbot.addWidget(dialog)
+    model = dialog.model
+    assert [r.memo for r in model.rows] == ["Xidmət haqqı", "Terminal", "Qısa idxal"]
+    assert dialog.total.text() == ""
+    for row in (1, 2):
+        model.setData(model.index(row, 0), Qt.CheckState.Checked, Qt.ItemDataRole.CheckStateRole)
+    assert dialog.total.text() == "Отмечено: 2 на 136.20"
+    header = dialog.table.horizontalHeader()
+    header.sectionClicked.emit(AMOUNT)
+    assert [r.left for r in model.rows] == [3_383, 3_620, 10_000]
+    header.sectionClicked.emit(AMOUNT)
+    assert [r.left for r in model.rows] == [10_000, 3_620, 3_383]
+    assert dialog.total.text() == "Отмечено: 2 на 136.20"

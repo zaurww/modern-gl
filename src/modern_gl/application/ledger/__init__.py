@@ -9,6 +9,7 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from modern_gl.application.ledger.account_change import AccountChangeCommands
 from modern_gl.application.ledger.account_form import AccountForm, AccountFormCommands
 from modern_gl.application.ledger.companies import CompanyCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
@@ -61,6 +62,7 @@ class Ledger(
     TemplateCommands,
     DocumentImportCommands,
     RevaluationCommands,
+    AccountChangeCommands,
     DocumentCommands,
     SubcontoDetailCommands,
     TagCommands,
