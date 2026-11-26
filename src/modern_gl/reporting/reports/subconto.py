@@ -104,12 +104,17 @@ def subconto_balance(  # noqa: PLR0913 the report's settings, as the other repor
     for r in raw:
         _add_up(sums, tuple(r[f"sc{n}"] for n in range(depth)), r)
     in_currency = _subconto_currency(conn, params, positions, invoices)
-    quantities = _subconto_quantity(conn, params, positions, invoices)
+    counted = sorted(set(json.loads(params["accounts"])) & counted_accounts(conn, company_id))
+    quantities = (
+        _subconto_quantity(conn, {**params, "accounts": json.dumps(counted)}, positions, invoices)
+        if counted
+        else {}
+    )
     for path in quantities:
         sums[path]  # a row that has only a quantity left is shown too
     names = _value_names(conn, company_id, {v for path in sums for v in path})
     rows = _subconto_tree(sums, in_currency, names, depth, quantities)
-    if quantities or acc["id"] in counted_accounts(conn, company_id):
+    if counted:
         for row in rows:
             row.quantity = row.quantity or QuantityMoves()
     return rows

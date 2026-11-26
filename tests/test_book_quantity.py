@@ -90,6 +90,17 @@ def test_the_subconto_balance_counts_each_object(books):
     assert got == {"Kreslo": (29000, 2 * Q, 0, 2 * Q), "Stul": (10500, 5 * Q, 2 * Q, 3 * Q)}
 
 
+def test_the_other_side_of_a_counted_line_shows_no_quantity(books):
+    """Dt 12 Kt 60 — 2 kreslo and 5 stul: the quantity is of account 12. Account 60 keeps
+    none: its report has no quantity at all (it showed 7 «расход» at the supplier)."""
+    books.example()
+    rows = subconto_balance(books.ledger.conn, books.cid, "60", "2026-01-01", "2026-02-28")
+    assert [(r.name, r.turnover_ct, r.quantity) for r in rows] == [("Mebel MMC", 46500, None)]
+    for account in ("60", "26"):
+        card = account_card(books.ledger.conn, books.cid, account, "2026-01-01", "2026-02-28")
+        assert card.quantity_opening is None  # the card has no quantity columns
+
+
 def test_the_card_counts_after_each_line(books):
     books.example()
     card = account_card(books.ledger.conn, books.cid, "12", "2026-01-01", "2026-02-28")
