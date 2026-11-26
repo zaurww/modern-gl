@@ -1,4 +1,4 @@
-"""An update of the schema must leave the books as they were (D-new-upgrade-check): the
+"""An update of the schema must leave the books as they were (D224): the
 turnover of every account in every month and every item's stock are read before the
 pending migrations and after them; a difference undoes the update."""
 

@@ -1,5 +1,5 @@
 """The books compared before and after an update; the warning about the second folder
-(D-new-upgrade-check, D97)."""
+(D224, D97)."""
 
 AZ: dict[str, str] = {
     "обороты счёта {account} за {month}": "{account} hesabının {month} üzrə dövriyyəsi",

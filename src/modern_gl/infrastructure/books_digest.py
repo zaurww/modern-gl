@@ -1,5 +1,5 @@
 """The figures of the books an update of the schema must leave as they were
-(D-new-upgrade-check): every account's debit and credit turnover of each month and every
+(D224): every account's debit and credit turnover of each month and every
 item's quantity and cost in each warehouse. Read before the pending migrations and after
 them, inside the update's transaction: a difference stops the update and the file stays
 the older program's file. Plain SQL over columns the tables have had since they appeared,

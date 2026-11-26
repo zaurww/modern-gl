@@ -354,7 +354,7 @@ def migrate(conn: sqlite3.Connection) -> None:
     ]
     if not pending:
         return
-    # the books before and after (D-new-upgrade-check): an update that would change a
+    # the books before and after (D224): an update that would change a
     # turnover or a stock balance is undone, unless a migration says it means to
     compared = current > 0 and not any(
         books_digest.intended(path.read_text(encoding="utf-8")) for _, path in pending
