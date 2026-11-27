@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.ledger import Ledger
 from modern_gl.application.workspace import Workspace
 from modern_gl.desktop import theme
+from modern_gl.desktop.assistant_dialog import AssistantDialog
 from modern_gl.desktop.command_palette import CommandPalette
 from modern_gl.desktop.main_window.commands import palette_entries
 from modern_gl.desktop.main_window.company_files import CompanySession
@@ -40,6 +41,7 @@ from modern_gl.desktop.toast import Toast
 from modern_gl.desktop.verification_dialog import VerificationDialog
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import language, set_language, tr
+from modern_gl.infrastructure.assistant_clients import server_command
 from modern_gl.infrastructure.db import Connection
 
 
@@ -194,6 +196,10 @@ class MainWindow(QMainWindow):
         dialog.exec()
         for doc_id in dialog.changed:
             self.page_stack.postings_changed(doc_id)
+
+    def show_assistant(self) -> None:
+        """«AI-помощник»: where the books are connected to an AI and what it is allowed."""
+        AssistantDialog(command=server_command(), parent=self).exec()
 
     def _reopen(self) -> None:
         """The same company again (another language, look or books), on the same place."""

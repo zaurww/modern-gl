@@ -76,6 +76,7 @@ OTHER_DIALOGS = {
 # forms checked live by the general rules (test_the_form_is_as_designed below)
 FORMS = {
     "AccountChangeDialog",
+    "AssistantDialog",
     "ChangeAccountDialog",
     "CrashDialog",
     "FillBalanceDialog",
@@ -266,6 +267,17 @@ def test_every_import_window_is_checked_live():
 # ---- forms, live ---------------------------------------------------------------------
 
 
+def assistant_form() -> QWidget:
+    """«AI-помощник»: one program connected for drafts, the other not installed."""
+    from modern_gl.desktop.assistant_dialog import AssistantDialog
+    from modern_gl.infrastructure.assistant_clients import CODE, DESKTOP, DRAFTS, Client
+
+    found = [Client(DESKTOP, Path("claude_desktop_config.json"), DRAFTS), Client(CODE, None)]
+    dialog = AssistantDialog(lambda: found, Path("modern-gl-mcp.exe"))
+    dialog.mode_buttons["edits"].click()  # something to apply: the blue button is live
+    return dialog
+
+
 def crash_form() -> QWidget:
     from modern_gl.desktop.crash_dialog import CrashDialog
 
@@ -348,6 +360,7 @@ def fill_balance_form() -> QWidget:
 
 FORM_STEPS = {
     "AccountChangeDialog": journal_account_form,
+    "AssistantDialog": assistant_form,
     "ChangeAccountDialog": change_account_form,
     "FillBalanceDialog": fill_balance_form,
     "CrashDialog": crash_form,

@@ -60,6 +60,7 @@ def _commands(win: MainWindow) -> list[Entry]:
                 (tr("Импорт проводок из Excel"), win.show_import, "", "import"),
                 (tr("Закрытие периода…"), win.close_period, "", "lock"),
             ]
+    items.append((tr("AI-помощник…"), win.show_assistant, "", "command"))
     return [Entry(group, title, run, hint, icon) for title, run, hint, icon in items]
 
 

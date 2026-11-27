@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller build of the desktop program (`uv run pyinstaller packaging/modern-gl.spec`):
-one folder `dist/modern-gl` with the interpreter, PySide6 and the package's data — the
+one folder `dist/modern-gl` with the program, the assistant server `modern-gl-mcp.exe`
+(D83), the interpreter, PySide6 and the package's data — the
 icons and fonts (`desktop/resources`), the migrations and the chart templates
 (`infrastructure/*`), which the code reads next to its own files."""
 
@@ -40,4 +41,22 @@ exe = EXE(
     upx=False,
     icon=str(ROOT / "packaging" / "modern-gl.ico"),
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="modern-gl")
+# The assistant server (D83) beside the program: «AI-помощник» writes its path into the
+# AI program's settings. A console program — an AI program talks to it over stdin/stdout.
+mcp = Analysis(
+    [str(ROOT / "packaging" / "launch_mcp.py")],
+    pathex=[str(ROOT / "src")],
+    datas=datas,
+    hiddenimports=collect_submodules("modern_gl"),
+    noarchive=False,
+)
+mcp_exe = EXE(
+    PYZ(mcp.pure),
+    mcp.scripts,
+    exclude_binaries=True,
+    name="modern-gl-mcp",
+    console=True,
+    upx=False,
+    icon=str(ROOT / "packaging" / "modern-gl.ico"),
+)
+coll = COLLECT(exe, a.binaries, a.datas, mcp_exe, mcp.binaries, mcp.datas, name="modern-gl")

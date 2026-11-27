@@ -5,11 +5,21 @@
 компания открывается снимком (D80), поэтому AI ничего не может изменить, а файл, открытый в
 программе, не блокируется. Запись — только флагами: черновики и правки (ниже).
 
-## Подключение к Claude Desktop
+## Подключение из программы
 
-1. Один раз: `uv sync` в папке программы (появится `.venv\Scripts\modern-gl-mcp.exe`).
+Меню компании (название вверху слева) → **«AI-помощник…»** (или Ctrl+K → «AI-помощник»):
+выбрать, что разрешено (только чтение · черновики · правки), отметить программу (Claude
+Desktop, Claude Code — что установлено) → «Применить» → перезапустить AI-программу (Claude
+Desktop — полностью: значок у часов → Quit). Снятая галочка отключает. Программа меняет в
+настройках AI только свою запись `modern-gl`.
+
+## Подключение вручную (Claude Desktop)
+
+1. Сервер — `modern-gl-mcp.exe` в папке программы (из исходников: `uv sync`, он в
+   `.venv\Scripts`).
 2. Claude Desktop → Settings → Developer → Edit Config (файл
-   `%APPDATA%\Claude\claude_desktop_config.json`), добавить:
+   `%APPDATA%\Claude\claude_desktop_config.json`; у сборки из Microsoft Store —
+   `%LOCALAPPDATA%\Packages\Claude_…\LocalCache\Roaming\Claude\`), добавить:
 
 ```json
 {

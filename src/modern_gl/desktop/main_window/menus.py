@@ -47,6 +47,7 @@ def company_menu(win: MainWindow) -> None:
         if not viewing:
             _file_actions(win, menu)
     menu.addSeparator()
+    menu.addAction(tr("AI-помощник…")).triggered.connect(win.show_assistant)
     menu.addAction(tr("Ваше имя: {name}…", name=company.user_name())).triggered.connect(
         win.ask_user_name
     )
