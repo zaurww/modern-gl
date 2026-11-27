@@ -17,7 +17,13 @@ from collections.abc import Collection, Sequence
 
 from modern_gl.application.bank.file_import import CONVERSION, FileOperation
 from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
-from modern_gl.application.bank.operations import FEE, IN, OUT
+from modern_gl.application.bank.operations import (
+    FEE,
+    IN,
+    OUT,
+    BankOperation,
+    load_bank_operation,
+)
 from modern_gl.application.bank.party_commands import BankPartyCommands
 from modern_gl.application.common import pad_subconto
 from modern_gl.application.conversion.calc import (
@@ -34,16 +40,18 @@ from modern_gl.infrastructure.db import transaction
 class FileConversionCommands(BankPartyCommands):
     def _redo_conversion_lines(
         self, company_id: int, ops: Sequence[FileOperation]
-    ) -> tuple[dict[str, int], dict[str, list[int]]]:
+    ) -> tuple[dict[str, int], dict[str, list[int]], dict[str, list[BankOperation]]]:
         """The bank operations with a conversion's references (its sides, its fees)
         deleted: the conversion takes their place — a draft, or one posted by hand in the
         open period. -> (the references of a side that stays — posted in a closed period
         — to its number; a side's reference -> the numbers of the posted operations the
-        conversion replaces, the fees' included)."""
+        conversion replaces, the fees' included; a side's reference -> the operations
+        that were its sides: the other account's line, loaded before, is the conversion's
+        other side — its file need not be loaded again)."""
         sides = {op.reference for op in ops if op.kind == CONVERSION}
         fees = {f.reference: op.reference for op in ops if op.kind == CONVERSION for f in op.fees}
         if not sides:
-            return {}, {}
+            return {}, {}, {}
         marks = ", ".join("?" * len(sides | set(fees)))
         rows = self.conn.execute(
             "SELECT o.id, o.reference, d.status, d.number FROM bank_operations o "
@@ -53,6 +61,7 @@ class FileConversionCommands(BankPartyCommands):
         ).fetchall()
         held: dict[str, int] = {}
         replaced: dict[str, list[int]] = {}
+        gone: dict[str, list[BankOperation]] = {}
         for r in rows:
             side = r["reference"] if r["reference"] in sides else fees[r["reference"]]
             if r["status"] == "posted":
@@ -64,8 +73,11 @@ class FileConversionCommands(BankPartyCommands):
                         held[r["reference"]] = r["number"]
                     continue
                 replaced.setdefault(side, []).append(r["number"])
+            if r["reference"] in sides:
+                was = load_bank_operation(self.conn, company_id, r["id"])
+                gone.setdefault(side, []).append(was)
             self.delete_bank_operation(company_id, r["id"])
-        return held, replaced
+        return held, replaced, gone
 
     def _document_id(self, operation_id: int) -> int:
         return self.conn.execute(
@@ -77,16 +89,17 @@ class FileConversionCommands(BankPartyCommands):
         company_id: int,
         op: FileOperation,
         ops: Sequence[FileOperation],
-        known: bool,
         post: bool,
         taken: Collection[str] = (),
         replaced: Sequence[int] = (),
+        gone: Sequence[BankOperation] = (),
     ) -> list[ImportRow]:
         """The conversion of the line `op` (and of the other account's line among `ops`):
         a new one, or the one of an earlier file finished with this side; a fee `taken`
         (posted as a bank operation) stays out; `replaced` — the numbers of the operations
-        posted by hand it takes the place of, said on the rows. -> the rows of both lines
-        and their fees."""
+        posted by hand it takes the place of, said on the rows; `gone` — the bank
+        operations that were its sides: the side no file of this load has is taken from
+        them. -> the rows of both lines and their fees."""
         other = next(
             (
                 x
@@ -96,7 +109,7 @@ class FileConversionCommands(BankPartyCommands):
             None,
         )
         mine = [x for x in (op, other) if x is not None]
-        existing = self._conversion_of(company_id, op.reference) if known else None
+        existing = self._conversion_of(company_id, op.reference)
         fees: list[ConversionFee] = []
         sides: dict[str, ConversionSide | None] = {OUT: None, IN: None}
         days: dict[str, str | None] = {OUT: None, IN: None}
@@ -130,6 +143,12 @@ class FileConversionCommands(BankPartyCommands):
                 for f in x.fees
                 if f.reference not in taken
             ]
+        for was in gone:  # the other account's line, in the books as a bank operation
+            if sides[was.direction] is None and was.account_id is not None and was.total:
+                days[was.direction] = was.doc_date
+                sides[was.direction] = ConversionSide(
+                    was.account_id, was.total, was.subconto, was.currency_id, was.reference
+                )
         data = ConversionInput(
             doc_date=days[OUT] or days[IN] or op.day,  # the debit's day is the conversion's
             source=sides[OUT],

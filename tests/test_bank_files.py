@@ -46,12 +46,14 @@ from modern_gl.application.bank.file_import import (
     budget_code,
     file_operations,
     iban_places,
+    lines_in_books,
     tax_lines_as_before,
 )
 from modern_gl.application.bank.files import BankFileError, read_bank_file
 from modern_gl.application.bank.files.kapital import other_side
-from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED
+from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED, SKIPPED
 from modern_gl.application.bank.operations import OUT, BankLine, BankOperationInput
+from modern_gl.application.bank.statement import place_balance
 from modern_gl.application.chart_csv import apply_chart_template
 from modern_gl.application.conversion.calc import load_conversion
 from modern_gl.application.currencies import days_without_rate
@@ -464,12 +466,25 @@ def test_only_the_lines_taken_are_loaded(ledger, firm, files):
     cid = firm["cid"]
     done = ledger.bank.import_bank_files(cid, files, firm["places"], take={"1001", "2001"})
     assert done.unknown_parties == 0  # Beta and VIAL-CAS-BEL were left out
-    assert sorted((row.op.reference, row.state) for row in done.rows) == [
+    loaded = [row for row in done.rows if row.state != SKIPPED]
+    assert sorted((row.op.reference, row.state) for row in loaded) == [
         ("1001", POSTED),
         ("2001", POSTED),
         ("2001", POSTED),
         ("2002", POSTED),
     ]
+    # the six lines not ticked are said so, none goes unsaid: 10 lines in the files
+    left = [row for row in done.rows if row.state == SKIPPED]
+    assert sorted(row.op.reference for row in left) == [
+        "1002",
+        "1003",
+        "1004",
+        "1005",
+        "1006",
+        "2003",
+    ]
+    assert {row.reason for row in left} == {"галочка снята"} and done.skipped == 6
+    every_line_is_said(ledger, cid, files, done)
 
 
 def test_a_conversion_waits_for_the_other_file(ledger, firm, files):
@@ -494,6 +509,37 @@ def test_a_conversion_waits_for_the_other_file(ledger, firm, files):
     assert ledger.conn.execute("SELECT COUNT(*) FROM currency_conversions").fetchone()[0] == 1
 
 
+def iban_of_eur(ledger, cid, iban):
+    """The EUR account's IBAN as the books keep it ("" — not known yet)."""
+    ledger.conn.execute(
+        "UPDATE bank_account_details SET iban = ? WHERE company_id = ? AND kind = 'currency'",
+        (iban, cid),
+    )
+
+
+def every_line_is_said(ledger, cid, files, done):
+    """The rule of every bank and form: a line of a file loaded has a row — and, unless
+    the row says it was left out (or is held, with why), is in the books on its own bank
+    account. (A conversion's fee is in the conversion: checked by its line.)"""
+    rows = {(r.op.reference, r.op.place.key): r for r in done.rows}
+    there = lines_in_books(ledger.conn, cid)
+    places = iban_places(ledger.conn, cid)
+    in_conversions = {
+        f.reference for op in file_operations(files, places, OWN_TIN) for f in op.fees
+    }
+    for file in files:
+        place = places[file.iban]
+        for line in file.lines:
+            row = rows.get((line.reference, place.key))
+            assert row is not None, f"{file.file_name}: {line.reference} goes unsaid"
+            if row.state == SKIPPED or (row.state == KNOWN and row.reason):
+                continue
+            if line.reference in in_conversions:
+                continue
+            key = (line.reference, place.account_id, place.value_id)
+            assert key in there, f"{line.reference} is not in the books"
+
+
 def test_a_side_loaded_as_a_transfer_becomes_the_conversion(ledger, firm, files):
     """The AZN file loaded while the EUR account's IBAN was not known: its conversion line
     is a transfer draft. Both files loaded again: the draft gives way to the conversion —
@@ -501,7 +547,9 @@ def test_a_side_loaded_as_a_transfer_becomes_the_conversion(ledger, firm, files)
     cid = firm["cid"]
     azn, eur = files
     alone = {AZN_IBAN: firm["places"][AZN_IBAN]}
+    iban_of_eur(ledger, cid, "")
     first = ledger.bank.import_bank_files(cid, [azn], alone)
+    iban_of_eur(ledger, cid, EUR_IBAN)
     [row] = [r for r in first.rows if r.op.reference == "2001"]
     assert (row.op.kind, row.state) == (TRANSFER, DRAFT)
 
@@ -521,7 +569,9 @@ def post_side_by_hand(ledger, firm, azn):
     """The AZN file loaded alone, its conversion line a transfer draft — posted by hand
     onto 57 (Dt 51 / Kt 57 1 925.00). -> the transfer's operation."""
     cid = firm["cid"]
+    iban_of_eur(ledger, cid, "")
     ledger.bank.import_bank_files(cid, [azn], {AZN_IBAN: firm["places"][AZN_IBAN]})
+    iban_of_eur(ledger, cid, EUR_IBAN)
     transfer_id = by_reference(ledger, cid)["2001"]
     op = load_bank_operation(ledger.conn, cid, transfer_id)
     line = replace(op.lines[0], account_id=ledger.account_id(cid, "57"))
@@ -564,6 +614,62 @@ def test_a_side_posted_by_hand_gives_way_to_the_conversion(ledger, firm, files):
         (op.id,),
     ).fetchone()[0]
     assert deleted == 1
+
+
+def test_the_other_file_alone_finishes_a_side_posted_by_hand(ledger, firm, files):
+    """As it went in the parallel run: the AZN file was loaded first, its line of the
+    conversion (+1 925.00, reference 2001) posted by hand onto 57. Then the EUR file is
+    loaded alone, the window giving only its own IBAN. The bank gives the EUR line the
+    same reference — it is not «уже есть»: the EUR account has no line of it. The
+    conversion is made of both: 1 000.00 EUR out (the file) → 1 925.00 ₼ in (the operation
+    posted by hand, which it replaces), fee 6.00 EUR, posted. EUR ends at
+    2 000.00 − 1 000.00 − 6.00 = 994.00; the AZN account keeps its 1 925.00; 57 is at zero."""
+    cid = firm["cid"]
+    azn, eur = files
+    op = post_side_by_hand(ledger, firm, azn)
+    place = firm["places"][EUR_IBAN]
+
+    done = ledger.bank.import_bank_files(cid, [eur], {EUR_IBAN: place})
+    states = sorted((r.op.reference, r.op.kind, r.state) for r in done.rows)
+    assert states == [
+        ("2001", CONVERSION, POSTED),
+        ("2002", FEE, POSTED),
+        ("2003", CUSTOMER, DRAFT),
+    ]
+    assert done.skipped == 0
+    [row] = [r for r in done.rows if r.op.reference == "2001"]
+    assert row.reason == tr(
+        "вместо проведённых вручную операций №{numbers}", numbers=str(op.number)
+    )
+    assert "2001" not in by_reference(ledger, cid)
+    [conversion_id] = [r[0] for r in ledger.conn.execute("SELECT id FROM currency_conversions")]
+    conversion = load_conversion(ledger.conn, cid, conversion_id)
+    assert conversion.status == "posted"
+    assert conversion.source is not None and conversion.target is not None
+    assert (conversion.source.amount, conversion.target.amount) == (100000, 192500)
+    assert [f.amount for f in conversion.fees] == [600]
+    assert place_balance(ledger.conn, cid, place, "2026-08-05") == 99400
+    transit = ledger.account_id(cid, "57")
+    balance = ledger.conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN debit_account_id = ? THEN amount ELSE -amount END), 0) "
+        "FROM postings WHERE debit_account_id = ? OR credit_account_id = ?",
+        (transit, transit, transit),
+    ).fetchone()[0]
+    assert balance == 0
+    every_line_is_said(ledger, cid, [eur], done)
+    again = ledger.bank.import_bank_files(cid, [eur], {EUR_IBAN: place})
+    assert (again.posted, again.drafts, again.skipped) == (0, 0, 0)
+
+
+def test_every_line_of_a_file_is_said(ledger, firm, files):
+    """Both files, one file, the same again: whatever is loaded, every line of it has a
+    row, and what the row calls loaded is in the books on its own account."""
+    cid = firm["cid"]
+    azn, eur = files
+    for loaded in ([azn], [eur], [azn, eur], [eur]):
+        done = ledger.bank.import_bank_files(cid, loaded, firm["places"])
+        assert done.skipped == 0
+        every_line_is_said(ledger, cid, loaded, done)
 
 
 def test_a_side_posted_in_a_closed_period_keeps_the_conversion_out(ledger, firm, files):
@@ -919,10 +1025,21 @@ def test_the_window_shows_the_lines_to_check_first_and_posts(qtbot, firm, sessio
     tree_item(dialog.rows, tax).setCheckState(0, Qt.CheckState.Unchecked)
     # the DSMF's 52.00 left out: the books will not meet the bank — said so
     assert tr(" — разница {diff}", diff="-452.00") in dialog.balances.text()
+    left_out = tr("не загружено строк: {n} на {amount}", n=1, amount="-52.00")
+    assert left_out in dialog.balances.text()  # what the difference is made of
     dialog.post_button.click()
     assert dialog.imported is not None
     assert (dialog.imported.posted, dialog.imported.drafts) == (6, 3)
     assert "1005" not in by_reference(s.ledger, s.company_id)
+    # the line left out is not gone from the window: above, with why; 10 lines in all
+    from modern_gl.desktop.bank_page.import_rows import STATE
+
+    assert dialog.imported.skipped == 1
+    assert dialog.rows.topLevelItemCount() == 10
+    texts = [dialog.rows.topLevelItem(n).text(STATE) for n in range(4)]
+    assert "не загружена: галочка снята" in texts
+    assert tr("Строк в файлах: {n}. ", n=10) in dialog.status.text()
+    assert left_out in dialog.balances.text()
     assert dialog.close_button.text() == tr("Готово")
     row = next(r for r in dialog.rows.rows() if r.op.reference == "1001")
     item = dialog.rows.topLevelItem(dialog.rows.rows().index(row))
@@ -1181,3 +1298,97 @@ def test_the_settings_offer_to_move_the_old_fees(qtbot, firm, session, files, mo
     assert dialog.moved == 1
     fee = by_reference(s.ledger, s.company_id)["1002"]
     assert lines(s.ledger, s.company_id, fee)[1] == [("26", 100, "")]
+
+
+SECOND_IBAN = "AZ99AIIB40040000000000000099"
+
+
+def transfer_files(tmp_path):
+    """100.00 ₼ from the company's second manat account to the first, 06.08: a line in
+    each account's file, the bank's reference 3100 in both."""
+    into = (
+        "2026-08-06",
+        "3100 / 900",
+        f"{SECOND_IBAN} / {OWN_NAME} / {OWN_TIN}",
+        "100",
+        "100",
+        "Hesabin mohkemlendirilmesi",
+    )
+    out = (
+        "2026-08-06",
+        "3100 / 900",
+        f"{AZN_IBAN} / {OWN_NAME} / {OWN_TIN}",
+        "-100",
+        "-100",
+        into[5],
+    )
+    first = kapital_file(tmp_path / "first.xlsx", AZN_IBAN, "AZN", "5000", [into])
+    second = kapital_file(tmp_path / "second.xlsx", SECOND_IBAN, "AZN", "1000", [out])
+    return read_bank_file(first), read_bank_file(second)
+
+
+def test_a_transfer_loaded_from_one_account_is_finished_by_the_other(ledger, firm, tmp_path):
+    """The first account's file is loaded while the second account is not in the books:
+    its line (+100.00) waits — «свой счёт не найден». The second account added, its file
+    loaded alone: its line (−100.00, the same reference) is not «уже есть» — the draft
+    gets the account and is posted, Dt 51 first / Kt 51 second 100.00: one operation,
+    both accounts' lines in the books."""
+    cid = firm["cid"]
+    first, second = transfer_files(tmp_path)
+    one = ledger.bank.import_bank_files(cid, [first], {AZN_IBAN: firm["places"][AZN_IBAN]})
+    assert [(r.op.kind, r.state) for r in one.rows] == [(TRANSFER, DRAFT)]
+    ledger.bank.add_bank_account(
+        cid, "Kapital AZN 2", firm["acc"]["51"], "current", iban=SECOND_IBAN
+    )
+    place = iban_places(ledger.conn, cid)[SECOND_IBAN]
+
+    done = ledger.bank.import_bank_files(cid, [second], {SECOND_IBAN: place})
+    assert [(r.op.kind, r.state, r.reason) for r in done.rows] == [(TRANSFER, POSTED, "")]
+    op = load_bank_operation(ledger.conn, cid, by_reference(ledger, cid)["3100"])
+    assert (op.status, op.direction, op.total) == ("posted", "in", 10000)
+    assert (op.lines[0].account_id, op.lines[0].subconto[0]) == (place.account_id, place.value_id)
+    assert place_balance(ledger.conn, cid, place, "2026-08-06") == -10000  # 1 000.00 not entered
+    assert place_balance(ledger.conn, cid, firm["places"][AZN_IBAN], "2026-08-06") == 510000
+    every_line_is_said(ledger, cid, [second], done)
+    again = ledger.bank.import_bank_files(cid, [first, second], iban_places(ledger.conn, cid))
+    assert {r.state for r in again.rows} == {KNOWN}
+
+
+def test_a_transfer_posted_by_hand_onto_57_gets_its_other_line(ledger, firm, tmp_path):
+    """The first account's line posted by hand, Dt 51 / Kt 57 100.00. The second account's
+    file: its line becomes a draft onto the same 57 that names the operation; posted, it is
+    Dt 57 / Kt 51 second 100.00 — 57 is at zero."""
+    cid = firm["cid"]
+    first, second = transfer_files(tmp_path)
+    ledger.bank.import_bank_files(cid, [first], {AZN_IBAN: firm["places"][AZN_IBAN]})
+    typed = load_bank_operation(ledger.conn, cid, by_reference(ledger, cid)["3100"])
+    transit = ledger.account_id(cid, "57")
+    line = replace(typed.lines[0], account_id=transit)
+    ledger.bank.save_bank_operation(cid, replace(typed, lines=(line,)), typed.id, post=True)
+    ledger.bank.add_bank_account(
+        cid, "Kapital AZN 2", firm["acc"]["51"], "current", iban=SECOND_IBAN
+    )
+    place = iban_places(ledger.conn, cid)[SECOND_IBAN]
+
+    done = ledger.bank.import_bank_files(cid, [second], {SECOND_IBAN: place})
+    [row] = done.rows
+    assert (row.state, row.lines) == (DRAFT, (("57", "", 10000),))
+    assert (
+        row.reason
+        == f"другая сторона перевода — операция №{typed.number}: проверьте счёт и проведите"
+    )
+    [other] = [
+        r["id"]
+        for r in ledger.conn.execute(
+            "SELECT id FROM bank_operations WHERE reference = '3100' AND id <> ?", (typed.id,)
+        )
+    ]
+    draft = load_bank_operation(ledger.conn, cid, other)
+    ledger.bank.save_bank_operation(cid, draft, other, post=True)
+    balance = ledger.conn.execute(
+        "SELECT COALESCE(SUM(CASE WHEN debit_account_id = ? THEN amount ELSE -amount END), 0) "
+        "FROM postings WHERE debit_account_id = ? OR credit_account_id = ?",
+        (transit, transit, transit),
+    ).fetchone()[0]
+    assert balance == 0
+    every_line_is_said(ledger, cid, [second], done)

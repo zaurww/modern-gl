@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 POSTED, DRAFT, LINKED, KNOWN = "posted", "draft", "linked", "known"
+SKIPPED = "skipped"  # a line of the file not in the books after the import, and why
 
 
 class ImportedOperation(Protocol):
@@ -47,7 +48,8 @@ class ImportedOperation(Protocol):
 @dataclass(frozen=True)
 class ImportRow:
     """What the import does (did) with one operation: POSTED, DRAFT (and why), LINKED —
-    entered by hand, gets the reference; KNOWN — in the books already."""
+    entered by hand, gets the reference; KNOWN — in the books already; SKIPPED — left out
+    (and why): no line of a file goes unsaid."""
 
     op: ImportedOperation
     state: str

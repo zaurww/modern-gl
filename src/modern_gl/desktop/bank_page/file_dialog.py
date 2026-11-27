@@ -7,6 +7,7 @@ what became of them, a double click opens a document."""
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date, timedelta
 from pathlib import Path
 
 from PySide6.QtWidgets import QComboBox, QGridLayout, QLabel, QWidget
@@ -15,7 +16,7 @@ from modern_gl.application.bank import BankPlace
 from modern_gl.application.bank.file_commands import FileImported
 from modern_gl.application.bank.file_import import FileOperation, account_choices, iban_places
 from modern_gl.application.bank.files import BankFile, read_bank_file
-from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, ImportRow
+from modern_gl.application.bank.imported import DRAFT, KNOWN, POSTED, SKIPPED, ImportRow
 from modern_gl.application.bank.statement import place_balance
 from modern_gl.application.invoices import eqaime_known
 from modern_gl.desktop.bank_page.fee_account import FeeAccountChoice
@@ -227,6 +228,7 @@ class BankFileDialog(ImportWindow):
             if books + drafts != file.closing:
                 differs = True
                 text += tr(" — разница {diff}", diff=format_minor(file.closing - books))
+                text += self._why_differs(file, place)
             elif drafts:
                 text += tr(
                     " — сойдётся, когда будут проведены черновики ({drafts})",
@@ -235,6 +237,40 @@ class BankFileDialog(ImportWindow):
             texts.append(text)
         text = ".\n".join(texts) + ("." if texts else "")
         say(self.balances, text, "warning" if differs else "secondary")
+
+    def _why_differs(self, file: BankFile, place: BankPlace) -> str:
+        """What a difference is made of, as far as the window knows: the books did not
+        agree with the bank before the file's first day (an earlier statement is not
+        loaded, the opening balance is not entered); lines of the file left out."""
+        before = (date.fromisoformat(file.date_from) - timedelta(days=1)).isoformat()
+        opening = place_balance(self.s.conn, self.s.company_id, place, before)
+        parts = []
+        if opening != file.opening:
+            parts.append(
+                tr(
+                    "на начало выписки в банке {bank}, в программе {books} — "
+                    "загрузите прежние выписки или введите начальный остаток",
+                    bank=format_minor(file.opening),
+                    books=format_minor(opening),
+                )
+            )
+        ticked = self.rows.rows(ticked_only=True)
+        left = [
+            r
+            for r in self.rows.rows()
+            if isinstance(r.op, FileOperation)
+            and r.op.place == place
+            and (r.state == SKIPPED or (self.imported is None and r not in ticked))
+        ]
+        if left:
+            parts.append(
+                tr(
+                    "не загружено строк: {n} на {amount}",
+                    n=len(left),
+                    amount=format_minor(sum(r.op.net for r in left)),
+                )
+            )
+        return ": " + "; ".join(parts) if parts else ""
 
     def _open_document(self, document_id: int) -> None:
         self.chosen_document = document_id
@@ -267,10 +303,14 @@ def summary(done: FileImported) -> str:
         posted=done.posted,
         drafts=done.drafts,
     )
+    if done.known:
+        text += tr(", уже есть {n}", n=done.known)
+    if done.skipped:
+        text += tr(", не загружено {n} (строки сверху, причина — в строке)", n=done.skipped)
     if done.linked:
         text += tr(", введённых вручную связано {n}", n=done.linked)
     if done.unknown_parties:
         text += tr(", контрагентов нет в справочнике: {n}", n=done.unknown_parties)
     if not (done.posted or done.drafts or done.linked):
         text += tr(" — новых строк нет")
-    return text
+    return tr("Строк в файлах: {n}. ", n=len(done.rows)) + text

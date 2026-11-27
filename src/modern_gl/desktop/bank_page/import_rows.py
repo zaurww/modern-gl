@@ -10,7 +10,14 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QTreeWidget, QTreeWidgetItem, QWidget
 
 from modern_gl.application.bank import IN
-from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED, ImportRow
+from modern_gl.application.bank.imported import (
+    DRAFT,
+    KNOWN,
+    LINKED,
+    POSTED,
+    SKIPPED,
+    ImportRow,
+)
 from modern_gl.desktop.list_table import fit_tree
 from modern_gl.desktop.theme import P
 from modern_gl.desktop.widgets import money
@@ -46,6 +53,8 @@ def state(row: ImportRow, written: bool) -> str:
     """What the import does with the operation — or, `written`, what it did."""
     if row.state == KNOWN:
         return tr("уже есть")
+    if row.state == SKIPPED:  # not in the books: never unsaid
+        return tr("не загружена: {why}", why=row.reason)
     if row.state == LINKED:
         return tr("введена вручную — связана") if written else tr("введена вручную — будет связана")
     if row.state == POSTED and row.reason:  # on the unidentified account: to move later
@@ -105,7 +114,7 @@ class ImportRows(QTreeWidget):
             for column in range(len(COLUMNS)):  # nothing to do here: quieter (D86)
                 item.setForeground(column, QColor(P.muted if written else P.tertiary))
         if waits and row.state != KNOWN:
-            item.setForeground(STATE, QColor(P.amber))
+            item.setForeground(STATE, QColor(P.red if row.state == SKIPPED else P.amber))
         if row.document_id is not None:
             hint = tr("Двойной щелчок — открыть документ")
             item.setToolTip(STATE, f"{item.text(STATE)}\n{hint}")

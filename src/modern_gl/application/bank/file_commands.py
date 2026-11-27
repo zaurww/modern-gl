@@ -14,15 +14,24 @@ from modern_gl.application.bank.deposit_import import previous_lines
 from modern_gl.application.bank.file_import import (
     CONVERSION,
     FileOperation,
+    book_key,
     budget_code,
     file_operations,
-    known_references,
+    iban_places,
+    lines_in_books,
     tax_lines_before,
 )
 from modern_gl.application.bank.file_links import FileLinkCommands
 from modern_gl.application.bank.files import BankFile, BankFileError
 from modern_gl.application.bank.import_commands import party_key
-from modern_gl.application.bank.imported import DRAFT, KNOWN, LINKED, POSTED, ImportRow
+from modern_gl.application.bank.imported import (
+    DRAFT,
+    KNOWN,
+    LINKED,
+    POSTED,
+    SKIPPED,
+    ImportRow,
+)
 from modern_gl.application.bank.operations import (
     CUSTOMER,
     FEE,
@@ -34,6 +43,7 @@ from modern_gl.application.bank.operations import (
     BankLine,
     BankOperationInput,
     default_memo,
+    load_bank_operation,
 )
 from modern_gl.application.bank.parties import statement_party, unknown_party_text
 from modern_gl.application.bank.places import BankPlace
@@ -52,7 +62,37 @@ class FileImported:
     linked: int = 0  # typed by hand, got the reference
     unknown_parties: int = 0  # senders the directory lacks: their lines wait
     closings: int = 0  # days whose balance by the bank was written
+    skipped: int = 0  # lines of the files left out of the books (why — in the rows)
     rows: list[ImportRow] = field(default_factory=list)  # in the order of the files
+
+
+def _left_out(
+    ops: Sequence[FileOperation], rows: Sequence[ImportRow], chosen: bool
+) -> list[ImportRow]:
+    """A row for every line of the files the import said nothing of: no line of a
+    statement goes unsaid — it is in the books, or the window says why it is not (the
+    fee of a conversion in the books already is in it)."""
+    said = {(row.op.reference, getattr(row.op, "place", None)): row.state for row in rows}
+    why = tr("галочка снята") if chosen else tr("программа не узнала строку")
+    found = []
+    for op in ops:
+        if (op.reference, op.place) not in said:
+            found.append(ImportRow(op, SKIPPED, (), why))
+        known = said.get((op.reference, op.place)) == KNOWN
+        found += [
+            ImportRow(FileOperation(fee, op.place, FEE), KNOWN)
+            if known
+            else ImportRow(FileOperation(fee, op.place, FEE), SKIPPED, (), why)
+            for fee in op.fees
+            if (fee.reference, op.place) not in said
+        ]
+    return found
+
+
+def _as_input(op: BankOperationInput) -> BankOperationInput:
+    """The operation as typed (a loaded one written again)."""
+    names = BankOperationInput.__dataclass_fields__
+    return BankOperationInput(**{name: getattr(op, name) for name in names})
 
 
 class BankFileCommands(FileLinkCommands):
@@ -92,12 +132,15 @@ class BankFileCommands(FileLinkCommands):
         for file in files:
             if file.iban in places:
                 self._remember_iban(company_id, places[file.iban], file.iban)
-        ops = file_operations(files, places, own_tin)
+        # every account known by its IBAN: the other side of a transfer or a conversion
+        # is found when one file is loaded alone
+        ops = file_operations(files, places, own_tin, iban_places(self.conn, company_id))
         redo = [op for op in ops if take is None or op.reference in take]
-        held, replaced = self._redo_conversion_lines(company_id, redo)
-        known = known_references(self.conn, company_id)
+        held, replaced, gone = self._redo_conversion_lines(company_id, redo)
+        known = lines_in_books(self.conn, company_id)
+        references = {key[0] for key in known}
         new = [
-            op for op in ops if op.reference not in known and (take is None or op.reference in take)
+            op for op in ops if book_key(op) not in known and (take is None or op.reference in take)
         ]
         links = self._hand_links(company_id, new)
         self._adopt_parties(company_id)  # the drafts of earlier files: found meanwhile?
@@ -109,7 +152,7 @@ class BankFileCommands(FileLinkCommands):
         for op in ops:
             if id(op) in handled:
                 continue
-            if op.reference in written or (op.reference in known and op.kind != CONVERSION):
+            if op.reference in written or (book_key(op) in known and op.kind != CONVERSION):
                 rows.append(ImportRow(op, KNOWN))
                 continue
             if take is not None and op.reference not in take:
@@ -121,11 +164,13 @@ class BankFileCommands(FileLinkCommands):
                     company_id,
                     op,
                     ops,
-                    op.reference in known,
                     post,
-                    known,
+                    references,
                     replaced.get(op.reference, ()),
+                    gone.get(op.reference, ()),
                 )
+            elif op.reference in references:  # the other account's line of a transfer
+                found = [self._file_other_side(company_id, op, post)]
             else:
                 party = parties.get(party_key(op))
                 linked, hold = self._link_hand_typed(company_id, op, links)
@@ -133,7 +178,9 @@ class BankFileCommands(FileLinkCommands):
             handled.update(id(row.op) for row in found)
             written.add(op.reference)
             rows += found
-        done.rows = rows
+        done.rows = rows + _left_out(ops, rows, take is not None)
+        done.skipped = sum(1 for row in done.rows if row.state == SKIPPED)
+        rows = done.rows
         done.known = sum(1 for row in rows if row.state == KNOWN)
         done.linked = sum(1 for row in rows if row.state == LINKED)
         done.posted = sum(1 for row in rows if row.state == POSTED)
@@ -142,6 +189,37 @@ class BankFileCommands(FileLinkCommands):
             if file.iban in places:
                 done.closings += self._file_closings(company_id, places[file.iban], file)
         return done
+
+    def _file_other_side(self, company_id: int, op: FileOperation, post: bool) -> ImportRow:
+        """A transfer between the company's accounts whose other account's line is in the
+        books already — as an operation that does not come to this account (loaded while
+        this account was not known; posted by hand onto 57): this account's line is not
+        there yet. The other one waits for its account — it gets this one; it went
+        elsewhere — this line goes to the same account (57 closes), a draft that says so."""
+        row = self.conn.execute(
+            "SELECT o.id, d.number FROM bank_operations o "
+            "JOIN documents d ON d.company_id = o.company_id AND d.id = o.document_id "
+            "WHERE o.company_id = ? AND o.reference = ? ORDER BY d.number LIMIT 1",
+            (company_id, op.reference),
+        ).fetchone()
+        other = load_bank_operation(self.conn, company_id, row["id"])
+        waits = len(other.lines) == 1 and other.lines[0].account_id is None
+        if waits and other.status == "draft" and other.direction != op.direction:
+            line = replace(
+                other.lines[0], account_id=op.place.account_id, subconto=op.place.subconto
+            )
+            data = _as_input(replace(other, kind=TRANSFER, lines=(line,)))
+            self.delete_bank_operation(company_id, other.id)
+            state, why, document = self._post_or_draft(company_id, data, post)
+            return ImportRow(op, state, self._line_codes(company_id, data), why, document)
+        data, _ = self._file_operation(company_id, op, None)
+        lines = tuple(replace(x, amount=op.amount) for x in other.lines[:1])
+        data = replace(data, lines=lines)
+        why = tr(
+            "другая сторона перевода — операция №{n}: проверьте счёт и проведите", n=row["number"]
+        )
+        state, why, document = self._post_or_draft(company_id, data, False, why)
+        return ImportRow(op, state, self._line_codes(company_id, data), why, document)
 
     def _file_parties(
         self, company_id: int, ops: Sequence[FileOperation]

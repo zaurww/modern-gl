@@ -154,16 +154,22 @@ def account_choices(conn: Connection, company_id: int, currency: str) -> list[Ba
 
 
 def file_operations(
-    files: Sequence[BankFile], places: Mapping[str, BankPlace], own_tin: str
+    files: Sequence[BankFile],
+    places: Mapping[str, BankPlace],
+    own_tin: str,
+    others: Mapping[str, BankPlace] | None = None,
 ) -> list[FileOperation]:
     """The lines of the files that have a bank account (`places`: IBAN -> account), each
-    with what it is, in the order of the files; a conversion's fee lines go into it."""
+    with what it is, in the order of the files; a conversion's fee lines go into it.
+    `others` — the company's accounts known by their IBAN beside the files': the other
+    side of a transfer or a conversion is found whichever file is loaded."""
     found: list[FileOperation] = []
+    own = {**(others or {}), **places}
     for file in files:
         place = places.get(file.iban)
         if place is None:
             continue
-        ops = [_operation(line, file, place, places, own_tin) for line in file.lines]
+        ops = [_operation(line, file, place, own, own_tin) for line in file.lines]
         groups = {op.line.group for op in ops if op.kind == CONVERSION}
         fees = [op for op in ops if op.kind == FEE and op.line.group in groups]
         for op in ops:
@@ -206,16 +212,32 @@ def _operation(
     return FileOperation(line, place, SUPPLIER if out else CUSTOMER)
 
 
-def known_references(conn: Connection, company_id: int) -> set[str]:
-    """The statement references the books have: of bank operations and conversions."""
+# a line of a bank's file in the books: (its reference, the GL account, the bank account)
+BookKey = tuple[str, int, int | None]
+
+
+def book_key(op: FileOperation) -> BookKey:
+    return (op.reference, op.place.account_id, op.place.value_id)
+
+
+def lines_in_books(conn: Connection, company_id: int) -> set[BookKey]:
+    """The lines of statements the books have, each on its own bank account: a bank
+    operation of the account, the account a transfer goes to (one operation is a line in
+    both accounts' files), a side of a conversion. The bank gives both sides of a
+    transfer one reference — a reference alone does not say the account's line is there."""
     return {
-        r[0]
+        (r[0], r[1], r[2])
         for r in conn.execute(
-            "SELECT reference FROM bank_operations WHERE company_id = :c AND reference <> '' "
-            "UNION SELECT from_reference FROM currency_conversions "
-            "WHERE company_id = :c AND from_reference <> '' "
-            "UNION SELECT to_reference FROM currency_conversions "
-            "WHERE company_id = :c AND to_reference <> ''",
+            "SELECT reference, account_id, sc1 FROM bank_operations "
+            "WHERE company_id = :c AND reference <> '' AND account_id IS NOT NULL "
+            "UNION SELECT o.reference, l.account_id, l.sc1 FROM bank_operations o "
+            "JOIN bank_operation_lines l "
+            "ON l.company_id = o.company_id AND l.operation_id = o.id "
+            "WHERE o.company_id = :c AND o.reference <> '' AND l.account_id IS NOT NULL "
+            "UNION SELECT from_reference, from_account_id, from_sc1 FROM currency_conversions "
+            "WHERE company_id = :c AND from_reference <> '' AND from_account_id IS NOT NULL "
+            "UNION SELECT to_reference, to_account_id, to_sc1 FROM currency_conversions "
+            "WHERE company_id = :c AND to_reference <> '' AND to_account_id IS NOT NULL",
             {"c": company_id},
         )
     }
