@@ -36,7 +36,7 @@ class Drafts:
         return AI + (self.client() or "MCP")
 
     def create(self, date: str, memo: str, postings: list[dict], company: str = "") -> dict:
-        with self._writing(company) as (ledger, company_id):
+        with self.writing(company) as (ledger, company_id):
             lines = posting_lines(Catalog(ledger.conn, company_id), postings)
             doc_id = ledger.create_draft(company_id, date, lines, memo)
             return _answer(ledger, company_id, doc_id)
@@ -44,19 +44,19 @@ class Drafts:
     def update(
         self, number: int, date: str, memo: str, postings: list[dict], company: str = ""
     ) -> dict:
-        with self._writing(company) as (ledger, company_id):
+        with self.writing(company) as (ledger, company_id):
             doc_id = self._own_draft(ledger.conn, company_id, number)
             lines = posting_lines(Catalog(ledger.conn, company_id), postings)
             ledger.update_draft(company_id, doc_id, date, lines, memo)
             return _answer(ledger, company_id, doc_id)
 
     def delete(self, number: int, company: str = "") -> dict:
-        with self._writing(company) as (ledger, company_id):
+        with self.writing(company) as (ledger, company_id):
             ledger.delete_draft(company_id, self._own_draft(ledger.conn, company_id, number))
             return {"deleted": number}
 
     @contextmanager
-    def _writing(self, company: str) -> Iterator[tuple[Ledger, int]]:
+    def writing(self, company: str) -> Iterator[tuple[Ledger, int]]:
         """The company file itself, briefly: the program may have it open — SQLite lets
         both write in turn; a file behind the program's schema is backed up first."""
         conn, company_id = self.companies.workspace.open(self.companies.path(company), lock=False)

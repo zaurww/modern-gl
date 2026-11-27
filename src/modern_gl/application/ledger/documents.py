@@ -133,9 +133,11 @@ class DocumentCommands(PostingChecks):
         postings: Sequence[PostingInput],
         memo: str = "",
         layer: str = "common",
+        reason: str = "",
     ) -> None:
         """Edit a posted document in place, as in 1C: the new content is posted atomically
-        and keeps the number; the audit trail keeps the old content."""
+        and keeps the number; the audit trail keeps the old content and why it was changed
+        (`reason`, when told)."""
         with transaction(self.conn):
             doc = self._document(company_id, doc_id)
             self._require_not_module_document(company_id, doc)
@@ -149,7 +151,7 @@ class DocumentCommands(PostingChecks):
             snapshot = self._snapshot(doc)
             self._rewrite(company_id, doc_id, doc_date, postings, memo, layer)
             self._show_books_for(company_id, layer)
-            self._audit(company_id, "document", doc_id, "repost", snapshot)
+            self._audit(company_id, "document", doc_id, "repost", with_reason(snapshot, reason))
 
     def rewrite_linked(
         self,

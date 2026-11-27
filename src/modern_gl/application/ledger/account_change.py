@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import replace
 
-from modern_gl.application.common import moved_subconto
+from modern_gl.application.common import moved_subconto, with_reason
 from modern_gl.application.ledger.documents import DocumentCommands
 from modern_gl.application.ledger.posting_record import PostingRecord
 from modern_gl.domain.errors import ValidationError
@@ -38,7 +38,9 @@ class AccountChangeCommands(DocumentCommands):
                 changed += 1
         return changed
 
-    def _replace_records(self, company_id: int, doc: Row, records: list[PostingRecord]) -> None:
+    def _replace_records(
+        self, company_id: int, doc: Row, records: list[PostingRecord], reason: str = ""
+    ) -> None:
         posted = doc["status"] == "posted"
         snapshot = self._snapshot(doc)
         if posted:
@@ -59,9 +61,8 @@ class AccountChangeCommands(DocumentCommands):
         self._insert_records(company_id, doc["id"], records)
         if posted:
             self._post(company_id, doc["id"])
-        self._audit(
-            company_id, "document", doc["id"], "repost" if posted else "update_draft", snapshot
-        )
+        action = "repost" if posted else "update_draft"
+        self._audit(company_id, "document", doc["id"], action, with_reason(snapshot, reason))
 
 
 def _moved(record: PostingRecord, old: Row, new: Row) -> PostingRecord:

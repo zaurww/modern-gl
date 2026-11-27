@@ -25,7 +25,8 @@ class Tool:
     run: Callable[..., dict]
     properties: dict[str, dict] = field(default_factory=dict)  # JSON Schema of each argument
     required: tuple[str, ...] = ()
-    writes: bool = False  # changes the books (drafts only, D84)
+    writes: bool = False  # changes the books (drafts, D84; edits with --allow-edits)
+    destructive: bool = False  # changes what is posted: the client asks the person first
 
     def listed(self) -> dict:
         return {
@@ -37,7 +38,10 @@ class Tool:
                 "required": list(self.required),
                 "additionalProperties": False,
             },
-            "annotations": {"readOnlyHint": not self.writes, "destructiveHint": False},
+            "annotations": {
+                "readOnlyHint": not self.writes,
+                "destructiveHint": self.destructive,
+            },
         }
 
 

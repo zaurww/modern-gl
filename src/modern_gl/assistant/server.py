@@ -1,5 +1,5 @@
 """The assistant server: uv run modern-gl-mcp [--data FOLDER] [--file X.gl …] [--lang az|ru]
-    [--allow-drafts]
+    [--allow-drafts] [--allow-edits]
 
 An MCP server over stdio (D83) for Claude Desktop or any MCP client; it reads the company
 files the program knows (its folder and remembered files), each as a read-only snapshot.
@@ -22,6 +22,9 @@ from modern_gl.assistant.companies import Companies
 from modern_gl.assistant.draft_tools import ABOUT as DRAFTS_ABOUT
 from modern_gl.assistant.draft_tools import draft_tools
 from modern_gl.assistant.drafts import Drafts
+from modern_gl.assistant.edit_tools import ABOUT as EDITS_ABOUT
+from modern_gl.assistant.edit_tools import edit_tools
+from modern_gl.assistant.edits import Edits
 from modern_gl.assistant.protocol import Server, Session, Tool
 from modern_gl.infrastructure.app_settings import default_folder, read_settings
 from modern_gl.reporting import answers
@@ -51,7 +54,9 @@ BOOK = {
 PERIOD = {"company": COMPANY, "date_from": DATE_FROM, "date_to": DATE_TO}
 
 
-def build_tools(companies: Companies, drafts: Drafts | None = None) -> list[Tool]:
+def build_tools(
+    companies: Companies, drafts: Drafts | None = None, edits: Edits | None = None
+) -> list[Tool]:
     def opened(answer: Callable[..., dict]) -> Callable[..., dict]:
         def run(company: str = "", **arguments) -> dict:
             conn, company_id = companies.open(company)
@@ -67,6 +72,7 @@ def build_tools(companies: Companies, drafts: Drafts | None = None) -> list[Tool
         *_report_tools(opened),
         *_book_tools(opened),
         *(draft_tools(drafts) if drafts else []),
+        *(edit_tools(edits) if edits else []),
     ]
 
 
@@ -187,14 +193,22 @@ def main() -> None:
     parser.add_argument(
         "--allow-drafts", action="store_true", help="let the AI prepare drafts (D84)"
     )
+    parser.add_argument(
+        "--allow-edits",
+        action="store_true",
+        help="let the AI correct posted documents of an open period; drafts too",
+    )
     args = parser.parse_args()
     language = args.lang or read_settings().language
     i18n.set_language(language if language in i18n.LANGUAGES else i18n.DEFAULT)
     companies = Companies(workspace_from(args))
     session = Session()
-    drafts = Drafts(companies, lambda: session.client) if args.allow_drafts else None
-    about = ABOUT + (DRAFTS_ABOUT if drafts else "")
-    server = Server("modern-gl", program_version(), build_tools(companies, drafts), about, session)
+    writes = args.allow_drafts or args.allow_edits
+    drafts = Drafts(companies, lambda: session.client) if writes else None
+    edits = Edits(drafts) if drafts and args.allow_edits else None
+    about = ABOUT + (DRAFTS_ABOUT if drafts else "") + (EDITS_ABOUT if edits else "")
+    tools = build_tools(companies, drafts, edits)
+    server = Server("modern-gl", program_version(), tools, about, session)
     try:
         server.serve(sys.stdin.buffer, sys.stdout.buffer)
     finally:

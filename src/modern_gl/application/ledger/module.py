@@ -24,6 +24,7 @@ from modern_gl.application.common import (
     closed_on,
     company_row,
     fill_subconto,
+    with_reason,
     write_audit,
 )
 from modern_gl.application.ledger import Ledger
@@ -202,8 +203,8 @@ class ModuleDocuments:
                         raise ValidationError(message) from exc
         return changed
 
-    def unpost(self, company_id: int, doc: Row) -> None:
-        """Back to a draft: its postings go (the audit trail keeps them)."""
+    def unpost(self, company_id: int, doc: Row, reason: str = "") -> None:
+        """Back to a draft: its postings go (the audit trail keeps them, and `reason`)."""
         if doc["status"] != "posted":
             raise ValidationError(tr("документ №{n} не проведён", n=doc["number"]))
         self.require_changeable(company_id, doc)
@@ -217,7 +218,7 @@ class ModuleDocuments:
             "DELETE FROM postings WHERE company_id = ? AND document_id = ?",
             (company_id, doc["id"]),
         )
-        self._audit(company_id, doc["id"], "unpost", snapshot)
+        self._audit(company_id, doc["id"], "unpost", with_reason(snapshot, reason))
 
     def remove(self, company_id: int, doc: Row) -> None:
         """The GL document goes with the module's document (a posted one in an open
