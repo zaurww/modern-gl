@@ -1036,7 +1036,7 @@ def test_the_window_shows_the_lines_to_check_first_and_posts(qtbot, firm, sessio
 
     assert dialog.imported.skipped == 1
     assert dialog.rows.topLevelItemCount() == 10
-    texts = [dialog.rows.topLevelItem(n).text(STATE) for n in range(4)]
+    texts = [tree_item(dialog.rows, n).text(STATE) for n in range(4)]
     assert "не загружена: галочка снята" in texts
     assert tr("Строк в файлах: {n}. ", n=10) in dialog.status.text()
     assert left_out in dialog.balances.text()
