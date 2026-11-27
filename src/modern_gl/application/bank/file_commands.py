@@ -139,8 +139,12 @@ class BankFileCommands(FileLinkCommands):
         held, replaced, gone = self._redo_conversion_lines(company_id, redo)
         known = lines_in_books(self.conn, company_id)
         references = {key[0] for key in known}
+        unknown_yet = [op for op in ops if book_key(op) not in known]
+        elsewhere = self._other_bank_sides(company_id, unknown_yet)  # the other bank's file
         new = [
-            op for op in ops if book_key(op) not in known and (take is None or op.reference in take)
+            op
+            for op in unknown_yet
+            if id(op) not in elsewhere and (take is None or op.reference in take)
         ]
         links = self._hand_links(company_id, new)
         self._adopt_parties(company_id)  # the drafts of earlier files: found meanwhile?
@@ -152,7 +156,8 @@ class BankFileCommands(FileLinkCommands):
         for op in ops:
             if id(op) in handled:
                 continue
-            if op.reference in written or (book_key(op) in known and op.kind != CONVERSION):
+            in_books = book_key(op) in known and op.kind != CONVERSION
+            if op.reference in written or in_books or id(op) in elsewhere:
                 rows.append(ImportRow(op, KNOWN))
                 continue
             if take is not None and op.reference not in take:

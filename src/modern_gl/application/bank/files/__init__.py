@@ -1,6 +1,6 @@
 """Bank statements from files: every bank has a form of its own — a module per bank
-(`kapital`), each recognises its form and reads it into the same `BankFile`. A new bank —
-a new module and its line in `FORMATS`; nothing else changes.
+(`kapital`, `yapikredi`), each recognises its form and reads it into the same `BankFile`.
+A new bank — a new module and its line in `_formats`; nothing else changes.
 
 A file is read whole and checked against itself: the balance after every line, the
 opening and closing balances — a file read wrong never reaches the books."""
@@ -35,6 +35,7 @@ class FileLine:
     memo: str  # the purpose of payment
     balance: int  # the account's balance after the line
     base_amount: int  # the bank's value in manat, signed as `amount`
+    fee: bool = False  # the form says it is the bank's fee (a form without the bank's VÖEN)
 
 
 @dataclass(frozen=True)
@@ -64,9 +65,9 @@ class BankFormat:
 
 
 def _formats() -> tuple[BankFormat, ...]:
-    from modern_gl.application.bank.files import kapital
+    from modern_gl.application.bank.files import kapital, yapikredi
 
-    return (kapital.FORMAT,)
+    return (kapital.FORMAT, yapikredi.FORMAT)
 
 
 def read_bank_file(path: str | Path) -> BankFile:

@@ -197,7 +197,9 @@ def _operation(
         if target is not None and target.currency_id != place.currency_id:
             return FileOperation(line, place, CONVERSION, target)
         return FileOperation(line, place, TRANSFER, target)
-    if line.tin == file.bank_tin:
+    if line.fee and out:
+        return FileOperation(line, place, FEE)
+    if file.bank_tin and line.tin == file.bank_tin:
         if out and any(w in words for w in FEE_WORDS):
             return FileOperation(line, place, FEE)
         if out and any(w in words for w in SALARY_WORDS):
