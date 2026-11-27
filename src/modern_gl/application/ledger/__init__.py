@@ -9,7 +9,6 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from modern_gl.application.ledger.account_change import AccountChangeCommands
 from modern_gl.application.ledger.account_form import AccountForm, AccountFormCommands
 from modern_gl.application.ledger.companies import CompanyCommands
 from modern_gl.application.ledger.currencies import CurrencyCommands
@@ -23,6 +22,7 @@ from modern_gl.application.ledger.inputs import (
     PostingInput,
     TemplateLine,
 )
+from modern_gl.application.ledger.invoice_change import InvoiceChangeCommands
 from modern_gl.application.ledger.opening import OpeningBalanceCommands, opening_posting
 from modern_gl.application.ledger.report_views import ReportViewCommands
 from modern_gl.application.ledger.revaluation import RevaluationCommands
@@ -64,7 +64,7 @@ class Ledger(
     TemplateCommands,
     DocumentImportCommands,
     RevaluationCommands,
-    AccountChangeCommands,
+    InvoiceChangeCommands,
     DocumentCommands,
     SubcontoDetailCommands,
     SubcontoMergeCommands,

@@ -240,6 +240,14 @@ class Workspace:
             backup.mirror(made, self.mirror)
         return made
 
+    def backup_file(self, company_file: Path, note: str) -> Path:
+        """A copy of a company file as it is saved by now, named with why it was made —
+        before something else than the program's own window changes it (the assistant's
+        edits); in the second folder too, when it can be written."""
+        made = backup.make_backup_of_file(company_file, self.backup_folder(company_file), note)
+        self._mirror_quietly(made)
+        return made
+
     def timed_backup(self, company_file: Path) -> Path | None:
         """The backup made every hour while a company stays open, if it changed: by a
         connection of its own, so it runs off the window's thread. A program never closed

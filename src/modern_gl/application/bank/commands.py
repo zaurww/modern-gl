@@ -24,12 +24,14 @@ from modern_gl.application.bank.operations import (
     BankLine,
     BankOperation,
     BankOperationInput,
+    load_bank_operation,
     load_bank_operations,
 )
-from modern_gl.application.common import account_kinds, fill_subconto, pad_subconto
+from modern_gl.application.common import account_kinds, fill_subconto, pad_subconto, with_reason
 from modern_gl.application.currencies import no_rate_text, rate_on
 from modern_gl.application.ledger.documents import explain_owner
 from modern_gl.application.ledger.inputs import PostingInput
+from modern_gl.application.ledger.invoice_change import require_lines
 from modern_gl.application.ledger.module import ModuleBase
 from modern_gl.domain.currency import to_base
 from modern_gl.domain.dates import iso_date
@@ -122,11 +124,13 @@ class BankCommands(ModuleBase):
             self._audit(company_id, "bank_operation", saved, action, {})
         return saved
 
-    def unpost_bank_operation(self, company_id: int, operation_id: int) -> None:
-        """Back to a draft: its postings go (the audit trail keeps them)."""
+    def unpost_bank_operation(self, company_id: int, operation_id: int, reason: str = "") -> None:
+        """Back to a draft: its postings go (the audit trail keeps them, and why it was
+        done — `reason`, when told)."""
         with transaction(self.conn):
             row = self._bank_row(company_id, operation_id)
-            self.documents.unpost(company_id, self.documents.get(company_id, row["document_id"]))
+            doc = self.documents.get(company_id, row["document_id"])
+            self.documents.unpost(company_id, doc, reason)
             self._set_checked(company_id, operation_id, False)
             self._audit(company_id, "bank_operation", operation_id, "unpost", {})
 
@@ -243,6 +247,29 @@ class BankCommands(ModuleBase):
                 self.save_bank_operation(company_id, data, operation_id, post=op.status == "posted")
                 changed += 1
         return changed
+
+    def change_line_invoice(
+        self, company_id: int, operation_id: int, old: str, new: str, reason: str = ""
+    ) -> int:
+        """The lines of the operation that pay the e-qaimə `old` pay `new` instead (an
+        empty `old` — the only line without a number); nothing else changes, a posted
+        operation is posted again. How many lines changed."""
+        was, now = normalize_invoice(old), normalize_invoice(new)
+        with transaction(self.conn):
+            op = load_bank_operation(self.conn, company_id, operation_id)
+            found = [line for line in op.lines if normalize_invoice(line.invoice) == was]
+            require_lines(op.number, was, now, len(found))
+            lines = tuple(
+                replace(line, invoice=now or "") if line in found else line for line in op.lines
+            )
+            data = BankOperationInput(
+                **{f.name: getattr(op, f.name) for f in fields(BankOperationInput)}
+            )
+            data = replace(data, lines=lines)
+            self.save_bank_operation(company_id, data, operation_id, post=op.status == "posted")
+            details = with_reason({"e_qaime": [was or "", now or ""]}, reason)
+            self._audit(company_id, "bank_operation", operation_id, "update", details)
+        return len(found)
 
     def _moved_subconto(
         self,
