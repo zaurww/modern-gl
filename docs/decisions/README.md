@@ -241,3 +241,4 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D229 | Выписка из файла: ни одна строка не пропадает молча | принято | [D229-bank-file-every-line.md](D229-bank-file-every-line.md) |
 | D230 | Выписка Yapı Kredi Bank; перевод между своими счетами в двух банках не двоится | принято | [D230-yapikredi.md](D230-yapikredi.md) |
 | D231 | Один контрагент не вводится дважды: имя сравнивается без İ/I, кавычек и формы | принято (уточняет D205, D49) | [D231-party-by-name.md](D231-party-by-name.md) |
+| D-new | Дубль контрагента объединяется: ссылки переезжают, закрытый период не трогается | принято (дополняет D231, D19, D32) | [D-new-merge-counterparties.md](D-new-merge-counterparties.md) |

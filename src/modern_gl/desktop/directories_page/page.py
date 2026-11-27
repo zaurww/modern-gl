@@ -31,6 +31,7 @@ from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.application.inventory import Inventory
 from modern_gl.application.ledger import ValueDetails
 from modern_gl.desktop.directories_page.form import DirectoriesForm
+from modern_gl.desktop.directories_page.merge import can_merge, merge_value
 from modern_gl.desktop.directories_page.tags import TagsDialog
 from modern_gl.desktop.directories_page.values import (
     ValueDialog,
@@ -198,6 +199,15 @@ class DirectoriesPage(DirectoriesForm):
                 value.id,
             )
 
+    def merge_value(self, value: SubcontoInfo) -> None:
+        """A counterparty entered twice: this one becomes another (D-new-merge-counterparties)."""
+
+        def done(kept: int) -> None:
+            self.refresh()
+            self.refresh_values(kept)
+
+        merge_value(self.s, self, value, done)
+
     def toggle_value(self, value: SubcontoInfo) -> None:
         self._apply(
             lambda: self.s.ledger.set_subconto_value_active(
@@ -302,6 +312,8 @@ class DirectoriesPage(DirectoriesForm):
             actions.insert(1, (tr("Теги…"), lambda: self.edit_tags(value)))
         if any(a.currency for a in self.s.catalog.accounts_using(value.kind_id)):
             actions.append((tr("Валюта…"), lambda: self.choose_currency(value)))
+        if can_merge(self.s, value):
+            actions.append((tr("Объединить с…"), lambda: self.merge_value(value)))
         for owned, owner in self.s.catalog.owner_kinds.items():  # a counterparty
             if owner == value.kind_id:
                 actions.append(
