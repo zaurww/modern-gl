@@ -333,3 +333,93 @@ def test_a_customer_is_found_the_same_way(ledger, firm, tmp_path):
     found = operations(ledger, cid)["1201"]
     assert (found.status, found.counterparty_id) == ("draft", gamma)
     assert lines(ledger, found) == [("62.1", 23600, "MT260800000011")]
+
+
+# ---- a sender without a VÖEN, a counterparty with one (D-new-party-by-name) ---------------
+
+AUTO_TIN = "1502387101"
+AUTO = "AZ66AIIB00000000000000000004 / AUTOUNIVERSAL MMC"  # the bank: no VÖEN, no dotted İ
+
+
+def auto_as_the_portal_names_it(ledger, firm) -> int:
+    """«AUTOUNİVERSAL MMC» as the e-qaimə import adds it — the short name, the VÖEN, the
+    official name — and its purchase of 02.08: MT260800000021 for 134.00."""
+    cid, acc = firm["cid"], firm["acc"]
+    auto = ledger.add_subconto_value(cid, firm["kind"], "AUTOUNİVERSAL MMC")
+    ledger.set_subconto_value_tax(cid, auto, AUTO_TIN)
+    ledger.set_subconto_value_legal_name(cid, auto, '"AUTOUNİVERSAL" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ')
+    ledger.post_new(
+        cid,
+        "2026-08-02",
+        [
+            PostingInput(
+                acc["26"], acc["60.1"], "134", [firm["cost"]], [auto], invoice="MT260800000021"
+            )
+        ],
+    )
+    return auto
+
+
+def auto_file(tmp_path, name=AUTO):
+    pays = ("2026-08-03", "1301 / 801", name, "-134", "-134", "MT260800000021 qaime")
+    return read_bank_file(kapital_file(tmp_path / "auto.xlsx", AZN_IBAN, "AZN", "5000", [pays]))
+
+
+def test_a_sender_without_voen_is_the_counterparty_of_that_name(ledger, firm, tmp_path):
+    """The bank names «AUTOUNIVERSAL MMC» and no VÖEN; the directory has «AUTOUNİVERSAL
+    MMC» with a VÖEN (I and İ apart, the same name): the line of −134.00 is its, on its
+    e-qaimə of 134.00 — and nobody is offered to be added."""
+    cid = firm["cid"]
+    auto = auto_as_the_portal_names_it(ledger, firm)
+    before = counterparties(ledger, firm)
+    done = ledger.bank.import_bank_files(cid, [auto_file(tmp_path)], firm["places"])
+    assert done.unknown_parties == 0
+    paid = operations(ledger, cid)["1301"]
+    assert paid.counterparty_id == auto
+    assert lines(ledger, paid) == [("60.1", 13400, "MT260800000021")]
+    assert counterparties(ledger, firm) == before
+
+
+def test_the_official_name_in_full_is_the_same_sender(ledger, firm, tmp_path):
+    """A bank that writes the legal form out: the official name, quotes apart."""
+    cid = firm["cid"]
+    auto = auto_as_the_portal_names_it(ledger, firm)
+    full = "AZ66AIIB00000000000000000004 / AUTOUNIVERSAL MEHDUD MESULIYYETLI CEMIYYETI"
+    ledger.bank.import_bank_files(cid, [auto_file(tmp_path, full)], firm["places"])
+    assert operations(ledger, cid)["1301"].counterparty_id == auto
+
+
+def test_two_counterparties_of_one_name_are_not_guessed(ledger, firm, tmp_path):
+    """Two of that name with different VÖEN (a branch): a name alone does not say which —
+    the line waits for a person."""
+    cid = firm["cid"]
+    auto_as_the_portal_names_it(ledger, firm)
+    branch = ledger.add_subconto_value(cid, firm["kind"], "Autouniversal MMC")
+    ledger.set_subconto_value_tax(cid, branch, "1502387102")
+    done = ledger.bank.import_bank_files(cid, [auto_file(tmp_path)], firm["places"])
+    assert done.unknown_parties == 1
+    assert operations(ledger, cid)["1301"].counterparty_id is None
+
+
+def test_the_waiting_draft_is_offered_the_one_of_that_name(qtbot, ledger, firm, session, tmp_path):
+    """The line came first, the e-qaimə after: the form says «в справочнике это
+    «AUTOUNİVERSAL MMC»» and offers «Подставить», not «Добавить в справочник…»."""
+    from modern_gl.desktop.bank_operation_page import BankOperationPage
+
+    cid = firm["cid"]
+    ledger.bank.import_bank_files(cid, [auto_file(tmp_path)], firm["places"])
+    waiting = operations(ledger, cid)["1301"]
+    assert waiting.counterparty_id is None
+    auto = auto_as_the_portal_names_it(ledger, firm)
+    session.catalog.reload()
+    page = BankOperationPage(session, waiting.id)
+    qtbot.addWidget(page)
+    assert page.party_text.text() == tr(
+        "В выписке: {who} — в справочнике это «{name}»",
+        who="AUTOUNIVERSAL MMC",
+        name="AUTOUNİVERSAL MMC",
+    )
+    assert page.btn_party.text() == tr("Подставить")
+    page.btn_party.click()
+    assert page.counterparty == auto
+    assert lines(ledger, operations(ledger, cid)["1301"]) == [("60.1", 13400, "MT260800000021")]

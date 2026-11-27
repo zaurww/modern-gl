@@ -4,7 +4,7 @@ company has with that VÖEN, and a shorter name for a new one."""
 from __future__ import annotations
 
 from modern_gl.i18n import fold
-from modern_gl.infrastructure.db import Connection
+from modern_gl.infrastructure.db import Connection, Row
 
 
 def known_counterparty(
@@ -32,6 +32,50 @@ def known_counterparty(
         if fold(" ".join(row["name"].split())) == wanted:
             return row["id"]
     return None
+
+
+def plain_name(name: str) -> str:
+    """A counterparty's name as it is compared: the legal form short, quotes, case, extra
+    spaces and İ/ı apart — «"AUTOUNİVERSAL" MƏHDUD MƏSULİYYƏTLİ CƏMİYYƏTİ», «Autouniversal
+    MMC» and «AUTOUNIVERSAL MMC» are one name."""
+    return fold(short_name(name))
+
+
+def _named(conn: Connection, company_id: int, name: str) -> list[Row]:
+    wanted = plain_name(name)
+    if not wanted:
+        return []
+    rows = conn.execute(
+        "SELECT v.id, v.name, v.legal_name, v.tax_id, v.active FROM subconto_values v "
+        "JOIN subconto_kinds k ON k.id = v.kind_id "
+        "WHERE v.company_id = ? AND k.code = 'counterparty' AND v.is_group = 0 "
+        "ORDER BY v.active DESC, v.id",
+        (company_id,),
+    )
+    return [
+        row
+        for row in rows
+        if wanted in (plain_name(row["name"]), plain_name(row["legal_name"] or ""))
+    ]
+
+
+def same_named(conn: Connection, company_id: int, name: str) -> list[int]:
+    """The counterparties called so here or officially (`plain_name`), whatever their
+    VÖEN: the shown ones first."""
+    return [row["id"] for row in _named(conn, company_id, name)]
+
+
+def entered_already(conn: Connection, company_id: int, name: str, tax_id: str = "") -> int | None:
+    """The counterparty a person is about to enter a second time: a shown one of that
+    name whose VÖEN is the same, or not known on either side. Two names with different
+    VÖEN are two counterparties (a branch, a namesake)."""
+    fits = [
+        row
+        for row in _named(conn, company_id, name)
+        if row["active"] == 1 and (not tax_id or not row["tax_id"] or row["tax_id"] == tax_id)
+    ]
+    fits.sort(key=lambda row: row["tax_id"] != tax_id if tax_id else not row["tax_id"])
+    return fits[0]["id"] if fits else None
 
 
 # legal forms written out in full on the portal and their usual short forms

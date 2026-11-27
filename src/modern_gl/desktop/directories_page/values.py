@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from modern_gl.application.catalog import SubcontoInfo
 from modern_gl.application.ledger import ValueDetails
 from modern_gl.desktop.directories_page.tags import TagPicker
+from modern_gl.desktop.new_cell_value import known_by_name
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.theme import fonts
 from modern_gl.desktop.widgets import button, caption
@@ -221,9 +222,15 @@ def new_value(
         return None
     name, owner, currency = dlg.name.text().strip(), dlg.owner_id(), dlg.currency_id()
     tax = dlg.tax()
+    cid = session.company_id
+    known = known_by_name(session, kind_id, name, tax[0] or "")
+    if known is not None:  # entered already: that one, with the VÖEN if it had none
+        if tax[0] and not cat.value(known).tax_id:
+            session.ledger.set_subconto_value_tax(cid, known, *tax)
+            cat.reload()
+        return known
     if tax_id_taken(session, parent, kind_id, tax):
         return None
-    cid = session.company_id
     try:
         details = ValueDetails(owner, currency, tax, tuple(dlg.tags.chosen()))
         value_id = session.ledger.add_detailed_value(cid, kind_id, name, details)
@@ -250,6 +257,9 @@ def added_value(
         return None
     if name.replace(" ", "").isdigit():
         return new_value(session, parent, kind_id, name, owner_id, currency_id)
+    known = known_by_name(session, kind_id, name)
+    if known is not None:
+        return known
     cid = session.company_id
     try:
         details = ValueDetails(owner_id, currency_id)

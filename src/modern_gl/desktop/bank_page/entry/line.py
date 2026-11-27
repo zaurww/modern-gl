@@ -15,6 +15,7 @@ from modern_gl.application.bank import IN, BankPlace
 from modern_gl.desktop.bank_operation_page.common import select_data
 from modern_gl.desktop.bank_page.entry.fields import ONE
 from modern_gl.desktop.bank_page.entry.saving import EntrySaving
+from modern_gl.desktop.new_cell_value import known_by_name
 from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import to_qdate
 from modern_gl.domain.accounts import BANK_FEE
@@ -151,7 +152,9 @@ class EntryLine(EntrySaving):
         kind = counterparty_kind(self.s)
         if kind is None:
             return
-        value = self.s.ledger.add_subconto_value(self.s.company_id, kind, name)
+        value = known_by_name(self.s, kind, name)
+        if value is None:
+            value = self.s.ledger.add_subconto_value(self.s.company_id, kind, name)
         self.s.catalog.reload()
         self.fill_lists()
         select_data(self.counterparty_box, value)

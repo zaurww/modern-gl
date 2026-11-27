@@ -4,11 +4,12 @@ The bank's spelling is a hint, not a name: a file never adds a counterparty to t
 directory — the official name comes from the tax portal with an e-qaimə, a person adds
 one knowingly. The sender is found by its VÖEN in the directory, a sender without one by
 exactly its name; else as last time — the counterparty a person gave a line of the same
-sender. Not found, the line waits as a draft that keeps the VÖEN and the name."""
+sender; else a sender without a VÖEN is the only counterparty of that name, whatever its
+VÖEN. Not found, the line waits as a draft that keeps the VÖEN and the name."""
 
 from __future__ import annotations
 
-from modern_gl.application.counterparties import known_counterparty
+from modern_gl.application.counterparties import known_counterparty, same_named
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection
 
@@ -25,7 +26,12 @@ def unknown_party_text(tin: str, name: str) -> str:
 def statement_party(conn: Connection, company_id: int, tin: str, name: str) -> int | None:
     """The counterparty of a statement's sender: of the directory, else as last time."""
     found = known_counterparty(conn, company_id, tin, name)
-    return found if found is not None else _as_last_time(conn, company_id, tin, name)
+    if found is None:
+        found = _as_last_time(conn, company_id, tin, name)
+    if found is None and not tin:  # a bank that gives no VÖEN: two of a name — nobody's
+        named = same_named(conn, company_id, name)
+        found = named[0] if len(named) == 1 else None
+    return found
 
 
 def _as_last_time(conn: Connection, company_id: int, tin: str, name: str) -> int | None:
