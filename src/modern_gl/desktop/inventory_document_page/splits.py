@@ -18,7 +18,7 @@ from modern_gl.application.table_text import plain_number
 from modern_gl.desktop.inventory_document_page.columns import EXPENSE_MONTH
 from modern_gl.desktop.inventory_document_page.form import InventoryDocumentForm
 from modern_gl.desktop.pick import PickBox
-from modern_gl.desktop.widgets import money
+from modern_gl.desktop.widgets import button, money
 from modern_gl.domain.dates import earlier_months, month_from_code, month_name
 from modern_gl.domain.errors import LedgerError
 from modern_gl.domain.money import to_minor
@@ -40,8 +40,14 @@ class SplitPart(InventoryDocumentForm):
         if not by_quantity and not row.amount:
             self.show_error(tr("в строке нет суммы — нечего делить"))
             return
-        dialog = SplitLineDialog(self, row.quantity if by_quantity else None, row.amount)
-        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.value is None:
+        units = self.model.units_of(current.row())
+        dialog = SplitLineDialog(self, row.quantity if by_quantity else None, row.amount, units)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        if dialog.by_units:
+            self._split_units(current.row())
+            return
+        if dialog.value is None:
             return
         try:
             if by_quantity:
@@ -52,6 +58,16 @@ class SplitPart(InventoryDocumentForm):
             self.show_error(str(exc))
             return
         self.table.setCurrentIndex(self.model.index(new_row, current.column()))
+
+    def _split_units(self, row_index: int) -> None:
+        """«По одной штуке»: a line per object, then the objects by the lines' names."""
+        try:
+            rows = self.model.split_by_units(row_index)
+        except LedgerError as exc:
+            self.show_error(str(exc))
+            return
+        self.table.setCurrentIndex(self.model.index(rows[0], self.table.currentIndex().column()))
+        self._make_objects()
 
     def _split_months(self, index: QPersistentModelIndex) -> None:
         """«несколько месяцев…» picked in «Расход за» («Доход за»): a line per month."""
@@ -74,12 +90,15 @@ class SplitLineDialog(QDialog):
     """How much goes to the second line: a quantity of the goods, or an amount of the
     service. The rest stays in the line as it is."""
 
-    def __init__(self, parent: QWidget, quantity: int | None, amount: int | None) -> None:
+    def __init__(
+        self, parent: QWidget, quantity: int | None, amount: int | None, units: int | None = None
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle(tr("Разделить строку"))
         self.setMinimumWidth(380)
         self.by_quantity = quantity is not None
         self.value: int | None = None
+        self.by_units = False  # «По одной штуке» pressed: a line and an object per unit
         form = QFormLayout(self)
         whole = (
             tr("Всего {quantity}", quantity=format_quantity(quantity or 0, 6))
@@ -94,12 +113,23 @@ class SplitLineDialog(QDialog):
         self.error.setObjectName("error")
         self.error.hide()
         form.addRow(self.error)
+        self.btn_units = button(tr("По одной штуке — {n} строк", n=units or 0), "flat")
+        self.btn_units.setToolTip(
+            tr("Каждая штука — своя строка и свой объект: «название №1», «№2»… Сумма — поровну")
+        )
+        self.btn_units.clicked.connect(self._accept_units)
+        self.btn_units.setVisible(units is not None)
+        form.addRow(self.btn_units)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
+
+    def _accept_units(self) -> None:
+        self.by_units = True
+        self.accept()
 
     def _accept(self) -> None:
         text = plain_number(self.edit.text())
