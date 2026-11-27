@@ -1,4 +1,4 @@
-"""«Объединить с…»: a counterparty entered twice becomes one (D-new-merge-counterparties).
+"""«Объединить с…»: a counterparty entered twice becomes one (D232).
 The extra one is chosen in the list, the one that stays — in the window; what will move
 is shown before anything does."""
 

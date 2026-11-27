@@ -105,3 +105,40 @@ def test_back_from_a_statement_past_the_period_shows_its_month(qtbot, bank):
     page.up()
     assert page.period_dates() == ("2026-03-01", "2026-03-31")
     assert page.current is not None and page.current.date_from == "2026-03-01"
+
+
+def test_the_kind_of_an_account_is_fixed_from_its_row(qtbot, bank, monkeypatch):
+    """An AZN account saved as «Валютные счета» by mistake: a right click on its row (or
+    «⋯») opens its details, and the kind chosen anew moves it to its group."""
+    from modern_gl.desktop.bank_page import actions
+    from modern_gl.desktop.bank_page.dialogs import BankAccountDialog
+
+    place = kapital(shown(qtbot, BankPage(bank))).place
+    bank.ledger.bank.set_bank_account(
+        bank.company_id, place.account_id, place.value_id, kind="currency"
+    )
+    page = shown(qtbot, BankPage(bank))
+    titles = [getattr(r, "title", "") for r in page.model.rows]
+    assert titles.index("Валютные счета") < titles.index("Kapital AZN")
+    assert "правый щелчок" in page.footer.text()
+
+    def fix(session, account, parent=None) -> bool:  # the window, without its exec()
+        dialog = BankAccountDialog(session, account, parent)
+        qtbot.addWidget(dialog)
+        assert dialog.name.text() == "Kapital AZN" and dialog.kind.currentData() == "currency"
+        dialog.kind.setCurrentIndex(dialog.kind.findData("current"))
+        dialog.save()
+        return True
+
+    monkeypatch.setattr(actions, "edit_bank_account", fix)
+    item = page.menu_actions(kapital(page))[0]
+    assert item is not None and item[0] == "Реквизиты счёта…" and callable(item[1])
+    item[1]()
+    assert page.level == ACCOUNTS  # the list stays, the account is in its group
+    titles = [getattr(r, "title", "") for r in page.model.rows]
+    assert titles[titles.index("Kapital AZN") - 1] == "Расчётные счета"
+    # «⋯» of the list offers the same for the account under the cursor
+    page.table.setCurrentIndex(page.model.index(page.model.rows.index(kapital(page)), 0))
+    assert "Реквизиты счёта…" in [item[0] for item in page.more_items() if item]
+    bank.read_only = True  # viewing only (D80): nothing to change
+    assert shown(qtbot, BankPage(bank)).menu_actions(kapital(page)) == []

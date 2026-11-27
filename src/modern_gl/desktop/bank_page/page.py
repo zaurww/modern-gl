@@ -364,9 +364,12 @@ class BankPage(BankActions):
                 day=ru_date(self.s.working_date.isoformat()),
             )
         )
-        self.footer.setText(
-            tr("Щёлкните счёт — откроются его выписки по дням.") if self.accounts else ""
-        )
+        hint = tr("Щёлкните счёт — откроются его выписки по дням.")
+        if not self.s.read_only:
+            hint = tr(
+                "Щёлкните счёт — откроются его выписки по дням; правый щелчок — реквизиты счёта."
+            )
+        self.footer.setText(hint if self.accounts else "")
 
     def _build_journal(self, lines: Statement) -> None:
         account = self.account

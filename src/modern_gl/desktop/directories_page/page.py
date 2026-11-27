@@ -200,7 +200,7 @@ class DirectoriesPage(DirectoriesForm):
             )
 
     def merge_value(self, value: SubcontoInfo) -> None:
-        """A counterparty entered twice: this one becomes another (D-new-merge-counterparties)."""
+        """A counterparty entered twice: this one becomes another (D232)."""
 
         def done(kept: int) -> None:
             self.refresh()

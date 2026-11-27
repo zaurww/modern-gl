@@ -12,6 +12,9 @@ AZ: dict[str, str] = {
     "Щёлкните счёт — откроются его выписки по дням.": (
         "Hesaba klikləyin — onun günlər üzrə çıxarışları açılacaq."
     ),
+    "Щёлкните счёт — откроются его выписки по дням; правый щелчок — реквизиты счёта.": (
+        "Hesaba klikləyin — onun günlər üzrə çıxarışları açılacaq; sağ klik — hesabın rekvizitləri."
+    ),
     "Щёлкните выписку — её строки; внизу выписки впишите остаток из банка.": (
         "Çıxarışa klikləyin — onun sətirləri; çıxarışın altında bankdakı qalığı yazın."
     ),

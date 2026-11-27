@@ -9,7 +9,7 @@ from collections.abc import Callable, Sequence
 from datetime import date, timedelta
 
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QDialog, QFileDialog, QMenu, QMessageBox
+from PySide6.QtWidgets import QDialog, QFileDialog, QMenu, QMessageBox, QWidget
 
 from modern_gl.application.bank import (
     BankAccount,
@@ -33,7 +33,8 @@ from modern_gl.desktop.bank_page.portal import DepositDialog
 from modern_gl.desktop.bank_page.settings import BankSettingsDialog
 from modern_gl.desktop.cbar_rates import MAX_DAYS, days_to_load, load_rates
 from modern_gl.desktop.preferences import BANK_AMOUNTS, prefs
-from modern_gl.desktop.reports_page import ReportPage
+from modern_gl.desktop.reports_page import MenuAction, ReportPage
+from modern_gl.desktop.session import Session
 from modern_gl.desktop.widgets import MenuItem
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import tr
@@ -47,6 +48,11 @@ def next_workday(day: str) -> str:
     while d.weekday() >= 5:
         d += timedelta(days=1)
     return d.isoformat()
+
+
+def edit_bank_account(session: Session, account: BankAccount, parent: QWidget) -> bool:
+    """The window of an account's details; True — saved."""
+    return BankAccountDialog(session, account, parent).exec() == QDialog.DialogCode.Accepted
 
 
 class BankActions(ReportPage):
@@ -138,9 +144,9 @@ class BankActions(ReportPage):
             if self.level != ACCOUNTS and place is not None and place.currency_id is None:
                 items.append((tr("Таможенный платёж…"), self.customs_payment))
             items.append((tr("Загрузить выписку из файла…"), self.load_bank_files))
-        if self.level != ACCOUNTS and not (place is not None and place.is_cash):
+        if place is not None and not place.is_cash:  # of the list: the one under the cursor
             items.append((tr("Реквизиты счёта…"), self.edit_account))
-        else:
+        if self.level == ACCOUNTS or (place is not None and place.is_cash):
             items.append((tr("Новый счёт или карта…"), self.new_account))
         return [
             *items,
@@ -269,8 +275,22 @@ class BankActions(ReportPage):
             self.refresh()
 
     def edit_account(self) -> None:
-        if self.account and BankAccountDialog(self.s, self.account, self).exec():
+        """«⋯ → Реквизиты счёта…»: of the account open, in the list — under the cursor."""
+        row = self.current_row()
+        account = row if self.level == ACCOUNTS else self.account
+        if isinstance(account, BankAccount):
+            self.edit_details(account)
+
+    def edit_details(self, account: BankAccount) -> None:
+        if edit_bank_account(self.s, account, self):
             self.refresh()
+
+    def menu_actions(self, row: object) -> list[MenuAction | None]:
+        """A right click on an account of the list: its details — the kind (the group),
+        the name, IBAN — are fixed where the mistake is seen; a cash desk has none."""
+        if self.s.read_only or not isinstance(row, BankAccount) or row.place.is_cash:
+            return []
+        return [(tr("Реквизиты счёта…"), lambda: self.edit_details(row))]
 
     def offset_advances(self) -> None:
         day = self.current.date_to if self.current else self.s.working_date.isoformat()
