@@ -425,7 +425,7 @@ def test_the_waiting_draft_is_offered_the_one_of_that_name(qtbot, ledger, firm, 
     assert lines(ledger, operations(ledger, cid)["1301"]) == [("60.1", 13400, "MT260800000021")]
 
 
-# ---- one payment for several e-qaimə, the ƏDV through the deposit account (D-new-net-first) --
+# ---- one payment for several e-qaimə, the ƏDV through the deposit account (D235) --
 
 SR_TIN = "4400000004"
 SR = f"AZ77AIIB00000000000000000005 / SR LOGISTICS MMC / {SR_TIN}"
