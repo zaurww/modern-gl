@@ -237,5 +237,5 @@ docs/decisions`. Новое решение в ветке — `D-new-<slug>.md`, 
 | D225 | Журнал: сменить счёт у отмеченных документов | принято | [D225-journal-account.md](D225-journal-account.md) |
 | D226 | «Bu gün»: импорт, до которого не дошли доп. расходы | принято | [D226-import-without-costs.md](D226-import-without-costs.md) |
 | D227 | Импорт продаж e-qaimə: название товара помнится для всех покупателей | принято | [D227-sale-names.md](D227-sale-names.md) |
-| D-new | Банк: проверка черновиков выписки — курсор на счёте, налог без угадывания | принято | [D-new-bank-check-account.md](D-new-bank-check-account.md) |
-| D-new2 | Выписка из файла: ни одна строка не пропадает молча | принято | [D-new2-bank-file-every-line.md](D-new2-bank-file-every-line.md) |
+| D228 | Банк: проверка черновиков выписки — курсор на счёте, налог без угадывания | принято | [D228-bank-check-account.md](D228-bank-check-account.md) |
+| D229 | Выписка из файла: ни одна строка не пропадает молча | принято | [D229-bank-file-every-line.md](D229-bank-file-every-line.md) |
