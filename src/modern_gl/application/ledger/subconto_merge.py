@@ -1,5 +1,5 @@
 """Two elements of the counterparties' directory that are one counterparty become one
-(D232): everything that refers to the extra one — postings, the
+(D233): everything that refers to the extra one — postings, the
 modules' documents, contracts, templates — refers to the one that stays, and the extra
 one goes. Amounts, accounts, numbers and dates do not change.
 

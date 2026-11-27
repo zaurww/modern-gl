@@ -1,4 +1,4 @@
-"""Two elements that are one counterparty become one (D232).
+"""Two elements that are one counterparty become one (D233).
 
 The bank firm (tests/helpers/bank.py), March 2026, hand-calculated. ALFA MMC has the VÖEN
 1234567890 and «Договор 1»; the purchase of 02.03: Dt 26 / Ct 60.1 [ALFA, Договор 1]
