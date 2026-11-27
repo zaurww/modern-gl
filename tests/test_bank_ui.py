@@ -812,3 +812,32 @@ def test_rates_not_loaded_leave_the_note_and_tell_why(qtbot, session):
     page.load_rates()
     assert not page.rate_note.isVisibleTo(page)
     assert told == ["Курсы ЦБА на 05.03.2026 загружены: 1"]
+
+
+def test_a_payment_dated_before_the_e_qaime_is_offered_it(qtbot, session):
+    """A payment of 03.03 entered late: on that day ALFA is owed MT1 alone (1 416.00 of
+    02.03 less 416.00 paid = 1 000.00); MT2 of 04.03, 1 239.00, came after the payment — it
+    is offered too, marked. Dated 05.03, both are plain."""
+    from PySide6.QtCore import QDate
+
+    owe_alfa(session)
+    page = shown_page(qtbot, session)
+    choose(page.sc[0], "Kapital AZN")
+    typed("alfa")
+    key(qtbot, Qt.Key.Key_Return)
+
+    def offered() -> list[str]:
+        box = page.line_rows[0].invoice
+        return [box.itemText(i) for i in range(box.count())]
+
+    assert offered() == [
+        "MT1 · 02.03.2026 · 1 000.00",
+        "MT2 · 04.03.2026 · 1 239.00",
+        "Несколько e-qaimə…",
+    ]
+    page.date.setDate(QDate(2026, 3, 3))
+    assert offered() == [
+        "MT1 · 02.03.2026 · 1 000.00",
+        "MT2 · 04.03.2026 · 1 239.00 · позже оплаты",
+    ]
+    assert [i.invoice for i in page.open_invoices] == ["MT1"]  # what the day itself owes

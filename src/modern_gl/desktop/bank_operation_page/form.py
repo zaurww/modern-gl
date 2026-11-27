@@ -68,6 +68,7 @@ class BankOperationForm(DocumentShell, PageWidget):
         self.counterparty: int | None = None
         self._party_found: int | None = None  # of a file's line that waits for it
         self.open_invoices: list[OpenInvoice] = []  # of the counterparty, for the lines
+        self.later_invoices: list[OpenInvoice] = []  # unpaid, dated after the payment
 
         root = QVBoxLayout(self)
         root.setContentsMargins(40, 30, 40, 22)

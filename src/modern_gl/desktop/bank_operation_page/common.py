@@ -51,17 +51,22 @@ def place_label(place: BankPlace) -> str:
     return f"{place.name}  ·  {place.account_code}  ·  {place.currency or 'AZN'}"
 
 
-def offer_invoices(box: SuggestBox, invoices: Sequence[OpenInvoice]) -> None:
+def offer_invoices(
+    box: SuggestBox, invoices: Sequence[OpenInvoice], later: Sequence[OpenInvoice] = ()
+) -> None:
     """The e-qaimə a list offers: number, date, what is left to pay, and where it is known
-    from if not from the posted documents; «several» after them."""
+    from if not from the posted documents; then the ones dated `later` than the payment
+    (an advance finds the purchase it was for), marked so; «several» after them."""
     typed = box.text()
     box.clear()
-    for i in invoices:
+    for i in (*invoices, *later):
         label = f"{i.invoice} · {ru_date(i.doc_date)} · {format_minor(i.amount)}"
         if i.vat:
             label += f" · ƏDV {format_minor(i.vat)}"
         if i.source in SOURCES:
             label += f" · {tr(SOURCES[i.source])}"
+        if i in later:
+            label += f" · {tr('позже оплаты')}"
         box.addItem(label, i, i.invoice)
     if len(invoices) > 1:
         box.addItem(tr("Несколько e-qaimə…"), SEVERAL, "")

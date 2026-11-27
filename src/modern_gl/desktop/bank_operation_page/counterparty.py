@@ -3,6 +3,8 @@ line of a bank's file whose sender the directory lacks — whom the bank names."
 
 from __future__ import annotations
 
+from datetime import date
+
 from modern_gl.application.bank import (
     CASH_KINDS,
     CUSTOMER,
@@ -166,19 +168,25 @@ class CounterpartyPart(BankOperationForm):
         """The unpaid e-qaimə of the counterparty on the day: owed to it when paying out,
         owed by it when money comes in."""
         if self.counterparty is None:
-            self.open_invoices = []
+            self.open_invoices = self.later_invoices = []
         else:
-            self.open_invoices = unpaid_invoices(
-                self.s.conn,
-                self.s.company_id,
-                self.counterparty,
-                payable=self.direction_value == OUT,
-                on_date=edited_date(self.date),
-                without=self.doc.document_id if self.doc else None,
-            )
-        offer_invoices(self.invoice, self.open_invoices)
+            day, without = edited_date(self.date), self.doc.document_id if self.doc else None
+            payable = self.direction_value == OUT
+            unpaid = [
+                unpaid_invoices(
+                    self.s.conn, self.s.company_id, self.counterparty, payable, on, without=without
+                )
+                for on in (day, date.max)
+            ]
+            self.open_invoices = unpaid[0]
+            known = {i.invoice for i in unpaid[0]}
+            # a payment entered late: the e-qaimə that came after it are offered too
+            self.later_invoices = [
+                i for i in unpaid[1] if i.invoice not in known and i.doc_date > day.isoformat()
+            ]
+        offer_invoices(self.invoice, self.open_invoices, self.later_invoices)
         for row in self.line_rows:
-            row.set_invoices(self.open_invoices)
+            row.set_invoices(self.open_invoices, self.later_invoices)
 
     def _show_counterparty(self) -> None:
         value = self.counterparty

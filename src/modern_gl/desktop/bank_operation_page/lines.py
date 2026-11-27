@@ -103,7 +103,7 @@ class LinesPart(BankOperationForm):
     def add_line(self, focus: bool = False, at: int | None = None) -> LineRow:
         row = LineRow(self.s)
         row.set_counterparty(self.counterparty)
-        row.set_invoices(self.open_invoices)
+        row.set_invoices(self.open_invoices, self.later_invoices)
         row.several.connect(lambda r: QTimer.singleShot(0, lambda: self._pay_several(r)))
         row.set_read_only(self.read_only)
         row.changed.connect(self._changed)

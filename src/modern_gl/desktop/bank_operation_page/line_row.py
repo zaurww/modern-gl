@@ -155,8 +155,10 @@ class LineRow(QWidget):
         self.pays_out = on
         self.vat.setVisible(on and not self.invoice.isHidden())
 
-    def set_invoices(self, invoices: Sequence[OpenInvoice]) -> None:
-        offer_invoices(self.invoice, invoices)
+    def set_invoices(
+        self, invoices: Sequence[OpenInvoice], later: Sequence[OpenInvoice] = ()
+    ) -> None:
+        offer_invoices(self.invoice, invoices, later)
 
     def _invoice_chosen(self, index: int) -> None:
         chosen = self.invoice.itemData(index) if index >= 0 else None
