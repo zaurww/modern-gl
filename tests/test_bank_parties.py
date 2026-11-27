@@ -423,3 +423,66 @@ def test_the_waiting_draft_is_offered_the_one_of_that_name(qtbot, ledger, firm, 
     page.btn_party.click()
     assert page.counterparty == auto
     assert lines(ledger, operations(ledger, cid)["1301"]) == [("60.1", 13400, "MT260800000021")]
+
+
+# ---- one payment for several e-qaimə, the ƏDV through the deposit account (D-new-net-first) --
+
+SR_TIN = "4400000004"
+SR = f"AZ77AIIB00000000000000000005 / SR LOGISTICS MMC / {SR_TIN}"
+FIRST, SECOND = "MT260800000031", "MT260800000032"
+
+
+def purchases_of_sr(ledger, firm) -> int:
+    """Two purchases of 02.08, each with its ƏDV on 19.3:
+    ..31: 500.24 + ƏDV 90.04 = 590.28;  ..32: 335.07 + ƏDV 60.31 = 395.38."""
+    cid, acc = firm["cid"], firm["acc"]
+    vat = ledger.account_id(cid, "19.3")
+    sr = ledger.add_subconto_value(cid, firm["kind"], "SR LOGISTICS MMC")
+    ledger.set_subconto_value_tax(cid, sr, SR_TIN)
+    for number, net, tax in ((FIRST, "500.24", "90.04"), (SECOND, "335.07", "60.31")):
+        ledger.post_new(
+            cid,
+            "2026-08-02",
+            [
+                PostingInput(acc["26"], acc["60.1"], net, [firm["cost"]], [sr], invoice=number),
+                PostingInput(vat, acc["60.1"], tax, [sr], [sr], invoice=number),
+            ],
+        )
+    return sr
+
+
+def paid_to_sr(ledger, firm, tmp_path, amount: str):
+    memo = f"eQaime {FIRST} ve {SECOND} esasinda odenis"
+    pays = ("2026-08-03", "1401 / 901", SR, f"-{amount}", f"-{amount}", memo)
+    path = kapital_file(tmp_path / "sr.xlsx", AZN_IBAN, "AZN", "5000", [pays])
+    ledger.bank.import_bank_files(firm["cid"], [read_bank_file(path)], firm["places"])
+    return lines(ledger, operations(ledger, firm["cid"])["1401"])
+
+
+def test_each_e_qaime_is_paid_without_its_vat_first(ledger, firm, tmp_path):
+    """835.31 for the two — their amounts without the ƏDV, 500.24 + 335.07: each takes
+    its own, not 590.28 to the first and the rest, 245.03, to the second. The ƏDV, 90.04
+    and 60.31, comes through the deposit account on each number."""
+    purchases_of_sr(ledger, firm)
+    assert paid_to_sr(ledger, firm, tmp_path, "835.31") == [
+        ("60.1", 50024, FIRST),
+        ("60.1", 33507, SECOND),
+    ]
+
+
+def test_what_is_left_after_the_nets_pays_the_vat_in_order(ledger, firm, tmp_path):
+    """835.34: 0.03 more than the two without ƏDV — it goes to the first one's ƏDV."""
+    purchases_of_sr(ledger, firm)
+    assert paid_to_sr(ledger, firm, tmp_path, "835.34") == [
+        ("60.1", 50027, FIRST),
+        ("60.1", 33507, SECOND),
+    ]
+
+
+def test_a_payment_in_full_is_spread_as_before(ledger, firm, tmp_path):
+    """985.66 = 590.28 + 395.38: with the ƏDV, each in full."""
+    purchases_of_sr(ledger, firm)
+    assert paid_to_sr(ledger, firm, tmp_path, "985.66") == [
+        ("60.1", 59028, FIRST),
+        ("60.1", 39538, SECOND),
+    ]

@@ -332,6 +332,19 @@ def allocate(total: int, owed: Sequence[int]) -> tuple[list[int], int]:
     return paid, total
 
 
+def net_first(total: int, owed: Sequence[tuple[int, int]]) -> list[int]:
+    """One payment over several e-qaimə — (still owed, the ƏDV of it) — that may not pay
+    them in full: each gets what it is owed without its ƏDV, oldest first (the ƏDV goes
+    through the deposit account, on each number), and what is left pays their ƏDV, oldest
+    first. What each takes; in full, each is paid in full as `allocate` does."""
+    taxes = [min(amount, max(vat, 0)) for amount, vat in owed]
+    nets, left = allocate(
+        total, [amount - vat for (amount, _), vat in zip(owed, taxes, strict=False)]
+    )
+    vats, _ = allocate(left, taxes)
+    return [net + vat for net, vat in zip(nets, vats, strict=True)]
+
+
 def vat_deposit_part(
     data: BankOperationInput,
     account_id: int,

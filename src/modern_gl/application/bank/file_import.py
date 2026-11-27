@@ -33,10 +33,11 @@ from modern_gl.application.bank.operations import (
     TRANSFER,
     BankLine,
     BankOperation,
+    net_first,
 )
 from modern_gl.application.bank.places import BankPlace, bank_places
 from modern_gl.application.free_money import free_money, lay_out
-from modern_gl.application.invoices import open_invoices
+from modern_gl.application.invoices import OpenInvoice, open_invoices
 from modern_gl.domain.money import format_minor
 from modern_gl.i18n import fold, tr
 from modern_gl.infrastructure.db import Connection
@@ -273,7 +274,7 @@ def payment_check(
             return invoices, why or tr(
                 "сумма больше долга по e-qaimə на {diff}", diff=format_minor(op.amount - total)
             )
-        return invoices, why
+        return _without_vat_first(op, invoices, unpaid), why
     # no number: what the money paid without one left unpaid — a number named is a fact
     # and reads the books, a suggestion must not pay again what is paid
     free = (
@@ -285,8 +286,25 @@ def payment_check(
     owed = {i.invoice: (i.vat if op.pays_vat else i.amount) for i in left}
     suggested = tuple((n, still) for n, still in owed.items() if still > 0)
     if suggested:
+        suggested = _without_vat_first(op, suggested, left)
         return suggested, why or tr("в назначении нет e-qaimə — разложено по старым")
     return (), why or tr("в назначении нет e-qaimə и долга нет — аванс?")
+
+
+def _without_vat_first(
+    op: Payment, invoices: tuple[tuple[str, int | None], ...], unpaid: Sequence[OpenInvoice]
+) -> tuple[tuple[str, int | None], ...]:
+    """What each e-qaimə takes of a payment that does not pay them all in full: its
+    amount without the ƏDV first (`net_first`) — the ƏDV comes through the deposit
+    account. A payment of the ƏDV itself, or one in full, is left as it is."""
+    owed = [still or 0 for _, still in invoices]
+    if op.pays_vat or op.amount >= sum(owed):
+        return invoices
+    vat = {i.invoice: i.vat for i in unpaid}
+    parts = net_first(
+        op.amount, [(still, vat.get(n, 0)) for (n, _), still in zip(invoices, owed, strict=False)]
+    )
+    return tuple((n, part) for (n, _), part in zip(invoices, parts, strict=True))
 
 
 def budget_code(memo: str) -> str:
