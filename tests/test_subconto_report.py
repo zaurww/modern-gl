@@ -255,3 +255,53 @@ def test_a_bank_account_in_credit_is_on_the_wrong_side():
         ("Yapi AZN", 0, 25000, False, True),
     ]
     conn.close()
+
+
+def test_the_open_report_reads_again_when_postings_change(session, qtbot, books):
+    """The report is open on «Бета», Ct 200.00; 15.03 a payment of 50.00 is posted
+    elsewhere: Dt 60 [Бета] / Ct 26 — the page hears it and shows Dt 50.00, closing Ct
+    150.00, the cursor on the row where it was."""
+    _, ledger, cid, v = books
+    acc = session.catalog.by_code["60"]
+    page = SubcontoPage(session, acc.id, ReportParams(date(2026, 3, 1), date(2026, 3, 31)))
+    qtbot.addWidget(page)
+    at = next(i for i, r in enumerate(page.model.rows) if r.name == "Бета")
+    assert cols(page.model.rows[at])[2:] == (0, 20000, 0, 20000)
+    page.table.setCurrentIndex(page.model.index(at, 0))
+    rent = session.catalog.by_code["26"]
+    cost = ledger.conn.execute(
+        "SELECT dt_sc1 FROM postings WHERE debit_account_id = ? LIMIT 1", (rent.id,)
+    ).fetchone()[0]
+    from modern_gl.application.ledger import PostingInput
+
+    doc = ledger.post_new(
+        cid, "2026-03-15", [PostingInput(acc.id, rent.id, "50", [v["Бета"]], [cost])]
+    )
+    page.on_postings_changed(doc)
+    assert cols(page.model.rows[at])[2:] == (5000, 20000, 0, 15000)
+    assert page.table.currentIndex().row() == at
+
+
+def test_back_on_the_report_it_shows_what_was_written_meanwhile(session, qtbot, books):
+    """Nobody told the page (a statement's line, an import): 15.03 Dt 60 [Бета] / Ct 26
+    50.00 is posted while another page is shown; shown again, the report has it —
+    Бета Dt 50.00, closing Ct 150.00. Nothing written — it is not read again."""
+    from modern_gl.application.ledger import PostingInput
+
+    _, ledger, cid, v = books
+    acc, rent = session.catalog.by_code["60"], session.catalog.by_code["26"]
+    page = SubcontoPage(session, acc.id, ReportParams(date(2026, 3, 1), date(2026, 3, 31)))
+    qtbot.addWidget(page)
+    at = next(i for i, r in enumerate(page.model.rows) if r.name == "Бета")
+    reads: list[int] = []
+    refresh = page.refresh
+    page.refresh = lambda: (reads.append(1), refresh())[1]  # type: ignore[method-assign]
+    page.activated()
+    assert reads == []  # nothing was written
+    cost = ledger.conn.execute(
+        "SELECT dt_sc1 FROM postings WHERE debit_account_id = ? LIMIT 1", (rent.id,)
+    ).fetchone()[0]
+    ledger.post_new(cid, "2026-03-15", [PostingInput(acc.id, rent.id, "50", [v["Бета"]], [cost])])
+    page.activated()
+    assert reads == [1]
+    assert cols(page.model.rows[at])[2:] == (5000, 20000, 0, 15000)

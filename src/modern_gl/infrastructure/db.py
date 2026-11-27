@@ -310,6 +310,12 @@ class ForeignKeyColumn:
     on_delete: str  # "CASCADE", "NO ACTION", ...
 
 
+def writes(conn: sqlite3.Connection) -> int:
+    """A counter that grows with every row the connection writes: what was read before
+    it moved may be stale (a report left open)."""
+    return conn.total_changes
+
+
 def table_names(conn: sqlite3.Connection) -> list[str]:
     """The tables of the schema, without SQLite's own."""
     rows = conn.execute(
