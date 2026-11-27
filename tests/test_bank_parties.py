@@ -335,7 +335,7 @@ def test_a_customer_is_found_the_same_way(ledger, firm, tmp_path):
     assert lines(ledger, found) == [("62.1", 23600, "MT260800000011")]
 
 
-# ---- a sender without a VÖEN, a counterparty with one (D-new-party-by-name) ---------------
+# ---- a sender without a VÖEN, a counterparty with one (D231) ---------------
 
 AUTO_TIN = "1502387101"
 AUTO = "AZ66AIIB00000000000000000004 / AUTOUNIVERSAL MMC"  # the bank: no VÖEN, no dotted İ

@@ -1,4 +1,4 @@
-# 2026-11-27, ветка party-by-name (D-new-party-by-name)
+# 2026-11-27, ветка party-by-name (D231)
 
 Пользователь: «создалось 2 контрагента с похожими именами» (ОСВ по субконто 60, ELV Battery:
 AUTOUNIVERSAL MMC и AUTOUNİVERSAL MMC), затем — «как быть в будущем, когда это будут вбивать

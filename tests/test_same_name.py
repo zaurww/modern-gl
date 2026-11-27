@@ -1,4 +1,4 @@
-"""One counterparty is not entered twice (D-new-party-by-name): a name typed as new that
+"""One counterparty is not entered twice (D231): a name typed as new that
 the directory has — İ/I, case, quotes, «MMC» or the legal form in full apart — takes the
 one there. Two names with different VÖEN stay two (a branch, a namesake)."""
 
