@@ -332,5 +332,8 @@ class InventoryDocumentForm(GridEditing, DocumentShell, PageWidget):
     def _split_months(self, index: QPersistentModelIndex) -> None:  # the splits
         raise NotImplementedError
 
+    def _make_objects(self) -> None:  # the line objects
+        raise NotImplementedError
+
     def _build_party(self, root: QVBoxLayout) -> None:  # the party
         raise NotImplementedError
