@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QStackedLayout,
@@ -32,7 +33,7 @@ from modern_gl.desktop.widgets import (
     hide_when_viewing,
 )
 from modern_gl.domain.errors import LedgerError
-from modern_gl.i18n import sort_key, tr
+from modern_gl.i18n import fold, sort_key, tr
 
 KIND_ROLE = Qt.ItemDataRole.UserRole
 
@@ -47,6 +48,13 @@ class DirectoriesForm(PageWidget):
         root.setSpacing(18)
 
         self.header = PageHeader(tr("Справочники"), "")
+        self.search = QLineEdit()  # D86: the search first in the header
+        self.search.setObjectName("search")
+        self.search.setPlaceholderText(tr("Поиск по названию или VÖEN   Ctrl+F"))
+        self.search.setClearButtonEnabled(True)
+        self.search.setFixedWidth(300)
+        self.search.textChanged.connect(lambda _text: self.refresh_values())
+        self.header.add_action(self.search)
         # one blue button on the page (D86): «+ New element»; a new directory is rare
         add_kind = self.header.more(self._more_items)
         root.addWidget(self.header)
@@ -81,9 +89,11 @@ class DirectoriesForm(PageWidget):
         self.empty = EmptyState(
             "○", tr("Справочник пуст"), tr("Нажмите «+ Новый элемент» или Ins.")
         )
+        self.nothing = EmptyState("○", tr("Ничего не найдено"), tr("Esc очищает поиск."))
         self.stack = QStackedLayout()
         self.stack.addWidget(self.table)
         self.stack.addWidget(self.empty)
+        self.stack.addWidget(self.nothing)
         right.addLayout(self.stack, 1)
         hint = QLabel(
             tr("Ins — новый элемент   ·   F2 или двойной щелчок — изменить   ·   Del — удалить")
@@ -95,6 +105,7 @@ class DirectoriesForm(PageWidget):
         root.addLayout(body, 1)
 
         bind(self, "insert", self.add_value)
+        bind(self, "find", self.search.setFocus)
         bind(self, "edit", lambda: self.rename_value(self._current_value()))
         bind(self.table, "delete", lambda: self.delete_value(self._current_value()))
         self.refresh()
@@ -203,12 +214,29 @@ class DirectoriesForm(PageWidget):
             columns.append(Column(tr("Теги"), cat.tag_text, width=260))
         if grouped:  # each group followed by what it holds
             values = [value for _, value in tree]
+        needle = fold(self.search.text().strip())
+        if needle:  # the found ones in a row, out of their groups
+            depth = {}
+            values = [v for v in values if not v.is_group and needle in self._searched(v)]
         self.model.set(columns, values, emphasis=lambda v: v.is_group, muted=lambda v: not v.active)
-        self.stack.setCurrentWidget(self.table if values else self.empty)
+        blank = self.nothing if needle else self.empty
+        self.stack.setCurrentWidget(self.table if values else blank)
         if select_value is not None:
             row = next((i for i, v in enumerate(values) if v.id == select_value), None)
             if row is not None:
                 self.table.setCurrentIndex(self.model.index(row, 0))
+
+    def _searched(self, value: SubcontoInfo) -> str:
+        """What the search reads of an element: its name, VÖEN, whose it is — İ/I and
+        case apart."""
+        return fold(f"{value.label} {self._owner_name(value)}")
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape and self.search.text():
+            self.search.clear()
+            self.focus_table()
+            return
+        super().keyPressEvent(event)
 
     def _name_text(self, value: SubcontoInfo, depth: int) -> str:
         """Indented under its group; a group shows how many elements it holds."""

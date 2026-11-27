@@ -126,3 +126,36 @@ def test_a_namesake_with_another_voen_is_added(qtbot, session, monkeypatch):
     added = new_value(session, window, kind)
     assert added is not None and added != alfa(session)
     assert len(partners(session)) == before + 1
+
+
+def test_the_directory_is_searched_by_name_and_voen(qtbot, session):
+    """«Kontragentlər» with ALFA MMC (VÖEN 1234567890) and «AUTOUNİVERSAL MMC»: «autouni»
+    finds the dotted İ, «12345» finds ALFA by its VÖEN, «zzz» — nothing; cleared — all."""
+    from modern_gl.desktop.directories_page import DirectoriesPage
+    from modern_gl.i18n import tr
+
+    cid = session.company_id
+    kind = session.ledger.subconto_kind_id(cid, "counterparty")
+    session.ledger.add_subconto_value(cid, kind, "AUTOUNİVERSAL MMC")
+    session.catalog.reload()
+    page = DirectoriesPage(session)
+    qtbot.addWidget(page)
+    page.refresh(select_kind=kind)
+
+    def shown_names() -> list[str]:
+        return [page.model.index(r, 0).data().strip() for r in range(page.model.rowCount())]
+
+    everyone = shown_names()
+    assert {"ALFA MMC", "AUTOUNİVERSAL MMC"} <= set(everyone)
+    type_text(page.search, "autouni")
+    assert shown_names() == ["AUTOUNİVERSAL MMC"]
+    page.search.clear()
+    type_text(page.search, "12345")
+    assert shown_names() == ["ALFA MMC"]
+    page.search.clear()
+    type_text(page.search, "zzz")
+    assert shown_names() == []
+    assert page.stack.currentWidget() is page.nothing
+    page.search.clear()
+    assert shown_names() == everyone
+    assert page.search.placeholderText() == tr("Поиск по названию или VÖEN   Ctrl+F")
