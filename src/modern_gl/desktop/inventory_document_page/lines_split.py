@@ -3,11 +3,14 @@ months its expense belongs to (D65) — the sum of the parts is the line as it w
 
 from __future__ import annotations
 
-from modern_gl.desktop.inventory_document_page.columns import InventoryGridRow
-from modern_gl.desktop.inventory_document_page.lines_base import InventoryLinesBase
+from modern_gl.desktop.inventory_document_page.columns import ESC_KEYS, InventoryGridRow
+from modern_gl.desktop.inventory_document_page.lines_spread import LineSpread
 from modern_gl.domain.errors import ValidationError
 from modern_gl.domain.money import round_ratio
+from modern_gl.domain.quantity import QUANTITY_FACTOR
 from modern_gl.i18n import tr
+
+MAX_UNITS = 200  # objects one line is split into at once
 
 
 def shares(total: int | None, parts: int) -> list[int | None]:
@@ -23,7 +26,7 @@ def portion(total: int | None, part: int, whole: int) -> int | None:
     return None if total is None else round_ratio(total * part, whole)
 
 
-class LineSplits(InventoryLinesBase):
+class LineSplits(LineSpread):
     def split_by_months(self, row_index: int, months: list[str]) -> list[int]:
         """The line becomes one line per month (each month's last day), the amount, VAT
         and currency amount divided evenly, the remainder of kopecks in the last month.
@@ -80,6 +83,49 @@ class LineSplits(InventoryLinesBase):
         new_row = self.insert_row(row_index + 1, moved)
         self._row_changed(row_index)
         return new_row
+
+    def units_of(self, row_index: int) -> int | None:
+        """How many objects the line holds: a line to an account of objects (01, 12: a
+        fixed asset, a low-value item) with a whole quantity of two or more."""
+        row = self.rows[row_index]
+        quantity = row.quantity or 0
+        if not self.is_service(row_index) or quantity % QUANTITY_FACTOR:
+            return None
+        if not any(self.is_per_line(row_index, key) for key in ESC_KEYS):
+            return None
+        units = quantity // QUANTITY_FACTOR
+        return units if units >= 2 else None
+
+    def split_by_units(self, row_index: int) -> list[int]:
+        """The line of N objects becomes N lines of one, named «… №1» to «… №N»: the
+        amount, VAT and currency amount divided evenly, the remainder of kopecks in the
+        last. An object chosen for the lot stays on the first line. Returns the rows."""
+        units = self.units_of(row_index)
+        if units is None:
+            raise ValidationError(tr("по одной штуке делится строка объектов с целым количеством"))
+        if units > MAX_UNITS:
+            raise ValidationError(
+                tr("больше {n} объектов разом не делится — сначала разделите строку", n=MAX_UNITS)
+            )
+        row = self.rows[row_index]
+        name = row.memo.strip()
+        amounts = shares(row.amount, units)
+        vats = shares(row.vat_amount, units)
+        currency = shares(row.currency_amount, units)
+        objects = [int(key[-1]) - 1 for key in sorted(ESC_KEYS) if self.is_per_line(row_index, key)]
+        rows = []
+        for i in range(units):
+            part = row if i == 0 else row.copy()
+            part.amount, part.vat_amount, part.currency_amount = amounts[i], vats[i], currency[i]
+            part.quantity = QUANTITY_FACTOR
+            part.memo = f"{name} №{i + 1}"
+            if i:
+                for position in objects:
+                    part.expense_subconto[position] = None
+                self.insert_row(row_index + i, part)
+            rows.append(row_index + i)
+        self._row_changed(row_index)
+        return rows
 
     @staticmethod
     def _move_share(row: InventoryGridRow, moved: InventoryGridRow, field: str, part, whole):

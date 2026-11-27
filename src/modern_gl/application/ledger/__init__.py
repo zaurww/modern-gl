@@ -31,6 +31,7 @@ from modern_gl.application.ledger.subconto_details import (
     SubcontoDetailCommands,
     ValueDetails,
 )
+from modern_gl.application.ledger.subconto_merge import MergePlan, SubcontoMergeCommands
 from modern_gl.application.ledger.tags import TagCommands
 from modern_gl.application.ledger.templates import TemplateCommands
 
@@ -47,6 +48,7 @@ __all__ = [
     "ImportOutcome",
     "ImportedDocument",
     "Ledger",
+    "MergePlan",
     "PostingInput",
     "TemplateLine",
     "ValueDetails",
@@ -65,6 +67,7 @@ class Ledger(
     InvoiceChangeCommands,
     DocumentCommands,
     SubcontoDetailCommands,
+    SubcontoMergeCommands,
     TagCommands,
     ReportViewCommands,
 ):

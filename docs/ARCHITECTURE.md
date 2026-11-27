@@ -102,7 +102,7 @@ i18n                       тексты: tr(), переводы
 ## 7. AI-помощник и разработчики
 `modern-gl-mcp` (`assistant/`): JSON-RPC по stdio, компании — снимками; `--allow-drafts` —
 черновики через тот же `Ledger` (D83, D84); `--allow-edits` — правки проведённого
-(`edits`, D-new-ai-edits). Для разработчиков (D130): `modern_gl.api` —
+(`edits`, D234). Для разработчиков (D130): `modern_gl.api` —
 единственная обещанная поверхность (`docs/API.md`), `modern-gl-cli`; файл обмена
 документами — `application/exchange/` + `reporting/exchange.py` (`docs/EXCHANGE.md`),
 повтор без дублей по `document_sources`.

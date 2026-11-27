@@ -211,6 +211,11 @@ class Reference:
 _REFERENCES: dict[int, dict[str, tuple[Reference, ...]]] = {}
 
 
+def references_to(conn: Connection, table: str) -> tuple[Reference, ...]:
+    """The tables that refer to the table's rows by id (cascaded parts apart)."""
+    return _references(conn, table)
+
+
 def _references(conn: Connection, table: str) -> tuple[Reference, ...]:
     """The tables that refer to the table, each with its columns that do."""
     version = db.schema_version(conn)

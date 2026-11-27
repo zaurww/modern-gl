@@ -48,7 +48,7 @@ from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.dates import month_days
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import N_, tr
-from modern_gl.infrastructure.db import Connection
+from modern_gl.infrastructure.db import Connection, writes
 from modern_gl.reporting.reports import COMMON, IFRS, TAX
 
 BOOKS = [("Общий учёт", COMMON), ("МСФО", IFRS), ("Налоговый учёт", TAX)]
@@ -138,6 +138,8 @@ class ReportPage(PageWidget):
 
     key: tuple[Any, ...] = ("report",)  # what opens the page again; [0] is its kind
     has_period = True
+    _return_to: tuple[int, int, int] | None = None  # row, column, scroll: after a re-read
+    _read_at: int | None = None  # `db.writes` when the report was shown
     # the period is the page's own — not the last report's, and not the next one's: the
     # working date's month (ƏDV is declared monthly) or what the page asks for (a list)
     own_period = False
@@ -324,6 +326,20 @@ class ReportPage(PageWidget):
     def focus_table(self) -> None:
         self.table.setFocus()
 
+    def activated(self) -> None:
+        """Back on the report: whatever was written since it was read — a statement's
+        line, an import, a directory — it reads again; nothing to press."""
+        if self._read_at is not None and writes(self.s.conn) != self._read_at:
+            self.on_postings_changed(0)
+        super().activated()
+
+    def on_postings_changed(self, doc_id: int) -> None:
+        """A document was posted or corrected elsewhere: the report left open reads
+        again, the cursor and the scroll where they were."""
+        index = self.table.currentIndex()
+        self._return_to = (index.row(), index.column(), self.table.verticalScrollBar().value())
+        self.refresh()
+
     def refresh(self) -> None:
         if self.has_period:
             self.params = ReportParams(
@@ -363,6 +379,12 @@ class ReportPage(PageWidget):
         self.stack.setCurrentWidget(self.table if self.model.rows else self.empty)
         self.table.layout_columns()
         self.footer.setVisible(bool(self.footer.text()))
+        self._read_at = writes(self.s.conn)
+        if self._return_to is not None:
+            (row, column, scroll), self._return_to = self._return_to, None
+            if 0 <= row < self.model.rowCount():
+                self.table.setCurrentIndex(self.model.index(row, max(column, 0)))
+            self.table.verticalScrollBar().setValue(scroll)
 
     def _drill_current(self) -> None:
         idx = self.table.currentIndex()
