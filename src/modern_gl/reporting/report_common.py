@@ -115,6 +115,10 @@ class SubcontoRow(Turnovers):
     currency_closing: dict[str, int] = field(default_factory=dict)
     # a counted account (01, 12…): how many; None — the account keeps no quantity
     quantity: QuantityMoves | None = None
+    # the element's balance on the side the account should not have (a bank account in
+    # credit: more paid than there was) — as the account's own in the ОСВ
+    opening_wrong: bool = False
+    closing_wrong: bool = False
 
 
 @dataclass

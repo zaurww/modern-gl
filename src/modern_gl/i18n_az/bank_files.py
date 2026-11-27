@@ -27,8 +27,8 @@ AZ: dict[str, str] = {
     ),
     # why a line waits for the user
     "что это — выберите счёт": "bu nədir — hesabı seçin",
-    "налог: проверьте счёт (код бюджета {code})": "vergi: hesabı yoxlayın (büdcə kodu {code})",
-    "налог без кода бюджета — проверьте счёт": "büdcə kodu olmayan vergi — hesabı yoxlayın",
+    "налог: выберите счёт (код бюджета {code})": "vergi: hesabı seçin (büdcə kodu {code})",
+    "налог без кода бюджета — выберите счёт": "büdcə kodu olmayan vergi — hesabı seçin",
     "не найден счёт расчётов": "hesablaşma hesabı tapılmadı",
     "не задан счёт комиссий банка": "bank komissiyası hesabı təyin edilməyib",
     "свой счёт {iban} не найден среди банковских": (

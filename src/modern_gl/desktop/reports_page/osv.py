@@ -36,6 +36,7 @@ from modern_gl.desktop.reports_page.view import (
     MenuAction,
     ReportPage,
     ReportParams,
+    side_warning,
     turnover_columns,
 )
 from modern_gl.desktop.session import Session
@@ -49,7 +50,6 @@ from modern_gl.desktop.widgets import (
     class_name,
     segments,
 )
-from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.dates import month_days
 from modern_gl.i18n import N_, tr
 from modern_gl.infrastructure.db import Connection
@@ -495,15 +495,7 @@ class OsvPage(ReportPage):
         self.open_report.emit("card", row.account_id, params)
 
     def _side_warning(self, row: OsvRow) -> str:
-        acc = self.s.catalog.accounts.get(row.account_id)
-        if acc is None:
-            return ""
-        side = normal_side(acc.account_class, acc.contra)
-        return tr(
-            "Сальдо не на своей стороне: для «{cls}» ожидается {side} сальдо",
-            cls=class_name(acc.account_class) + (f" · {tr('контрсчёт')}" if acc.contra else ""),
-            side=tr("дебетовое") if side == "debit" else tr("кредитовое"),
-        )
+        return side_warning(self.s, row.account_id)
 
     def menu_actions(self, row: OsvRow | None) -> list[MenuAction | None]:
         if not row or not row.account_id:

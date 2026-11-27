@@ -271,6 +271,16 @@ class BankCommands(ModuleBase):
         ).fetchone()
         return row["id"] if row else None
 
+    def _only_account_of_type(self, company_id: int, account_type: str) -> int | None:
+        """The posting account of a type when the chart has one; several (68.1, 68.2, 69…)
+        — none: which one is the user's to say, not a guess."""
+        rows = self.conn.execute(
+            "SELECT id FROM accounts WHERE company_id = ? AND account_type = ? "
+            "AND is_group = 0 AND active = 1 ORDER BY id LIMIT 2",
+            (company_id, account_type),
+        ).fetchall()
+        return rows[0]["id"] if len(rows) == 1 else None
+
     def _place_currency(self, company_id: int, subconto: tuple[int | None, ...]) -> int | None:
         """The currency of a bank account: of its element of the directory (D47)."""
         for value_id in subconto:

@@ -17,6 +17,7 @@ from modern_gl.application.bank import (
     FEE,
     KIND_TYPES,
     OTHER,
+    TAX,
     TRANSFER,
     BankLine,
     last_lines,
@@ -64,6 +65,9 @@ class LinesPart(BankOperationForm):
         if line is None:
             return
         row.set_line(line, amount=False)
+        if line.account_id is None:  # to choose: the line is shown, not a summary
+            self._unfolded = True
+            self._layout_lines()
 
     def _kind_line(self) -> BankLine | None:
         kind = self.kind.currentData()
@@ -80,8 +84,10 @@ class LinesPart(BankOperationForm):
         account_type = KIND_TYPES.get(kind)
         if account_type is None:
             return None
-        found = next((a for a in catalog.leaf_accounts if a.account_type == account_type), None)
-        return BankLine(found.id, 0) if found else None
+        found = [a for a in catalog.leaf_accounts if a.account_type == account_type]
+        if kind == TAX and len(found) > 1:  # 68.1, 68.2, 69…: which tax, the user says
+            return BankLine(None, 0)
+        return BankLine(found[0].id, 0) if found else None
 
     def _fee_subconto(self, account_id: int | None) -> tuple[int | None, ...]:
         """The item «Комиссия банка» of the fee account (made on first use, as a

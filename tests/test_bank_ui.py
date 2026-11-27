@@ -114,13 +114,53 @@ def test_tax_has_no_counterparty(qtbot, session):
     page = new_page(qtbot, session)
     choose(page.kind, "Налоги")
     assert page.counterparty_edit.isHidden()
-    assert page.line_rows[0].account_info is not None
-    assert page.line_rows[0].account_info.code == "68.1"
+    # several tax accounts in the chart: which tax is not guessed, the line waits shown
+    assert page.line_rows[0].account_info is None and not page.folded
     assert page.memo.placeholderText() == "Уплата налогов"
     choose(page.sc[0], "Kapital AZN")
+    choose(page.line_rows[0].account, session.catalog.by_code["68.1"].label)
     type_text(page.line_rows[0].amount, "180")
     assert page.save(post=True)
     assert page.doc is not None and page.doc.kind == TAX and page.doc.counterparty_id is None
+
+
+def test_a_draft_to_check_opens_on_its_account(qtbot, session):
+    """A tax of a statement, loaded as a draft: opened, the cursor is on the account (the
+    amount is the bank's), and what the bank wrote is above the lines, where the
+    account's list does not cover it."""
+    cid = session.company_id
+    data = BankOperationInput(
+        doc_date="2026-03-05",
+        direction=OUT,
+        account_id=acc(session, "51"),
+        subconto=(value(session, "Kapital AZN"),),
+        kind=TAX,
+        lines=(BankLine(None, 3600),),
+        memo="4121211DSMF isci terefinden",
+    )
+    op_id = session.ledger.bank.save_bank_operation(cid, data, post=False)
+    page = BankOperationPage(session, op_id)
+    qtbot.addWidget(page)
+    page.show()
+    qtbot.waitExposed(page)
+    page.activateWindow()
+    page.activated()
+    qtbot.waitUntil(page.line_rows[0].account.hasFocus)
+    assert page.purpose.isVisible()
+    assert page.purpose.text() == "Назначение: 4121211DSMF isci terefinden"
+    if (popup := QApplication.activePopupWidget()) is not None:
+        popup.hide()
+
+    # with its account, the cursor is still there: it is what is checked
+    choose(page.line_rows[0].account, session.catalog.by_code["69"].label)
+    assert page.save(post=False)
+    again = BankOperationPage(session, op_id)
+    qtbot.addWidget(again)
+    again.show()
+    qtbot.waitExposed(again)
+    again.activateWindow()
+    again.activated()
+    qtbot.waitUntil(again.line_rows[0].account.hasFocus)
 
 
 def test_bank_fee_line_and_a_receipt(qtbot, session):

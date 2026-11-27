@@ -17,6 +17,7 @@ from modern_gl.desktop.reports_page.view import (
     Column,
     ReportPage,
     ReportParams,
+    side_warning,
     turnover_columns,
 )
 from modern_gl.desktop.session import Session
@@ -329,7 +330,10 @@ class SubcontoPage(AccountReportPage):
         ]
         if any(self._tax_id(r) for r in rows):  # counterparties with a VÖEN: on request
             columns.append(Column(tr("VÖEN"), self._tax_id, width=130, optional=True))
-        columns += turnover_columns()
+        columns += turnover_columns(
+            lambda r: side_warning(self.s, self.account_id) if r.opening_wrong else None,
+            lambda r: side_warning(self.s, self.account_id) if r.closing_wrong else None,
+        )
         if any(r.currency_closing for r in rows):  # a foreign partner: USD and EUR apart
             columns.append(Column(tr("В валюте на конец"), self._in_currency, width=200))
         if any(r.quantity is not None for r in rows):  # 01, 12…: how many of each

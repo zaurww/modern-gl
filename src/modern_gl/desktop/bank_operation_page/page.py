@@ -27,6 +27,7 @@ from modern_gl.application.bank import (
     load_bank_operation,
     next_to_check,
 )
+from modern_gl.application.bank.file_import import tax_lines_as_before
 from modern_gl.application.currencies import missing_rates_text
 from modern_gl.application.document_kinds import document_title
 from modern_gl.application.posting_preview import PostingPreview
@@ -137,10 +138,18 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
 
     def focus_table(self) -> None:
         """The cursor starts where typing starts: who, else how much."""
+        rows = self.line_rows
         if not self.counterparty_edit.isHidden() and self.counterparty is None:
             self.counterparty_edit.setFocus()
-        elif self.line_rows:
-            self._amount_of(self.line_rows[0]).setFocus()
+            return
+        if not rows:
+            return
+        # one opened to check: the amount is the bank's, the question is the account
+        missing = next((r for r in rows if r.account.currentData() is None), None)
+        if not self.folded and (missing is not None or self.doc is not None):
+            (missing or rows[0]).account.setFocus()
+        else:
+            self._amount_of(rows[0]).setFocus()
 
     def _set_new(self, prefill: BankOperationInput | None) -> None:
         self._loading = True
@@ -169,11 +178,13 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
         QTimer.singleShot(0, self.focus_table)
 
     def load(self, operation_id: int) -> None:
-        self.doc = load_bank_operation(self.s.conn, self.s.company_id, operation_id)
+        cid = self.s.company_id
+        self.doc = load_bank_operation(self.s.conn, cid, operation_id)
         d = self.doc
         self._unfolded = True  # opened again to check its lines: shown, not «Развернуть»
         self._loading = True
-        self._fill(d)
+        as_before = None if self.s.read_only else tax_lines_as_before(self.s.conn, cid, d)
+        self._fill(d if as_before is None else replace(d, lines=as_before))
         self._loading = False
         self._lines_edited = True
         self.number.setText(f"№{d.number}")
@@ -183,7 +194,10 @@ class BankOperationPage(LinesPart, FoldedPart, CounterpartyPart, BankAccountPart
             self.status.set(tr("Черновик"), "amber")
         else:
             self.status.set(tr("Проведён"), "green")
-        self.dirty = False
+        self.dirty = as_before is not None  # the account suggested is not saved yet
+        checking = d.status == "draft" or not d.checked
+        self.purpose.setText(tr("Назначение: {text}", text=d.memo))
+        self.purpose.setVisible(checking and bool(d.memo) and not self.read_only)
         self._apply_mode()
         self._update()
         self.title_changed.emit()

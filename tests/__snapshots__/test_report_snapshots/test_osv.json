@@ -119,12 +119,14 @@
       {
         "closing_ct": 20000,
         "closing_dt": 0,
+        "closing_wrong": false,
         "currency_closing": {},
         "depth": 0,
         "invoice": null,
         "name": "Поставщик A",
         "opening_ct": 20000,
         "opening_dt": 0,
+        "opening_wrong": false,
         "path": [
           1
         ],
@@ -136,12 +138,14 @@
       {
         "closing_ct": 50000,
         "closing_dt": 0,
+        "closing_wrong": false,
         "currency_closing": {},
         "depth": 0,
         "invoice": null,
         "name": "Поставщик B",
         "opening_ct": 0,
         "opening_dt": 0,
+        "opening_wrong": false,
         "path": [
           2
         ],

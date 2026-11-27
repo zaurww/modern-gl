@@ -211,7 +211,8 @@ class BankFileCommands(FileLinkCommands):
         data, why = self._file_operation(company_id, op, counterparty)
         why = hold or why
         # an own account not known is a setting to make, not money nobody knows
-        sure_kind = op.kind != TRANSFER and not hold
+        # a tax is known for what it is: it waits for its account, not among the unknown
+        sure_kind = op.kind not in (TRANSFER, TAX) and not hold
         unknown = self._to_unidentified(company_id, data) if post and sure_kind else None
         if unknown is not None:  # posted all the same: the bank's balance meets the books
             state, reason, document = self._post_or_draft(company_id, unknown, post)
@@ -284,11 +285,12 @@ class BankFileCommands(FileLinkCommands):
             before = tax_lines_before(self.conn, company_id, code)
             if before:
                 return [replace(before[0], amount=op.amount)], ""
-            account = self._first_account_of_type(company_id, KIND_TYPES[TAX])
+            # which tax (68.1, 68.2, 69…) — only the user knows: no guess to post by mistake
+            account = self._only_account_of_type(company_id, KIND_TYPES[TAX])
             why = (
-                tr("налог: проверьте счёт (код бюджета {code})", code=code)
+                tr("налог: выберите счёт (код бюджета {code})", code=code)
                 if code
-                else tr("налог без кода бюджета — проверьте счёт")
+                else tr("налог без кода бюджета — выберите счёт")
             )
             return [BankLine(account, op.amount)], why
         return unknown, tr("что это — выберите счёт")

@@ -255,6 +255,13 @@ class BankOperationForm(DocumentShell, PageWidget):
     def _build_lines(self, root: QVBoxLayout) -> None:
         """Where the money goes: one line is shown folded (as last time for the
         counterparty); several lines, a fee or «Развернуть» show the lines themselves."""
+        # a line of a statement being checked: what the bank says it is, in full — above
+        # the lines, where the account's list does not cover it
+        self.purpose = caption("")
+        self.purpose.setWordWrap(True)
+        self.purpose.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.purpose.hide()
+        root.addWidget(self.purpose)
         lines_head = QHBoxLayout()
         lines_head.setSpacing(6)
         lines_head.addWidget(caption(tr("Расшифровка платежа")))

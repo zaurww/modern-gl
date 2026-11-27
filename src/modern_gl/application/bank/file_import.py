@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from modern_gl.application.bank.deposit_import import invoices_in
@@ -24,6 +24,7 @@ from modern_gl.application.bank.operations import (
     CUSTOMER,
     FEE,
     IN,
+    KIND_TYPES,
     OTHER,
     OUT,
     SALARY,
@@ -31,6 +32,7 @@ from modern_gl.application.bank.operations import (
     TAX,
     TRANSFER,
     BankLine,
+    BankOperation,
 )
 from modern_gl.application.bank.places import BankPlace, bank_places
 from modern_gl.application.free_money import free_money, lay_out
@@ -47,7 +49,8 @@ VAT_DEPOSITS = "CTRE00000000000000014001"
 FEE_WORDS = ("xidmet haqqi", "abune haqqi", "konvertasiya")
 SALARY_WORDS = ("emek haqqi", "amak haqqi")
 POS_WORDS = ("pos-terminal", "pos terminal")
-BUDGET_CODE = re.compile(r"^(\d{7})\d{4}")  # «41211112026 IYUL DSMF»: code, then the year
+# «41211112026 IYUL DSMF»: the code, then the year — or the code alone, «4121211DSMF»
+BUDGET_CODE = re.compile(r"^(\d{7})(?:\d{4})?(?!\d)")
 
 
 @dataclass(frozen=True)
@@ -285,3 +288,25 @@ def tax_lines_before(conn: Connection, company_id: int, code: str) -> list[BankL
     if row is None:
         return []
     return [BankLine(row["account_id"], 0, (row["sc1"], row["sc2"], row["sc3"]))]
+
+
+def tax_lines_as_before(
+    conn: Connection, company_id: int, op: BankOperation
+) -> tuple[BankLine, ...] | None:
+    """A tax draft whose account nobody chose — none, or the first tax account older
+    imports guessed: its line as the last posted tax with its budget code (drafts loaded
+    together learn from the first one posted). None — the draft stays as it is."""
+    if op.status != "draft" or op.kind != TAX or op.direction != OUT or len(op.lines) != 1:
+        return None
+    guess = conn.execute(
+        "SELECT id FROM accounts WHERE company_id = ? AND account_type = ? "
+        "AND is_group = 0 AND active = 1 ORDER BY code IS NULL, code LIMIT 1",
+        (company_id, KIND_TYPES[TAX]),
+    ).fetchone()
+    line = op.lines[0]
+    if line.account_id is not None and (guess is None or line.account_id != guess["id"]):
+        return None
+    before = tax_lines_before(conn, company_id, budget_code(op.memo))
+    if not before or before[0].account_id == line.account_id:
+        return None
+    return (replace(line, account_id=before[0].account_id, subconto=before[0].subconto),)

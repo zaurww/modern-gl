@@ -9,6 +9,7 @@ from datetime import date
 
 from modern_gl.application.books import COMMON, book_params
 from modern_gl.application.quantities import counted_accounts
+from modern_gl.domain.accounts import wrong_side
 from modern_gl.domain.errors import ValidationError
 from modern_gl.i18n import tr
 from modern_gl.infrastructure.db import Connection, Row
@@ -117,7 +118,17 @@ def subconto_balance(  # noqa: PLR0913 the report's settings, as the other repor
     if counted:
         for row in rows:
             row.quantity = row.quantity or QuantityMoves()
+    _flag_sides(rows, acc)
     return rows
+
+
+def _flag_sides(rows: list[SubcontoRow], acc: Row) -> None:
+    """An element's balance on the side the account should not have (a bank account in
+    credit) — flagged as the account's own is in the ОСВ; two-sided accounts never are."""
+    check = (acc["account_class"], bool(acc["contra"]), bool(acc["two_sided"]))
+    for row in rows:
+        row.opening_wrong = wrong_side(*check, row.opening_dt - row.opening_ct)
+        row.closing_wrong = wrong_side(*check, row.closing_dt - row.closing_ct)
 
 
 def _add_up(sums: Sums, path: Key, r: Row) -> None:

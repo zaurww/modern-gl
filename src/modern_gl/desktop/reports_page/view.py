@@ -44,6 +44,7 @@ from modern_gl.desktop.widgets import (
     type_choices,
     type_name,
 )
+from modern_gl.domain.accounts import normal_side
 from modern_gl.domain.dates import month_days
 from modern_gl.domain.errors import LedgerError
 from modern_gl.i18n import N_, tr
@@ -109,6 +110,19 @@ def turnover_columns(warn_opening=None, warn_closing=None) -> list[Column]:
         )
         for group, side, a in TURNOVER_COLUMNS
     ]
+
+
+def side_warning(session: Session, account_id: int | None) -> str:
+    """Why a balance is red: it is on the side the account should not have."""
+    acc = session.catalog.accounts.get(account_id or 0)
+    if acc is None:
+        return ""
+    side = normal_side(acc.account_class, acc.contra)
+    return tr(
+        "Сальдо не на своей стороне: для «{cls}» ожидается {side} сальдо",
+        cls=class_name(acc.account_class) + (f" · {tr('контрсчёт')}" if acc.contra else ""),
+        side=tr("дебетовое") if side == "debit" else tr("кредитовое"),
+    )
 
 
 # A context menu entry: text and what it does, or text and a submenu; None is a separator.

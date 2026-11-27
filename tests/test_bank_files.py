@@ -46,6 +46,7 @@ from modern_gl.application.bank.file_import import (
     budget_code,
     file_operations,
     iban_places,
+    tax_lines_as_before,
 )
 from modern_gl.application.bank.files import BankFileError, read_bank_file
 from modern_gl.application.bank.files.kapital import other_side
@@ -373,6 +374,8 @@ def test_the_bank_the_treasury_and_own_accounts(firm, files, tmp_path):
     assert ops[5].target is None
     assert budget_code("41212112026 IYUL DSMF") == "4121211"
     assert budget_code("IYUL DSMF") == ""
+    assert budget_code("4121211DSMF isci terefinden") == "4121211"  # no year after it
+    assert budget_code("38810944014592560199 AGAYEV") == ""  # an account, not a code
 
 
 # ---- the import -----------------------------------------------------------------------
@@ -398,7 +401,7 @@ def test_the_import_posts_what_is_sure_and_drafts_the_rest(ledger, firm, files):
     assert (
         states[("1004", "out")][1] == "e-qaimə MT260899999999 нет среди неоплаченных у контрагента"
     )
-    assert states[("1005", "out")][1] == "налог: проверьте счёт (код бюджета 4121211)"
+    assert states[("1005", "out")][1] == "налог: выберите счёт (код бюджета 4121211)"
     assert states[("2003", "in")][1] == f"контрагента нет в справочнике: {VIAL}"
     assert (done.posted, done.drafts, done.known, done.unknown_parties) == (6, 4, 0, 2)
 
@@ -772,6 +775,38 @@ def test_a_tax_is_posted_as_the_last_one_with_its_code(ledger, firm, files, tmp_
     ledger.bank.save_bank_operation(cid, replace(op, lines=(fixed,)), tax_id, post=True)
     done = ledger.bank.import_bank_files(cid, [september], firm["places"])
     assert [(r.state, r.lines[0][0]) for r in done.rows] == [(POSTED, "69")]
+
+
+def test_tax_drafts_loaded_together_learn_from_the_first_posted(ledger, firm, files, tmp_path):
+    """August's and September's DSMF (52.00 and 55.00, code 4121211) are loaded before
+    either is posted: both wait with no account — the chart has several tax accounts, and
+    68.1 would be a guess. August's given 69 and posted: September's draft, opened, is
+    offered 69 with its own 55.00; August's own (posted) — nothing."""
+    cid = firm["cid"]
+    path = kapital_file(tmp_path / "sep.xlsx", AZN_IBAN, "AZN", "5292", [SEPTEMBER_DSMF])
+    ledger.bank.import_bank_files(cid, [files[0], read_bank_file(path)], firm["places"])
+    ids = by_reference(ledger, cid)
+    assert lines(ledger, cid, ids["1005"])[1] == [(None, 5200, "")]
+    september = load_bank_operation(ledger.conn, cid, ids["1105"])
+    assert lines(ledger, cid, ids["1105"])[1] == [(None, 5500, "")]
+    assert tax_lines_as_before(ledger.conn, cid, september) is None  # nothing posted yet
+
+    august = load_bank_operation(ledger.conn, cid, ids["1005"])
+    account = ledger.account_id(cid, "69")
+    fixed = replace(august.lines[0], account_id=account)
+    ledger.bank.save_bank_operation(cid, replace(august, lines=(fixed,)), ids["1005"], post=True)
+    found = tax_lines_as_before(ledger.conn, cid, september)
+    assert found is not None
+    assert [(x.account_id, x.amount) for x in found] == [(account, 5500)]
+    august = load_bank_operation(ledger.conn, cid, ids["1005"])
+    assert tax_lines_as_before(ledger.conn, cid, august) is None
+    # an account chosen by hand in a draft is not a guess: it stays
+    other = replace(september.lines[0], account_id=ledger.account_id(cid, "68.2"))
+    ledger.bank.save_bank_operation(
+        cid, replace(september, lines=(other,)), ids["1105"], post=False
+    )
+    september = load_bank_operation(ledger.conn, cid, ids["1105"])
+    assert tax_lines_as_before(ledger.conn, cid, september) is None
 
 
 SEPTEMBER_FEE = (

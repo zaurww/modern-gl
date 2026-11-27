@@ -226,3 +226,32 @@ def test_osv_opens_into_contracts_and_a_contract_leads_to_its_card(session, qtbo
     page.drill(under[1])
     ((kind, account, params),) = opened
     assert (kind, account, params.subconto) == ("card", sixty, (v["Альфа"], v["Д1"]))
+
+
+def test_a_bank_account_in_credit_is_on_the_wrong_side():
+    """51 by bank accounts: Kapital AZN got 10 000.00 (Dt), from Yapi AZN 250.00 was paid
+    with nothing on it (Ct 250.00) — an asset in credit: Yapi's closing balance is flagged,
+    Kapital's is not; nothing was there at the start."""
+    from modern_gl.application.ledger import Ledger, PostingInput
+    from modern_gl.infrastructure.db import connect
+    from modern_gl.reporting import reports
+    from tests.helpers.bank_ui import setup_company
+
+    conn = connect(":memory:")
+    ledger = Ledger(conn, actor="test")
+    cid = setup_company(ledger)
+    banks = ledger.subconto_kind_id(cid, "bank_account")
+    yapi = ledger.add_subconto_value(cid, banks, "Yapi AZN")
+    owner = conn.execute(
+        "SELECT id FROM subconto_values WHERE company_id = ? AND name = 'Учредитель'", (cid,)
+    ).fetchone()["id"]
+    bank, capital = ledger.account_id(cid, "51"), ledger.account_id(cid, "80")
+    ledger.post_new(cid, "2026-03-02", [PostingInput(capital, bank, "250", [owner], [yapi])])
+    rows = reports.subconto_balance(conn, cid, "51", "2026-03-01", "2026-03-31")
+    assert [
+        (r.name, r.closing_dt, r.closing_ct, r.opening_wrong, r.closing_wrong) for r in rows
+    ] == [
+        ("Kapital AZN", 1000000, 0, False, False),
+        ("Yapi AZN", 0, 25000, False, True),
+    ]
+    conn.close()
